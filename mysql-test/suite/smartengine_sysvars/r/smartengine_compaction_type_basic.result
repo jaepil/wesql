@@ -1,0 +1,7 @@
+SET @start_global_value = @@global.SMARTENGINE_COMPACTION_TYPE;
+SELECT @start_global_value;
+@start_global_value
+0
+"Trying to set variable @@global.SMARTENGINE_COMPACTION_TYPE to 444. It should fail because it is readonly."
+SET @@global.SMARTENGINE_COMPACTION_TYPE   = 444;
+ERROR HY000: Variable 'smartengine_compaction_type' is a read only variable

@@ -1,0 +1,48 @@
+show global status like 'smartengine\_%';
+Variable_name	Value
+Smartengine_block_cache_miss	###
+Smartengine_block_cache_hit	###
+Smartengine_block_cache_add	###
+Smartengine_block_cache_index_miss	###
+Smartengine_block_cache_index_hit	###
+Smartengine_block_cache_filter_miss	###
+Smartengine_block_cache_filter_hit	###
+Smartengine_block_cache_data_miss	###
+Smartengine_block_cache_data_hit	###
+Smartengine_row_cache_add	###
+Smartengine_row_cache_hit	###
+Smartengine_row_cache_miss	###
+Smartengine_memtable_hit	###
+Smartengine_memtable_miss	###
+Smartengine_number_keys_written	###
+Smartengine_number_keys_read	###
+Smartengine_number_keys_updated	###
+Smartengine_bytes_written	###
+Smartengine_bytes_read	###
+Smartengine_block_cachecompressed_miss	###
+Smartengine_block_cachecompressed_hit	###
+Smartengine_wal_synced	###
+Smartengine_wal_bytes	###
+Smartengine_write_self	###
+Smartengine_write_other	###
+Smartengine_write_wal	###
+Smartengine_number_superversion_acquires	###
+Smartengine_number_superversion_releases	###
+Smartengine_number_superversion_cleanups	###
+Smartengine_number_block_not_compressed	###
+Smartengine_snapshot_conflict_errors	###
+Smartengine_wal_group_syncs	###
+Smartengine_rows_deleted	###
+Smartengine_rows_inserted	###
+Smartengine_rows_updated	###
+Smartengine_rows_read	###
+Smartengine_system_rows_deleted	###
+Smartengine_system_rows_inserted	###
+Smartengine_system_rows_updated	###
+Smartengine_system_rows_read	###
+
+
+show engine smartengine status;
+Type	Name	Status
+DBSTATS	Smartengine	###
+Memory_Stats	Smartengine	###
