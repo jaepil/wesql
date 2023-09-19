@@ -1,0 +1,68 @@
+name: ENABLE-GKE-RUNNER
+
+on:
+  workflow_call:
+    inputs:
+      ENABLE:
+        description: "enable flag:true"
+        type: string
+        required: false
+        default: 'true'
+      RUNNER_LABEL:
+        description: "runner label"
+        type: string
+        required: false
+        default: ''
+
+env:
+  GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+  CLUSTER_NAME: "infracreate-gke"
+  REGION: "us-central1"
+  RUNNER_NAMESPACE: "github-runner"
+
+
+jobs:
+  enable-runner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: "latest"
+
+      - if: ${{ env.GOOGLE_CREDENTIALS != '' }}
+        id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ env.GOOGLE_CREDENTIALS }}'
+
+      - uses: simenandre/setup-gke-gcloud-auth-plugin@v1
+      - uses: google-github-actions/get-gke-credentials@v1
+        with:
+          cluster_name: ${{ env.CLUSTER_NAME }}
+          location: ${{ env.REGION }}
+
+      - name: enable runner
+        run: |
+          runner_list=$(kubectl get runnerdeployments -n ${{ env.RUNNER_NAMESPACE }} | (grep "wesql/wesql-server" | grep "${{ inputs.RUNNER_LABEL }}" || true) | awk '{print $1}')
+          if [[ -n "$runner_list" ]]; then
+              for runner_name in $(echo "$runner_list"); do
+                  echo "runner name: $runner_name"
+                  hautoscalers=$(kubectl get horizontalrunnerautoscalers -n ${{ env.RUNNER_NAMESPACE }} | (grep "$runner_name-autoscaler" || true) )
+                  if [[ "${{ inputs.ENABLE }}" == "true" ]]; then
+                      echo "enable runner"
+                      if [[ -n "$hautoscalers" ]]; then
+                          echo "enable runner autoscaler"
+                          kubectl patch horizontalrunnerautoscalers $runner_name-autoscaler -n ${{ env.RUNNER_NAMESPACE }} -p '{"spec":{"minReplicas": 1}}' --type=merge
+                      fi
+                      kubectl patch runnerdeployments $runner_name -n ${{ env.RUNNER_NAMESPACE }} -p '{"spec":{"replicas": 1}}' --type=merge
+                  else
+                      echo "disable runner"
+                      if [[ -n "$hautoscalers" ]]; then
+                          echo "disable runner autoscaler"
+                          kubectl patch horizontalrunnerautoscalers $runner_name-autoscaler -n ${{ env.RUNNER_NAMESPACE }} -p '{"spec":{"minReplicas": 0}}' --type=merge
+                      fi
+                      kubectl patch runnerdeployments $runner_name -n ${{ env.RUNNER_NAMESPACE }} -p '{"spec":{"replicas": 0}}' --type=merge
+                  fi
+              done
+          fi

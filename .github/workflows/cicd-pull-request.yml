@@ -1,0 +1,62 @@
+name: CICD-PULL-REQUEST
+
+on:
+  pull_request:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+jobs:
+  enable-runner:
+    uses: ./.github/workflows/enable-gke-runner.yml
+    with:
+      RUNNER_LABEL: "gke-amd-runner"
+    secrets: inherit
+
+  build-test:
+    needs: [ enable-runner ]
+    name: make install mtr
+    runs-on: [self-hosted, gke-amd-runner ]
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          all_but_latest: true
+          access_token: ${{ env.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v3
+      - name: cmake
+        run: |
+          cp /home/mysql/boost_1_77_0.tar.bz2 ${{ github.workspace }}/extra
+          sudo mkdir -pv /u01
+          sudo chown -R mysql:mysql /u01
+          sudo chown -R mysql:mysql ./
+          mkdir -pv bu
+          cd bu
+          cmake3 ../ -B ./ \
+            -DCMAKE_INSTALL_PREFIX="/u01/mysql" \
+            -DWITH_SSL="system" \
+            -DCMAKE_BUILD_TYPE="Debug" \
+            -DWITH_WESQL_TEST=1   \
+            -DDOWNLOAD_BOOST=1 \
+            -DWITH_BOOST="../extra/"
+
+      - name: make install
+        run: |
+          cd bu
+          make -j$(echo "4 * $(nproc)" | bc) && make install
+
+      - name: run mtr
+        run: |
+          cd bu
+          cd mysql-test
+          ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=1  --parallel=2 --force
+
+      - name: view mtr logs
+        if: ${{ failure() }}
+        run: |
+          for logFile in $( ls bu/mysql-test/var/log/*/*.log ); do
+              echo "logFile:"$logFile
+              cat $logFile
+          done
+
