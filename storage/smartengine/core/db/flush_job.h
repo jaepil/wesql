@@ -103,6 +103,9 @@ class BaseFlush {
   int delete_old_M0(const InternalKeyComparator *internal_comparator, MiniTables &mtables);
   int stop_record_flush_stats(const int64_t bytes_written,
                               const uint64_t start_micros);
+  void upload_current_flush_stats_to_global(uint64_t bytes_written,
+                                            uint64_t start_micros,
+                                            uint64_t end_micros);
   void RecordFlushIOStats();
 
   ColumnFamilyData* cfd_;

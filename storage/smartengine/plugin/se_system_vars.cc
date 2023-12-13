@@ -851,6 +851,22 @@ static void se_set_scan_add_blocks_limit(
   SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
 }
 
+static void se_set_master_thread_monitor_interval_ms(THD *thd,
+                                                     struct SYS_VAR *const var,
+                                                     void *const var_ptr,
+                                                     const void *const save) {
+  assert(save != nullptr);
+
+  SE_MUTEX_LOCK_CHECK(se_sysvars_mutex);
+
+  se_db_options.monitor_interval_ms = *static_cast<const uint64_t *>(save);
+
+  se_db->SetDBOptions({{"monitor_interval_ms",
+                        std::to_string(se_db_options.monitor_interval_ms)}});
+
+  SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
+}
+
 static MYSQL_SYSVAR_STR(
     datadir, se_datadir,
     PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
@@ -1511,6 +1527,14 @@ static MYSQL_SYSVAR_ULONG(
     nullptr, se_set_scan_add_blocks_limit,
     se_default_cf_options.scan_add_blocks_limit, 0L, ULONG_MAX, 0);
 
+static MYSQL_SYSVAR_ULONG(master_thread_monitor_interval_ms,
+                          se_db_options.monitor_interval_ms,
+                          PLUGIN_VAR_OPCMDARG,
+                          "DBOptions::master_thread_monitor_interval_ms for SE",
+                          nullptr, se_set_master_thread_monitor_interval_ms,
+                          /* default */ 60'000,
+                          /* min */ 0L, /* max */ ULLONG_MAX, 0);
+
 ulong se_thd_lock_wait_timeout(THD *thd)
 {
   return THDVAR(thd, lock_wait_timeout);
@@ -1639,6 +1663,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(query_trace_threshold_time),
     MYSQL_SYSVAR(parallel_read_threads),
     MYSQL_SYSVAR(scan_add_blocks_limit),
+    MYSQL_SYSVAR(master_thread_monitor_interval_ms),
     nullptr};
 
 SYS_VAR **se_system_vars_export = se_system_vars_internal;

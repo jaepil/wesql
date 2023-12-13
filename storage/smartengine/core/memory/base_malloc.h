@@ -212,7 +212,7 @@ struct ptr_destruct_delete {
 #define FREE_ARRAY(ALLOC, ptr)                    \
   ({                                              \
     if (nullptr != (ptr)) {                       \
-      (ALLOC).free((void*) (ptr))                 \
+      (ALLOC).free((void*) (ptr));                \
       (ptr) = nullptr;                            \
     }                                             \
    })

@@ -493,6 +493,9 @@ struct DBOptions {
   // If non-null, then we should collect metrics about database operations
   std::shared_ptr<monitor::Statistics> statistics = nullptr;
 
+  // default to 1 minute
+  uint64_t monitor_interval_ms = 60'000;
+
   // If true, then every store to stable storage will issue a fsync.
   // If false, then every store to stable storage will issue a fdatasync.
   // This parameter should be set to true while storing data to

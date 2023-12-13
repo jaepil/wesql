@@ -155,6 +155,8 @@ public:
   int get_level_delete_size(const db::Snapshot *current_meta,
                             const int32_t level,
                             int64_t &delete_size) const;
+  std::pair<uint64_t, uint64_t> get_level_fragmentation_rate_and_delete_percent(
+      const db::Snapshot *current_meta, int32_t level) const;
   //calculate the range size
   int64_t approximate_size(const db::ColumnFamilyData *cfd,
                            const common::Slice &start,

@@ -65,6 +65,7 @@ class AllocMgr {
   int64_t get_allocated_size(const size_t mod_id) const;
   int64_t get_hold_size(const size_t mod_id) const;
   int64_t get_alloc_count(const size_t mod_id) const;
+  const char *get_mod_name_by_mod_id(size_t mod_id) const;
   void print_memory_usage(std::string &stat_str);
   void get_memory_usage(MemItemDump *items, 
                         std::string *mod_names);

@@ -4,9 +4,11 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 #pragma once
+#include "port/port_posix.h"
 #include "smartengine/statistics.h"
 
 #include <atomic>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -43,9 +45,46 @@ class StatisticsImpl : public Statistics {
   virtual uint64_t getAndResetTickerCount(uint32_t ticker_type) override;
   virtual void recordTick(uint32_t ticker_type, uint64_t count) override;
   virtual void measureTime(uint32_t histogram_type, uint64_t value) override;
+  void set_gauge_value(Gauge which, uint64_t value) override;
+  uint64_t get_gauge_value(Gauge which) const override;
+  void update_global_compaction_stat(
+      uint64_t bytes_written, [[maybe_unused]] uint64_t start_micros,
+      [[maybe_unused]] uint64_t end_micros) override {
+    if (bytes_written > 0) {
+      compaction_bytes_written_.fetch_add(bytes_written,
+                                          std::memory_order_relaxed);
+    }
+  }
 
   virtual std::string ToString() const override;
   virtual bool HistEnabledForType(uint32_t type) const override;
+  uint64_t get_global_flush_megabytes_written() const override {
+    constexpr uint64_t kBytes2Megabytes = 1 << 20;
+    return flush_bytes_written_.load(std::memory_order_relaxed) /
+           kBytes2Megabytes;
+  }
+
+  void reset_global_flush_stat() override {
+    flush_bytes_written_.store(0, std::memory_order_relaxed);
+  }
+
+  void update_global_flush_stat(uint64_t bytes_written,
+                                [[maybe_unused]] uint64_t start_micros,
+                                [[maybe_unused]] uint64_t end_micros) override {
+    if (bytes_written > 0) {
+      flush_bytes_written_.fetch_add(bytes_written, std::memory_order_relaxed);
+    }
+  }
+
+  uint64_t get_global_compaction_megabytes_written() const override {
+    constexpr uint64_t kBytes2Megabytes = 1 << 20;
+    return compaction_bytes_written_.load(std::memory_order_relaxed) /
+           kBytes2Megabytes;
+  }
+
+  void reset_global_compaction_stat() override {
+    compaction_bytes_written_.store(0, std::memory_order_relaxed);
+  }
 
  private:
   std::shared_ptr<Statistics> stats_shared_;
@@ -135,6 +174,14 @@ class StatisticsImpl : public Statistics {
 
   TickerInfo tickers_[INTERNAL_TICKER_ENUM_MAX];
   HistogramInfo histograms_[INTERNAL_HISTOGRAM_ENUM_MAX];
+  // we use an asynchronous thread to set/get, no synchronization needed here.
+  // Gauge type is actually uint64_t, the subscript of vector means which Gauge
+  // metrics.
+  std::vector<uint64_t> gauge_metrics_;
+  // maintain compaction_bytes_written in monitor interval
+  std::atomic<uint64_t> compaction_bytes_written_;
+  // maintain flush_bytes_written in monitor interval
+  std::atomic<uint64_t> flush_bytes_written_;
 };
 
 // Utility functions

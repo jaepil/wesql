@@ -4,6 +4,7 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 #include "monitoring/statistics.h"
+#include <atomic>
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -29,7 +30,10 @@ StatisticsImpl::StatisticsImpl(std::shared_ptr<Statistics> stats,
                                bool enable_internal_stats)
     : stats_shared_(stats),
       stats_(stats.get()),
-      enable_internal_stats_(enable_internal_stats) {}
+      enable_internal_stats_(enable_internal_stats),
+      gauge_metrics_(static_cast<size_t>(Gauge::GAUGE_ENUM_MAX), 0ull),
+      compaction_bytes_written_(0),
+      flush_bytes_written_(0) {}
 
 StatisticsImpl::~StatisticsImpl() {}
 
@@ -168,6 +172,21 @@ void StatisticsImpl::measureTime(uint32_t histogramType, uint64_t value) {
   if (stats_ && histogramType < HISTOGRAM_ENUM_MAX) {
     stats_->measureTime(histogramType, value);
   }
+}
+
+void StatisticsImpl::set_gauge_value(Gauge which, uint64_t value) {
+  auto ind = static_cast<size_t>(which);
+  if (ind < gauge_metrics_.size()) {
+    gauge_metrics_[ind] = value;
+  }
+}
+
+uint64_t StatisticsImpl::get_gauge_value(Gauge which) const {
+  auto ind = static_cast<size_t>(which);
+  if (ind < gauge_metrics_.size()) {
+    return gauge_metrics_[ind];
+  }
+  return 0ull;
 }
 
 namespace {

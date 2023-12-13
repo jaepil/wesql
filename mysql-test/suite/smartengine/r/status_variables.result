@@ -40,6 +40,23 @@ Smartengine_system_rows_deleted	###
 Smartengine_system_rows_inserted	###
 Smartengine_system_rows_updated	###
 Smartengine_system_rows_read	###
+Smartengine_max_level0_layers	###
+Smartengine_max_imm_numbers	###
+Smartengine_max_level0_fragmentation_rate	###
+Smartengine_max_level1_fragmentation_rate	###
+Smartengine_max_level2_fragmentation_rate	###
+Smartengine_max_level0_delete_percent	###
+Smartengine_max_level1_delete_percent	###
+Smartengine_max_level2_delete_percent	###
+Smartengine_all_flush_megabytes	###
+Smartengine_all_compaction_megabytes	###
+Smartengine_top1_subtable_size	###
+Smartengine_top2_subtable_size	###
+Smartengine_top3_subtable_size	###
+Smartengine_top1_mod_mem_info	###
+Smartengine_top2_mod_mem_info	###
+Smartengine_top3_mod_mem_info	###
+Smartengine_global_external_fragmentation_rate	###
 
 
 show engine smartengine status;

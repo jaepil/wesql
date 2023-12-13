@@ -2091,6 +2091,7 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
         static_cast<ExtentBasedTableFactory *>(cf_options.table_factory.get())->table_options().block_cache.get();
     if (nullptr != block_cache) {
       alloc->set_mod_size_limit(ModId::kDataBlockCache, block_cache->GetCapacity());
+      impl->block_cache_ = block_cache;
     }
   }
   if (IS_NULL(impl->table_cache_.get())) {

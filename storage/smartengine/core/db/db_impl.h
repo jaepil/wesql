@@ -39,6 +39,7 @@
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
 #include "port/port.h"
+#include "smartengine/cache.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_common.h"
 #include "table/scoped_arena_iterator.h"
@@ -141,6 +142,12 @@ struct RecoveryDebugInfo
   int64_t recoverywal_slowest;
 
   std::string show();
+};
+
+struct Top3ModMemInfo {
+  uint64_t top1 = 0;
+  uint64_t top2 = 0;
+  uint64_t top3 = 0;
 };
 
 struct ShrinkArgs
@@ -1268,6 +1275,9 @@ protected:
   int background_dump(bool* madeProgress, JobContext* job_context);
   int background_gc();
   void PrintStatistics();
+  // Will be called in master thread, no need external synchronization here.
+  void background_pull_gauge_statistics();
+  Top3ModMemInfo pull_top3_mod_mem_info();
 
   // helper functions for adding and removing from flush & compaction queues
   void AddToFlushQueue(ColumnFamilyData* cfd, TaskType type);
@@ -1823,7 +1833,7 @@ protected:
   std::map<uint64_t, int64_t> not_commited_section_;
   std::mutex not_commited_mutex_;
 
-  std::shared_ptr<cache::Cache> block_cache_ = nullptr;
+  cache::Cache* block_cache_ = nullptr;
   // No copying allowed
   DBImpl(const DBImpl&);
   void operator=(const DBImpl&);

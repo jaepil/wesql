@@ -106,6 +106,10 @@ class MemTableListVersion {
 
   uint64_t GetTotalNumDeletes() const;
 
+  uint64_t get_imm_number() const;
+
+  uint64_t get_data_size() const;
+
   MemTable::MemTableStats ApproximateStats(const common::Slice& start_ikey,
                                            const common::Slice& end_ikey);
 

@@ -206,6 +206,16 @@ uint64_t MemTableListVersion::GetTotalNumEntries() const {
   return total_num;
 }
 
+uint64_t MemTableListVersion::get_imm_number() const { return memlist_.size(); }
+
+uint64_t MemTableListVersion::get_data_size() const {
+  uint64_t data_size = 0;
+  std::for_each(
+      memlist_.begin(), memlist_.end(),
+      [&data_size](const MemTable *entry) { data_size += entry->data_size(); });
+  return data_size;
+}
+
 MemTable::MemTableStats MemTableListVersion::ApproximateStats(
     const Slice& start_ikey, const Slice& end_ikey) {
   MemTable::MemTableStats total_stats = {0, 0};

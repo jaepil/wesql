@@ -229,6 +229,32 @@ enum Tickers : uint32_t {
   TICKER_ENUM_MAX
 };
 
+// Gauge type represents the current state of the system.
+// Currently, we let all the Gauge value be uint64_t.
+enum class Gauge : uint64_t {
+  // every subtable has its own value, we maintain max value here.
+  MAX_LEVEL0_LAYERS = 0,
+  MAX_IMM_NUMBERS,
+  // internal fragmentation rate
+  MAX_LEVEL0_FRAGMENTATION_RATE,
+  MAX_LEVEL1_FRAGMENTATION_RATE,
+  MAX_LEVEL2_FRAGMENTATION_RATE,
+  MAX_LEVEL0_DELETE_PERCENT,
+  MAX_LEVEL1_DELETE_PERCENT,
+  MAX_LEVEL2_DELETE_PERCENT,
+  ALL_FLUSH_MEGABYTES,
+  ALL_COMPACTION_MEGABYTES,
+  TOP1_SUBTABLE_SIZE,
+  TOP2_SUBTABLE_SIZE,
+  TOP3_SUBTABLE_SIZE,
+  TOP1_MOD_MEM_INFO,
+  TOP2_MOD_MEM_INFO,
+  TOP3_MOD_MEM_INFO,
+  GLOBAL_EXTERNAL_FRAGMENTATION_RATE,
+
+  GAUGE_ENUM_MAX
+};
+
 // The order of items listed in  Tickers should be the same as
 // the order listed in TickersNameMap
 const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
@@ -501,6 +527,18 @@ class Statistics {
   virtual void setTickerCount(uint32_t tickerType, uint64_t count) = 0;
   virtual uint64_t getAndResetTickerCount(uint32_t tickerType) = 0;
   virtual void measureTime(uint32_t histogramType, uint64_t time) = 0;
+  virtual void set_gauge_value(Gauge which, uint64_t value) = 0;
+  virtual uint64_t get_gauge_value(Gauge which) const = 0;
+  virtual void update_global_flush_stat(uint64_t bytes_written,
+                                        uint64_t start_micros,
+                                        uint64_t end_micros) = 0;
+  virtual uint64_t get_global_flush_megabytes_written() const = 0;
+  virtual void reset_global_flush_stat() = 0;
+  virtual void update_global_compaction_stat(uint64_t bytes_written,
+                                             uint64_t start_micros,
+                                             uint64_t end_micros) = 0;
+  virtual uint64_t get_global_compaction_megabytes_written() const = 0;
+  virtual void reset_global_compaction_stat() = 0;
 
   // String representation of the statistic object.
   virtual std::string ToString() const {

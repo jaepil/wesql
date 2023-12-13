@@ -59,6 +59,23 @@ struct SeGlobalStats
 
   std::atomic<uint64_t> snapshot_conflict_errors_;
   std::atomic<uint64_t> wal_group_syncs_;
+  std::atomic<uint64_t> max_level0_layers_;
+  std::atomic<uint64_t> max_imm_numbers_;
+  std::atomic<uint64_t> max_level0_fragmentation_rate_;
+  std::atomic<uint64_t> max_level1_fragmentation_rate_;
+  std::atomic<uint64_t> max_level2_fragmentation_rate_;
+  std::atomic<uint64_t> max_level0_delete_percent_;
+  std::atomic<uint64_t> max_level1_delete_percent_;
+  std::atomic<uint64_t> max_level2_delete_percent_;
+  std::atomic<uint64_t> all_flush_megabytes_;
+  std::atomic<uint64_t> all_compaction_megabytes_;
+  std::atomic<uint64_t> top1_subtable_size_;
+  std::atomic<uint64_t> top2_subtable_size_;
+  std::atomic<uint64_t> top3_subtable_size_;
+  std::atomic<uint64_t> top1_mod_mem_info_;
+  std::atomic<uint64_t> top2_mod_mem_info_;
+  std::atomic<uint64_t> top3_mod_mem_info_;
+  std::atomic<uint64_t> global_external_fragmentation_rate_;
 
   SeGlobalStats();
 };
@@ -107,6 +124,23 @@ struct SeStatusVars
   uint64_t system_rows_inserted_;
   uint64_t system_rows_updated_;
   uint64_t system_rows_read_;
+  uint64_t max_level0_layers_;
+  uint64_t max_imm_numbers_;
+  uint64_t max_level0_fragmentation_rate_;
+  uint64_t max_level1_fragmentation_rate_;
+  uint64_t max_level2_fragmentation_rate_;
+  uint64_t max_level0_delete_percent_;
+  uint64_t max_level1_delete_percent_;
+  uint64_t max_level2_delete_percent_;
+  uint64_t all_flush_megabytes_;
+  uint64_t all_compaction_megabytes_;
+  uint64_t top1_subtable_size_;
+  uint64_t top2_subtable_size_;
+  uint64_t top3_subtable_size_;
+  uint64_t top1_mod_mem_info_;
+  uint64_t top2_mod_mem_info_;
+  uint64_t top3_mod_mem_info_;
+  uint64_t global_external_fragmentation_rate_;
 
   SeStatusVars();
   void reset();

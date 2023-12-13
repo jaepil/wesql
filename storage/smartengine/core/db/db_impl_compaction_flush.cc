@@ -2268,6 +2268,15 @@ Status DBImpl::run_one_compaction_task(ColumnFamilyData* sub_table,
         record_compaction_stats(compaction->get_stats());
         const_cast<storage::Compaction::Statstics&>(job->get_stats()).record_stats_.add(compaction->get_stats().record_stats_);
         const_cast<storage::Compaction::Statstics&>(job->get_stats()).perf_stats_.add(compaction->get_stats().perf_stats_);
+        if (stats_) {
+          auto compaction_stat = compaction->get_stats().record_stats_;
+          uint64_t bytes_written = (compaction_stat.total_input_extents -
+                                    compaction_stat.reuse_extents) *
+                                   MAX_EXTENT_SIZE;
+          stats_->update_global_compaction_stat(bytes_written,
+                                                compaction_stat.start_micros,
+                                                compaction_stat.end_micros);
+        }
       }
       // retain db mutex for change meta;
       mutex_.Lock();

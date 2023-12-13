@@ -57,6 +57,10 @@ int64_t AllocMgr::get_alloc_count(const size_t mod_id) const {
   return mod_set_.get_alloc_count(mod_id);
 }
 
+const char *AllocMgr::get_mod_name_by_mod_id(size_t mod_id) const {
+  return mod_set_.get_mod_name(mod_id);
+}
+
 // export the memory usage for information schema
 void AllocMgr::get_memory_usage(MemItemDump *items, 
                                 std::string *mod_names) {

@@ -9,6 +9,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/db_impl.h"
+#include <cstdint>
+#include "memory/base_malloc.h"
+#include "memory/mod_info.h"
+
+#ifdef WITH_SMARTENGINE
+#include "se_status_vars.h"
+#endif
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -86,6 +93,7 @@
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
+#include "util/defer.h"
 #include "util/file_reader_writer.h"
 #include "util/file_util.h"
 #include "util/filename.h"
@@ -728,6 +736,7 @@ void DBImpl::bg_master_thread_func() {
   uint64_t ebr_ms = 2 * 1000; // 2 seconds
   uint64_t last_seq = versions_.get()->LastSequence();
   uint64_t sequence_step = 256;
+  uint64_t last_monitor_ts = env_->NowMicros() / 1'000;
   bool idle_flag = true;
   SE_LOG(WARN, "smartengine Master Thread online");
   int ret = 0;
@@ -745,7 +754,7 @@ void DBImpl::bg_master_thread_func() {
     if (env_->NowMicros() / 1000 > last_stats_dump_ts + stats_dump_period_ms) {
       last_stats_dump_ts = env_->NowMicros() / 1000;
       QueryPerfContext::async_log_stats(env_, db_absolute_path_,
-          block_cache_.get(), immutable_db_options_.row_cache.get());
+          block_cache_, immutable_db_options_.row_cache.get());
     }
     if (db_shutting_down() || !bg_error_.ok()) {
       break;
@@ -824,6 +833,16 @@ void DBImpl::bg_master_thread_func() {
       last_ebr_ts = env_->NowMicros() / 1000;
       SE_LOG(INFO, "BG_TASK: ebr task", K(env_->NowMicros()));
       schedule_ebr();
+    }
+    // (7) update and set monitor gauge value
+    // In some core uts, stats_ maybe nullptr
+    if (stats_ &&
+        env_->NowMicros() / 1'000 >
+            last_monitor_ts + mutable_db_options_.monitor_interval_ms) {
+      last_monitor_ts = env_->NowMicros() / 1'000;
+      SE_LOG(INFO, "BG_TASK: monitor task", K(env_->NowMicros()),
+             K(mutable_db_options_.monitor_interval_ms));
+      background_pull_gauge_statistics();
     }
   }
   //we should set stat while holding mutex_
@@ -3921,6 +3940,335 @@ bool DBImpl::get_columnfamily_stats(ColumnFamilyHandle* column_family, int64_t &
     SE_LOG(WARN, "can't get sub tables stats of empty handle\n", K(data_size));
     return false;
   }
+}
+
+Top3ModMemInfo DBImpl::pull_top3_mod_mem_info() {
+  Top3ModMemInfo ret;
+  // return if block cache type
+  auto process_single_mod = [this](ModId::ModType mod_type,
+                                   int64_t &mod_malloc_size) {
+    bool is_block_cache_type = false;
+    // default every mod has max quota
+    int64_t quota = std::numeric_limits<int64_t>::max();
+    switch (mod_type) {
+      case memory::ModId::kMemtable: {
+        quota = this->immutable_db_options_.db_total_write_buffer_size;
+        break;
+      }
+      case memory::ModId::kIndexBlockCache: {
+        [[fallthrough]];
+      }
+      case memory::ModId::kDataBlockCache: {
+        is_block_cache_type = true;
+        // we leave block cache size calculation to upper layer
+        break;
+      }
+      case memory::ModId::kRowCache: {
+        if (IS_NULL(this->immutable_db_options_.row_cache)) {
+          SE_LOG(INFO, "row cache is nullptr, maybe it is turned off.");
+        } else {
+          quota = this->immutable_db_options_.row_cache->get_capacity();
+        }
+        break;
+      }
+      // this mod is related to kRowCache, we set the quoto to 1/10 kRowCache
+      case memory::ModId::kCacheHashTable: {
+        if (IS_NULL(this->immutable_db_options_.row_cache)) {
+          SE_LOG(INFO, "row cache is nullptr, maybe it is turned off.");
+        } else {
+          quota = this->immutable_db_options_.row_cache->get_capacity() / 10;
+        }
+        break;
+      }
+      // these three mods have the same quota, currently we set to 500 MB
+      case memory::ModId::kAIOBuffer: {
+        [[fallthrough]];
+      }
+      case memory::ModId::kTransactionLockMgr: {
+        [[fallthrough]];
+      }
+      case memory::ModId::kStorageLogger: {
+        // 500 MB
+        quota = 500 * (1 << 20);
+        break;
+      }
+      default:
+        // the quota of other mods are zero
+        quota = 0;
+    }
+    if (!is_block_cache_type) {
+      mod_malloc_size -= quota;
+      if (mod_malloc_size < 0) {
+        mod_malloc_size = 0;
+      }
+    }
+    return is_block_cache_type;
+  };
+  int mod_cnt = memory::ModMemSet::kModMaxCnt;
+  ArenaAllocator tmp_alloc(8 * 1024);
+  // It is better to use unique_ptr here but for reusing exisiting api, we just
+  // use raw new/delete here
+  auto items = new memory::MemItemDump[mod_cnt];
+  auto items_free = util::defer([&items] { delete[] items; });
+  auto mod_names = new std::string[mod_cnt];
+  auto mode_names_free = util::defer([&mod_names] { delete[] mod_names; });
+  int mod_cnt_processed = mod_cnt - 1;
+  auto items_processed = new memory::MemItemDump[mod_cnt_processed];
+  auto items_processed_free =
+      util::defer([&items_processed] { delete[] items_processed; });
+  memory::AllocMgr::get_instance()->get_memory_usage(items, mod_names);
+  // block_cache_size = size(kDataBlockCache) + size(kIndexBlockCache), and we
+  // preprocess first
+  for (int i = 0, processed = 0; i < mod_cnt; ++i) {
+    auto mod_malloc_size = items[i].malloc_size_;
+    if (process_single_mod(static_cast<ModId::ModType>(items[i].id_),
+                           mod_malloc_size)) {
+      // put block cache into last entry
+      items_processed[mod_cnt_processed - 1].malloc_size_ +=
+          items[i].malloc_size_;
+      items_processed[mod_cnt_processed - 1].alloc_size_ +=
+          items[i].alloc_size_;
+      // reuse kDataBlockCache to represent kDataBlockCache + kIndexBlockCache
+      items_processed[mod_cnt_processed - 1].id_ = ModId::kDataBlockCache;
+    } else {
+      items_processed[processed] = std::move(items[i]);
+      items_processed[processed].malloc_size_ = mod_malloc_size;
+      items_processed[processed].alloc_size_ = mod_malloc_size;
+      ++processed;
+    }
+  }
+  int64_t block_cache_size =
+      (this->block_cache_ == nullptr ? 0 : this->block_cache_->GetCapacity());
+  // we minus the quota of block cache
+  if (items_processed[mod_cnt_processed - 1].malloc_size_ > block_cache_size) {
+    items_processed[mod_cnt_processed - 1].malloc_size_ -= block_cache_size;
+    items_processed[mod_cnt_processed - 1].alloc_size_ -= block_cache_size;
+  } else {
+    items_processed[mod_cnt_processed - 1].malloc_size_ =
+        items_processed[mod_cnt_processed - 1].alloc_size_ = 0;
+  }
+  std::sort(items_processed, items_processed + mod_cnt_processed);
+  // we know there are more than three mods
+  for (int topk = 1; topk < 4; ++topk) {
+    __SE_LOG(WARN,
+             "Top %d module is %s, the memory usage beyond quota is %lld MB.",
+             topk,
+             AllocMgr::get_instance()->get_mod_name_by_mod_id(
+                 items_processed[topk - 1].id_),
+             items_processed[topk - 1].malloc_size_ / (1 << 20));
+  }
+  ret.top1 = items_processed[0].malloc_size_ / (1 << 20);
+  ret.top2 = items_processed[1].malloc_size_ / (1 << 20);
+  ret.top3 = items_processed[2].malloc_size_ / (1 << 20);
+  return ret;
+}
+
+void DBImpl::background_pull_gauge_statistics() {
+  GlobalContext *global_ctx = nullptr;
+  AllSubTable *all_sub_table = nullptr;
+  auto defer_release_all_sub_table = util::defer([&global_ctx, &all_sub_table] {
+    if (ISNULL(global_ctx)) {
+      return;
+    }
+    global_ctx->release_thread_local_all_sub_table(all_sub_table);
+  });
+  int ret = 0;
+  // 1. We get all threadlocal sub tables
+  if (FAILED(get_all_sub_table(all_sub_table, global_ctx))) {
+    SE_LOG(WARN, "fail to get all sub tables");
+    return;
+  }
+  SubTableMap &all_sub_tables = all_sub_table->sub_table_map_;
+  SubTable *sub_table = nullptr;
+  uint64_t max_level0_layers = 0;
+  uint64_t max_imm_numbers = 0;
+  uint64_t max_level0_fragmentation_rate = 0;
+  uint64_t max_level1_fragmentation_rate = 0;
+  uint64_t max_level2_fragmentation_rate = 0;
+  uint64_t max_level0_delete_percent = 0;
+  uint64_t max_level1_delete_percent = 0;
+  uint64_t max_level2_delete_percent = 0;
+  uint64_t global_external_fragmentation_rate = 0;
+  std::vector<uint64_t> subtable_size_vec;
+  subtable_size_vec.reserve(all_sub_tables.size());
+  // all_flush/compaction_megabytes maintainted by statistics
+  // 2. Traverse all sub tables, update the gauge value we need
+  for (auto iter = all_sub_tables.begin(); iter != all_sub_tables.end();
+       ++iter) {
+    if (ISNULL(sub_table = iter->second) || sub_table->IsDropped()) {
+      SE_LOG(WARN, "sub table is nullptr or dropped", K(iter->first));
+      continue;
+    }
+    // we get all data we need in thread local sv to avoid mutex_ hold
+    SuperVersion *sv = sub_table->GetThreadLocalSuperVersion(&mutex_);
+    auto defer_return_sv = util::defer([&sub_table, &sv] {
+      if (IS_NULL(sub_table)) {
+        return;
+      }
+      if (!sub_table->ReturnThreadLocalSuperVersion(sv)) {
+        SE_LOG(WARN, "return thread local super version failed",
+               K(sub_table->GetID()));
+      }
+    });
+    if (IS_NULL(sv->current_meta_)) {
+      SE_LOG(WARN, "unexpected error, current meta snapshot must not nullptr",
+             KP(sv->current_meta_));
+      continue;
+    }
+    // 2.1 max level0 layer size
+    uint64_t level0_layer_size =
+        sv->current_meta_->get_extent_layer_version(0)->get_extent_layer_size();
+    max_level0_layers = std::max(max_level0_layers, level0_layer_size);
+    // 2.2 max imm number
+    uint64_t imm_numbers = sv->imm->get_imm_number();
+    max_imm_numbers = std::max(max_imm_numbers, imm_numbers);
+    // 2.3 && 2.4 max fragmentation rate and delete percent of level 0/1/2
+    auto get_level_fragmentation_rate_and_delete_percent_func =
+        [](const Snapshot *meta_snapshot, int32_t level) {
+          uint64_t fragmentation_rate = 0;
+          uint64_t delete_percent = 0;
+          if (level < 0 || level >= storage::MAX_TIER_COUNT) {
+            SE_LOG(WARN, "level is invalid", K(level));
+            return std::make_pair(fragmentation_rate, delete_percent);
+          }
+          auto extent_stat = meta_snapshot->get_extent_layer_version(level)
+                                 ->get_extent_stats();
+          fragmentation_rate = ((extent_stat.disk_size_ == 0)
+                                    ? 0
+                                    : 100 - extent_stat.data_size_ * 100.0 /
+                                                extent_stat.disk_size_);
+          delete_percent = ((extent_stat.num_entries_ == 0)
+                                ? 0
+                                : extent_stat.num_deletes_ * 100.0 /
+                                      extent_stat.num_entries_);
+          return std::make_pair(fragmentation_rate, delete_percent);
+        };
+    // level 0
+    auto [level0_fragmentation_rate, level0_delete_percent] =
+        get_level_fragmentation_rate_and_delete_percent_func(sv->current_meta_,
+                                                             0);
+    max_level0_fragmentation_rate =
+        std::max(max_level0_fragmentation_rate, level0_fragmentation_rate);
+    max_level0_delete_percent =
+        std::max(max_level0_delete_percent, level0_delete_percent);
+    // level 1
+    auto [level1_fragmentation_rate, level1_delete_percent] =
+        get_level_fragmentation_rate_and_delete_percent_func(sv->current_meta_,
+                                                             1);
+    max_level1_fragmentation_rate =
+        std::max(max_level1_fragmentation_rate, level1_fragmentation_rate);
+    max_level1_delete_percent =
+        std::max(max_level1_delete_percent, level1_delete_percent);
+    // level 2
+    auto [level2_fragmentation_rate, level2_delete_percent] =
+        get_level_fragmentation_rate_and_delete_percent_func(sv->current_meta_,
+                                                             2);
+    max_level2_fragmentation_rate =
+        std::max(max_level2_fragmentation_rate, level2_fragmentation_rate);
+    max_level2_delete_percent =
+        std::max(max_level2_delete_percent, level2_delete_percent);
+    // 2.5 global flush/compaction stat already update in flush/compaction job
+    // 2.6 subtable size
+    auto get_subtable_size_func = [&sv] {
+      uint64_t mt_size = sv->mem->data_size();
+      uint64_t immt_size = sv->imm->get_data_size();
+      uint64_t extent_size =
+          sv->current_meta_->get_total_extent_count() * MAX_EXTENT_SIZE;
+      return (mt_size + immt_size + extent_size) / (1 << 20);
+    };
+    subtable_size_vec.push_back(get_subtable_size_func());
+  }
+  // calculate subtable size top3
+  int subtable_size = subtable_size_vec.size();
+  std::partial_sort(subtable_size_vec.begin(),
+                    subtable_size_vec.begin() + std::min(3, subtable_size),
+                    subtable_size_vec.end(), std::greater<>());
+  // 2.7 global external fragmentation rate
+  std::vector<storage::DataFileStatistics> data_file_stats;
+  get_data_file_stats(data_file_stats);
+  int64_t free_extents = 0;
+  int64_t total_extents = 0;
+  for (const auto &stat : data_file_stats) {
+    free_extents += stat.free_extent_count_;
+    total_extents += stat.total_extent_count_;
+  }
+  global_external_fragmentation_rate =
+      ((total_extents == 0) ? 0 : (1.0 * free_extents * 100) / total_extents);
+  // 2.8 top3 module memory usage
+  auto top3_mod_mem_info = pull_top3_mod_mem_info();
+  // 3. Set value to statistics
+  stats_->set_gauge_value(Gauge::MAX_LEVEL0_LAYERS, max_level0_layers);
+  stats_->set_gauge_value(Gauge::MAX_IMM_NUMBERS, max_imm_numbers);
+  stats_->set_gauge_value(Gauge::MAX_LEVEL0_FRAGMENTATION_RATE,
+                          max_level0_fragmentation_rate);
+  stats_->set_gauge_value(Gauge::MAX_LEVEL1_FRAGMENTATION_RATE,
+                          max_level1_fragmentation_rate);
+  stats_->set_gauge_value(monitor::Gauge::MAX_LEVEL2_FRAGMENTATION_RATE,
+                          max_level2_fragmentation_rate);
+  stats_->set_gauge_value(Gauge::MAX_LEVEL0_DELETE_PERCENT,
+                          max_level0_delete_percent);
+  stats_->set_gauge_value(Gauge::MAX_LEVEL1_DELETE_PERCENT,
+                          max_level1_delete_percent);
+  stats_->set_gauge_value(Gauge::MAX_LEVEL2_DELETE_PERCENT,
+                          max_level2_delete_percent);
+  stats_->set_gauge_value(Gauge::ALL_FLUSH_MEGABYTES,
+                          stats_->get_global_flush_megabytes_written());
+  stats_->set_gauge_value(Gauge::ALL_COMPACTION_MEGABYTES,
+                          stats_->get_global_compaction_megabytes_written());
+#define SET_TOPK_SUBTABLE_SIZE(k)                          \
+  if (k <= subtable_size) {                                \
+    stats_->set_gauge_value(Gauge::TOP##k##_SUBTABLE_SIZE, \
+                            subtable_size_vec[k - 1]);     \
+  }
+  SET_TOPK_SUBTABLE_SIZE(1);
+  SET_TOPK_SUBTABLE_SIZE(2);
+  SET_TOPK_SUBTABLE_SIZE(3);
+#undef SET_TOPK_SUBTABLE_SIZE
+  stats_->set_gauge_value(Gauge::GLOBAL_EXTERNAL_FRAGMENTATION_RATE,
+                          global_external_fragmentation_rate);
+  stats_->set_gauge_value(Gauge::TOP1_MOD_MEM_INFO, top3_mod_mem_info.top1);
+  stats_->set_gauge_value(Gauge::TOP2_MOD_MEM_INFO, top3_mod_mem_info.top2);
+  stats_->set_gauge_value(Gauge::TOP3_MOD_MEM_INFO, top3_mod_mem_info.top3);
+  // 4. Reset global flush/compaction stats
+  stats_->reset_global_flush_stat();
+  stats_->reset_global_compaction_stat();
+#ifdef WITH_SMARTENGINE
+  // 5. Set global_stats in handler layer
+  global_stats.max_level0_layers_ =
+      stats_->get_gauge_value(Gauge::MAX_LEVEL0_LAYERS);
+  global_stats.max_imm_numbers_ =
+      stats_->get_gauge_value(Gauge::MAX_IMM_NUMBERS);
+  global_stats.max_level0_fragmentation_rate_ =
+      stats_->get_gauge_value(Gauge::MAX_LEVEL0_FRAGMENTATION_RATE);
+  global_stats.max_level1_fragmentation_rate_ =
+      stats_->get_gauge_value(Gauge::MAX_LEVEL1_FRAGMENTATION_RATE);
+  global_stats.max_level2_fragmentation_rate_ =
+      stats_->get_gauge_value(Gauge::MAX_LEVEL2_FRAGMENTATION_RATE);
+  global_stats.max_level0_delete_percent_ =
+      stats_->get_gauge_value(Gauge::MAX_LEVEL0_DELETE_PERCENT);
+  global_stats.max_level1_delete_percent_ =
+      stats_->get_gauge_value(Gauge::MAX_LEVEL1_DELETE_PERCENT);
+  global_stats.max_level2_delete_percent_ =
+      stats_->get_gauge_value(Gauge::MAX_LEVEL2_DELETE_PERCENT);
+  global_stats.all_flush_megabytes_ =
+      stats_->get_gauge_value(Gauge::ALL_FLUSH_MEGABYTES);
+  global_stats.all_compaction_megabytes_ =
+      stats_->get_gauge_value(Gauge::ALL_COMPACTION_MEGABYTES);
+  global_stats.top1_subtable_size_ =
+      stats_->get_gauge_value(Gauge::TOP1_SUBTABLE_SIZE);
+  global_stats.top2_subtable_size_ =
+      stats_->get_gauge_value(Gauge::TOP2_SUBTABLE_SIZE);
+  global_stats.top3_subtable_size_ =
+      stats_->get_gauge_value(Gauge::TOP3_SUBTABLE_SIZE);
+  global_stats.top1_mod_mem_info_ =
+      stats_->get_gauge_value(Gauge::TOP1_MOD_MEM_INFO);
+  global_stats.top2_mod_mem_info_ =
+      stats_->get_gauge_value(Gauge::TOP2_MOD_MEM_INFO);
+  global_stats.top3_mod_mem_info_ =
+      stats_->get_gauge_value(Gauge::TOP3_MOD_MEM_INFO);
+  global_stats.global_external_fragmentation_rate_ =
+      stats_->get_gauge_value(Gauge::GLOBAL_EXTERNAL_FRAGMENTATION_RATE);
+#endif
 }
 
 #endif  // ROCKSDB_LITE

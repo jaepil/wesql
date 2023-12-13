@@ -296,6 +296,10 @@ class MemTable {
     return num_deletes_.load(std::memory_order_relaxed);
   }
 
+  uint64_t data_size() const {
+    return data_size_.load(std::memory_order_relaxed);
+  }
+
   // Returns if there is no entry inserted to the mem table.
   // REQUIRES: external synchronization to prevent simultaneous
   // operations on the same MemTable (unless this Memtable is immutable).

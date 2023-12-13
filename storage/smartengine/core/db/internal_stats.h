@@ -152,7 +152,11 @@ class InternalStats {
         started_at_(env->NowMicros()) {}
 
   // Per level compaction stats.  comp_stats_[level] stores the stats for
-  // compactions that produced data for the specified "level".
+  // flush that produced data for the specified "level" and current we use
+  // this struct to store flush stats.
+  // For do not block flush progress and allow stale stat, we do not add mutex
+  // here, but you should know that it is possible that master thread Clear()
+  // and flush job set() are invoked at the same time.
   struct CompactionStats {
     uint64_t micros;
 
@@ -362,7 +366,9 @@ class InternalStats {
   uint64_t cf_stats_value_[INTERNAL_CF_STATS_ENUM_MAX];
   uint64_t cf_stats_count_[INTERNAL_CF_STATS_ENUM_MAX];
   // Per-ColumnFamily/level compaction stats
-  std::vector<CompactionStats> comp_stats_;  // not used
+  // Currently used for flush statistics, comp_stats_[0] store flush level0
+  // rate, comp_stats_[1] store flush level1 rate
+  std::vector<CompactionStats> comp_stats_;
 //  std::vector<monitor::HistogramImpl> file_read_latency_;
 
   // Per-ColumnFamily/level compaction stats for smartengine

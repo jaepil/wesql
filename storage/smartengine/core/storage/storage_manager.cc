@@ -283,6 +283,23 @@ int StorageManager::get_extent_layer_iterator(
                                       iterator);
 }
 
+std::pair<uint64_t, uint64_t> StorageManager::get_level_fragmentation_rate_and_delete_percent(const Snapshot *current_meta, int32_t level) const {
+  uint64_t fragmentation_rate = 0;
+  uint64_t delete_percent = 0;
+  if (level < 0 || level >= storage::MAX_TIER_COUNT) {
+    SE_LOG(WARN, "level is invalid", K(level));
+    return std::make_pair(fragmentation_rate, delete_percent);
+  }
+  if (IS_NULL(current_meta)) {
+    SE_LOG(WARN, "unexpected error, current meta must be non-nullptr", KP_(current_meta));
+    return std::make_pair(fragmentation_rate, delete_percent);
+  }
+  auto extent_stat = current_meta->get_extent_layer_version(level)->get_extent_stats();
+  fragmentation_rate = ((extent_stat.disk_size_ == 0) ? 0 : 100 - extent_stat.data_size_ * 100.0 / extent_stat.disk_size_);
+  delete_percent = ((extent_stat.num_entries_ == 0) ? 0 : extent_stat.num_deletes_ * 100.0 / extent_stat.num_entries_);
+  return std::make_pair(fragmentation_rate, delete_percent);
+}
+
 int64_t StorageManager::approximate_size(const db::ColumnFamilyData *cfd,
                                          const Slice &start, const Slice &end,
                                          int start_level, int end_level,

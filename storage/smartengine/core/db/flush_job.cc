@@ -264,15 +264,27 @@ int BaseFlush::stop_record_flush_stats(const int64_t bytes_written,
   int ret = 0;
   // Note that here we treat flush as level 0 compaction in internal stats
   InternalStats::CompactionStats stats(1);
-  stats.micros = db_options_.env->NowMicros() - start_micros;
+  auto end_micros = db_options_.env->NowMicros();
+  stats.micros = end_micros - start_micros;
   stats.bytes_written = bytes_written;
   cfd_->internal_stats()->AddCompactionStats(job_context_.output_level_ /* level */, stats);
   cfd_->internal_stats()->AddCFStats(InternalStats::BYTES_FLUSHED,
                                      bytes_written);
   cfd_->internal_stats()->AddCFStats(InternalStats::BYTES_WRITE,
                                      bytes_written);
+  upload_current_flush_stats_to_global(bytes_written, start_micros, end_micros);
   RecordFlushIOStats();
   return ret;
+}
+
+void BaseFlush::upload_current_flush_stats_to_global(uint64_t bytes_written,
+                                                     uint64_t start_micros,
+                                                     uint64_t end_micros) {
+  if (IS_NULL(db_options_.statistics)) {
+    return;
+  }
+  db_options_.statistics->update_global_flush_stat(bytes_written, start_micros,
+                                                   end_micros);
 }
 
 // delete M0's extens already exist

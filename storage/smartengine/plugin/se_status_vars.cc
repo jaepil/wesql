@@ -83,6 +83,23 @@ void SeStatusVars::reset()
   system_rows_inserted_ = 0;
   system_rows_updated_ = 0;
   system_rows_read_ = 0;
+  max_level0_layers_ = 0;
+  max_imm_numbers_ = 0;
+  max_level0_fragmentation_rate_ = 0;
+  max_level1_fragmentation_rate_ = 0;
+  max_level2_fragmentation_rate_ = 0;
+  max_level0_delete_percent_ = 0;
+  max_level1_delete_percent_ = 0;
+  max_level2_delete_percent_ = 0;
+  all_flush_megabytes_ = 0;
+  all_compaction_megabytes_ = 0;
+  top1_subtable_size_ = 0;
+  top2_subtable_size_ = 0;
+  top3_subtable_size_ = 0;
+  top1_mod_mem_info_ = 0;
+  top2_mod_mem_info_ = 0;
+  top3_mod_mem_info_ = 0;
+  global_external_fragmentation_rate_ = 0;
 }
 
 DEFINE_TO_STRING(SeStatusVars, KV_(block_cache_miss), KV_(block_cache_hit), KV_(block_cache_add),
@@ -94,7 +111,14 @@ DEFINE_TO_STRING(SeStatusVars, KV_(block_cache_miss), KV_(block_cache_hit), KV_(
     KV_(write_wal), KV_(number_superversion_acquires), KV_(number_superversion_releases),
     KV_(number_superversion_cleanups), KV_(number_block_not_compressed), KV_(snapshot_conflict_errors),
     KV_(wal_group_syncs), KV_(rows_deleted), KV_(rows_inserted), KV_(rows_updated), KV_(rows_read),
-    KV_(system_rows_deleted), KV_(system_rows_inserted), KV_(system_rows_updated), KV_(system_rows_read));
+    KV_(system_rows_deleted), KV_(system_rows_inserted), KV_(system_rows_updated), KV_(system_rows_read),
+    KV_(max_level0_layers), KV_(max_imm_numbers),
+    KV_(max_level0_fragmentation_rate), KV_(max_level1_fragmentation_rate), KV_(max_level2_fragmentation_rate),
+    KV_(max_level0_delete_percent), KV_(max_level1_delete_percent), KV_(max_level2_delete_percent),
+    KV_(all_flush_megabytes), KV_(all_compaction_megabytes),
+    KV_(top1_subtable_size), KV_(top2_subtable_size), KV_(top3_subtable_size),
+    KV_(top1_mod_mem_info), KV_(top2_mod_mem_info), KV_(top3_mod_mem_info),
+    KV_(global_external_fragmentation_rate))
 
 static int se_update_query_perf_vars(SeStatusVars &status_vars)
 {
@@ -157,6 +181,31 @@ int se_update_global_statistic_vars(SeStatusVars &status_vars)
   status_vars.system_rows_read_ =  global_stats.system_rows_[ROWS_READ];
   status_vars.snapshot_conflict_errors_ = global_stats.snapshot_conflict_errors_;
   status_vars.wal_group_syncs_ = global_stats.wal_group_syncs_;
+  status_vars.max_level0_layers_ = global_stats.max_level0_layers_;
+  status_vars.max_imm_numbers_ = global_stats.max_imm_numbers_;
+  status_vars.max_level0_fragmentation_rate_ =
+      global_stats.max_level0_fragmentation_rate_;
+  status_vars.max_level1_fragmentation_rate_ =
+      global_stats.max_level1_fragmentation_rate_;
+  status_vars.max_level2_fragmentation_rate_ =
+      global_stats.max_level2_fragmentation_rate_;
+  status_vars.max_level0_delete_percent_ =
+      global_stats.max_level0_delete_percent_;
+  status_vars.max_level1_delete_percent_ =
+      global_stats.max_level1_delete_percent_;
+  status_vars.max_level2_delete_percent_ =
+      global_stats.max_level2_delete_percent_;
+  status_vars.all_flush_megabytes_ = global_stats.all_flush_megabytes_;
+  status_vars.all_compaction_megabytes_ =
+      global_stats.all_compaction_megabytes_;
+  status_vars.top1_subtable_size_ = global_stats.top1_subtable_size_;
+  status_vars.top2_subtable_size_ = global_stats.top2_subtable_size_;
+  status_vars.top3_subtable_size_ = global_stats.top3_subtable_size_;
+  status_vars.top1_mod_mem_info_ = global_stats.top1_mod_mem_info_;
+  status_vars.top2_mod_mem_info_ = global_stats.top2_mod_mem_info_;
+  status_vars.top3_mod_mem_info_ = global_stats.top3_mod_mem_info_;
+  status_vars.global_external_fragmentation_rate_ =
+      global_stats.global_external_fragmentation_rate_;
 
   return ret;
 }
@@ -192,36 +241,53 @@ static SHOW_VAR se_status_vars[] = {
   SE_GLOBAL_LONG_STATUS_VAR(block_cache_data_miss),
   SE_GLOBAL_LONG_STATUS_VAR(block_cache_data_hit),
   SE_GLOBAL_LONG_STATUS_VAR(row_cache_add),
-  SE_GLOBAL_LONG_STATUS_VAR(row_cache_hit),
-  SE_GLOBAL_LONG_STATUS_VAR(row_cache_miss),
-  SE_GLOBAL_LONG_STATUS_VAR(memtable_hit),
-  SE_GLOBAL_LONG_STATUS_VAR(memtable_miss),
-  SE_GLOBAL_LONG_STATUS_VAR(number_keys_written),
-  SE_GLOBAL_LONG_STATUS_VAR(number_keys_read),
-  SE_GLOBAL_LONG_STATUS_VAR(number_keys_updated),
-  SE_GLOBAL_LONG_STATUS_VAR(bytes_written),
-  SE_GLOBAL_LONG_STATUS_VAR(bytes_read),
-  SE_GLOBAL_LONG_STATUS_VAR(block_cachecompressed_miss),
-  SE_GLOBAL_LONG_STATUS_VAR(block_cachecompressed_hit),
-  SE_GLOBAL_LONG_STATUS_VAR(wal_synced),
-  SE_GLOBAL_LONG_STATUS_VAR(wal_bytes),
-  SE_GLOBAL_LONG_STATUS_VAR(write_self),
-  SE_GLOBAL_LONG_STATUS_VAR(write_other),
-  SE_GLOBAL_LONG_STATUS_VAR(write_wal),
-  SE_GLOBAL_LONG_STATUS_VAR(number_superversion_acquires),
-  SE_GLOBAL_LONG_STATUS_VAR(number_superversion_releases),
-  SE_GLOBAL_LONG_STATUS_VAR(number_superversion_cleanups),
-  SE_GLOBAL_LONG_STATUS_VAR(number_block_not_compressed),
-  SE_GLOBAL_LONG_STATUS_VAR(snapshot_conflict_errors),
-  SE_GLOBAL_LONG_STATUS_VAR(wal_group_syncs),
-  SE_GLOBAL_LONG_STATUS_VAR(rows_deleted),
-  SE_GLOBAL_LONG_STATUS_VAR(rows_inserted),
-  SE_GLOBAL_LONG_STATUS_VAR(rows_updated),
-  SE_GLOBAL_LONG_STATUS_VAR(rows_read),
-  SE_GLOBAL_LONG_STATUS_VAR(system_rows_deleted),
-  SE_GLOBAL_LONG_STATUS_VAR(system_rows_inserted),
-  SE_GLOBAL_LONG_STATUS_VAR(system_rows_updated),
-  SE_GLOBAL_LONG_STATUS_VAR(system_rows_read),
+ SE_GLOBAL_LONG_STATUS_VAR(row_cache_hit),
+ SE_GLOBAL_LONG_STATUS_VAR(row_cache_miss),
+ SE_GLOBAL_LONG_STATUS_VAR(memtable_hit),
+ SE_GLOBAL_LONG_STATUS_VAR(memtable_miss),
+ SE_GLOBAL_LONG_STATUS_VAR(number_keys_written),
+ SE_GLOBAL_LONG_STATUS_VAR(number_keys_read),
+ SE_GLOBAL_LONG_STATUS_VAR(number_keys_updated),
+ SE_GLOBAL_LONG_STATUS_VAR(bytes_written),
+ SE_GLOBAL_LONG_STATUS_VAR(bytes_read),
+ SE_GLOBAL_LONG_STATUS_VAR(block_cachecompressed_miss),
+ SE_GLOBAL_LONG_STATUS_VAR(block_cachecompressed_hit),
+ SE_GLOBAL_LONG_STATUS_VAR(wal_synced),
+ SE_GLOBAL_LONG_STATUS_VAR(wal_bytes),
+ SE_GLOBAL_LONG_STATUS_VAR(write_self),
+ SE_GLOBAL_LONG_STATUS_VAR(write_other),
+ SE_GLOBAL_LONG_STATUS_VAR(write_wal),
+ SE_GLOBAL_LONG_STATUS_VAR(number_superversion_acquires),
+ SE_GLOBAL_LONG_STATUS_VAR(number_superversion_releases),
+ SE_GLOBAL_LONG_STATUS_VAR(number_superversion_cleanups),
+ SE_GLOBAL_LONG_STATUS_VAR(number_block_not_compressed),
+ SE_GLOBAL_LONG_STATUS_VAR(snapshot_conflict_errors),
+ SE_GLOBAL_LONG_STATUS_VAR(wal_group_syncs),
+ SE_GLOBAL_LONG_STATUS_VAR(rows_deleted),
+ SE_GLOBAL_LONG_STATUS_VAR(rows_inserted),
+ SE_GLOBAL_LONG_STATUS_VAR(rows_updated),
+ SE_GLOBAL_LONG_STATUS_VAR(rows_read),
+ SE_GLOBAL_LONG_STATUS_VAR(system_rows_deleted),
+ SE_GLOBAL_LONG_STATUS_VAR(system_rows_inserted),
+ SE_GLOBAL_LONG_STATUS_VAR(system_rows_updated),
+ SE_GLOBAL_LONG_STATUS_VAR(system_rows_read),
+ SE_GLOBAL_LONG_STATUS_VAR(max_level0_layers),
+ SE_GLOBAL_LONG_STATUS_VAR(max_imm_numbers),
+ SE_GLOBAL_LONG_STATUS_VAR(max_level0_fragmentation_rate),
+ SE_GLOBAL_LONG_STATUS_VAR(max_level1_fragmentation_rate),
+ SE_GLOBAL_LONG_STATUS_VAR(max_level2_fragmentation_rate),
+ SE_GLOBAL_LONG_STATUS_VAR(max_level0_delete_percent),
+ SE_GLOBAL_LONG_STATUS_VAR(max_level1_delete_percent),
+ SE_GLOBAL_LONG_STATUS_VAR(max_level2_delete_percent),
+ SE_GLOBAL_LONG_STATUS_VAR(all_flush_megabytes),
+ SE_GLOBAL_LONG_STATUS_VAR(all_compaction_megabytes),
+ SE_GLOBAL_LONG_STATUS_VAR(top1_subtable_size),
+ SE_GLOBAL_LONG_STATUS_VAR(top2_subtable_size),
+ SE_GLOBAL_LONG_STATUS_VAR(top3_subtable_size),
+ SE_GLOBAL_LONG_STATUS_VAR(top1_mod_mem_info),
+ SE_GLOBAL_LONG_STATUS_VAR(top2_mod_mem_info),
+ SE_GLOBAL_LONG_STATUS_VAR(top3_mod_mem_info),
+ SE_GLOBAL_LONG_STATUS_VAR(global_external_fragmentation_rate),
   {NullS, NullS, SHOW_LONG, SHOW_SCOPE_GLOBAL}
 };
 
