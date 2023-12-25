@@ -50,7 +50,7 @@ jobs:
         run: |
           cd bu
           cd mysql-test
-          ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=1  --parallel=2 --force
+          ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=8 --force
 
       - name: view mtr logs
         if: ${{ failure() }}
