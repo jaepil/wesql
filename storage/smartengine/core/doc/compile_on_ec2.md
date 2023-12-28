@@ -22,5 +22,6 @@ cmake3 ../ -B ./ \
   -DWITH_WESQL_TEST=1   \
   -DDOWNLOAD_BOOST=1 \
   -DWITH_BOOST="../extra/"
+make -j16
 ```
 
