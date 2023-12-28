@@ -13,7 +13,7 @@ scl enable devtoolset-11 bash
 <h2>Compile</h2>
 
 ```
-make build
+mkdir build
 cd build
 cmake3 ../ -B ./ \
   -DCMAKE_INSTALL_PREFIX="/u01/mysql" \
