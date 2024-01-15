@@ -25,6 +25,7 @@
 #define protected public
 #include "db/db_test_util.h"
 
+static const std::string test_dir = "/hotbackup_test";
 namespace smartengine
 {
 using namespace common;
@@ -33,11 +34,10 @@ using namespace storage;
 
 namespace util
 {
-
 class HotbackupTest : public DBTestBase
 {
 public:
-  HotbackupTest() : DBTestBase("/hotbackup_test") 
+  HotbackupTest() : DBTestBase(test_dir) 
   {
     backup_tmp_dir_path_ = db_->GetName() + BACKUP_TMP_DIR;
   }
@@ -322,8 +322,10 @@ TEST_F(HotbackupTest, delete_cf)
   ASSERT_OK(Put(2, "b", "bb"));
   ASSERT_OK(Flush(2));
   DropColumnFamily(2);
-  // tigger gc
+  // tigger gc, pop_front_gc_job needs to be protected by db_mutex_
+  dbfull()->TEST_LockMutex();
   DBImpl::GCJob *gc_job = dbfull()->pop_front_gc_job();
+  dbfull()->TEST_UnlockMutex();
   ASSERT_TRUE(gc_job != nullptr);
   int64_t index_id = gc_job->sub_table_->GetID();
   ASSERT_OK(gc_job->sub_table_->release_resource(false));
@@ -588,14 +590,79 @@ TEST_F(HotbackupTest, amber_test)
   DestroyDB(backup_path, last_options_);
 }
 
+TEST_F(HotbackupTest, lost_wal)
+{
+  CreateColumnFamilies({"lost_wal"}, CurrentOptions());
+  BackupSnapshot *backup_snapshot = nullptr;
+  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+
+  //step 1: insert base data 
+  ASSERT_OK(Put(1, "1", "11"));
+  ASSERT_OK(Flush(1));
+
+  //step 2: first step of xtrabackup, copy full sst files
+  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+  copy_sst_files();
+
+  SyncPoint::GetInstance()->SetCallBack("DBImpl::wait_create_backup_snapshot",
+      [&](void *arg) {
+        DBImpl *db_impl = reinterpret_cast<DBImpl *>(arg);
+        while (!db_impl->TEST_get_after_create_backup_snapshot()) {
+          sleep(1);
+        }
+      });
+  SyncPoint::GetInstance()->SetCallBack("BackupSnapshotImpl::acquire_snapshot::after_create_backup_snapshot",
+      [&](void *arg) {
+        DBImpl *db_impl = reinterpret_cast<DBImpl *>(arg);
+        db_impl->TEST_set_after_create_backup_snapshot(true);
+        db_impl->TEST_WaitForCompact();
+      });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  //step 3: insert incremental data
+  ASSERT_OK(Put(1, "2", "22"));
+  //This flush job should execute after create_backup_snapshot in acquire_snapshots
+  ASSERT_OK(Flush(1, false /**wait*/));
+
+
+  //step 4: remaining steps of xtrabackup
+  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+  copy_extents(backup_tmp_dir_path_, 
+               backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
+
+  copy_rest_files(backup_tmp_dir_path_);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
+  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
+
+  //step 5: prepare and restore the backup
+  std::string backup_path = dbname_ + backup_dir_;
+  replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+  Reopen(CurrentOptions(), &backup_path); 
+
+  //step 6: check data
+  ASSERT_EQ("11", Get(1, "1"));
+  ASSERT_EQ("22", Get(1, "2"));
+
+  //step 7: reset db status
+  SyncPoint::GetInstance()->DisableProcessing();
+  Close();
+  DestroyDB(backup_path, last_options_);
+}
+
 } // namespace util
 } // namespace smartengine
 
 int main(int argc, char **argv) 
 {
+  std::string info_log_path = smartengine::util::test::TmpDir() + "/hotbackup_test.log";
+  std::string abs_test_dir = smartengine::util::test::TmpDir() + test_dir;
+  smartengine::util::test::remove_dir(abs_test_dir.c_str());
   smartengine::port::InstallStackTraceHandler();
   ::testing::InitGoogleTest(&argc, argv);
-	smartengine::util::test::init_logger(__FILE__, smartengine::logger::INFO_LEVEL);
+	smartengine::util::test::init_logger(info_log_path.c_str(), smartengine::logger::INFO_LEVEL);
   return RUN_ALL_TESTS();
 }
 

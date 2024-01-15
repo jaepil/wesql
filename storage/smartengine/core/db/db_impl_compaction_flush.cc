@@ -182,6 +182,9 @@ int DBImpl::run_one_flush_task(ColumnFamilyData *sub_table,
     } else {
       // unlock when flush task run
       mutex_.Unlock();
+#ifndef NDEBUG
+    TEST_SYNC_POINT_CALLBACK("DBImpl::wait_create_backup_snapshot", this);
+#endif
       int64_t dummy_log_seq = 0;
       if (FAILED(context.storage_logger_->begin(event))) {
         SE_LOG(WARN, "failed to begin flush event", K(ret), K((int)task_type));

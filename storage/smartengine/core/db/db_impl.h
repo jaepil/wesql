@@ -639,6 +639,13 @@ class DBImpl : public DB {
   {
     return extent_space_manager_->get_data_file_stats(table_space_id, data_file_stats);
   }
+
+  bool TEST_after_create_backup_snapshot_ = false;
+  void TEST_set_after_create_backup_snapshot(bool val)
+  {
+    TEST_after_create_backup_snapshot_ = val;
+  }
+  bool TEST_get_after_create_backup_snapshot() const { return TEST_after_create_backup_snapshot_; }
 #endif  // NDEBUG
 
   // Return maximum background compaction allowed to be scheduled based on

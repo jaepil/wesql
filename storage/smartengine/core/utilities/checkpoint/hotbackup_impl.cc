@@ -18,6 +18,7 @@
 
 #include "utilities/checkpoint/hotbackup_impl.h"
 #include "util/file_util.h"
+#include "util/sync_point.h"
 #include "memory/thread_local_store.h"
 
 namespace smartengine
@@ -147,31 +148,38 @@ int BackupSnapshotImpl::acquire_snapshots(DB *db)
   } else if (ISNULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
-  } else if (FAILED(db->create_backup_snapshot(meta_snapshots_,
-                                               last_manifest_file_num_,
-                                               last_manifest_file_size_,
-                                               last_wal_file_num_))) {
-    SE_LOG(WARN, "Failed to acquire backup snapshot", K(ret));
   } else {
-    std::string last_manifest_file_dest = DescriptorFileName(backup_tmp_dir_path_, last_manifest_file_num_);
-    std::string last_manifest_file_src = DescriptorFileName(db->GetName(), last_manifest_file_num_);
-    DataDirFileChecker data_file_checker(first_manifest_file_num_,
-                                       last_manifest_file_num_);
-    WalDirFileChecker wal_file_checker(last_wal_file_num_);
-    if (FAILED(link_files(db, &data_file_checker, &wal_file_checker))) {
-      SE_LOG(WARN, "Failed to link backup files", K(ret));
-    } else if (FAILED(CopyFile(db->GetEnv(),
-                               last_manifest_file_src,
-                               last_manifest_file_dest,
-                               last_manifest_file_size_,
-                               db->GetDBOptions().use_fsync).code())) { // copy last MANIFEST file
-      SE_LOG(WARN, "Failed to copy last manifest file", K(ret));
+    db->DisableFileDeletions();
+    if (FAILED(db->create_backup_snapshot(meta_snapshots_,
+                                          last_manifest_file_num_,
+                                          last_manifest_file_size_,
+                                          last_wal_file_num_))) {
+      SE_LOG(WARN, "Failed to acquire backup snapshot", K(ret));
     } else {
-      SE_LOG(INFO, "Success to copy last MANIFEST file and acquire snapshots",
-          K(last_manifest_file_dest), K(last_manifest_file_num_),
-          K(last_manifest_file_size_), K(last_wal_file_num_));
+#ifndef NDEBUG
+      TEST_SYNC_POINT_CALLBACK("BackupSnapshotImpl::acquire_snapshot::after_create_backup_snapshot", db);
+#endif
+      std::string last_manifest_file_dest = DescriptorFileName(backup_tmp_dir_path_, last_manifest_file_num_);
+      std::string last_manifest_file_src = DescriptorFileName(db->GetName(), last_manifest_file_num_);
+      DataDirFileChecker data_file_checker(first_manifest_file_num_, last_manifest_file_num_);
+      WalDirFileChecker wal_file_checker(last_wal_file_num_);
+      if (FAILED(link_files(db, &data_file_checker, &wal_file_checker))) {
+        SE_LOG(WARN, "Failed to link backup files", K(ret));
+      } else if (FAILED(CopyFile(db->GetEnv(),
+                                 last_manifest_file_src,
+                                 last_manifest_file_dest,
+                                 last_manifest_file_size_,
+                                 db->GetDBOptions().use_fsync).code())) { // copy last MANIFEST file
+        SE_LOG(WARN, "Failed to copy last manifest file", K(ret));
+      } else {
+        SE_LOG(INFO, "Success to copy last MANIFEST file and acquire snapshots",
+            K(last_manifest_file_dest), K(last_manifest_file_num_),
+            K(last_manifest_file_size_), K(last_wal_file_num_));
+      }
     }
+    db->EnableFileDeletions(false /**force enable*/);
   }
+
   if (FAILED(ret) && Status::kInitTwice != ret) {
     do_cleanup(db);
     reset();
