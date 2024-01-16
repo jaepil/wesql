@@ -33,6 +33,7 @@ this program; if not, write to the Free Software Foundation, Inc.,
 #include <array>
 #include <atomic>
 #include <functional>
+#include <pthread.h>
 
 /** CPU cache line size */
 #ifndef CACHE_LINE_SIZE

@@ -2619,8 +2619,10 @@ int ha_smartengine::get_row_by_rowid(uchar *const buf,
   assert(tx != nullptr);
 
   // only check ha_thd() with no parallelization cause current_thd is thread_local
-  if (tbl == table)
+  if (tbl == table) {
     DEBUG_SYNC(ha_thd(), "se.get_row_by_rowid");
+  }
+
   DBUG_EXECUTE_IF("dbug.se.get_row_by_rowid", {
     THD *thd = ha_thd();
     const char act[] = "now signal Reached "

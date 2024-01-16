@@ -631,6 +631,8 @@ int DBImpl::do_flush_log_buffer_job(uint64_t thread_local_expected_seq) {
   this->pipline_flush_log_busy_flag_.store(false);
 
   QUERY_COUNT_ADD(CountPoint::BYTES_PER_LOG_WRITE, flush_bytes);
+  //make compiler happy
+  UNUSED(flush_bytes);
   return error;
 }
 

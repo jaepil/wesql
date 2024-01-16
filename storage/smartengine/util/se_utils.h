@@ -359,9 +359,14 @@ class Regex_list_handler
 #endif
     m_delimiter(delimiter),
     m_bad_pattern_str(""),
-    m_pattern(nullptr)
+    m_pattern(nullptr),
+    m_rwlock()
   {
+#if defined(HAVE_PSI_INTERFACE)
     mysql_rwlock_init(key, &m_rwlock);
+#else
+    mysql_rwlock_init(0, &m_rwlock);
+#endif
   }
 
   ~Regex_list_handler()

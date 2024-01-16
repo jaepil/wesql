@@ -148,13 +148,14 @@ WriteBatchWithIndexInternal::Result WriteBatchWithIndexInternal::GetFromBatch(
 
   std::unique_ptr<WBWIIterator> iter =
       std::unique_ptr<WBWIIterator>(batch->NewIterator(column_family));
+  WriteEntry entry;
 
   // We want to iterate in the reverse order that the writes were added to the
   // batch.  Since we don't have a reverse iterator, we must seek past the end.
   // TODO(agiardullo): consider adding support for reverse iteration
   iter->Seek(key);
   while (iter->Valid()) {
-    const WriteEntry& entry = iter->Entry();
+    entry = iter->Entry();
     if (cmp->CompareKey(cf_id, entry.key, key) != 0) {
       break;
     }
@@ -175,7 +176,7 @@ WriteBatchWithIndexInternal::Result WriteBatchWithIndexInternal::GetFromBatch(
 
   const Slice* entry_value = nullptr;
   while (iter->Valid()) {
-    const WriteEntry& entry = iter->Entry();
+    entry = iter->Entry();
     if (cmp->CompareKey(cf_id, entry.key, key) != 0) {
       // Unexpected error or we've reached a different next key
       break;

@@ -226,7 +226,10 @@ void Logger::write_log(LogBuffer &log_buffer)
 {
   if (-1 != fd_) {
     if (external_log_) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
       write(fd_, log_buffer.buf_, log_buffer.pos_);
+#pragma GCC diagnostic pop
       // skip rotation for external log
       return;
     }
@@ -252,10 +255,13 @@ void Logger::swith_log_file()
       struct tm tm;
       localtime_r(&t, &tm);
       do {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
         if (snprintf(old_file_path, sizeof(old_file_path), "%s.%04d%02d%02d%02d%02d%02d", file_path_, tm.tm_year + 1900,
             tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec) < 0) {
           // error
         }
+#pragma GCC diagnostic pop
         tm.tm_sec += 1;
       } while (file_exist(old_file_path));
       rename(file_path_, old_file_path);

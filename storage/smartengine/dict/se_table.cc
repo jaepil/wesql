@@ -60,14 +60,18 @@ void SeTableDef::check_if_is_mysql_system_table()
 
 void SeTableDef::set_name(const std::string &name)
 {
-  int err;
+  int err = HA_EXIT_SUCCESS;
 
   m_dbname_tablename = name;
-  err = se_split_normalized_tablename(name, &m_dbname, &m_tablename,
-                                       &m_partition);
+  err = se_split_normalized_tablename(name,
+                                      &m_dbname,
+                                      &m_tablename,
+                                      &m_partition);
   assert(err == 0);
 
   check_if_is_mysql_system_table();
+  //make compiler happy
+  UNUSED(err);
 }
 
 int SeTableDef::clear_keys_for_ddl()
