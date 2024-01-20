@@ -31,9 +31,6 @@
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "table/block.h"
-#include "table/block_based_table_builder.h"
-#include "table/block_based_table_factory.h"
-#include "table/block_based_table_reader.h"
 #include "table/block_builder.h"
 #include "table/extent_table_builder.h"
 #include "table/extent_table_factory.h"
@@ -75,10 +72,6 @@ using namespace monitor;
 namespace smartengine {
 namespace table {
 
-extern const uint64_t kLegacyBlockBasedTableMagicNumber;
-extern const uint64_t kLegacyPlainTableMagicNumber;
-extern const uint64_t kBlockBasedTableMagicNumber;
-extern const uint64_t kPlainTableMagicNumber;
 
 namespace {
 

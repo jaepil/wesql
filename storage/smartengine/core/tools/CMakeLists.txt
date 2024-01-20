@@ -5,8 +5,6 @@ set(TOOLS
   write_stress.cc
   ldb.cc
   db_repl_stress.cc
-  dump/rocksdb_dump.cc
-  dump/rocksdb_undump.cc
   backup_check.cc)
 foreach(src ${TOOLS})
   get_filename_component(exename ${src} NAME_WE)

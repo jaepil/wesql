@@ -55,8 +55,6 @@ std::shared_ptr<SeTablePropertyCollectorFactory> properties_collector_factory;
 
 SeSubtableOptions se_cf_options_map;
 
-char *se_override_cf_options = nullptr;
-
 SeDictionaryManager dict_manager;
 
 SeBinlogManager binlog_manager;

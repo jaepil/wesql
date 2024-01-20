@@ -384,7 +384,6 @@ set(SOURCES
         cache/sharded_cache.cc
         cache/row_cache.cc
         db/builder.cc
-        db/c.cc
         db/column_family.cc
         db/compacted_db_impl.cc
         #        db/major_compaction_iterator.cc
@@ -418,7 +417,6 @@ set(SOURCES
         db/merge_operator.cc
         db/range_del_aggregator.cc
         db/recovery_point.cc
-        db/repair.cc
         db/snapshot_impl.cc
         db/table_cache.cc
         db/table_properties_collector.cc
@@ -468,7 +466,6 @@ set(SOURCES
         options/db_options.cc
         options/options.cc
         options/options_helper.cc
-        options/options_parser.cc
         options/options_sanity_check.cc
         port/stack_trace.cc
         storage/change_info.cc
@@ -487,21 +484,13 @@ set(SOURCES
         storage/storage_meta_struct.cc
         storage/storage_logger.cc
         storage/table_space.cc
-        table/adaptive_table_factory.cc
         table/block.cc
-        table/block_based_filter_block.cc
-        table/block_based_table_builder.cc
-        table/block_based_table_factory.cc
-        table/block_based_table_reader.cc
         table/extent_table_builder.cc
         table/extent_table_factory.cc
         table/extent_table_reader.cc
         table/block_builder.cc
         table/block_prefix_index.cc
         table/bloom_block.cc
-        table/cuckoo_table_builder.cc
-        table/cuckoo_table_factory.cc
-        table/cuckoo_table_reader.cc
         table/flush_block_policy.cc
         table/format.cc
         table/full_filter_block.cc
@@ -511,13 +500,6 @@ set(SOURCES
         table/iterator.cc
         table/merging_iterator.cc
         table/meta_blocks.cc
-        table/partitioned_filter_block.cc
-        table/persistent_cache_helper.cc
-        table/plain_table_builder.cc
-        table/plain_table_factory.cc
-        table/plain_table_index.cc
-        table/plain_table_key_coding.cc
-        table/plain_table_reader.cc
         table/sst_file_writer.cc
         table/table_properties.cc
         table/two_level_iterator.cc
@@ -586,39 +568,17 @@ set(SOURCES
         fpga/multi_way_block_merge_stats.cc
         fpga/fpga_compaction_job.cc
         utilities/backupable/backupable_db.cc
-        utilities/blob_db/blob_db.cc
         utilities/checkpoint/checkpoint.cc
         utilities/checkpoint/hotbackup_impl.cc
-        utilities/col_buf_decoder.cc
-        utilities/col_buf_encoder.cc
-        utilities/column_aware_encoding_util.cc
         utilities/compaction_filters/remove_emptyvalue_compactionfilter.cc
-        utilities/date_tiered/date_tiered_db_impl.cc
-        utilities/document/document_db.cc
-        utilities/document/json_document.cc
-        utilities/document/json_document_builder.cc
         utilities/env_mirror.cc
         utilities/env_timed.cc
-        utilities/geodb/geodb_impl.cc
-        utilities/leveldb_options/leveldb_options.cc
-        utilities/lua/rocks_lua_compaction_filter.cc
         utilities/memory/memory_util.cc
         utilities/merge_operators/max.cc
         utilities/merge_operators/put.cc
         utilities/merge_operators/string_append/stringappend.cc
         utilities/merge_operators/string_append/stringappend2.cc
         utilities/merge_operators/uint64add.cc
-        utilities/option_change_migration/option_change_migration.cc
-        utilities/options/options_util.cc
-        utilities/persistent_cache/block_cache_tier.cc
-        utilities/persistent_cache/block_cache_tier_file.cc
-        utilities/persistent_cache/block_cache_tier_metadata.cc
-        utilities/persistent_cache/persistent_cache_tier.cc
-        utilities/persistent_cache/volatile_tier_impl.cc
-        utilities/redis/redis_lists.cc
-        utilities/simulator_cache/sim_cache.cc
-        utilities/spatialdb/spatial_db.cc
-        utilities/table_properties_collectors/compact_on_deletion_collector.cc
         utilities/transactions/optimistic_transaction_db_impl.cc
         utilities/transactions/optimistic_transaction_impl.cc
         utilities/transactions/transaction_base.cc
@@ -627,7 +587,6 @@ set(SOURCES
         utilities/transactions/transaction_impl.cc
         utilities/transactions/transaction_lock_mgr.cc
         utilities/transactions/transaction_util.cc
-        utilities/ttl/db_ttl_impl.cc
         utilities/write_batch_with_index/write_batch_with_index.cc
         utilities/write_batch_with_index/write_batch_with_index_internal.cc
         utilities/parallel_read/parallel_read.cc
@@ -772,9 +731,7 @@ set(TESTS
         #db/merge_test.cc
         db/options_file_test.cc
         db/perf_context_test.cc
-        #db/plain_table_db_test.cc
         #db/prefix_test.cc
-        #db/repair_test.cc
         db/recover_no_space_test.cc
         #db/table_properties_collector_test.cc
         #db/version_edit_test.cc
@@ -799,7 +756,6 @@ set(TESTS
         monitoring/iostats_context_test.cc
         #monitoring/statistics_test.cc
         #options/options_settable_test.cc
-        options/options_test.cc
         storage/data_file_test.cc
         storage/extent_space_test.cc
         #storage/extent_space_manager_test.cc
@@ -810,7 +766,6 @@ set(TESTS
         #storage/storage_manager_test.cc
         storage/storage_logger_test.cc
         storage/table_space_test.cc
-        table/block_based_filter_block_test.cc
         #table/block_test.cc
         table/full_filter_block_test.cc
         table/merger_test.cc
@@ -851,10 +806,8 @@ set(TESTS
         #compact/minor_compaction_test.cc
         #compact/minor_compaction_util_test.cc
         #utilities/backupable/backupable_db_test.cc
-        #utilities/blob_db/blob_db_test.cc
         #utilities/checkpoint/checkpoint_test.cc
         utilities/checkpoint/hotbackup_test.cc
-        #utilities/column_aware_encoding_test.cc
         #utilities/date_tiered/date_tiered_test.cc
         #utilities/document/document_db_test.cc
         #utilities/document/json_document_test.cc
@@ -864,7 +817,6 @@ set(TESTS
         #utilities/merge_operators/string_append/stringappend_test.cc
         #utilities/object_registry_test.cc
         #utilities/option_change_migration/option_change_migration_test.cc
-        #utilities/options/options_util_test.cc
         #utilities/persistent_cache/hash_table_test.cc
         #utilities/persistent_cache/persistent_cache_test.cc
         #utilities/redis/redis_lists_test.cc
@@ -884,10 +836,7 @@ set(BENCHMARKS
   cache/cache_bench.cc
   memtable/memtablerep_bench.cc
   tools/db_bench.cc
-  tools/perf_memtable_search.cc
-  table/table_reader_bench.cc
-  utilities/column_aware_encoding_exp.cc
-  utilities/persistent_cache/hash_table_bench.cc)
+  tools/perf_memtable_search.cc)
 add_library(testharness OBJECT util/testharness.cc)
 foreach(sourcefile ${BENCHMARKS})
   get_filename_component(exename ${sourcefile} NAME_WE)

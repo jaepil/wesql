@@ -31,14 +31,11 @@
 #include "options/cf_options.h"
 #include "storage/extent_space_manager.h"
 #include "table/block.h"
-#include "table/block_based_table_builder.h"
-#include "table/block_based_table_factory.h"
 #include "table/block_builder.h"
 #include "table/extent_table_builder.h"
 #include "table/extent_table_factory.h"
 #include "table/format.h"
 #include "table/meta_blocks.h"
-#include "table/plain_table_factory.h"
 #include "table/table_reader.h"
 #include "util/compression.h"
 #include "util/random.h"
@@ -64,12 +61,6 @@ using namespace logger;
 
 namespace smartengine {
 
-namespace table {
-extern const uint64_t kBlockBasedTableMagicNumber;
-extern const uint64_t kLegacyBlockBasedTableMagicNumber;
-extern const uint64_t kPlainTableMagicNumber;
-extern const uint64_t kLegacyPlainTableMagicNumber;
-}
 
 namespace tools {
 
@@ -92,50 +83,6 @@ const char* testFileName = "test_file_name";
 
 Status SstFileReader::GetTableReader(const std::string& file_path,
                                      size_t extent_offset) {
-  // an easy way to achieve extent reading by creating a new file which
-  // merely contains the target extent. (fall into disuse)
-  /*
-  std::ifstream in(file_path);//input sst file
-  if(!in)
-  {
-     s = Status::NotFound("the file you tpyed does not exist");
-     return s;
-  }
-  char* buffer = new char[1024*1024*2];
-  std::string dirname;
-  size_t found = file_path.rfind('/');//the last '/'
-  dirname = file_path.substr(0, found);
-
-  std::string filename=std::string(file_path,found+1);
-  found = filename.rfind('.');
-  filename = filename.substr(0,found);//erease ".sst"
-  std::stringstream ss;
-  ss<<extent_offset;
-  std::string new_file_path = dirname+"/"+filename+"_"+ss.str()+".sst";
-  std::ofstream out(new_file_path);//output sst file with only one extent
-  temp_file_name_ = new_file_path.c_str();
-  size_t extent_real_size = 1024*1024*extent_size;
-  in.seekg(extent_real_size*extent_offset,std::ios::beg);
-  in.read(buffer,extent_real_size);
-  out.write(buffer,extent_real_size);
-  in.close();
-  out.close();
-  delete buffer;
-  // Warning about 'magic_number' being uninitialized shows up only in UBsan
-  // builds. Though access is guarded by 's.ok()' checks, fix the issue to
-  // avoid any warnings.
-  uint64_t magic_number = Footer::kInvalidTableMagicNumber;
-
-  // read table magic number
-  Footer footer;
-
-  unique_ptr<RandomAccessFile> file;
-  uint64_t file_size;
-  s = options_.env->NewRandomAccessFile(new_file_path, &file, soptions_);
-  if (s.ok()) {
-    s = options_.env->GetFileSize(new_file_path, &file_size);
-  }
-  */
   // Warning about 'magic_number' being uninitialized shows up only in UBsan
   // builds. Though access is guarded by 's.ok()' checks, fix the issue to
   // avoid any warnings.
@@ -169,8 +116,6 @@ Status SstFileReader::GetTableReader(const std::string& file_path,
     s = options_.env->GetFileSize(file_path, &file_size);
   }
 
-//  unique_ptr<storage::RandomAccessExtent> extent(
-//      new storage::RandomAccessExtent());
   storage::RandomAccessExtent *extent = MOD_NEW_OBJECT(ModId::kDefaultMod, storage::RandomAccessExtent);
   storage::ExtentSpaceManager* fake_space = reinterpret_cast<storage::ExtentSpaceManager*>(1);
   storage::ExtentIOInfo io_info(fd, eid, storage::MAX_EXTENT_SIZE, storage::DATA_BLOCK_SIZE, 1);
@@ -184,22 +129,14 @@ Status SstFileReader::GetTableReader(const std::string& file_path,
 
   if (s.ok()) {
     magic_number = footer.table_magic_number();
+    assert(kExtentBasedTableMagicNumber == magic_number);
   }
 
   if (s.ok()) {
-    /*
-    if (magic_number == kPlainTableMagicNumber ||
-        magic_number == kLegacyPlainTableMagicNumber) {
-      soptions_.use_mmap_reads = true;
-      options_.env->NewRandomAccessFile(file_path, &file, soptions_);
-      file_.reset(new RandomAccessFileReader(std::move(file)));
-    }*/
     options_.comparator = &internal_comparator_;
     // For old sst format, ReadTableProperties might fail but file can be read
     if (ReadTableProperties(magic_number, file_.get(), file_size).ok()) {
       SetTableOptionsByMagicNumber(magic_number);
-    } else {
-      SetOldTableOptions();
     }
   }
 
@@ -215,20 +152,6 @@ Status SstFileReader::NewTableReader(
     const ImmutableCFOptions& ioptions, const EnvOptions& soptions,
     const InternalKeyComparator& internal_comparator, uint64_t file_size,
     TableReader *&table_reader) {
-  // We need to turn off pre-fetching of index and filter nodes for
-  // BlockBasedTable
-  shared_ptr<BlockBasedTableFactory> block_table_factory =
-      dynamic_pointer_cast<BlockBasedTableFactory>(options_.table_factory);
-
-  if (block_table_factory) {
-    return block_table_factory->NewTableReader(
-        TableReaderOptions(ioptions_, soptions_, internal_comparator_,
-                           nullptr /* fd */, nullptr /* read hist */,
-                           false /* skip_filters */),
-        file_.release(), file_size, table_reader, /*enable_prefetch=*/false);
-  }
-
-  assert(!block_table_factory);
 
   // Not sure if this is 100% necessary, but it seems not a bad idea to have
   // the same logic as block based table.
@@ -264,80 +187,6 @@ Status SstFileReader::DumpTable(const std::string& out_filename) {
   return s;
 }
 
-uint64_t SstFileReader::CalculateCompressedTableSize(
-    const TableBuilderOptions& tb_options, size_t block_size) {
-//  unique_ptr<WritableFile> out_file;
-  WritableFile *out_file = nullptr;
-  unique_ptr<Env> env(NewMemEnv(Env::Default()));
-  env->NewWritableFile(testFileName, out_file, soptions_);
-//  unique_ptr<WritableFileWriter> dest_writer;
-  WritableFileWriter *dest_writer = nullptr;
-//  dest_writer.reset(new WritableFileWriter(out_file, soptions_));
-  dest_writer = new WritableFileWriter(out_file, soptions_);
-  BlockBasedTableOptions table_options;
-  table_options.block_size = block_size;
-  BlockBasedTableFactory block_based_tf(table_options);
-  unique_ptr<TableBuilder> table_builder;
-  table_builder.reset(block_based_tf.NewTableBuilder(
-      tb_options,
-      TablePropertiesCollectorFactory::Context::kUnknownColumnFamily,
-      dest_writer));
-  unique_ptr<InternalIterator> iter(table_reader_->NewIterator(ReadOptions()));
-  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-    if (!iter->status().ok()) {
-      fputs(iter->status().ToString().c_str(), stderr);
-      exit(1);
-    }
-    table_builder->Add(iter->key(), iter->value());
-  }
-  Status s = table_builder->Finish();
-  if (!s.ok()) {
-    fputs(s.ToString().c_str(), stderr);
-    exit(1);
-  }
-  uint64_t size = table_builder->FileSize();
-  env->DeleteFile(testFileName);
-  return size;
-}
-
-int SstFileReader::ShowAllCompressionSizes(size_t block_size) {
-  ReadOptions read_options;
-  Options opts;
-  const ImmutableCFOptions imoptions(opts);
-  InternalKeyComparator ikc(opts.comparator);
-  std::vector<std::unique_ptr<IntTblPropCollectorFactory> >
-      block_based_table_factories;
-
-  fprintf(stdout, "Block Size: %" ROCKSDB_PRIszt "\n", block_size);
-
-  std::pair<CompressionType, const char*> compressions[] = {
-      {CompressionType::kNoCompression, "kNoCompression"},
-      {CompressionType::kSnappyCompression, "kSnappyCompression"},
-      {CompressionType::kZlibCompression, "kZlibCompression"},
-      {CompressionType::kBZip2Compression, "kBZip2Compression"},
-      {CompressionType::kLZ4Compression, "kLZ4Compression"},
-      {CompressionType::kLZ4HCCompression, "kLZ4HCCompression"},
-      {CompressionType::kXpressCompression, "kXpressCompression"},
-      {CompressionType::kZSTD, "kZSTD"}};
-
-  for (auto& i : compressions) {
-    if (CompressionTypeSupported(i.first)) {
-      CompressionOptions compress_opt;
-      std::string column_family_name;
-      storage::LayerPosition layer_position(-1);
-      TableBuilderOptions tb_opts(
-          imoptions, ikc, &block_based_table_factories, i.first, compress_opt,
-          nullptr /* compression_dict */, false /* skip_filters */,
-          column_family_name, layer_position);
-      uint64_t file_size = CalculateCompressedTableSize(tb_opts, block_size);
-      fprintf(stdout, "Compression: %s", i.second);
-      //fprintf(stdout, " Size: %" PRIu64 "\n", file_size);
-    } else {
-      fprintf(stdout, "Unsupported compression type: %s.\n", i.second);
-    }
-  }
-  return 0;
-}
 
 Status SstFileReader::ReadTableProperties(uint64_t table_magic_number,
                                           RandomAccessFileReader* file,
@@ -356,47 +205,8 @@ Status SstFileReader::ReadTableProperties(uint64_t table_magic_number,
 Status SstFileReader::SetTableOptionsByMagicNumber(
     uint64_t table_magic_number) {
   assert(table_properties_);
-  if (table_magic_number == kBlockBasedTableMagicNumber ||
-      table_magic_number == kLegacyBlockBasedTableMagicNumber) {
-    options_.table_factory = std::make_shared<BlockBasedTableFactory>();
-    fprintf(stdout, "Sst file format: block-based\n");
-    auto& props = table_properties_->user_collected_properties;
-    auto pos = props.find(BlockBasedTablePropertyNames::kIndexType);
-    if (pos != props.end()) {
-      auto index_type_on_file = static_cast<BlockBasedTableOptions::IndexType>(
-          DecodeFixed32(pos->second.c_str()));
-      if (index_type_on_file ==
-          BlockBasedTableOptions::IndexType::kHashSearch) {
-        options_.prefix_extractor.reset(NewNoopTransform());
-      }
-    }
-  } else if (table_magic_number == kPlainTableMagicNumber ||
-             table_magic_number == kLegacyPlainTableMagicNumber) {
-    options_.allow_mmap_reads = true;
-
-    PlainTableOptions plain_table_options;
-    plain_table_options.user_key_len = kPlainTableVariableLength;
-    plain_table_options.bloom_bits_per_key = 0;
-    plain_table_options.hash_table_ratio = 0;
-    plain_table_options.index_sparseness = 1;
-    plain_table_options.huge_page_tlb_size = 0;
-    plain_table_options.encoding_type = kPlain;
-    plain_table_options.full_scan_mode = true;
-
-    options_.table_factory.reset(NewPlainTableFactory(plain_table_options));
-    fprintf(stdout, "Sst file format: plain table\n");
-  } else if (table_magic_number == kExtentBasedTableMagicNumber) {
+  if (table_magic_number == kExtentBasedTableMagicNumber) {
     options_.table_factory = std::make_shared<ExtentBasedTableFactory>();
-    auto& props = table_properties_->user_collected_properties;
-    auto pos = props.find(BlockBasedTablePropertyNames::kIndexType);
-    if (pos != props.end()) {
-      auto index_type_on_file = static_cast<BlockBasedTableOptions::IndexType>(
-          DecodeFixed32(pos->second.c_str()));
-      if (index_type_on_file ==
-          BlockBasedTableOptions::IndexType::kHashSearch) {
-        options_.prefix_extractor.reset(NewNoopTransform());
-      }
-    }
   } else {
     char error_msg_buffer[80];
     snprintf(error_msg_buffer, sizeof(error_msg_buffer) - 1,
@@ -408,13 +218,6 @@ Status SstFileReader::SetTableOptionsByMagicNumber(
   return Status::OK();
 }
 
-Status SstFileReader::SetOldTableOptions() {
-  assert(table_properties_ == nullptr);
-  options_.table_factory = std::make_shared<BlockBasedTableFactory>();
-  fprintf(stdout, "Sst file format: block-based(old version)\n");
-
-  return Status::OK();
-}
 
 Status SstFileReader::ReadSequential(bool print_kv, uint64_t read_num,
                                      bool has_from, const std::string& from_key,
@@ -556,8 +359,7 @@ int SSTDumpTool::Run(int argc, char** argv) {
                                         // different compresion algorithms and
                                         // report the sizes
   bool show_summary = false;
-  bool set_block_size =
-      false;  // set the block size when using show_compresion_size
+  bool set_block_size = false;  // set the block size when using show_compresion_size
   bool set_extent_offset = false;
   std::string extent_str;
   std::string from_key;  //
@@ -617,6 +419,7 @@ int SSTDumpTool::Run(int argc, char** argv) {
         exit(1);
       }
       iss >> block_size;
+      UNUSED(set_block_size);
     } else if (strncmp(argv[i], "--parse_internal_key=", 21) == 0) {
       std::string in_key(argv[i] + 21);
       try {
@@ -722,14 +525,7 @@ int SSTDumpTool::Run(int argc, char** argv) {
       continue;
     }
 
-    if (show_compression_sizes) {
-      if (set_block_size) {
-        reader.ShowAllCompressionSizes(block_size);
-      } else {
-        reader.ShowAllCompressionSizes(16384);
-      }
-      return 0;
-    }
+    assert(!show_compression_sizes);
 
     if (command == "raw") {
       std::string out_filename = filename.substr(0, filename.length() - 4);

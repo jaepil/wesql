@@ -154,7 +154,6 @@ class SanityTestZlibCompressionVersion2 : public SanityTest {
 #if ROCKSDB_MAJOR > 3 || (ROCKSDB_MAJOR == 3 && ROCKSDB_MINOR >= 10)
     table_options.format_version = 2;
 #endif
-    options_.table_factory.reset(NewBlockBasedTableFactory(table_options));
   }
   virtual Options GetOptions() const override { return options_; }
   virtual std::string Name() const override {
@@ -204,30 +203,12 @@ class SanityTestZSTDCompression : public SanityTest {
   Options options_;
 };
 
-#ifndef ROCKSDB_LITE
-class SanityTestPlainTableFactory : public SanityTest {
- public:
-  explicit SanityTestPlainTableFactory(const std::string& path)
-      : SanityTest(path) {
-    options_.table_factory.reset(NewPlainTableFactory());
-    options_.prefix_extractor.reset(NewFixedPrefixTransform(2));
-    options_.allow_mmap_reads = true;
-  }
-  ~SanityTestPlainTableFactory() {}
-  virtual Options GetOptions() const override { return options_; }
-  virtual std::string Name() const override { return "PlainTable"; }
-
- private:
-  Options options_;
-};
-#endif  // ROCKSDB_LITE
 
 class SanityTestBloomFilter : public SanityTest {
  public:
   explicit SanityTestBloomFilter(const std::string& path) : SanityTest(path) {
     BlockBasedTableOptions table_options;
     table_options.filter_policy.reset(NewBloomFilterPolicy(10));
-    options_.table_factory.reset(NewBlockBasedTableFactory(table_options));
   }
   ~SanityTestBloomFilter() {}
   virtual Options GetOptions() const override { return options_; }
@@ -250,9 +231,6 @@ bool RunSanityTests(const std::string& command, const std::string& path) {
       new SanityTestLZ4Compression(path),
       new SanityTestLZ4HCCompression(path),
       new SanityTestZSTDCompression(path),
-#ifndef ROCKSDB_LITE
-      new SanityTestPlainTableFactory(path),
-#endif  // ROCKSDB_LITE
       new SanityTestBloomFilter(path)};
 
   if (command == "create") {

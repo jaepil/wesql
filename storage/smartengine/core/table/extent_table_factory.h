@@ -37,10 +37,6 @@ class ColumnFamilyOptions;
 }
 
 namespace table {
-extern const std::string kHashIndexPrefixesBlock;
-extern const std::string kHashIndexPrefixesMetadataBlock;
-extern const std::string kPropTrue;
-extern const std::string kPropFalse;
 
 class TableFactory;
 struct BlockBasedTableOptions;

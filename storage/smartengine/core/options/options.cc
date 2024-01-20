@@ -23,7 +23,6 @@
 #include "monitoring/statistics.h"
 #include "options/db_options.h"
 #include "options/options_helper.h"
-#include "table/block_based_table_factory.h"
 #include "table/extent_table_factory.h"
 #include "util/compression.h"
 #include "smartengine/cache.h"
@@ -571,18 +570,6 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForSmallDb() {
 }
 
 #ifndef ROCKSDB_LITE
-ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForPointLookup(
-    uint64_t block_cache_size_mb) {
-  prefix_extractor.reset(NewNoopTransform());
-  BlockBasedTableOptions block_based_options;
-  block_based_options.index_type = BlockBasedTableOptions::kHashSearch;
-  block_based_options.filter_policy.reset(NewBloomFilterPolicy(10));
-  block_based_options.block_cache =
-      NewLRUCache(static_cast<size_t>(block_cache_size_mb * 1024 * 1024));
-  table_factory.reset(new BlockBasedTableFactory(block_based_options));
-  memtable_prefix_bloom_size_ratio = 0.02;
-  return this;
-}
 
 ColumnFamilyOptions* ColumnFamilyOptions::OptimizeLevelStyleCompaction(
     uint64_t memtable_memory_budget) {

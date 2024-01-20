@@ -33,7 +33,6 @@
 #include "smartengine/se_constants.h"
 
 #include "table/block.h"
-#include "table/block_based_filter_block.h"
 #include "table/block_builder.h"
 #include "table/extent_table_builder.h"
 #include "table/extent_table_factory.h"
@@ -56,7 +55,6 @@
 #include "storage/extent_space_manager.h"
 #include "storage/storage_manager.h"
 #include "table/index_builder.h"
-#include "table/partitioned_filter_block.h"
 
 using namespace smartengine;
 using namespace util;
@@ -68,9 +66,6 @@ using namespace memory;
 
 namespace smartengine {
 namespace table {
-
-extern const std::string kHashIndexPrefixesBlock;
-extern const std::string kHashIndexPrefixesMetadataBlock;
 
 typedef BlockBasedTableOptions::IndexType IndexType;
 
@@ -509,9 +504,7 @@ int ExtentBasedTableBuilder::sst_meta_size() const {
   int dict_size = compression_dict_ ? compression_dict_->size() : 0;
   sz += dict_size;
 
-  int metaindex_size = kHashIndexPrefixesBlock.size() +
-                       kHashIndexPrefixesMetadataBlock.size() +
-                       kPropertiesBlock.size() + kCompressionDictBlock.size() +
+  int metaindex_size = kPropertiesBlock.size() + kCompressionDictBlock.size() +
                        BlockHandle::kMaxEncodedLength * 6;
   sz += metaindex_size;
 

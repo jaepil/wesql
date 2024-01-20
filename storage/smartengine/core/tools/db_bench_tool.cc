@@ -53,9 +53,7 @@
 #include "util/transaction_test_util.h"
 #include "util/xxhash.h"
 #include "memory/mod_info.h"
-#include "utilities/blob_db/blob_db.h"
 #include "utilities/merge_operators.h"
-#include "utilities/persistent_cache/block_cache_tier.h"
 #include "util/lock_free_fixed_queue.h"
 #include "smartengine/cache.h"
 #include "smartengine/db.h"
@@ -72,8 +70,6 @@
 #include "smartengine/slice_transform.h"
 #include "smartengine/utilities/object_registry.h"
 #include "smartengine/utilities/optimistic_transaction_db.h"
-#include "smartengine/utilities/options_util.h"
-#include "smartengine/utilities/sim_cache.h"
 #include "smartengine/utilities/transaction.h"
 #include "smartengine/utilities/transaction_db.h"
 #include "smartengine/write_batch.h"
@@ -97,7 +93,6 @@ using namespace cache;
 using namespace storage;
 using namespace memtable;
 using namespace memory;
-
 #define STRESS_CHECK_TIME(OPS)\
 do {                                                                        \
   if (OPS % 100 == 0 && FLAGS_env->NowMicros() > stress_start_time &&       \
@@ -2754,16 +2749,6 @@ class Benchmark {
         stress_worker_cond_(&stress_worker_mutex_),
         is_recover_mode(false),
         rand_large_val(1000) {
-    // use simcache instead of cache
-    if (FLAGS_simcache_size >= 0) {
-      if (FLAGS_cache_numshardbits >= 1) {
-        cache_ =
-            NewSimCache(cache_, FLAGS_simcache_size, FLAGS_cache_numshardbits);
-      } else {
-        cache_ = NewSimCache(cache_, FLAGS_simcache_size, 0);
-      }
-    }
-
     if (report_file_operations_) {
       if (!FLAGS_hdfs.empty()) {
         fprintf(stderr,
@@ -3536,27 +3521,6 @@ class Benchmark {
     }
   }
 
-  // Returns true if the options is initialized from the specified
-  // options file.
-  bool InitializeOptionsFromFile(Options* opts) {
-#ifndef ROCKSDB_LITE
-    printf("Initializing SE Options from the specified file\n");
-    DBOptions db_opts;
-    std::vector<ColumnFamilyDescriptor> cf_descs;
-    if (FLAGS_options_file != "") {
-      auto s = LoadOptionsFromFile(FLAGS_options_file, Env::Default(), &db_opts,
-                                   &cf_descs);
-      if (s.ok()) {
-        *opts = Options(db_opts, cf_descs[0].options);
-        return true;
-      }
-      fprintf(stderr, "Unable to load options file %s --- %s\n",
-              FLAGS_options_file.c_str(), s.ToString().c_str());
-      exit(1);
-    }
-#endif
-    return false;
-  }
 
   void InitializeOptionsFromFlags(Options* opts) {
     printf("Initializing SE Options from command-line flags\n");
@@ -3671,123 +3635,31 @@ class Benchmark {
         exit(1);
 #endif  // ROCKSDB_LITE
     }
-    if (FLAGS_use_plain_table) {
-#ifndef ROCKSDB_LITE
-      if (FLAGS_rep_factory != kPrefixHash &&
-          FLAGS_rep_factory != kHashLinkedList) {
-        fprintf(stderr, "Waring: plain table is used with skipList\n");
-      }
-
-      int bloom_bits_per_key = FLAGS_bloom_bits;
-      if (bloom_bits_per_key < 0) {
-        bloom_bits_per_key = 0;
-      }
-
-      PlainTableOptions plain_table_options;
-      plain_table_options.user_key_len = FLAGS_key_size;
-      plain_table_options.bloom_bits_per_key = bloom_bits_per_key;
-      plain_table_options.hash_table_ratio = 0.75;
-      options.table_factory = std::shared_ptr<TableFactory>(
-          NewPlainTableFactory(plain_table_options));
-#else
-      fprintf(stderr, "Plain table is not supported in lite mode\n");
-      exit(1);
-#endif  // ROCKSDB_LITE
-    } else if (FLAGS_use_cuckoo_table) {
-#ifndef ROCKSDB_LITE
-      if (FLAGS_cuckoo_hash_ratio > 1 || FLAGS_cuckoo_hash_ratio < 0) {
-        fprintf(stderr, "Invalid cuckoo_hash_ratio\n");
-        exit(1);
-      }
-      CuckooTableOptions table_options;
-      table_options.hash_table_ratio = FLAGS_cuckoo_hash_ratio;
-      table_options.identity_as_first_hash = FLAGS_identity_as_first_hash;
-      options.table_factory =
-          std::shared_ptr<TableFactory>(NewCuckooTableFactory(table_options));
-#else
-      fprintf(stderr, "Cuckoo table is not supported in lite mode\n");
-      exit(1);
-#endif  // ROCKSDB_LITE
-    } else {
-      BlockBasedTableOptions block_based_options;
-      if (FLAGS_use_hash_search) {
-        if (FLAGS_prefix_size == 0) {
-          fprintf(stderr,
-                  "prefix_size not assigned when enable use_hash_search \n");
-          exit(1);
-        }
-        block_based_options.index_type = BlockBasedTableOptions::kHashSearch;
-      } else {
-        block_based_options.index_type = BlockBasedTableOptions::kBinarySearch;
-      }
-      if (cache_ == nullptr) {
-        block_based_options.no_block_cache = true;
-      }
-      block_based_options.cache_index_and_filter_blocks =
-          FLAGS_cache_index_and_filter_blocks;
-      block_based_options.pin_l0_filter_and_index_blocks_in_cache =
-          FLAGS_pin_l0_filter_and_index_blocks_in_cache;
-      if (FLAGS_cache_high_pri_pool_ratio > 1e-6) {  // > 0.0 + eps
-        block_based_options.cache_index_and_filter_blocks_with_high_priority =
-            true;
-      }
-      block_based_options.block_cache = cache_;
-      block_based_options.block_cache_compressed = compressed_cache_;
-      block_based_options.block_size = FLAGS_block_size;
-      block_based_options.block_restart_interval = FLAGS_block_restart_interval;
-      block_based_options.index_block_restart_interval =
-          FLAGS_index_block_restart_interval;
-      block_based_options.filter_policy = filter_policy_;
-      block_based_options.format_version = 2;
-      block_based_options.read_amp_bytes_per_bit = FLAGS_read_amp_bytes_per_bit;
-      if (FLAGS_read_cache_path != "") {
-#ifndef ROCKSDB_LITE
-        Status rc_status;
-
-#if 0  // GCOV
-        // Read cache need to be provided with a the Logger, we will put all
-        // reac cache logs in the read cache path in a file named rc_LOG
-        rc_status = FLAGS_env->CreateDirIfMissing(FLAGS_read_cache_path);
-        std::shared_ptr<Logger> read_cache_logger;
-        if (rc_status.ok()) {
-          rc_status = FLAGS_env->NewLogger(FLAGS_read_cache_path + "/rc_LOG",
-                                           &read_cache_logger);
-        }
-#endif  // GCOV
-        if (rc_status.ok()) {
-          PersistentCacheConfig rc_cfg(FLAGS_env, FLAGS_read_cache_path,
-                                       FLAGS_read_cache_size);
-
-          rc_cfg.enable_direct_reads = FLAGS_read_cache_direct_read;
-          rc_cfg.enable_direct_writes = FLAGS_read_cache_direct_write;
-          rc_cfg.writer_qdepth = 4;
-          rc_cfg.writer_dispatch_size = 4 * 1024;
-
-          auto pcache = std::make_shared<BlockCacheTier>(rc_cfg);
-          block_based_options.persistent_cache = pcache;
-          rc_status = pcache->Open();
-        }
-
-        if (!rc_status.ok()) {
-          fprintf(stderr, "Error initializing read cache, %s\n",
-                  rc_status.ToString().c_str());
-          exit(1);
-        }
-#else
-        fprintf(stderr, "Read cache is not supported in LITE\n");
-        exit(1);
-
-#endif
-      }
-
-      if (FLAGS_use_extent_based_table) {
-        block_based_options.format_version = 3;
-        options.table_factory.reset(
-            table::NewExtentBasedTableFactory(block_based_options));
-      } else
-        options.table_factory.reset(
-            NewBlockBasedTableFactory(block_based_options));
+    BlockBasedTableOptions block_based_options;
+    block_based_options.index_type = BlockBasedTableOptions::kBinarySearch;
+    if (cache_ == nullptr) {
+      block_based_options.no_block_cache = true;
     }
+    block_based_options.cache_index_and_filter_blocks =
+        FLAGS_cache_index_and_filter_blocks;
+    block_based_options.pin_l0_filter_and_index_blocks_in_cache =
+        FLAGS_pin_l0_filter_and_index_blocks_in_cache;
+    if (FLAGS_cache_high_pri_pool_ratio > 1e-6) {  // > 0.0 + eps
+      block_based_options.cache_index_and_filter_blocks_with_high_priority =
+          true;
+    }
+    block_based_options.block_cache = cache_;
+    block_based_options.block_cache_compressed = compressed_cache_;
+    block_based_options.block_size = FLAGS_block_size;
+    block_based_options.block_restart_interval = FLAGS_block_restart_interval;
+    block_based_options.index_block_restart_interval =
+        FLAGS_index_block_restart_interval;
+    block_based_options.filter_policy = filter_policy_;
+    block_based_options.format_version = 2;
+    block_based_options.read_amp_bytes_per_bit = FLAGS_read_amp_bytes_per_bit;
+    assert(FLAGS_use_extent_based_table);
+    block_based_options.format_version = 3;
+    options.table_factory.reset(table::NewExtentBasedTableFactory(block_based_options));
     if (FLAGS_max_bytes_for_level_multiplier_additional_v.size() > 0) {
       if (FLAGS_max_bytes_for_level_multiplier_additional_v.size() !=
           (unsigned int)FLAGS_num_levels) {
@@ -3973,11 +3845,9 @@ class Benchmark {
     }
   }
 
-  void Open(Options* opts) {
-    if (!InitializeOptionsFromFile(opts)) {
-      InitializeOptionsFromFlags(opts);
-    }
-
+  void Open(Options* opts)
+  {
+    InitializeOptionsFromFlags(opts);
     InitializeOptionsGeneral(opts);
   }
 
@@ -4062,8 +3932,6 @@ class Benchmark {
         db->db = ptr;
       }
 #endif  // ROCKSDB_LITE
-    } else if (FLAGS_use_blob_db) {
-      s = NewBlobDB(options, db_name, &db->db);
     } else {
       s = DB::Open(options, db_name, &db->db);
     }

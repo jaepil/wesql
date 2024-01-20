@@ -16,9 +16,9 @@
 #include <string>
 #include <vector>
 
-#include "table/block_based_table_factory.h"
+#include "db/dbformat.h"
 #include "table/internal_iterator.h"
-#include "table/plain_table_factory.h"
+#include "util/coding.h"
 #include "util/concurrent_direct_file_writer.h"
 #include "util/mutexlock.h"
 #include "util/random.h"
@@ -79,29 +79,6 @@ class ErrorEnv : public util::EnvWrapper {
   }
 };
 
-// An internal comparator that just forward comparing results from the
-// user comparator in it. Can be used to test entities that have no dependency
-// on internal key structure but consumes InternalKeyComparator, like
-// BlockBasedTable.
-class PlainInternalKeyComparator : public db::InternalKeyComparator {
- public:
-  explicit PlainInternalKeyComparator(const util::Comparator* c)
-      : InternalKeyComparator(c) {}
-
-  virtual ~PlainInternalKeyComparator() {}
-
-  virtual int Compare(const common::Slice& a,
-                      const common::Slice& b) const override {
-    return user_comparator()->Compare(a, b);
-  }
-  virtual void FindShortestSeparator(
-      std::string* start, const common::Slice& limit) const override {
-    user_comparator()->FindShortestSeparator(start, limit);
-  }
-  virtual void FindShortSuccessor(std::string* key) const override {
-    user_comparator()->FindShortSuccessor(key);
-  }
-};
 
 // A test comparator which compare two strings in this way:
 // (1) first compare prefix of 8 bytes in alphabet order,
@@ -767,8 +744,6 @@ storage::CompactionFilterFactory* RandomCompactionFilterFactory(Random* rnd);
 
 const common::SliceTransform* RandomSliceTransform(Random* rnd,
                                                    int pre_defined = -1);
-
-table::TableFactory* RandomTableFactory(Random* rnd, int pre_defined = -1);
 
 std::string RandomName(Random* rnd, const size_t len);
 

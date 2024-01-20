@@ -71,7 +71,6 @@ void LDBCommandRunner::PrintHelp(const LDBOptions& ldb_options,
   PutCommand::Help(ret);
   GetCommand::Help(ret);
   BatchPutCommand::Help(ret);
-  ScanCommand::Help(ret);
   DeleteCommand::Help(ret);
   DeleteRangeCommand::Help(ret);
   DBQuerierCommand::Help(ret);
@@ -84,14 +83,12 @@ void LDBCommandRunner::PrintHelp(const LDBOptions& ldb_options,
   CompactorCommand::Help(ret);
   ReduceDBLevelsCommand::Help(ret);
   ChangeCompactionStyleCommand::Help(ret);
-  DBDumperCommand::Help(ret);
   DBLoaderCommand::Help(ret);
   ManifestDumpCommand::Help(ret);
   CheckpointDumpCommand::Help(ret);
   ListColumnFamiliesCommand::Help(ret);
   DBFileDumperCommand::Help(ret);
   InternalDumpCommand::Help(ret);
-  RepairCommand::Help(ret);
   BackupCommand::Help(ret);
   RestoreCommand::Help(ret);
   CheckPointCommand::Help(ret);

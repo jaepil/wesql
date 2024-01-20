@@ -18,7 +18,6 @@
 #include "db/column_family.h"
 #include "db/table_cache.h"
 #include "port/likely.h"
-#include "table/block_based_filter_block.h"
 #include "table/filter_block.h"
 #include "table/filter_block.h"
 #include "table/filter_manager.h"
@@ -285,18 +284,6 @@ void FilterManager::release_meta_snapshot(const Snapshot *meta_snapshot) {
   cfd_->release_meta_snapshot(meta_snapshot, db_mutex_);
 }
 
-int FilterManager::lookup_filter_cache(const Slice &request_key, Cache *cache,
-                                       Statistics *stats,
-                                       FilterBlockReader *&filter,
-                                       Cache::Handle *&cache_handle) {
-  cache_handle = GetEntryFromCache(cache, request_key,
-                                   CountPoint::BLOCK_CACHE_FILTER_MISS,
-                                   CountPoint::BLOCK_CACHE_FILTER_HIT);
-  if (cache_handle != nullptr) {
-    filter = reinterpret_cast<FilterBlockReader *>(cache->Value(cache_handle));
-  }
-  return Status::kOk;
-}
 
 void FilterManager::append_to_request_queue(const Slice &request_key, int level,
                                             const FileDescriptor &fd,

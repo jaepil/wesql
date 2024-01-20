@@ -12,8 +12,6 @@
 #include "db/dbformat.h"
 #include "db/version_edit.h"
 #include "storage/storage_common.h"
-#include "table/block_based_table_builder.h"
-#include "table/sst_file_writer_collectors.h"
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
 #include "smartengine/table.h"
@@ -25,12 +23,6 @@ using namespace db;
 
 namespace smartengine {
 namespace table {
-
-const std::string ExternalSstFilePropertyNames::kVersion =
-    "rocksdb.external_sst_file.version";
-const std::string ExternalSstFilePropertyNames::kGlobalSeqno =
-    "rocksdb.external_sst_file.global_seqno";
-
 #ifndef ROCKSDB_LITE
 
 const size_t kFadviseTrigger = 1024 * 1024;  // 1MB
@@ -120,25 +112,6 @@ Status SstFileWriter::Open(const std::string& file_path) {
   } else {
     compression_type = r->mutable_cf_options.compression;
   }
-
-#if 0
-  std::vector<std::unique_ptr<IntTblPropCollectorFactory>>
-      int_tbl_prop_collector_factories;
-
-  // SstFileWriter properties collector to add SstFileWriter version.
-  int_tbl_prop_collector_factories.emplace_back(
-      new SstFileWriterPropertiesCollectorFactory(2 /* version */,
-                                                  0 /* global_seqno*/));
-  // User collector factories
-  auto user_collector_factories =
-      r->ioptions.table_properties_collector_factories;
-  for (size_t i = 0; i < user_collector_factories.size(); i++) {
-    int_tbl_prop_collector_factories.emplace_back(
-        new UserKeyTablePropertiesCollectorFactory(
-            user_collector_factories[i]));
-  }
-#endif
-
 
   uint32_t cf_id;
 

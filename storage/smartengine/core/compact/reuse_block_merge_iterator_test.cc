@@ -21,7 +21,6 @@
 #include "db/merge_helper.h"
 #include "meta_data.h"
 #include "table/block.h"
-#include "table/block_based_table_reader.h"
 #include "table/merging_iterator.h"
 #include "util/arena.h"
 #include "util/logging.h"

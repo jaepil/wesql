@@ -23,7 +23,6 @@
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
-#include "table/persistent_cache_helper.h"
 #include "table/table_properties_internal.h"
 #include "table/table_reader.h"
 #include "table/two_level_iterator.h"

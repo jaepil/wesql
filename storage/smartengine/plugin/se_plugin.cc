@@ -276,9 +276,9 @@ static int se_init_func(void *const p)
     DBUG_RETURN(1);
   }
 
-  if (!se_cf_options_map.init(
-          se_tbl_options, properties_collector_factory,
-          se_default_cf_options, se_override_cf_options)) {
+  if (!se_cf_options_map.init(se_tbl_options,
+                              properties_collector_factory,
+                              se_default_cf_options)) {
     // NO_LINT_DEBUG
     sql_print_error("SE: Failed to initialize CF options map.");
     se_open_tables.free_hash();

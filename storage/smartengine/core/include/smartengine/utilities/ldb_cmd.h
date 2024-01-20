@@ -25,7 +25,6 @@
 #include "smartengine/ldb_tool.h"
 #include "smartengine/options.h"
 #include "smartengine/slice.h"
-#include "smartengine/utilities/db_ttl.h"
 #include "smartengine/utilities/ldb_cmd_execute_result.h"
 #include "storage/storage_log_entry.h"
 #include "storage/storage_logger.h"
@@ -133,7 +132,6 @@ class LDBCommand {
   std::string db_path_;
   std::string column_family_name_;
   db::DB* db_;
-  util::DBWithTTL* db_ttl_;
   std::map<std::string, db::ColumnFamilyHandle*> cf_handles_;
 
   /**
@@ -148,8 +146,6 @@ class LDBCommand {
   /** If true, the value is input/output as hex in get/put/scan/delete etc. */
   bool is_value_hex_;
 
-  /** If true, the value is treated as timestamp suffixed */
-  bool is_db_ttl_;
 
   // If true, the kvs are output with their insert/modify timestamp in a ttl db
   bool timestamp_;

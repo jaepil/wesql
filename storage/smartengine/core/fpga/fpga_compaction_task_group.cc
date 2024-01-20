@@ -15,7 +15,6 @@
  */
 #include <assert.h>
 #include "db/builder.h"
-#include "table/block_based_table_builder.h"
 #include "fpga_compaction_task_group.h"
 #include "fpga/fpga_compaction_job.h"
 #include "table/table_builder.h"

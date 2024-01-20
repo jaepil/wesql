@@ -247,19 +247,6 @@ struct BlockBasedTableOptions {
   uint32_t format_version = 3;
 };
 
-// Table Properties that are specific to block-based table properties.
-struct BlockBasedTablePropertyNames {
-  // value of this propertis is a fixed int32 number.
-  static const std::string kIndexType;
-  // value is "1" for true and "0" for false.
-  static const std::string kWholeKeyFiltering;
-  // value is "1" for true and "0" for false.
-  static const std::string kPrefixFiltering;
-};
-
-// Create default block based table factory.
-extern TableFactory* NewBlockBasedTableFactory(
-    const BlockBasedTableOptions& table_options = BlockBasedTableOptions());
 
 #ifndef ROCKSDB_LITE
 

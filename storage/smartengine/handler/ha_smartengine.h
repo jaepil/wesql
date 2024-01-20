@@ -45,7 +45,6 @@
 #include "smartengine/cache.h"
 #include "smartengine/perf_context.h"
 #include "smartengine/statistics.h"
-#include "smartengine/utilities/options_util.h"
 #include "smartengine/utilities/transaction_db.h"
 #include "smartengine/utilities/write_batch_with_index.h"
 #include "storage/storage_manager.h"

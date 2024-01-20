@@ -69,13 +69,11 @@
 #include "monitoring/thread_status_util.h"
 #include "options/cf_options.h"
 #include "options/options_helper.h"
-#include "options/options_parser.h"
 #include "port/likely.h"
 #include "port/port.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "table/block.h"
-#include "table/block_based_table_factory.h"
 #include "table/extent_table_factory.h"
 #include "table/filter_manager.h"
 #include "table/merging_iterator.h"
@@ -3170,33 +3168,6 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
   return result;
 }
 
-Status DBImpl::WriteOptionsFile() {
-#ifndef ROCKSDB_LITE
-  mutex_.AssertHeld();
-
-  std::vector<std::string> cf_names;
-  std::vector<ColumnFamilyOptions> cf_opts;
-
-  // Unlock during expensive operations.  New writes cannot get here
-  // because the single write thread ensures all new writes get queued.
-  DBOptions db_options =
-      BuildDBOptions(immutable_db_options_, mutable_db_options_);
-  mutex_.Unlock();
-
-  std::string file_name =
-      TempOptionsFileName(GetName(), versions_->NewFileNumber());
-  Status s =
-      PersistRocksDBOptions(db_options, cf_names, cf_opts, file_name, GetEnv());
-
-  if (s.ok()) {
-    s = RenameTempFileToOptionsFile(file_name);
-  }
-  mutex_.Lock();
-  return s;
-#else
-  return Status::OK();
-#endif  // !ROCKSDB_LITE
-}
 
 #ifndef ROCKSDB_LITE
 namespace {

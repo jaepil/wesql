@@ -235,22 +235,6 @@ BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
   return opt;
 }
 
-TableFactory* RandomTableFactory(Random* rnd, int pre_defined) {
-#ifndef ROCKSDB_LITE
-  int random_num = pre_defined >= 0 ? pre_defined : rnd->Uniform(4);
-  switch (random_num) {
-    case 0:
-      return NewPlainTableFactory();
-    case 1:
-      return NewCuckooTableFactory();
-    default:
-      return NewBlockBasedTableFactory();
-  }
-#else
-  return NewBlockBasedTableFactory();
-#endif  // !ROCKSDB_LITE
-}
-
 MergeOperator* RandomMergeOperator(Random* rnd) {
   return new ChanglingMergeOperator(RandomName(rnd, 10));
 }
@@ -384,7 +368,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
 
   // pointer typed options
   cf_opt->prefix_extractor.reset(RandomSliceTransform(rnd));
-  cf_opt->table_factory.reset(RandomTableFactory(rnd));
   cf_opt->merge_operator.reset(RandomMergeOperator(rnd));
   if (cf_opt->compaction_filter) {
     delete cf_opt->compaction_filter;

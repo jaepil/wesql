@@ -150,10 +150,6 @@ private:
                           table::FilterBlockReader *filter_contents,
                           monitor::Statistics *statistics);
 
-  int lookup_filter_cache(const common::Slice &request_key, cache::Cache *cache,
-                          monitor::Statistics *stats,
-                          table::FilterBlockReader *&filter,
-                          cache::Cache::Handle *&cache_handle);
   void append_to_request_queue(const common::Slice &request_key, int level,
                                const db::FileDescriptor &fd,
                                monitor::HistogramImpl *file_read_hist);

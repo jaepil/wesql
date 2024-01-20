@@ -72,8 +72,6 @@ extern std::shared_ptr<SeTablePropertyCollectorFactory> properties_collector_fac
 
 extern SeSubtableOptions se_cf_options_map;
 
-extern char *se_override_cf_options;
-
 extern SeDictionaryManager dict_manager;
 
 extern SeBinlogManager binlog_manager;

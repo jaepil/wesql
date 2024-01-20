@@ -13,9 +13,7 @@
 #include <cstdlib>
 #include <unordered_set>
 #include <vector>
-#include "table/block_based_table_factory.h"
 #include "table/extent_table_factory.h"
-#include "table/plain_table_factory.h"
 #include "memory/mod_info.h"
 #include "util/string_util.h"
 #include "smartengine/cache.h"
@@ -830,138 +828,6 @@ Status StringToMap(const std::string& opts_str,
   return Status::OK();
 }
 
-Status ParseColumnFamilyOption(const std::string& name,
-                               const std::string& org_value,
-                               ColumnFamilyOptions* new_options,
-                               bool input_strings_escaped = false) {
-  const std::string& value =
-      input_strings_escaped ? UnescapeOptionString(org_value) : org_value;
-  try {
-    if (name == "block_based_table_factory") {
-      // Nested options
-      BlockBasedTableOptions table_opt, base_table_options;
-      auto block_based_table_factory = dynamic_cast<BlockBasedTableFactory*>(
-          new_options->table_factory.get());
-      if (block_based_table_factory != nullptr) {
-        base_table_options = block_based_table_factory->table_options();
-      }
-      Status table_opt_s = GetBlockBasedTableOptionsFromString(
-          base_table_options, value, &table_opt);
-      if (!table_opt_s.ok()) {
-        return Status::InvalidArgument(
-            "unable to parse the specified CF option " + name);
-      }
-      new_options->table_factory.reset(NewBlockBasedTableFactory(table_opt));
-    } else if (name == "extent_based_table_factory") {
-      // Nested options
-      BlockBasedTableOptions table_opt, base_table_options;
-      auto extent_based_table_factory =
-          dynamic_cast<table::ExtentBasedTableFactory*>(
-              new_options->table_factory.get());
-      if (extent_based_table_factory != nullptr) {
-        base_table_options = extent_based_table_factory->table_options();
-      }
-      Status table_opt_s = GetBlockBasedTableOptionsFromString(
-          base_table_options, value, &table_opt);
-      if (!table_opt_s.ok()) {
-        return Status::InvalidArgument(
-            "unable to parse the specified CF option " + name);
-      }
-      new_options->table_factory.reset(
-          table::NewExtentBasedTableFactory(table_opt));
-    } else if (name == "plain_table_factory") {
-      // Nested options
-      PlainTableOptions table_opt, base_table_options;
-      auto plain_table_factory =
-          dynamic_cast<PlainTableFactory*>(new_options->table_factory.get());
-      if (plain_table_factory != nullptr) {
-        base_table_options = plain_table_factory->table_options();
-      }
-      Status table_opt_s =
-          GetPlainTableOptionsFromString(base_table_options, value, &table_opt);
-      if (!table_opt_s.ok()) {
-        return Status::InvalidArgument(
-            "unable to parse the specified CF option " + name);
-      }
-      new_options->table_factory.reset(NewPlainTableFactory(table_opt));
-    } else if (name == "memtable") {
-      std::unique_ptr<MemTableRepFactory> new_mem_factory;
-      Status mem_factory_s =
-          GetMemTableRepFactoryFromString(value, &new_mem_factory);
-      if (!mem_factory_s.ok()) {
-        return Status::InvalidArgument(
-            "unable to parse the specified CF option " + name);
-      }
-      new_options->memtable_factory.reset(new_mem_factory.release());
-    } else if (name == "compression_opts") {
-      size_t start = 0;
-      size_t end = value.find(':');
-      if (end == std::string::npos) {
-        return Status::InvalidArgument(
-            "unable to parse the specified CF option " + name);
-      }
-      new_options->compression_opts.window_bits =
-          ParseInt(value.substr(start, end - start));
-      start = end + 1;
-      end = value.find(':', start);
-      if (end == std::string::npos) {
-        return Status::InvalidArgument(
-            "unable to parse the specified CF option " + name);
-      }
-      new_options->compression_opts.level =
-          ParseInt(value.substr(start, end - start));
-      start = end + 1;
-      if (start >= value.size()) {
-        return Status::InvalidArgument(
-            "unable to parse the specified CF option " + name);
-      }
-      end = value.find(':', start);
-      new_options->compression_opts.strategy =
-          ParseInt(value.substr(start, value.size() - start));
-      // max_dict_bytes is optional for backwards compatibility
-      if (end != std::string::npos) {
-        start = end + 1;
-        if (start >= value.size()) {
-          return Status::InvalidArgument(
-              "unable to parse the specified CF option " + name);
-        }
-        new_options->compression_opts.max_dict_bytes =
-            ParseInt(value.substr(start, value.size() - start));
-      }
-    } else if (name == "compaction_options_fifo") {
-      new_options->compaction_options_fifo.max_table_files_size =
-          ParseUint64(value);
-    } else {
-      auto iter = cf_options_type_info.find(name);
-      if (iter == cf_options_type_info.end()) {
-        return Status::InvalidArgument(
-            "Unable to parse the specified CF option " + name);
-      }
-      const auto& opt_info = iter->second;
-      if (opt_info.verification != OptionVerificationType::kDeprecated &&
-          ParseOptionHelper(
-              reinterpret_cast<char*>(new_options) + opt_info.offset,
-              opt_info.type, value)) {
-        return Status::OK();
-      }
-      switch (opt_info.verification) {
-        case OptionVerificationType::kByName:
-        case OptionVerificationType::kByNameAllowNull:
-          return Status::NotSupported("Deserializing the specified CF option " +
-                                      name + " is not supported");
-        case OptionVerificationType::kDeprecated:
-          return Status::OK();
-        default:
-          return Status::InvalidArgument(
-              "Unable to parse the specified CF option " + name);
-      }
-    }
-  } catch (const std::exception&) {
-    return Status::InvalidArgument("unable to parse the specified option " +
-                                   name);
-  }
-  return Status::OK();
-}
 
 bool SerializeSingleDBOption(std::string* opt_string,
                              const DBOptions& db_options,
@@ -1113,17 +979,6 @@ Status GetStringFromBlockBasedTableOptions(
   return Status::OK();
 }
 
-Status GetStringFromTableFactory(std::string* opts_str, const TableFactory* tf,
-                                 const std::string& delimiter) {
-  const auto* bbtf = dynamic_cast<const BlockBasedTableFactory*>(tf);
-  opts_str->clear();
-  if (bbtf != nullptr) {
-    return GetStringFromBlockBasedTableOptions(opts_str, bbtf->table_options(),
-                                               delimiter);
-  }
-
-  return Status::OK();
-}
 
 Status ParseDBOption(const std::string& name, const std::string& org_value,
                      DBOptions* new_options,
@@ -1388,59 +1243,6 @@ Status GetMemTableRepFactoryFromString(
   return Status::OK();
 }
 
-Status GetColumnFamilyOptionsFromMap(
-    const ColumnFamilyOptions& base_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    ColumnFamilyOptions* new_options, bool input_strings_escaped) {
-  return GetColumnFamilyOptionsFromMapInternal(
-      base_options, opts_map, new_options, input_strings_escaped);
-}
-
-Status GetColumnFamilyOptionsFromMapInternal(
-    const ColumnFamilyOptions& base_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    ColumnFamilyOptions* new_options, bool input_strings_escaped,
-    std::vector<std::string>* unsupported_options_names) {
-  assert(new_options);
-  *new_options = base_options;
-  if (unsupported_options_names) {
-    unsupported_options_names->clear();
-  }
-  for (const auto& o : opts_map) {
-    auto s = ParseColumnFamilyOption(o.first, o.second, new_options,
-                                     input_strings_escaped);
-    if (!s.ok()) {
-      if (s.IsNotSupported()) {
-        // If the deserialization of the specified option is not supported
-        // and an output vector of unsupported_options is provided, then
-        // we log the name of the unsupported option and proceed.
-        if (unsupported_options_names != nullptr) {
-          unsupported_options_names->push_back(o.first);
-        }
-        // Note that we still return Status::OK in such case to maintain
-        // the backward compatibility in the old public API defined in
-        // smartengine/convenience.h
-      } else {
-        // Restore "new_options" to the default "base_options".
-        *new_options = base_options;
-        return s;
-      }
-    }
-  }
-  return Status::OK();
-}
-
-Status GetColumnFamilyOptionsFromString(const ColumnFamilyOptions& base_options,
-                                        const std::string& opts_str,
-                                        ColumnFamilyOptions* new_options) {
-  std::unordered_map<std::string, std::string> opts_map;
-  Status s = StringToMap(opts_str, &opts_map);
-  if (!s.ok()) {
-    *new_options = base_options;
-    return s;
-  }
-  return GetColumnFamilyOptionsFromMap(base_options, opts_map, new_options);
-}
 
 Status GetDBOptionsFromMap(
     const DBOptions& base_options,
@@ -1496,56 +1298,6 @@ Status GetDBOptionsFromString(const DBOptions& base_options,
   return GetDBOptionsFromMap(base_options, opts_map, new_options);
 }
 
-Status GetOptionsFromString(const Options& base_options,
-                            const std::string& opts_str, Options* new_options) {
-  std::unordered_map<std::string, std::string> opts_map;
-  Status s = StringToMap(opts_str, &opts_map);
-  if (!s.ok()) {
-    return s;
-  }
-  DBOptions new_db_options(base_options);
-  ColumnFamilyOptions new_cf_options(base_options);
-  for (const auto& o : opts_map) {
-    if (ParseDBOption(o.first, o.second, &new_db_options).ok()) {
-    } else if (ParseColumnFamilyOption(o.first, o.second, &new_cf_options)
-                   .ok()) {
-    } else {
-      return Status::InvalidArgument("Can't parse option " + o.first);
-    }
-  }
-  *new_options = Options(new_db_options, new_cf_options);
-  return Status::OK();
-}
-
-Status GetTableFactoryFromMap(
-    const std::string& factory_name,
-    const std::unordered_map<std::string, std::string>& opt_map,
-    std::shared_ptr<TableFactory>* table_factory) {
-  Status s;
-  if (factory_name == BlockBasedTableFactory().Name()) {
-    BlockBasedTableOptions bbt_opt;
-    s = GetBlockBasedTableOptionsFromMap(BlockBasedTableOptions(), opt_map,
-                                         &bbt_opt, true);
-    if (!s.ok()) {
-      return s;
-    }
-    table_factory->reset(new BlockBasedTableFactory(bbt_opt));
-    return Status::OK();
-  } else if (factory_name == PlainTableFactory().Name()) {
-    PlainTableOptions pt_opt;
-    s = GetPlainTableOptionsFromMap(PlainTableOptions(), opt_map, &pt_opt,
-                                    true);
-    if (!s.ok()) {
-      return s;
-    }
-    table_factory->reset(new PlainTableFactory(pt_opt));
-    return Status::OK();
-  }
-  // Return OK for not supported table factories as TableFactory
-  // Deserialization is optional.
-  table_factory->reset();
-  return Status::OK();
-}
 
 #endif  // !ROCKSDB_LITE
 

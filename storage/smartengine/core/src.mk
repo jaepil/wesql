@@ -5,7 +5,6 @@ LIB_SOURCES =                                                   \
 	cache/row_cache.cc                                            \
   cache/sharded_cache.cc                                        \
   db/builder.cc                                                 \
-  db/c.cc                                                       \
   db/column_family.cc                                           \
   db/compacted_db_impl.cc                                       \
   db/convenience.cc                                             \
@@ -41,7 +40,6 @@ LIB_SOURCES =                                                   \
   db/merge_operator.cc                                          \
   db/range_del_aggregator.cc                                    \
   db/recovery_point.cc																					\
-  db/repair.cc                                                  \
   db/snapshot_impl.cc                                           \
   db/table_cache.cc                                             \
   db/table_properties_collector.cc                              \
@@ -91,7 +89,6 @@ LIB_SOURCES =                                                   \
   options/db_options.cc                                         \
   options/options.cc                                            \
   options/options_helper.cc                                     \
-  options/options_parser.cc                                     \
   options/options_sanity_check.cc                               \
   port/port_posix.cc                                            \
   port/stack_trace.cc                                           \
@@ -110,21 +107,13 @@ LIB_SOURCES =                                                   \
 	storage/storage_meta_struct.cc																\
 	storage/table_space.cc																				\
 	storage/multi_version_extent_meta_layer.cc										\
-  table/adaptive_table_factory.cc                               \
   table/block.cc                                                \
-  table/block_based_filter_block.cc                             \
-  table/block_based_table_builder.cc                            \
-  table/block_based_table_factory.cc                            \
-  table/block_based_table_reader.cc                             \
   table/extent_table_builder.cc                                 \
   table/extent_table_factory.cc                                 \
   table/extent_table_reader.cc                                  \
   table/block_builder.cc                                        \
   table/block_prefix_index.cc                                   \
   table/bloom_block.cc                                          \
-  table/cuckoo_table_builder.cc                                 \
-  table/cuckoo_table_factory.cc                                 \
-  table/cuckoo_table_reader.cc                                  \
   table/flush_block_policy.cc                                   \
   table/format.cc                                               \
   table/full_filter_block.cc                                    \
@@ -134,13 +123,6 @@ LIB_SOURCES =                                                   \
   table/iterator.cc                                             \
   table/merging_iterator.cc                                     \
   table/meta_blocks.cc                                          \
-  table/partitioned_filter_block.cc                             \
-  table/persistent_cache_helper.cc                              \
-  table/plain_table_builder.cc                                  \
-  table/plain_table_factory.cc                                  \
-  table/plain_table_index.cc                                    \
-  table/plain_table_key_coding.cc                               \
-  table/plain_table_reader.cc                                   \
   table/sst_file_writer.cc                                      \
   table/table_properties.cc                                     \
   table/two_level_iterator.cc                                   \
@@ -195,36 +177,17 @@ LIB_SOURCES =                                                   \
   compact/new_compaction_iterator.cc														\
   compact/compaction_stats.cc                                   \
   utilities/backupable/backupable_db.cc                         \
-  utilities/blob_db/blob_db.cc                                  \
   utilities/checkpoint/checkpoint.cc                            \
   utilities/checkpoint/hotbackup_impl.cc                        \
   utilities/compaction_filters/remove_emptyvalue_compactionfilter.cc    \
-  utilities/date_tiered/date_tiered_db_impl.cc                  \
-  utilities/document/document_db.cc                             \
-  utilities/document/json_document.cc                           \
-  utilities/document/json_document_builder.cc                   \
   utilities/env_mirror.cc                                       \
   utilities/env_timed.cc                                        \
-  utilities/geodb/geodb_impl.cc                                 \
-  utilities/leveldb_options/leveldb_options.cc                  \
-  utilities/lua/rocks_lua_compaction_filter.cc                  \
   utilities/memory/memory_util.cc                               \
   utilities/merge_operators/max.cc                              \
   utilities/merge_operators/put.cc                              \
   utilities/merge_operators/string_append/stringappend.cc       \
   utilities/merge_operators/string_append/stringappend2.cc      \
   utilities/merge_operators/uint64add.cc                        \
-  utilities/option_change_migration/option_change_migration.cc  \
-  utilities/options/options_util.cc                             \
-  utilities/persistent_cache/block_cache_tier.cc                \
-  utilities/persistent_cache/block_cache_tier_file.cc           \
-  utilities/persistent_cache/block_cache_tier_metadata.cc       \
-  utilities/persistent_cache/persistent_cache_tier.cc           \
-  utilities/persistent_cache/volatile_tier_impl.cc              \
-  utilities/redis/redis_lists.cc                                \
-  utilities/simulator_cache/sim_cache.cc                        \
-  utilities/spatialdb/spatial_db.cc                             \
-  utilities/table_properties_collectors/compact_on_deletion_collector.cc \
   utilities/transactions/optimistic_transaction_db_impl.cc      \
   utilities/transactions/optimistic_transaction_impl.cc         \
   utilities/transactions/transaction_base.cc                    \
@@ -233,7 +196,6 @@ LIB_SOURCES =                                                   \
   utilities/transactions/transaction_impl.cc                    \
   utilities/transactions/transaction_lock_mgr.cc                \
   utilities/transactions/transaction_util.cc                    \
-  utilities/ttl/db_ttl_impl.cc                                  \
   utilities/write_batch_with_index/write_batch_with_index.cc    \
   utilities/write_batch_with_index/write_batch_with_index_internal.cc    \
   utilities/parallel_read/parallel_read.cc                      
@@ -250,11 +212,6 @@ MOCK_LIB_SOURCES = \
 BENCH_LIB_SOURCES = \
   tools/db_bench_tool.cc                                        \
 
-EXP_LIB_SOURCES = \
-  utilities/col_buf_encoder.cc                                          \
-  utilities/col_buf_decoder.cc                                          \
-  utilities/column_aware_encoding_util.cc
-
 TEST_LIB_SOURCES = \
   util/testharness.cc                                                   \
   util/testutil.cc                                                      \
@@ -269,7 +226,6 @@ MAIN_SOURCES =                                                    \
   db/compaction_picker_test.cc                                          \
   db/comparator_db_test.cc                                              \
   db/corruption_test.cc                                                 \
-  db/cuckoo_table_db_test.cc                                            \
   db/db_basic_test.cc                                                   \
   db/db_block_cache_test.cc                                             \
   db/db_bloom_filter_test.cc                                            \
@@ -306,7 +262,6 @@ MAIN_SOURCES =                                                    \
   db/merge_test.cc                                                      \
   db/options_file_test.cc                                               \
   db/perf_context_test.cc                                               \
-  db/plain_table_db_test.cc                                             \
   db/prefix_test.cc                                                     \
 	db/shrink_job_test.cc                                                 \
   db/table_properties_collector_test.cc                                 \
@@ -329,11 +284,9 @@ MAIN_SOURCES =                                                    \
   monitoring/iostats_context_test.cc                                    \
   monitoring/statistics_test.cc                                         \
   options/options_test.cc                                               \
-  table/block_based_filter_block_test.cc                                \
   table/block_test.cc                                                   \
   table/full_filter_block_test.cc                                       \
   table/merger_test.cc                                                  \
-  table/table_reader_bench.cc                                           \
   table/extent_table_test.cc                                            \
   third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc                  \
   tools/db_bench.cc                                                     \
@@ -356,65 +309,14 @@ MAIN_SOURCES =                                                    \
   util/thread_local_test.cc                                             \
   util/concurrent_direct_file_writer_test.cc                            \
   utilities/backupable/backupable_db_test.cc                            \
-  utilities/blob_db/blob_db_test.cc                                     \
   utilities/checkpoint/checkpoint_test.cc                               \
   utilities/column_aware_encoding_exp.cc                                \
   utilities/column_aware_encoding_test.cc                               \
-  utilities/date_tiered/date_tiered_test.cc                             \
-  utilities/document/document_db_test.cc                                \
-  utilities/document/json_document_test.cc                              \
-  utilities/geodb/geodb_test.cc                                         \
-  utilities/lua/rocks_lua_test.cc                                       \
   utilities/memory/memory_test.cc                                       \
   utilities/merge_operators/string_append/stringappend_test.cc          \
   utilities/object_registry_test.cc                                     \
-  utilities/option_change_migration/option_change_migration_test.cc           \
   utilities/options/options_util_test.cc                                \
-  utilities/redis/redis_lists_test.cc                                   \
-  utilities/simulator_cache/sim_cache_test.cc                           \
-  utilities/spatialdb/spatial_db_test.cc                                \
-  utilities/table_properties_collectors/compact_on_deletion_collector_test.cc  \
   utilities/transactions/optimistic_transaction_test.cc                 \
   utilities/transactions/transaction_test.cc                            \
-  utilities/ttl/ttl_test.cc                                             \
   utilities/write_batch_with_index/write_batch_with_index_test.cc       \
   utilities/parallel_read/parallel_read_test.cc                         \
-
-JNI_NATIVE_SOURCES =                                          \
-  java/rocksjni/backupenginejni.cc                            \
-  java/rocksjni/backupablejni.cc                              \
-  java/rocksjni/checkpoint.cc                                 \
-  java/rocksjni/clock_cache.cc                                \
-  java/rocksjni/columnfamilyhandle.cc                         \
-  java/rocksjni/compaction_filter.cc                          \
-  java/rocksjni/compaction_options_fifo.cc                    \
-  java/rocksjni/compaction_options_universal.cc               \
-  java/rocksjni/comparator.cc                                 \
-  java/rocksjni/comparatorjnicallback.cc                      \
-  java/rocksjni/compression_options.cc                        \
-  java/rocksjni/env.cc                                        \
-  java/rocksjni/env_options.cc                                \
-  java/rocksjni/external_sst_file_info.cc                     \
-  java/rocksjni/filter.cc                                     \
-  java/rocksjni/iterator.cc                                   \
-  java/rocksjni/loggerjnicallback.cc                          \
-  java/rocksjni/lru_cache.cc                                  \
-  java/rocksjni/memtablejni.cc                                \
-  java/rocksjni/merge_operator.cc                             \
-  java/rocksjni/options.cc                                    \
-  java/rocksjni/ratelimiterjni.cc                             \
-  java/rocksjni/remove_emptyvalue_compactionfilterjni.cc      \
-  java/rocksjni/restorejni.cc                                 \
-  java/rocksjni/rocksjni.cc                                   \
-  java/rocksjni/rocksdb_exception_test.cc                     \
-  java/rocksjni/slice.cc                                      \
-  java/rocksjni/snapshot.cc                                   \
-  java/rocksjni/sst_file_writerjni.cc                         \
-  java/rocksjni/statistics.cc                                 \
-  java/rocksjni/table.cc                                      \
-  java/rocksjni/transaction_log.cc                            \
-  java/rocksjni/ttl.cc                                        \
-  java/rocksjni/write_batch.cc                                \
-  java/rocksjni/writebatchhandlerjnicallback.cc               \
-  java/rocksjni/write_batch_test.cc                           \
-  java/rocksjni/write_batch_with_index.cc

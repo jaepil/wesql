@@ -39,8 +39,6 @@ class SstFileReader {
   common::Status DumpTable(const std::string& out_filename);
   common::Status getStatus() { return init_result_; }
 
-  int ShowAllCompressionSizes(size_t block_size);
- 
   table::TableReader *get_table_reader() const { return table_reader_.get(); }
 
  private:
@@ -51,11 +49,7 @@ class SstFileReader {
                                      util::RandomAccessFileReader* file,
                                      uint64_t file_size);
 
-  uint64_t CalculateCompressedTableSize(
-      const table::TableBuilderOptions& tb_options, size_t block_size);
-
   common::Status SetTableOptionsByMagicNumber(uint64_t table_magic_number);
-  common::Status SetOldTableOptions();
 
   // Helper function to call the factory with settings specific to the
   // factory implementation

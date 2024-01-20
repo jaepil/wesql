@@ -38,7 +38,6 @@
 #include "storage/storage_logger.h"
 #include "storage/storage_manager.h"
 #include "storage/multi_version_extent_meta_layer.h"
-#include "table/block_based_table_factory.h"
 #include "table/get_context.h"
 #include "util/autovector.h"
 #include "util/compression.h"

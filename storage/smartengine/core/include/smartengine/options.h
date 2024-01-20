@@ -121,11 +121,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // spend lots of memory for memtables.
   ColumnFamilyOptions* OptimizeForSmallDb();
 
-  // Use this if you don't need to keep the data sorted, i.e. you'll never use
-  // an iterator, only Put() and Get() API calls
-  //
-  // Not supported in ROCKSDB_LITE
-  ColumnFamilyOptions* OptimizeForPointLookup(uint64_t block_cache_size_mb);
 
   // Default values for some parameters in ColumnFamilyOptions are not
   // optimized for heavy workloads and big datasets, which means you might

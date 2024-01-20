@@ -59,7 +59,6 @@ int main() {
 #include "smartengine/slice.h"
 #include "smartengine/slice_transform.h"
 #include "smartengine/statistics.h"
-#include "smartengine/utilities/db_ttl.h"
 #include "smartengine/write_batch.h"
 
 using GFLAGS::ParseCommandLineFlags;
@@ -2132,8 +2131,6 @@ class StressTest {
     block_based_options.block_size = FLAGS_block_size;
     block_based_options.format_version = 2;
     block_based_options.filter_policy = filter_policy_;
-    options_.table_factory.reset(
-        NewBlockBasedTableFactory(block_based_options));
     options_.db_write_buffer_size = FLAGS_db_write_buffer_size;
     options_.write_buffer_size = FLAGS_write_buffer_size;
     options_.max_write_buffer_number = FLAGS_max_write_buffer_number;
@@ -2291,14 +2288,8 @@ class StressTest {
              column_families_.size() ==
                  static_cast<size_t>(FLAGS_column_families));
     } else {
-#ifndef ROCKSDB_LITE
-      DBWithTTL* db_with_ttl;
-      s = DBWithTTL::Open(options_, FLAGS_db, &db_with_ttl, FLAGS_ttl);
-      db_ = db_with_ttl;
-#else
       fprintf(stderr, "TTL is not supported in RocksDBLite\n");
       exit(1);
-#endif
     }
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());

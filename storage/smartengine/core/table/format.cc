@@ -17,8 +17,6 @@
 #include "monitoring/query_perf_context.h"
 #include "monitoring/statistics.h"
 #include "table/block.h"
-#include "table/block_based_table_reader.h"
-#include "table/persistent_cache_helper.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -38,18 +36,7 @@ using namespace monitor;
 namespace smartengine {
 namespace table {
 
-extern const uint64_t kLegacyBlockBasedTableMagicNumber;
-extern const uint64_t kBlockBasedTableMagicNumber;
 extern const uint64_t kExtentBasedTableMagicNumber;
-
-#ifndef ROCKSDB_LITE
-extern const uint64_t kLegacyPlainTableMagicNumber;
-extern const uint64_t kPlainTableMagicNumber;
-#else
-// ROCKSDB_LITE doesn't have plain table
-const uint64_t kLegacyPlainTableMagicNumber = 0;
-const uint64_t kPlainTableMagicNumber = 0;
-#endif
 const uint32_t DefaultStackBufferSize = 5000;
 
 bool ShouldReportDetailedTime(Env* env, Statistics* stats) {
@@ -88,23 +75,6 @@ std::string BlockHandle::ToString(bool hex) const {
 
 const BlockHandle BlockHandle::kNullBlockHandle(0, 0);
 
-namespace {
-inline bool IsLegacyFooterFormat(uint64_t magic_number) {
-  return magic_number == kLegacyBlockBasedTableMagicNumber ||
-         magic_number == kLegacyPlainTableMagicNumber;
-}
-inline uint64_t UpconvertLegacyFooterFormat(uint64_t magic_number) {
-  if (magic_number == kLegacyBlockBasedTableMagicNumber) {
-    return kBlockBasedTableMagicNumber;
-  }
-  if (magic_number == kLegacyPlainTableMagicNumber) {
-    return kPlainTableMagicNumber;
-  }
-  assert(false);
-  return 0;
-}
-}  // namespace
-
 // legacy footer format:
 //    metaindex handle (varint64 offset, varint64 size)
 //    index handle     (varint64 offset, varint64 size)
@@ -119,47 +89,24 @@ inline uint64_t UpconvertLegacyFooterFormat(uint64_t magic_number) {
 //    table_magic_number (8 bytes)
 void Footer::EncodeTo(std::string* dst) const {
   assert(HasInitializedTableMagicNumber());
-  if (IsLegacyFooterFormat(table_magic_number())) {
-    // has to be default checksum with legacy footer
-    assert(checksum_ == kCRC32c);
-    const size_t original_size = dst->size();
-    metaindex_handle_.EncodeTo(dst);
-    index_handle_.EncodeTo(dst);
-    dst->resize(original_size + 2 * BlockHandle::kMaxEncodedLength);  // Padding
-    PutFixed32(dst, static_cast<uint32_t>(table_magic_number() & 0xffffffffu));
-    PutFixed32(dst, static_cast<uint32_t>(table_magic_number() >> 32));
-    assert(dst->size() == original_size + kVersion0EncodedLength);
-  } else if (table_magic_number() == kBlockBasedTableMagicNumber) {
-    const size_t original_size = dst->size();
-    dst->push_back(static_cast<char>(checksum_));
-    metaindex_handle_.EncodeTo(dst);
-    index_handle_.EncodeTo(dst);
-    dst->resize(original_size + kNewVersionsEncodedLength - 12);  // Padding
-    PutFixed32(dst, version());
-    PutFixed32(dst, static_cast<uint32_t>(table_magic_number() & 0xffffffffu));
-    PutFixed32(dst, static_cast<uint32_t>(table_magic_number() >> 32));
-    assert(dst->size() == original_size + kNewVersionsEncodedLength);
-  } else {
-    const size_t original_size = dst->size();
-    PutFixed32(dst, valid_size_);
-    PutFixed64(dst, next_extent_);
-    dst->push_back(static_cast<char>(checksum_));
-    metaindex_handle_.EncodeTo(dst);
-    index_handle_.EncodeTo(dst);
-    dst->resize(original_size + kVersion3EncodedLength - 12);  // Padding
-    PutFixed32(dst, version());
-    PutFixed32(dst, static_cast<uint32_t>(table_magic_number() & 0xffffffffu));
-    PutFixed32(dst, static_cast<uint32_t>(table_magic_number() >> 32));
-    assert(dst->size() == original_size + kVersion3EncodedLength);
-  }
+  assert(kExtentBasedTableMagicNumber == table_magic_number());
+  const size_t original_size = dst->size();
+  PutFixed32(dst, valid_size_);
+  PutFixed64(dst, next_extent_);
+  dst->push_back(static_cast<char>(checksum_));
+  metaindex_handle_.EncodeTo(dst);
+  index_handle_.EncodeTo(dst);
+  dst->resize(original_size + kVersion3EncodedLength - 12);  // Padding
+  PutFixed32(dst, version());
+  PutFixed32(dst, static_cast<uint32_t>(table_magic_number() & 0xffffffffu));
+  PutFixed32(dst, static_cast<uint32_t>(table_magic_number() >> 32));
+  assert(dst->size() == original_size + kVersion3EncodedLength);
 }
 
 Footer::Footer(uint64_t _table_magic_number, uint32_t _version)
     : version_(_version),
       checksum_(kCRC32c),
       table_magic_number_(_table_magic_number) {
-  // This should be guaranteed by constructor callers
-  assert(!IsLegacyFooterFormat(_table_magic_number) || version_ == 0);
 }
 
 Footer::Footer(uint64_t _table_magic_number, uint32_t _valid_size,
@@ -169,8 +116,6 @@ Footer::Footer(uint64_t _table_magic_number, uint32_t _valid_size,
       next_extent_(_next_extent),
       checksum_(kCRC32c),
       table_magic_number_(_table_magic_number) {
-  // This should be guaranteed by constructor callers
-  assert(!IsLegacyFooterFormat(_table_magic_number) || version_ == 0);
 }
 
 Status Footer::DecodeFrom(Slice* input) {
@@ -185,35 +130,9 @@ Status Footer::DecodeFrom(Slice* input) {
   uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) |
                     (static_cast<uint64_t>(magic_lo)));
 
-  // We check for legacy formats here and silently upconvert them
-  bool legacy = IsLegacyFooterFormat(magic);
-  if (legacy) {
-    magic = UpconvertLegacyFooterFormat(magic);
-  }
   set_table_magic_number(magic);
 
-  if (legacy) {
-    // The size is already asserted to be at least kMinEncodedLength
-    // at the beginning of the function
-    input->remove_prefix(input->size() - kVersion0EncodedLength);
-    version_ = 0 /* legacy */;
-    checksum_ = kCRC32c;
-  } else if (magic == kBlockBasedTableMagicNumber) {
-    version_ = DecodeFixed32(magic_ptr - 4);
-    // Footer version 1 and higher will always occupy exactly this many bytes.
-    // It consists of the checksum type, two block handles, padding,
-    // a version number, and a magic number
-    if (input->size() < kNewVersionsEncodedLength) {
-      return Status::Corruption("input is too short to be an sstable");
-    } else {
-      input->remove_prefix(input->size() - kNewVersionsEncodedLength);
-    }
-    uint32_t chksum;
-    if (!GetVarint32(input, &chksum)) {
-      return Status::Corruption("bad checksum type");
-    }
-    checksum_ = static_cast<ChecksumType>(chksum);
-  } else if (magic == table::kExtentBasedTableMagicNumber) {
+  if (magic == table::kExtentBasedTableMagicNumber) {
     version_ = DecodeFixed32(magic_ptr - 4);
     if (input->size() < kVersion3EncodedLength) {
       return Status::Corruption("input is too short to be an extent sstable");
@@ -245,27 +164,19 @@ Status Footer::DecodeFrom(Slice* input) {
 }
 
 std::string Footer::ToString() const {
-  std::string result, handle_;
+  std::string result;
   result.reserve(1024);
 
-  bool legacy = IsLegacyFooterFormat(table_magic_number_);
-  if (legacy) {
-    result.append("metaindex handle: " + metaindex_handle_.ToString() + "\n  ");
-    result.append("index handle: " + index_handle_.ToString() + "\n  ");
-    result.append("table_magic_number: " + util::ToString(table_magic_number_) +
-                  "\n  ");
-  } else {
-    result.append("checksum: " + util::ToString(checksum_) + "\n  ");
-    result.append("metaindex handle: " + metaindex_handle_.ToString() + " [" +
-                  std::to_string(metaindex_handle_.offset()) + ", " +
-                  std::to_string(metaindex_handle_.size()) + "]\n  ");
-    result.append("index handle: " + index_handle_.ToString() + " [" +
-                  std::to_string(index_handle_.offset()) + ", " +
-                  std::to_string(index_handle_.size()) + "]\n  ");
-    result.append("footer version: " + util::ToString(version_) + "\n  ");
-    result.append("table_magic_number: " + util::ToString(table_magic_number_) +
-                  "\n  ");
-  }
+  result.append("checksum: " + util::ToString(checksum_) + "\n  ");
+  result.append("metaindex handle: " + metaindex_handle_.ToString() + " [" +
+                std::to_string(metaindex_handle_.offset()) + ", " +
+                std::to_string(metaindex_handle_.size()) + "]\n  ");
+  result.append("index handle: " + index_handle_.ToString() + " [" +
+                std::to_string(index_handle_.offset()) + ", " +
+                std::to_string(index_handle_.size()) + "]\n  ");
+  result.append("footer version: " + util::ToString(version_) + "\n  ");
+  result.append("table_magic_number: " + util::ToString(table_magic_number_) +
+                "\n  ");
   return result;
 }
 
@@ -362,42 +273,6 @@ Status ReadBlockContents(RandomAccessFileReader* file, const Footer& footer,
   char* used_buf = nullptr;
   CompressionType compression_type;
 
-  if (cache_options.persistent_cache &&
-      !cache_options.persistent_cache->IsCompressed()) {
-    status = PersistentCacheHelper::LookupUncompressedPage(cache_options,
-                                                           handle, contents);
-    if (status.ok()) {
-      // uncompressed page is found for the block handle
-      return status;
-    } else {
-      // uncompressed page is not found
-      if (!status.IsNotFound()) {
-        assert(!status.ok());
-        __SE_LOG(INFO, "Error reading from persistent cache. %s",
-                      status.ToString().c_str());
-      }
-    }
-  }
-
-  if (cache_options.persistent_cache &&
-      cache_options.persistent_cache->IsCompressed()) {
-    // lookup uncompressed cache mode p-cache
-    status = PersistentCacheHelper::LookupRawPage(
-        cache_options, handle, &heap_buf, n + kBlockTrailerSize);
-  } else {
-    status = Status::NotFound();
-  }
-
-  if (status.ok()) {
-    // cache hit
-    used_buf = heap_buf.get();
-    slice = Slice(heap_buf.get(), n);
-  } else {
-    if (!status.IsNotFound()) {
-      assert(!status.ok());
-      __SE_LOG(INFO, "Error reading from persistent cache. %s",
-                    status.ToString().c_str());
-    }
     // cache miss read from device
     if (decompression_requested &&
         n + kBlockTrailerSize < DefaultStackBufferSize) {
@@ -415,14 +290,6 @@ Status ReadBlockContents(RandomAccessFileReader* file, const Footer& footer,
       }
     }
     status = ReadBlock(file, footer, read_options, handle, &slice, used_buf, aio_handle);
-    if (status.ok() && read_options.fill_cache &&
-        cache_options.persistent_cache &&
-        cache_options.persistent_cache->IsCompressed()) {
-      // insert to raw cache
-      PersistentCacheHelper::InsertRawPage(cache_options, handle, used_buf,
-                                           n + kBlockTrailerSize);
-    }
-  }
 
   if (!status.ok()) {
     return status;
@@ -453,13 +320,6 @@ Status ReadBlockContents(RandomAccessFileReader* file, const Footer& footer,
     *contents = BlockContents(std::move(heap_buf), n, true, compression_type);
   }
 
-  if (status.ok() && read_options.fill_cache &&
-      cache_options.persistent_cache &&
-      !cache_options.persistent_cache->IsCompressed()) {
-    // insert to uncompressed cache
-    PersistentCacheHelper::InsertUncompressedPage(cache_options, handle,
-                                                  *contents);
-  }
 
   return status;
 }

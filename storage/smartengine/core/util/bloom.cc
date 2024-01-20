@@ -11,7 +11,6 @@
 
 #include "smartengine/filter_policy.h"
 
-#include "table/block_based_filter_block.h"
 #include "table/full_filter_block.h"
 #include "memory/base_malloc.h"
 #include "util/coding.h"

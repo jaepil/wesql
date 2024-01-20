@@ -907,10 +907,6 @@ protected:
       SuperVersion* super_version, util::Arena* arena,
       RangeDelAggregator* range_del_agg);
 
-  // Except in DB::Open(), WriteOptionsFile can only be called when:
-  // 1. WriteThread::Writer::EnterUnbatched() is used.
-  // 2. db_mutex is held
-  common::Status WriteOptionsFile();
 
   // The following two functions can only be called when:
   // 1. WriteThread::Writer::EnterUnbatched() is used.

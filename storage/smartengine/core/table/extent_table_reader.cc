@@ -30,9 +30,8 @@
 #include "smartengine/table_properties.h"
 
 #include "table/block.h"
-#include "table/block_based_filter_block.h"
-#include "table/block_based_table_factory.h"
 #include "table/block_prefix_index.h"
+#include "table/extent_table_factory.h"
 #include "table/filter_block.h"
 #include "table/filter_manager.h"
 #include "table/format.h"
@@ -40,9 +39,6 @@
 #include "table/get_context.h"
 #include "table/internal_iterator.h"
 #include "table/meta_blocks.h"
-#include "table/partitioned_filter_block.h"
-#include "table/persistent_cache_helper.h"
-#include "table/sst_file_writer_collectors.h"
 #include "table/two_level_iterator.h"
 #include "table/sstable_scan_struct.h"
 
@@ -356,120 +352,6 @@ class BinarySearchIndexReader : public ExtentBasedTable::IndexReader {
   std::unique_ptr<Block, ptr_destruct_delete<Block>> index_block_;
 };
 
-// Index that leverages an internal hash table to quicken the lookup for a given
-// key.
-class HashIndexReader : public IndexReader {
- public:
-  static Status Create(const SliceTransform* hash_key_extractor,
-                       const Footer& footer, RandomAccessFileReader* file,
-                       const ImmutableCFOptions& ioptions,
-                       const Comparator* comparator,
-                       const BlockHandle& index_handle,
-                       InternalIterator* meta_index_iter,
-                       IndexReader** index_reader,
-                       bool hash_index_allow_collision,
-                       const PersistentCacheOptions& cache_options,
-                       SimpleAllocator *alloc = nullptr) {
-    std::unique_ptr<Block, ptr_destruct_delete<Block>> index_block_ptr;
-    Block *index_block = nullptr;
-    auto s = ReadBlockFromFile(
-        file, footer, ReadOptions(), index_handle, index_block, ioptions,
-        true /* decompress */, Slice() /*compression dict*/, cache_options,
-        kDisableGlobalSequenceNumber, 0 /* read_amp_bytes_per_bit */);
-
-    if (!s.ok()) {
-      return s;
-    }
-    index_block_ptr.reset(index_block);
-    // Note, failure to create prefix hash index does not need to be a
-    // hard error. We can still fall back to the original binary search index.
-    // So, Create will succeed regardless, from this point on.
-//    auto new_index_reader = new HashIndexReader(
-//        comparator, std::move(index_block), ioptions.statistics);
-    auto new_index_reader = COMMON_NEW(ModId::kDefaultMod, HashIndexReader, alloc,
-        comparator, std::move(index_block_ptr), ioptions.statistics);
-    *index_reader = new_index_reader;
-
-    // Get prefixes block
-    BlockHandle prefixes_handle;
-    s = FindMetaBlock(meta_index_iter, kHashIndexPrefixesBlock,
-                      &prefixes_handle);
-    if (!s.ok()) {
-      // TODO: log error
-      return Status::OK();
-    }
-
-    // Get index metadata block
-    BlockHandle prefixes_meta_handle;
-    s = FindMetaBlock(meta_index_iter, kHashIndexPrefixesMetadataBlock,
-                      &prefixes_meta_handle);
-    if (!s.ok()) {
-      // TODO: log error
-      return Status::OK();
-    }
-
-    // Read contents for the blocks
-    BlockContents prefixes_contents;
-    s = ReadBlockContents(file, footer, ReadOptions(), prefixes_handle,
-                          &prefixes_contents, ioptions, true /* decompress */,
-                          Slice() /*compression dict*/, cache_options);
-    if (!s.ok()) {
-      return s;
-    }
-    BlockContents prefixes_meta_contents;
-    s = ReadBlockContents(file, footer, ReadOptions(), prefixes_meta_handle,
-                          &prefixes_meta_contents, ioptions,
-                          true /* decompress */, Slice() /*compression dict*/,
-                          cache_options);
-    if (!s.ok()) {
-      // TODO: log error
-      return Status::OK();
-    }
-
-    BlockPrefixIndex* prefix_index = nullptr;
-    s = BlockPrefixIndex::Create(hash_key_extractor, prefixes_contents.data,
-                                 prefixes_meta_contents.data, &prefix_index);
-    // TODO: log error
-    if (s.ok()) {
-      new_index_reader->index_block_->SetBlockPrefixIndex(prefix_index);
-    }
-
-    return Status::OK();
-  }
-
-  virtual InternalIterator* NewIterator(BlockIter* iter = nullptr,
-                                        bool total_order_seek = true) override {
-    return index_block_->NewIterator(comparator_, iter, total_order_seek);
-  }
-
-  virtual size_t size() const override { return index_block_->size(); }
-  virtual size_t usable_size() const override {
-    return index_block_->usable_size();
-  }
-
-  virtual size_t ApproximateMemoryUsage() const override {
-    assert(index_block_);
-    return index_block_->ApproximateMemoryUsage() +
-           prefixes_contents_.data.size();
-  }
-
-  virtual void set_mod_id(const size_t mod_id) const override {
-    assert(index_block_);
-    update_mod_id(index_block_->data(), mod_id);
-  }
-
- private:
-  HashIndexReader(const Comparator* comparator,
-                  std::unique_ptr<Block, ptr_destruct_delete<Block>>&& index_block, Statistics* stats)
-      : IndexReader(comparator, stats), index_block_(std::move(index_block)) {
-    assert(index_block_ != nullptr);
-  }
-
-  ~HashIndexReader() {}
-
-  std::unique_ptr<Block, ptr_destruct_delete<Block>> index_block_;
-  BlockContents prefixes_contents_;
-};
 
 }  // namespace
 
@@ -523,63 +405,6 @@ void ExtentBasedTable::GenerateCachePrefix(Cache* cc, WritableFile* file,
   }
 }
 
-namespace {
-// Return True if table_properties has `user_prop_name` has a `true` value
-// or it doesn't contain this property (for backward compatible).
-bool IsFeatureSupported(const TableProperties& table_properties,
-                        const std::string& user_prop_name) {
-  auto& props = table_properties.user_collected_properties;
-  auto pos = props.find(user_prop_name);
-  // Older version doesn't have this value set. Skip this check.
-  if (pos != props.end()) {
-    if (pos->second == kPropFalse) {
-      return false;
-    } else if (pos->second != kPropTrue) {
-      __SE_LOG(WARN, "Property %s has invalidate value %s",
-                    user_prop_name.c_str(), pos->second.c_str());
-    }
-  }
-  return true;
-}
-
-SequenceNumber GetGlobalSequenceNumber(const TableProperties& table_properties) {
-  auto& props = table_properties.user_collected_properties;
-
-  auto version_pos = props.find(ExternalSstFilePropertyNames::kVersion);
-  auto seqno_pos = props.find(ExternalSstFilePropertyNames::kGlobalSeqno);
-
-  if (version_pos == props.end()) {
-    if (seqno_pos != props.end()) {
-      // This is not an external sst file, global_seqno is not supported.
-      assert(false);
-      __SE_LOG(ERROR, "A non-external sst file have global seqno property with value %s", seqno_pos->second.c_str());
-    }
-    return kDisableGlobalSequenceNumber;
-  }
-
-  uint32_t version = DecodeFixed32(version_pos->second.c_str());
-  if (version < 2) {
-    if (seqno_pos != props.end() || version != 1) {
-      // This is a v1 external sst file, global_seqno is not supported.
-      assert(false);
-      __SE_LOG(ERROR, "An external sst file with version %u have global seqno property with value %s",
-          version, seqno_pos->second.c_str());
-    }
-    return kDisableGlobalSequenceNumber;
-  }
-
-  SequenceNumber global_seqno = DecodeFixed64(seqno_pos->second.c_str());
-
-  if (global_seqno > kMaxSequenceNumber) {
-    assert(false);
-    __SE_LOG(ERROR, "An external sst file with version %u have global seqno property "
-        "with value %llu, which is greater than kMaxSequenceNumber",
-        version, global_seqno);
-  }
-
-  return global_seqno;
-}
-}  // namespace
 
 Slice ExtentBasedTable::GetCacheKey(const char* cache_key_prefix,
                                     size_t cache_key_prefix_size,
@@ -809,17 +634,6 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
     }
   }
 
-  // Determine whether whole key filtering is supported.
-  if (rep->table_properties) {
-    rep->whole_key_filtering &=
-        IsFeatureSupported(*(rep->table_properties),
-                           BlockBasedTablePropertyNames::kWholeKeyFiltering);
-    rep->prefix_filtering &= IsFeatureSupported(
-        *(rep->table_properties),
-        BlockBasedTablePropertyNames::kPrefixFiltering);
-
-    rep->global_seqno = GetGlobalSequenceNumber(*(rep->table_properties));
-  }
 
   // pre-fetching of blocks is turned on
   // Will use block cache for index/filter blocks access
@@ -1176,33 +990,11 @@ FilterBlockReader* ExtentBasedTable::ReadFilter(
   }
 
   switch (filter_type) {
-#if 0  // this is not necessary for extent base table
-    case Rep::FilterType::kPartitionedFilter: {
-      return new PartitionedFilterBlockReader(
-          rep->prefix_filtering ? rep->ioptions.prefix_extractor : nullptr,
-          rep->whole_key_filtering, std::move(block), nullptr,
-          rep->ioptions.statistics, rep->internal_comparator, this);
-    }
-#endif
-
-    case Rep::FilterType::kBlockFilter:
-//      return new BlockBasedFilterBlockReader(
-//          rep->prefix_filtering ? rep->ioptions.prefix_extractor : nullptr,
-//          rep->table_options, rep->whole_key_filtering, std::move(block),
-//          rep->ioptions.statistics);
-      return MOD_NEW_OBJECT(ModId::kCache, BlockBasedFilterBlockReader,
-          rep->prefix_filtering ? rep->ioptions.prefix_extractor : nullptr,
-          rep->table_options, rep->whole_key_filtering, std::move(block),
-          rep->ioptions.statistics);
 
     case Rep::FilterType::kFullFilter: {
       auto filter_bits_reader =
           rep->filter_policy->GetFilterBitsReader(block.data);
       assert(filter_bits_reader != nullptr);
-//      return new FullFilterBlockReader(
-//          rep->prefix_filtering ? rep->ioptions.prefix_extractor : nullptr,
-//          rep->whole_key_filtering, std::move(block), filter_bits_reader,
-//          rep->ioptions.statistics);
       return MOD_NEW_OBJECT(ModId::kCache, FullFilterBlockReader,
           rep->prefix_filtering ? rep->ioptions.prefix_extractor : nullptr,
           rep->whole_key_filtering, std::move(block), filter_bits_reader,
@@ -2073,14 +1865,6 @@ Status ExtentBasedTable::CreateIndexReader(IndexReader** index_reader,
   // Some old version of block-based tables don't have index type present in
   // table properties. If that's the case we can safely use the kBinarySearch.
   auto index_type_on_file = BlockBasedTableOptions::kBinarySearch;
-  if (rep_->table_properties) {
-    auto& props = rep_->table_properties->user_collected_properties;
-    auto pos = props.find(BlockBasedTablePropertyNames::kIndexType);
-    if (pos != props.end()) {
-      index_type_on_file = static_cast<BlockBasedTableOptions::IndexType>(
-          DecodeFixed32(pos->second.c_str()));
-    }
-  }
 
   auto file = rep_->file.get();
   auto comparator = &rep_->internal_comparator;
@@ -2092,41 +1876,10 @@ Status ExtentBasedTable::CreateIndexReader(IndexReader** index_reader,
   }
 
   switch (index_type_on_file) {
-    case BlockBasedTableOptions::kTwoLevelIndexSearch: {
-      return PartitionIndexReader::Create(
-          this, file, footer, footer.index_handle(), rep_->ioptions, comparator,
-          index_reader, rep_->persistent_cache_options, level, alloc);
-    }
     case BlockBasedTableOptions::kBinarySearch: {
       return BinarySearchIndexReader::Create(
           file, footer, footer.index_handle(), rep_->ioptions, comparator,
           index_reader, rep_->persistent_cache_options, aio_handle, alloc);
-    }
-    case BlockBasedTableOptions::kHashSearch: {
-      std::unique_ptr<Block, ptr_destruct_delete<Block>> meta_guard_ptr;
-      Block *meta_guard = nullptr;
-      std::unique_ptr<InternalIterator, ptr_destruct_delete<InternalIterator>> meta_iter_guard_ptr;
-      InternalIterator *meta_iter_guard = nullptr;
-      auto meta_index_iter = preloaded_meta_index_iter;
-      if (meta_index_iter == nullptr) {
-        auto s = ReadMetaBlock(rep_, meta_guard, meta_iter_guard);
-        meta_guard_ptr.reset(meta_guard);
-        meta_iter_guard_ptr.reset(meta_iter_guard);
-        if (!s.ok()) {
-          // we simply fall back to binary search in case there is any
-          // problem with prefix hash index loading.
-          __SE_LOG(WARN, "Unable to read the metaindex block.Fall back to binary search index.");
-          return BinarySearchIndexReader::Create(
-              file, footer, footer.index_handle(), rep_->ioptions, comparator,
-              index_reader, rep_->persistent_cache_options, aio_handle, alloc);
-        }
-        meta_index_iter = meta_iter_guard_ptr.get();
-      }
-
-      return HashIndexReader::Create(
-          rep_->internal_prefix_transform.get(), footer, file, rep_->ioptions,
-          comparator, footer.index_handle(), meta_index_iter, index_reader,
-          rep_->hash_index_allow_collision, rep_->persistent_cache_options, alloc);
     }
     default: {
       std::string error_message =
@@ -2307,13 +2060,7 @@ Status ExtentBasedTable::DumpTable(WritableFile* out_file) {
                 rep_->ioptions, false /*decompress*/,
                 Slice() /*compression dict*/, rep_->persistent_cache_options)
                 .ok()) {
-          auto block_reader_ptr = MOD_NEW_OBJECT(ModId::kRep, BlockBasedFilterBlockReader,
-              rep_->ioptions.prefix_extractor, table_options, table_options.whole_key_filtering,
-              std::move(block), rep_->ioptions.statistics);
-//          rep_->filter.reset(new BlockBasedFilterBlockReader(
-//              rep_->ioptions.prefix_extractor, table_options,
-//              table_options.whole_key_filtering, std::move(block),
-//              rep_->ioptions.statistics));
+          abort();
         }
       }
     }

@@ -49,52 +49,6 @@ class DBFileDumperCommand : public tools::LDBCommand {
   virtual void DoCommand() override;
 };
 
-class DBDumperCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "dump"; }
-
-  DBDumperCommand(const std::vector<std::string>& params,
-                  const std::map<std::string, std::string>& options,
-                  const std::vector<std::string>& flags);
-
-  static void Help(std::string& ret);
-
-  virtual void DoCommand() override;
-
- private:
-  /**
-   * Extract file name from the full path. We handle both the forward slash (/)
-   * and backslash (\) to make sure that different OS-s are supported.
-  */
-  static std::string GetFileNameFromPath(const std::string& s) {
-    std::size_t n = s.find_last_of("/\\");
-
-    if (std::string::npos == n) {
-      return s;
-    } else {
-      return s.substr(n + 1);
-    }
-  }
-
-  void DoDumpCommand();
-
-  bool null_from_;
-  std::string from_;
-  bool null_to_;
-  std::string to_;
-  int max_keys_;
-  std::string delim_;
-  bool count_only_;
-  bool count_delim_;
-  bool print_stats_;
-  std::string path_;
-
-  static const std::string ARG_COUNT_ONLY;
-  static const std::string ARG_COUNT_DELIM;
-  static const std::string ARG_STATS;
-  static const std::string ARG_TTL_BUCKET;
-};
-
 class InternalDumpCommand : public tools::LDBCommand {
  public:
   static std::string Name() { return "idump"; }
@@ -398,27 +352,6 @@ class BatchPutCommand : public tools::LDBCommand {
   std::vector<std::pair<std::string, std::string>> key_values_;
 };
 
-class ScanCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "scan"; }
-
-  ScanCommand(const std::vector<std::string>& params,
-              const std::map<std::string, std::string>& options,
-              const std::vector<std::string>& flags);
-
-  virtual void DoCommand() override;
-
-  static void Help(std::string& ret);
-
- private:
-  std::string start_key_;
-  std::string end_key_;
-  bool start_key_specified_;
-  bool end_key_specified_;
-  int max_keys_scanned_;
-  bool no_value_;
-};
-
 class DeleteCommand : public tools::LDBCommand {
  public:
   static std::string Name() { return "delete"; }
@@ -527,20 +460,6 @@ class CheckPointCommand : public tools::LDBCommand {
   static const std::string ARG_CHECKPOINT_DIR;
 };
 
-class RepairCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "repair"; }
-
-  RepairCommand(const std::vector<std::string>& params,
-                const std::map<std::string, std::string>& options,
-                const std::vector<std::string>& flags);
-
-  virtual void DoCommand() override;
-
-  virtual bool NoDBOpen() override { return true; }
-
-  static void Help(std::string& ret);
-};
 
 class BackupableCommand : public tools::LDBCommand {
  public:

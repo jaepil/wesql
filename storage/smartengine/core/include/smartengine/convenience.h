@@ -158,20 +158,6 @@ namespace common {
 //        cf_opt.compression_opts.strategy = 6;
 //        cf_opt.compression_opts.max_dict_bytes = 7;
 //
-// @param base_options the default options of the output "new_options".
-// @param opts_map an option name to value map for specifying how "new_options"
-//     should be set.
-// @param new_options the resulting options based on "base_options" with the
-//     change specified in "opts_map".
-// @param input_strings_escaped when set to true, each escaped characters
-//     prefixed by '\' in the values of the opts_map will be further converted
-//     back to the raw string before assigning to the associated options.
-// @return Status::OK() on success.  Otherwise, a non-ok status indicating
-//     error will be returned, and "new_options" will be set to "base_options".
-Status GetColumnFamilyOptionsFromMap(
-    const ColumnFamilyOptions& base_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    ColumnFamilyOptions* new_options, bool input_strings_escaped = false);
 
 // Take a default DBOptions "base_options" in addition to a
 // map "opts_map" of option name to option value to construct the new
@@ -264,17 +250,6 @@ Status GetPlainTableOptionsFromMap(
     table::PlainTableOptions* new_table_options,
     bool input_strings_escaped = false);
 
-// Take a string representation of option names and  values, apply them into the
-// base_options, and return the new options as a result. The string has the
-// following format:
-//   "write_buffer_size=1024;max_write_buffer_number=2"
-// Nested options config is also possible. For example, you can define
-// BlockBasedTableOptions as part of the string for block-based table factory:
-//   "write_buffer_size=1024;block_based_table_factory={block_size=4k};"
-//   "max_write_buffer_num=2"
-Status GetColumnFamilyOptionsFromString(const ColumnFamilyOptions& base_options,
-                                        const std::string& opts_str,
-                                        ColumnFamilyOptions* new_options);
 
 Status GetDBOptionsFromString(const DBOptions& base_options,
                               const std::string& opts_str,
@@ -306,8 +281,6 @@ Status GetMemTableRepFactoryFromString(
     const std::string& opts_str,
     std::unique_ptr<memtable::MemTableRepFactory>* new_mem_factory);
 
-Status GetOptionsFromString(const Options& base_options,
-                            const std::string& opts_str, Options* new_options);
 
 Status StringToMap(const std::string& opts_str,
                    std::unordered_map<std::string, std::string>* opts_map);

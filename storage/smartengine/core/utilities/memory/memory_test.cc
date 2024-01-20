@@ -6,7 +6,6 @@
 #ifndef ROCKSDB_LITE
 
 #include "db/db_impl.h"
-#include "table/block_based_table_factory.h"
 #include "util/string_util.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
