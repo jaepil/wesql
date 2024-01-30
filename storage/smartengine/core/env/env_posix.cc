@@ -43,7 +43,6 @@
 #include <vector>
 
 #include "env/io_posix.h"
-#include "env/posix_logger.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_updater.h"
 #include "port/port.h"
@@ -718,27 +717,6 @@ class PosixEnv : public Env {
 
   virtual uint64_t GetThreadID() const override {
     return gettid(pthread_self());
-  }
-
-  virtual Status NewLogger(const std::string& fname,
-                           shared_ptr<Logger>* result) override {
-    FILE* f;
-    {
-      IOSTATS_TIMER_GUARD(open_nanos);
-      f = fopen(fname.c_str(), "w");
-    }
-    if (f == nullptr) {
-      result->reset();
-      return IOError(fname, errno);
-    } else {
-      int fd = fileno(f);
-#ifdef ROCKSDB_FALLOCATE_PRESENT
-      fallocate(fd, FALLOC_FL_KEEP_SIZE, 0, 4 * 1024);
-#endif
-      SetFD_CLOEXEC(fd, nullptr);
-      result->reset(new PosixLogger(f, &PosixEnv::gettid, this));
-      return Status::OK();
-    }
   }
 
   virtual uint64_t NowMicros() override {

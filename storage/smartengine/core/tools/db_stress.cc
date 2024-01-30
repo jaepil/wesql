@@ -43,7 +43,6 @@ int main() {
 #include <gflags/gflags.h>
 #include "db/db_impl.h"
 #include "db/version_set.h"
-#include "hdfs/env_hdfs.h"
 #include "monitoring/histogram.h"
 #include "port/port.h"
 #include "util/coding.h"
@@ -2346,9 +2345,6 @@ int main(int argc, char** argv) {
   }
   FLAGS_compression_type_e =
       StringToCompressionType(FLAGS_compression_type.c_str());
-  if (!FLAGS_hdfs.empty()) {
-    FLAGS_env = new HdfsEnv(FLAGS_hdfs);
-  }
   FLAGS_rep_factory = StringToRepFactory(FLAGS_memtablerep.c_str());
 
   // The number of background threads should be at least as much the

@@ -257,13 +257,14 @@ Status ReadBlock(RandomAccessFileReader* file, const Footer& footer,
   return s;
 }
 
-Status ReadBlockContents(RandomAccessFileReader* file, const Footer& footer,
+Status ReadBlockContents(RandomAccessFileReader* file,
+                         const Footer& footer,
                          const ReadOptions& read_options,
-                         const BlockHandle& handle, BlockContents* contents,
+                         const BlockHandle& handle,
+                         BlockContents* contents,
                          const ImmutableCFOptions& ioptions,
                          bool decompression_requested,
                          const Slice& compression_dict,
-                         const PersistentCacheOptions& cache_options,
                          AIOHandle *aio_handle) {
   Status status;
   Slice slice;
@@ -274,22 +275,22 @@ Status ReadBlockContents(RandomAccessFileReader* file, const Footer& footer,
   CompressionType compression_type;
 
     // cache miss read from device
-    if (decompression_requested &&
-        n + kBlockTrailerSize < DefaultStackBufferSize) {
-      // If we've got a small enough hunk of data, read it in to the
-      // trivially allocated stack buffer instead of needing a full malloc()
-      used_buf = &stack_buf[0];
+  if (decompression_requested &&
+      n + kBlockTrailerSize < DefaultStackBufferSize) {
+    // If we've got a small enough hunk of data, read it in to the
+    // trivially allocated stack buffer instead of needing a full malloc()
+    used_buf = &stack_buf[0];
+  } else {
+    char* obj_ptr = static_cast<char*>(
+        base_malloc(n + kBlockTrailerSize, memory::ModId::kPersistentCache));
+    if (nullptr == obj_ptr) {
+      return Status::MemoryLimit();
     } else {
-      char* obj_ptr = static_cast<char*>(
-          base_malloc(n + kBlockTrailerSize, memory::ModId::kPersistentCache));
-      if (nullptr == obj_ptr) {
-        return Status::MemoryLimit();
-      } else {
-        heap_buf.reset(obj_ptr);
-        used_buf = heap_buf.get();
-      }
+      heap_buf.reset(obj_ptr);
+      used_buf = heap_buf.get();
     }
-    status = ReadBlock(file, footer, read_options, handle, &slice, used_buf, aio_handle);
+  }
+  status = ReadBlock(file, footer, read_options, handle, &slice, used_buf, aio_handle);
 
   if (!status.ok()) {
     return status;

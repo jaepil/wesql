@@ -47,7 +47,6 @@ class Slice;
 
 namespace util {
 class FileLock;
-class Logger;
 class RandomAccessFile;
 class SequentialFile;
 class WritableFile;
@@ -344,10 +343,6 @@ class Env {
   // between runs of the same process, but subsequent calls will return the
   // same directory.
   virtual common::Status GetTestDirectory(std::string* path) = 0;
-
-  // Create and return a log file for storing informational messages.
-  virtual common::Status NewLogger(const std::string& fname,
-                                   shared_ptr<Logger>* result) = 0;
 
   // Returns the number of micro-seconds since some fixed point in time.
   // It is often used as system time such as in GenericRateLimiter
@@ -826,54 +821,6 @@ enum InfoLogLevel : unsigned char {
   NUM_INFO_LOG_LEVELS,
 };
 
-// An interface for writing log messages.
-class Logger {
- public:
-  size_t kDoNotSupportGetLogFileSize = std::numeric_limits<size_t>::max();
-
-  explicit Logger(const InfoLogLevel log_level = InfoLogLevel::INFO_LEVEL)
-      : log_level_(log_level) {}
-  virtual ~Logger();
-
-  // Write a header to the log file with the specified format
-  // It is recommended that you log all header information at the start of the
-  // application. But it is not enforced.
-  virtual void LogHeader(const char* format, va_list ap) {
-    // Default implementation does a simple INFO level log write.
-    // Please override as per the logger class requirement.
-    Logv(format, ap);
-  }
-
-  // Write an entry to the log file with the specified format.
-  virtual void Logv(const char* format, va_list ap) = 0;
-  virtual void print_log_buffer(const char *buf, const int64_t buf_len)
-  {
-    (void)(buf);
-    (void)(buf_len);
-  }
-
-  // Write an entry to the log file with the specified log level
-  // and format.  Any log with level under the internal log level
-  // of *this (see @SetInfoLogLevel and @GetInfoLogLevel) will not be
-  // printed.
-  virtual void Logv(const InfoLogLevel log_level, const char* format,
-                    va_list ap);
-
-  virtual size_t GetLogFileSize() const { return kDoNotSupportGetLogFileSize; }
-  // Flush to the OS buffers
-  virtual void Flush() {}
-  virtual InfoLogLevel GetInfoLogLevel() const { return log_level_; }
-  virtual void SetInfoLogLevel(const InfoLogLevel log_level) {
-    log_level_ = log_level;
-  }
-
- private:
-  // No copying allowed
-  Logger(const Logger&);
-  void operator=(const Logger&);
-  InfoLogLevel log_level_;
-};
-
 // Identifies a locked file.
 class FileLock {
  public:
@@ -1069,10 +1016,6 @@ class EnvWrapper : public Env {
   virtual common::Status GetTestDirectory(std::string* path) override {
     return target_->GetTestDirectory(path);
   }
-  virtual common::Status NewLogger(const std::string& fname,
-                                   shared_ptr<Logger>* result) override {
-    return target_->NewLogger(fname, result);
-  }
   uint64_t NowMicros() override { return target_->NowMicros(); }
 
   void SleepForMicroseconds(int micros) override {
@@ -1183,15 +1126,6 @@ class WritableFileWrapper : public WritableFile {
 // when it is no longer needed.
 // *base_env must remain live while the result is in use.
 Env* NewMemEnv(Env* base_env);
-
-// Returns a new environment that is used for HDFS environment.
-// This is a factory method for HdfsEnv declared in hdfs/env_hdfs.h
-common::Status NewHdfsEnv(Env** hdfs_env, const std::string& fsname);
-
-// Returns a new environment that measures function call times for filesystem
-// operations, reporting results to variables in PerfContext.
-// This is a factory method for TimedEnv defined in utilities/env_timed.cc.
-Env* NewTimedEnv(Env* base_env);
 
 }  // namespace util
 }  // namespace smartengine

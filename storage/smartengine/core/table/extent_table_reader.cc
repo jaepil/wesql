@@ -90,23 +90,29 @@ namespace {
 // On success fill *result and return OK - caller owns *result
 // @param compression_dict Data for presetting the compression library's
 //    dictionary.
-Status ReadBlockFromFile(RandomAccessFileReader* file, const Footer& footer,
-                         const ReadOptions& options, const BlockHandle& handle,
+Status ReadBlockFromFile(RandomAccessFileReader* file,
+                         const Footer& footer,
+                         const ReadOptions& options,
+                         const BlockHandle& handle,
                          Block *&result,
-                         const ImmutableCFOptions& ioptions, bool do_uncompress,
+                         const ImmutableCFOptions& ioptions,
+                         bool do_uncompress,
                          const Slice& compression_dict,
-                         const PersistentCacheOptions& cache_options,
                          SequenceNumber global_seqno,
                          size_t read_amp_bytes_per_bit,
-                         AIOHandle *aio_handle = nullptr,
-                         SimpleAllocator *alloc = nullptr) {
+                         AIOHandle *aio_handle,
+                         SimpleAllocator *alloc) {
   BlockContents contents;
-  Status s =
-      ReadBlockContents(file, footer, options, handle, &contents, ioptions,
-                        do_uncompress, compression_dict, cache_options, aio_handle);
+  Status s = ReadBlockContents(file,
+                               footer,
+                               options,
+                               handle,
+                               &contents,
+                               ioptions,
+                               do_uncompress,
+                               compression_dict,
+                               aio_handle);
   if (s.ok()) {
-//    result->reset(new Block(std::move(contents), global_seqno,
-//                            read_amp_bytes_per_bit));
     result = COMMON_NEW(ModId::kDefaultMod, Block, alloc, std::move(contents),
         global_seqno, read_amp_bytes_per_bit);
   }
@@ -115,22 +121,6 @@ Status ReadBlockFromFile(RandomAccessFileReader* file, const Footer& footer,
   return s;
 }
 
-Status ReadBlockFromFile(RandomAccessFileReader* file, const Footer& footer,
-                         const ReadOptions& options, const BlockHandle& handle,
-                         BlockContents& contents,
-                         const ImmutableCFOptions& ioptions, bool do_uncompress,
-                         const Slice& compression_dict,
-                         const PersistentCacheOptions& cache_options,
-                         SequenceNumber global_seqno,
-                         size_t read_amp_bytes_per_bit) {
-  QUERY_TRACE_BEGIN(TracePoint::LOAD_DATA_BLOCK);
-  Status s =
-      ReadBlockContents(file, footer, options, handle, &contents, ioptions,
-                        do_uncompress, compression_dict, cache_options);
-  QUERY_COUNT(CountPoint::ENGINE_DISK_READ);
-  QUERY_TRACE_END();
-  return s;
-}
 
 // Delete the resource that is held by the iterator.
 template <class ResourceType>
@@ -198,96 +188,6 @@ Cache::Handle* GetEntryFromCache(Cache* block_cache, const Slice& key,
   return cache_handle;
 }
 
-// Index that allows binary search lookup in a two-level index structure.
-class PartitionIndexReader : public IndexReader, public Cleanable {
- public:
-  // Read the partition index from the file and create an instance for
-  // `PartitionIndexReader`.
-  // On success, index_reader will be populated; otherwise it will remain
-  // unmodified.
-  static Status Create(ExtentBasedTable* table, RandomAccessFileReader* file,
-                       const Footer& footer, const BlockHandle& index_handle,
-                       const ImmutableCFOptions& ioptions,
-                       const Comparator* comparator, IndexReader** index_reader,
-                       const PersistentCacheOptions& cache_options,
-                       const int level,
-                       SimpleAllocator *alloc = nullptr) {
-    std::unique_ptr<Block, ptr_destruct_delete<Block>> index_block_ptr;
-    Block *index_block;
-    auto s = ReadBlockFromFile(
-        file, footer, ReadOptions(), index_handle, index_block, ioptions,
-        true /* decompress */, Slice() /*compression dict*/, cache_options,
-        kDisableGlobalSequenceNumber, 0 /* read_amp_bytes_per_bit */);
-
-    if (s.ok()) {
-      index_block_ptr.reset(index_block);
-//      *index_reader = new PartitionIndexReader(
-//          table, comparator, std::move(index_block), ioptions.statistics, level);
-      *index_reader = COMMON_NEW(ModId::kDefaultMod, PartitionIndexReader, alloc,
-          table, comparator, std::move(index_block_ptr), ioptions.statistics, level);
-    }
-
-    return s;
-  }
-
-  // return a two-level iterator: first level is on the partition index
-  virtual InternalIterator* NewIterator(BlockIter* iter = nullptr,
-                                        bool dont_care = true) override {
-    // Filters are already checked before seeking the index
-    const bool skip_filters = true;
-    const bool is_index = true;
-    Cleanable* block_cache_cleaner = nullptr;
-    const bool pin_cached_indexes =
-        level_ == 0 &&
-        table_->get_table_options().pin_l0_filter_and_index_blocks_in_cache;
-    if (pin_cached_indexes) {
-      // Keep partition indexes into the cache as long as the partition index
-      // reader object is alive
-      block_cache_cleaner = this;
-    }
-    return NewTwoLevelIterator(
-//        new ExtentBasedTable::BlockEntryIteratorState(
-//            table_, ReadOptions(), skip_filters, is_index, block_cache_cleaner),
-        MOD_NEW_OBJECT(ModId::kDbIter, ExtentBasedTable::BlockEntryIteratorState,
-            table_, ReadOptions(), skip_filters, is_index, block_cache_cleaner),
-        index_block_->NewIterator(comparator_, nullptr, true),
-        TracePoint::INDEX_ITERATOR_NEXT);
-    // TODO(myabandeh): Update TwoLevelIterator to be able to make use of
-    // on-stack
-    // BlockIter while the state is on heap
-  }
-
-  virtual size_t size() const override { return index_block_->size(); }
-  virtual size_t usable_size() const override {
-    return index_block_->usable_size();
-  }
-
-  virtual size_t ApproximateMemoryUsage() const override {
-    assert(index_block_);
-    return index_block_->ApproximateMemoryUsage();
-  }
-
-  virtual void set_mod_id(const size_t mod_id) const override {
-    assert(index_block_);
-    update_mod_id(index_block_->data(), mod_id);
-  }
-
- private:
-  PartitionIndexReader(ExtentBasedTable* table, const Comparator* comparator,
-                       std::unique_ptr<Block, ptr_destruct_delete<Block>>&& index_block,
-                       Statistics* stats,
-                       const int level)
-      : IndexReader(comparator, stats),
-        table_(table),
-        index_block_(std::move(index_block)),
-        level_(level) {
-    assert(index_block_ != nullptr);
-  }
-  ExtentBasedTable* table_;
-  std::unique_ptr<Block, ptr_destruct_delete<Block>> index_block_;
-  int level_;
-};
-
 // Index that allows binary search lookup for the first key of each block.
 // This class can be viewed as a thin wrapper for `Block` class which already
 // supports binary search.
@@ -297,24 +197,32 @@ class BinarySearchIndexReader : public ExtentBasedTable::IndexReader {
   // `BinarySearchIndexReader`.
   // On success, index_reader will be populated; otherwise it will remain
   // unmodified.
-  static Status Create(RandomAccessFileReader* file, const Footer& footer,
+  static Status Create(RandomAccessFileReader* file,
+                       const Footer& footer,
                        const BlockHandle& index_handle,
                        const ImmutableCFOptions& ioptions,
-                       const Comparator* comparator, IndexReader** index_reader,
-                       const PersistentCacheOptions& cache_options,
+                       const Comparator* comparator,
+                       IndexReader** index_reader,
                        AIOHandle *aio_handle,
-                       SimpleAllocator *alloc = nullptr) {
+                       SimpleAllocator *alloc)
+  {
     std::unique_ptr<Block, ptr_destruct_delete<Block>> index_block_ptr;
     Block *index_block = nullptr;
-    auto s = ReadBlockFromFile(
-        file, footer, ReadOptions(), index_handle, index_block, ioptions,
-        true /* decompress */, Slice() /*compression dict*/, cache_options,
-        kDisableGlobalSequenceNumber, 0 /* read_amp_bytes_per_bit */, aio_handle);
+    auto s = ReadBlockFromFile(file,
+                               footer,
+                               ReadOptions(),
+                               index_handle,
+                               index_block,
+                               ioptions,
+                               true /* decompress */,
+                               Slice() /*compression dict*/,
+                               kDisableGlobalSequenceNumber,
+                               0 /* read_amp_bytes_per_bit */,
+                               aio_handle,
+                               nullptr /* allocator */);
 
     if (s.ok()) {
       index_block_ptr.reset(index_block);
-//      *index_reader = new BinarySearchIndexReader(
-//          comparator, std::move(index_block), ioptions.statistics);
       *index_reader = COMMON_NEW(ModId::kDefaultMod, BinarySearchIndexReader, alloc,
           comparator, std::move(index_block_ptr), ioptions.statistics);
     }
@@ -366,11 +274,6 @@ void ExtentBasedTable::SetupCacheKeyPrefix(Rep* rep, uint64_t file_size) {
     // Create dummy offset of index reader which is beyond the file size.
     rep->dummy_index_reader_offset =
         file_size + rep->table_options.block_cache->NewId();
-  }
-  if (rep->table_options.persistent_cache != nullptr) {
-    GenerateCachePrefix(/*cache=*/nullptr, rep->file->file(),
-                        &rep->persistent_cache_key_prefix[0],
-                        &rep->persistent_cache_key_prefix_size);
   }
   if (rep->table_options.block_cache_compressed != nullptr) {
     GenerateCachePrefix(rep->table_options.block_cache_compressed.get(),
@@ -523,13 +426,6 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   SetupCacheKeyPrefix(rep, file_size);
 //  unique_ptr<ExtentBasedTable> new_table(new ExtentBasedTable(rep));
   ExtentBasedTable *new_table = COMMON_NEW(ModId::kRep, ExtentBasedTable, alloc, rep);
-
-  // page cache options
-  rep->persistent_cache_options =
-      PersistentCacheOptions(rep->table_options.persistent_cache,
-                             std::string(rep->persistent_cache_key_prefix,
-                                         rep->persistent_cache_key_prefix_size),
-                             rep->ioptions.statistics);
 
   // Read meta index
   std::unique_ptr<Block, ptr_destruct<Block>> meta_ptr;
@@ -745,23 +641,24 @@ Status ExtentBasedTable::ReadMetaBlock(
     SimpleAllocator *alloc) {
   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
   // it is an empty block.
-  //  TODO: we never really verify check sum for meta index block
-//  std::unique_ptr<Block> meta;
-  Status s = ReadBlockFromFile(
-      rep->file.get(), rep->footer, ReadOptions(),
-      rep->footer.metaindex_handle(), meta_block, rep->ioptions,
-      true /* decompress */, Slice() /*compression dict*/,
-      rep->persistent_cache_options, kDisableGlobalSequenceNumber,
-      0 /* read_amp_bytes_per_bit */, nullptr, alloc);
+  Status s = ReadBlockFromFile(rep->file.get(),
+                               rep->footer,
+                               ReadOptions(),
+                               rep->footer.metaindex_handle(),
+                               meta_block,
+                               rep->ioptions,
+                               true /* decompress */,
+                               Slice() /*compression dict*/,
+                               kDisableGlobalSequenceNumber,
+                               0 /* read_amp_bytes_per_bit */,
+                               nullptr,
+                               alloc);
 
   if (!s.ok()) {
     __SE_LOG(ERROR, "Encountered error while reading data from properties block %s", s.ToString().c_str());
     return s;
   }
 
-//  *meta_block = std::move(meta);
-  // meta block uses bytewise comparator.
-//  iter->reset(meta_block->get()->NewIterator(BytewiseComparator()));
   iter = meta_block->NewIterator(BytewiseComparator(), nullptr, true, nullptr, false, alloc);
   return Status::OK();
 }
@@ -972,10 +869,15 @@ FilterBlockReader* ExtentBasedTable::ReadFilter(
     return nullptr;
   }
   BlockContents block;
-  if (!ReadBlockContents(rep->file.get(), rep->footer, ReadOptions(),
-                         filter_handle, &block, rep->ioptions,
-                         false /* decompress */, Slice() /*compression dict*/,
-                         rep->persistent_cache_options)
+  if (!ReadBlockContents(rep->file.get(),
+                         rep->footer,
+                         ReadOptions(),
+                         filter_handle,
+                         &block,
+                         rep->ioptions,
+                         false /* decompress */,
+                         Slice() /*compression dict*/,
+                         nullptr /*aio_handle*/)
            .ok()) {
     // Error reading the block
     return nullptr;
@@ -1098,11 +1000,18 @@ InternalIterator* ExtentBasedTable::create_data_block_iterator(
 
   rep_->data_block.reset();
   Block *tmp_block = nullptr;
-  Status s = ReadBlockFromFile(
-      rep_->file.get(), rep_->footer, ro, handle, tmp_block,
-      rep_->ioptions, true /* compress */, compression_dict,
-      rep_->persistent_cache_options, rep_->global_seqno,
-      rep_->table_options.read_amp_bytes_per_bit, nullptr);
+  Status s = ReadBlockFromFile(rep_->file.get(),
+                               rep_->footer,
+                               ro,
+                               handle,
+                               tmp_block,
+                               rep_->ioptions,
+                               true /* compress */,
+                               compression_dict,
+                               rep_->global_seqno,
+                               rep_->table_options.read_amp_bytes_per_bit,
+                               nullptr /* aio_handle */,
+                               nullptr /* allocaor */);
   rep_->data_block.reset(tmp_block);
 
   InternalIterator* iter = nullptr;
@@ -1235,29 +1144,6 @@ InternalIterator* ExtentBasedTable::NewDataBlockIterator(
       input_iter, is_index, s, add_blocks, scan_add_blocks_limit);
 }
 
-// Get uncompressed block
-int ExtentBasedTable::get_uncompressed_data_block(const BlockHandle& handle,
-    table::BlockContents& block_contents) {
-  //PERF_TIMER_GUARD(new_table_block_iter_nanos);
-
-  Slice compression_dict;
-  if (rep_->compression_dict_block) {
-    compression_dict = rep_->compression_dict_block->data;
-  }
-
-  Status s = ReadBlockFromFile(
-      rep_->file.get(), rep_->footer, ReadOptions(), handle, block_contents,
-      rep_->ioptions, true /* compress */, compression_dict,
-      rep_->persistent_cache_options, rep_->global_seqno,
-      rep_->table_options.read_amp_bytes_per_bit);
-
-  if (!s.ok()) {
-    __SE_LOG(WARN, "get data block(%ld,%ld) failed(%s).", handle.offset(), handle.size(), s.ToString().c_str());
-  }
-
-  return s.code();
-}
-
 int ExtentBasedTable::get_data_block(const BlockHandle& handle,
                                      Slice& data_block, bool verify_checksums) {
   if (data_block.size() < handle.size() + kBlockTrailerSize) {
@@ -1308,14 +1194,21 @@ InternalIterator* ExtentBasedTable::NewDataBlockIterator(
         return NewErrorInternalIterator(Status::Incomplete("no blocking io"));
       }
     }
-//    std::unique_ptr<Block> block_value;
+
     Block *block_value = nullptr;
-    s = ReadBlockFromFile(
-        rep->file.get(), rep->footer, ro, handle, block_value, rep->ioptions,
-        true /* compress */, compression_dict, rep->persistent_cache_options,
-        rep->global_seqno, rep->table_options.read_amp_bytes_per_bit);
+    s = ReadBlockFromFile(rep->file.get(),
+                          rep->footer,
+                          ro,
+                          handle,
+                          block_value,
+                          rep->ioptions,
+                          true /* compress */,
+                          compression_dict,
+                          rep->global_seqno,
+                          rep->table_options.read_amp_bytes_per_bit,
+                          nullptr /* aio_handle */,
+                          nullptr /* allocator */);
     if (s.ok()) {
-//      block.value = block_value.release();
       block.value = block_value;
     }
   }
@@ -1381,13 +1274,19 @@ Status ExtentBasedTable::MaybeLoadDataBlockToCache(
         rep->table_options.read_amp_bytes_per_bit, is_index);
 
     if (block_entry->value == nullptr && !no_io && ro.fill_cache) {
-//      std::unique_ptr<Block> raw_block;
       Block *raw_block = nullptr;
-      s = ReadBlockFromFile(
-          rep->file.get(), rep->footer, ro, handle, raw_block, rep->ioptions,
-          block_cache_compressed == nullptr, compression_dict,
-          rep->persistent_cache_options, rep->global_seqno,
-          rep->table_options.read_amp_bytes_per_bit);
+      s = ReadBlockFromFile(rep->file.get(),
+                            rep->footer,
+                            ro,
+                            handle,
+                            raw_block,
+                            rep->ioptions,
+                            block_cache_compressed == nullptr,
+                            compression_dict,
+                            rep->global_seqno,
+                            rep->table_options.read_amp_bytes_per_bit,
+                            nullptr /* aio_handle */,
+                            nullptr /* allocator */);
 
       if (s.ok()
           && (nullptr == add_blocks || *add_blocks < scan_add_blocks_limit)) {
@@ -1877,9 +1776,14 @@ Status ExtentBasedTable::CreateIndexReader(IndexReader** index_reader,
 
   switch (index_type_on_file) {
     case BlockBasedTableOptions::kBinarySearch: {
-      return BinarySearchIndexReader::Create(
-          file, footer, footer.index_handle(), rep_->ioptions, comparator,
-          index_reader, rep_->persistent_cache_options, aio_handle, alloc);
+      return BinarySearchIndexReader::Create(file,
+                                             footer,
+                                             footer.index_handle(),
+                                             rep_->ioptions,
+                                             comparator,
+                                             index_reader,
+                                             aio_handle,
+                                             alloc);
     }
     default: {
       std::string error_message =
@@ -2055,10 +1959,15 @@ Status ExtentBasedTable::DumpTable(WritableFile* out_file) {
       BlockHandle handle;
       if (FindMetaBlock(meta_iter, filter_block_key, &handle).ok()) {
         BlockContents block;
-        if (ReadBlockContents(
-                rep_->file.get(), rep_->footer, ReadOptions(), handle, &block,
-                rep_->ioptions, false /*decompress*/,
-                Slice() /*compression dict*/, rep_->persistent_cache_options)
+        if (ReadBlockContents(rep_->file.get(),
+                              rep_->footer,
+                              ReadOptions(),
+                              handle,
+                              &block,
+                              rep_->ioptions,
+                              false /*decompress*/,
+                              Slice() /*compression dict*/,
+                              nullptr /*aio_handle*/)
                 .ok()) {
           abort();
         }
@@ -2590,10 +2499,10 @@ int ExtentBasedTable::new_data_block_iterator(const ReadOptions &read_options,
                                      rep_->ioptions,
                                      block_cache_compressed == nullptr,
                                      compression_dict,
-                                     rep_->persistent_cache_options,
                                      rep_->global_seqno,
                                      rep_->table_options.read_amp_bytes_per_bit,
-                                     &handle.aio_handle_).code())) {
+                                     &handle.aio_handle_,
+                                     nullptr /* allocator */).code())) {
           SE_LOG(WARN, "failed to read block from file", K(ret));
         }
         raw_block_ptr.reset(raw_block);

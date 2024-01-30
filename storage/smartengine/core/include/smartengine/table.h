@@ -36,10 +36,6 @@ namespace db {
 class MiniTables;
 }
 
-namespace cache {
-class PersistentCache;
-}
-
 namespace util {
 class WritableFileWriter;
 class RandomAccessFile;
@@ -136,10 +132,6 @@ struct BlockBasedTableOptions {
   // If non-NULL use the specified cache for blocks.
   // If NULL, rocksdb will automatically create and use an 8MB internal cache.
   std::shared_ptr<cache::Cache> block_cache = nullptr;
-
-  // If non-NULL use the specified cache for pages read from device
-  // IF NULL, no page cache is used
-  std::shared_ptr<cache::PersistentCache> persistent_cache = nullptr;
 
   // If non-NULL use the specified cache for compressed blocks.
   // If NULL, rocksdb will not use a compressed block cache.

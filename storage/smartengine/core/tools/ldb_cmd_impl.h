@@ -460,45 +460,5 @@ class CheckPointCommand : public tools::LDBCommand {
   static const std::string ARG_CHECKPOINT_DIR;
 };
 
-
-class BackupableCommand : public tools::LDBCommand {
- public:
-  BackupableCommand(const std::vector<std::string>& params,
-                    const std::map<std::string, std::string>& options,
-                    const std::vector<std::string>& flags);
-
- protected:
-  static void Help(const std::string& name, std::string& ret);
-  std::string backup_env_uri_;
-  std::string backup_dir_;
-  int num_threads_;
-
- private:
-  static const std::string ARG_BACKUP_DIR;
-  static const std::string ARG_BACKUP_ENV_URI;
-  static const std::string ARG_NUM_THREADS;
-  static const std::string ARG_STDERR_LOG_LEVEL;
-};
-
-class BackupCommand : public BackupableCommand {
- public:
-  static std::string Name() { return "backup"; }
-  BackupCommand(const std::vector<std::string>& params,
-                const std::map<std::string, std::string>& options,
-                const std::vector<std::string>& flags);
-  virtual void DoCommand() override;
-  static void Help(std::string& ret);
-};
-
-class RestoreCommand : public BackupableCommand {
- public:
-  static std::string Name() { return "restore"; }
-  RestoreCommand(const std::vector<std::string>& params,
-                 const std::map<std::string, std::string>& options,
-                 const std::vector<std::string>& flags);
-  virtual void DoCommand() override;
-  virtual bool NoDBOpen() override { return true; }
-  static void Help(std::string& ret);
-};
 }
 }  // namespace smartengine

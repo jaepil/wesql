@@ -26,7 +26,6 @@
 #include "tools/sst_dump_tool_imp.h"
 #include "util/coding.h"
 #include "util/filename.h"
-#include "util/stderr_logger.h"
 #include "util/string_util.h"
 #include "smartengine/cache.h"
 #include "smartengine/table_properties.h"
@@ -239,12 +238,6 @@ LDBCommand* LDBCommand::SelectCommand(const ParsedParams& parsed_params) {
   } else if (parsed_params.cmd == CheckPointCommand::Name()) {
     return new CheckPointCommand(parsed_params.cmd_params,
                                  parsed_params.option_map, parsed_params.flags);
-  } else if (parsed_params.cmd == BackupCommand::Name()) {
-    return new BackupCommand(parsed_params.cmd_params, parsed_params.option_map,
-                             parsed_params.flags);
-  } else if (parsed_params.cmd == RestoreCommand::Name()) {
-    return new RestoreCommand(parsed_params.cmd_params,
-                              parsed_params.option_map, parsed_params.flags);
   }
   return nullptr;
 }
@@ -2779,140 +2772,6 @@ void CheckPointCommand::DoCommand() {
     exec_state_ = LDBCommandExecuteResult::Failed(status.ToString());
   }
 }
-const std::string BackupableCommand::ARG_NUM_THREADS = "num_threads";
-const std::string BackupableCommand::ARG_BACKUP_ENV_URI = "backup_env_uri";
-const std::string BackupableCommand::ARG_BACKUP_DIR = "backup_dir";
-//const std::string BackupableCommand::ARG_STDERR_LOG_LEVEL = "stderr_log_level";
-
-BackupableCommand::BackupableCommand(
-    const std::vector<std::string>& params,
-    const std::map<std::string, std::string>& options,
-    const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false /* is_read_only */,
-                 BuildCmdLineOptions({ARG_BACKUP_ENV_URI, ARG_BACKUP_DIR,
-                                      ARG_NUM_THREADS/*, ARG_STDERR_LOG_LEVEL*/})),
-      num_threads_(1) {
-  auto itr = options.find(ARG_NUM_THREADS);
-  if (itr != options.end()) {
-    num_threads_ = std::stoi(itr->second);
-  }
-  itr = options.find(ARG_BACKUP_ENV_URI);
-  if (itr != options.end()) {
-    backup_env_uri_ = itr->second;
-  }
-  itr = options.find(ARG_BACKUP_DIR);
-  if (itr == options.end()) {
-    exec_state_ = LDBCommandExecuteResult::Failed("--" + ARG_BACKUP_DIR +
-                                                  ": missing backup directory");
-  } else {
-    backup_dir_ = itr->second;
-  }
-#if 0  // GCOV
-  itr = options.find(ARG_STDERR_LOG_LEVEL);
-  if (itr != options.end()) {
-    int stderr_log_level = std::stoi(itr->second);
-    if (stderr_log_level < 0 ||
-        stderr_log_level >= InfoLogLevel::NUM_INFO_LOG_LEVELS) {
-      exec_state_ = LDBCommandExecuteResult::Failed(
-          ARG_STDERR_LOG_LEVEL + " must be >= 0 and < " +
-          std::to_string(InfoLogLevel::NUM_INFO_LOG_LEVELS) + ".");
-    } else {
-      logger_.reset(
-          new StderrLogger(static_cast<InfoLogLevel>(stderr_log_level)));
-    }
-  }
-#endif  // GCOV
-}
-
-void BackupableCommand::Help(const std::string& name, std::string& ret) {
-  ret.append("  ");
-  ret.append(name);
-  ret.append(" [--" + ARG_BACKUP_ENV_URI + "] ");
-  ret.append(" [--" + ARG_BACKUP_DIR + "] ");
-  ret.append(" [--" + ARG_NUM_THREADS + "] ");
-  //ret.append(" [--" + ARG_STDERR_LOG_LEVEL + "=<int (InfoLogLevel)>] ");
-  ret.append("\n");
-}
-
-// ----------------------------------------------------------------------------
-
-BackupCommand::BackupCommand(const std::vector<std::string>& params,
-                             const std::map<std::string, std::string>& options,
-                             const std::vector<std::string>& flags)
-    : BackupableCommand(params, options, flags) {}
-
-void BackupCommand::Help(std::string& ret) {
-  BackupableCommand::Help(Name(), ret);
-}
-
-void BackupCommand::DoCommand() {
-  BackupEngine* backup_engine;
-  Status status;
-  if (!db_) {
-    assert(GetExecuteState().IsFailed());
-    return;
-  }
-  printf("open db OK\n");
-  std::unique_ptr<Env> custom_env_guard;
-  Env* custom_env = NewCustomObject<Env>(backup_env_uri_, &custom_env_guard);
-  BackupableDBOptions backup_options =
-      BackupableDBOptions(backup_dir_, custom_env);
-  backup_options.max_background_operations = num_threads_;
-  status = BackupEngine::Open(Env::Default(), backup_options, &backup_engine);
-  if (status.ok()) {
-    printf("open backup engine OK\n");
-  } else {
-    exec_state_ = LDBCommandExecuteResult::Failed(status.ToString());
-    return;
-  }
-  status = backup_engine->CreateNewBackup(db_);
-  if (status.ok()) {
-    printf("create new backup OK\n");
-  } else {
-    exec_state_ = LDBCommandExecuteResult::Failed(status.ToString());
-    return;
-  }
-}
-
-// ----------------------------------------------------------------------------
-
-RestoreCommand::RestoreCommand(
-    const std::vector<std::string>& params,
-    const std::map<std::string, std::string>& options,
-    const std::vector<std::string>& flags)
-    : BackupableCommand(params, options, flags) {}
-
-void RestoreCommand::Help(std::string& ret) {
-  BackupableCommand::Help(Name(), ret);
-}
-
-void RestoreCommand::DoCommand() {
-  std::unique_ptr<Env> custom_env_guard;
-  Env* custom_env = NewCustomObject<Env>(backup_env_uri_, &custom_env_guard);
-  std::unique_ptr<BackupEngineReadOnly> restore_engine;
-  Status status;
-  {
-    BackupableDBOptions opts(backup_dir_, custom_env);
-    opts.max_background_operations = num_threads_;
-    BackupEngineReadOnly* raw_restore_engine_ptr;
-    status = BackupEngineReadOnly::Open(Env::Default(), opts,
-                                        &raw_restore_engine_ptr);
-    if (status.ok()) {
-      restore_engine.reset(raw_restore_engine_ptr);
-    }
-  }
-  if (status.ok()) {
-    printf("open restore engine OK\n");
-    status = restore_engine->RestoreDBFromLatestBackup(db_path_, db_path_);
-  }
-  if (status.ok()) {
-    printf("restore from backup OK\n");
-  } else {
-    exec_state_ = LDBCommandExecuteResult::Failed(status.ToString());
-  }
-}
-
-// ----------------------------------------------------------------------------
 
 namespace {
 

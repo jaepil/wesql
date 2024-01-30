@@ -82,16 +82,6 @@ TEST_F(GenerateLevelFilesBriefTest, Multiple) {
   ASSERT_EQ(0, Compare());
 }
 
-#if 0
-class CountingLogger : public Logger {
- public:
-  CountingLogger() : log_count(0) {}
-  using Logger::Logv;
-  virtual void Logv(const char* format, va_list ap) override { log_count++; }
-  int log_count;
-};
-#endif
-
 Options GetOptionsWithNumLevels(int num_levels) {
   Options opt;
   opt.num_levels = num_levels;

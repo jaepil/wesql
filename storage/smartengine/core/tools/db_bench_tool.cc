@@ -38,7 +38,6 @@
 
 #include "db/db_impl.h"
 #include "db/version_set.h"
-#include "hdfs/env_hdfs.h"
 #include "monitoring/histogram.h"
 #include "monitoring/statistics.h"
 #include "port/port.h"
@@ -63,7 +62,6 @@
 #include "smartengine/options.h"
 // TODO @zhencheng : use QUERY TRACE to print this.
 // #include "smartengine/perf_context.h"
-#include "smartengine/persistent_cache.h"
 #include "smartengine/perf_level.h"
 #include "smartengine/rate_limiter.h"
 #include "smartengine/slice.h"
@@ -2750,12 +2748,6 @@ class Benchmark {
         is_recover_mode(false),
         rand_large_val(1000) {
     if (report_file_operations_) {
-      if (!FLAGS_hdfs.empty()) {
-        fprintf(stderr,
-                "--hdfs and --report_file_operations cannot be enabled "
-                "at the same time");
-        exit(1);
-      }
       FLAGS_env = new ReportFileOpEnv(Env::Default());
     }
 
@@ -7560,10 +7552,7 @@ int db_bench_tool(int argc, char** argv) {
 
 #ifndef ROCKSDB_LITE
   std::unique_ptr<Env> custom_env_guard;
-  if (!FLAGS_hdfs.empty() && !FLAGS_env_uri.empty()) {
-    fprintf(stderr, "Cannot provide both --hdfs and --env_uri.\n");
-    exit(1);
-  } else if (!FLAGS_env_uri.empty()) {
+  if (!FLAGS_env_uri.empty()) {
     FLAGS_env = NewCustomObject<Env>(FLAGS_env_uri, &custom_env_guard);
     if (FLAGS_env == nullptr) {
       fprintf(stderr, "No Env registered for URI: %s\n", FLAGS_env_uri.c_str());
@@ -7571,9 +7560,6 @@ int db_bench_tool(int argc, char** argv) {
     }
   }
 #endif  // ROCKSDB_LITE
-  if (!FLAGS_hdfs.empty()) {
-    FLAGS_env = new HdfsEnv(FLAGS_hdfs);
-  }
 
   if (!strcasecmp(FLAGS_compaction_fadvice.c_str(), "NONE"))
     FLAGS_compaction_fadvice_e = Options::NONE;

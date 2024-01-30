@@ -435,8 +435,6 @@ set(SOURCES
         db/replay_thread_pool.cc
         db/replay_threadpool_executor.cc
         env/env.cc
-        env/env_chroot.cc
-        env/env_hdfs.cc
         env/memenv.cc
         logger/logger.cc
         memory/chunk_allocator.cc
@@ -567,13 +565,8 @@ set(SOURCES
         fpga/multi_way_block_merge.cc
         fpga/multi_way_block_merge_stats.cc
         fpga/fpga_compaction_job.cc
-        utilities/backupable/backupable_db.cc
         utilities/checkpoint/checkpoint.cc
         utilities/checkpoint/hotbackup_impl.cc
-        utilities/compaction_filters/remove_emptyvalue_compactionfilter.cc
-        utilities/env_mirror.cc
-        utilities/env_timed.cc
-        utilities/memory/memory_util.cc
         utilities/merge_operators/max.cc
         utilities/merge_operators/put.cc
         utilities/merge_operators/string_append/stringappend.cc
@@ -598,7 +591,6 @@ if(WIN32)
     port/win/env_win.cc
     port/win/env_default.cc
     port/win/port_win.cc
-    port/win/win_logger.cc
     port/win/win_thread.cc
     port/win/xpress_win.cc)
 else()
@@ -612,13 +604,6 @@ if(WITH_FPAG_COMPACTION)
   add_definitions(-DFPGA_COMPACTION)
   set(FPGA_COMPACTION_LIBS fpga_compaction glog)
   list(APPEND THIRDPARTY_LIBS ${FPGA_COMPACTION_LIBS})
-endif()
-
-option(WITH_LIBRADOS "Build with librados" OFF)
-if(WITH_LIBRADOS)
-list(APPEND SOURCES
-utilities/env_librados.cc)
-list(APPEND THIRDPARTY_LIBS rados)
 endif()
 
 # add common target to build objects from files for shared/static library target
@@ -806,7 +791,6 @@ set(TESTS
         compact/compaction_test.cc
         #compact/minor_compaction_test.cc
         #compact/minor_compaction_util_test.cc
-        #utilities/backupable/backupable_db_test.cc
         #utilities/checkpoint/checkpoint_test.cc
         utilities/checkpoint/hotbackup_test.cc
         #utilities/date_tiered/date_tiered_test.cc
@@ -814,7 +798,6 @@ set(TESTS
         #utilities/document/json_document_test.cc
         #utilities/geodb/geodb_test.cc
         #utilities/lua/rocks_lua_test.cc
-        #utilities/memory/memory_test.cc
         #utilities/merge_operators/string_append/stringappend_test.cc
         #utilities/object_registry_test.cc
         #utilities/option_change_migration/option_change_migration_test.cc
@@ -829,9 +812,6 @@ set(TESTS
         #utilities/write_batch_with_index/write_batch_with_index_test.cc
         utilities/parallel_read/parallel_read_test.cc
 )
-if(WITH_LIBRADOS)
-  list(APPEND TESTS utilities/env_librados_test.cc)
-endif()
 
 set(BENCHMARKS
   cache/cache_bench.cc

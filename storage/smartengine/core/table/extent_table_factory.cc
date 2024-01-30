@@ -204,14 +204,6 @@ std::string ExtentBasedTableFactory::GetPrintableTableOptions() const {
     ret.append("  block_cache_compressed_options:\n");
     ret.append(table_options_.block_cache_compressed->GetPrintableOptions());
   }
-  snprintf(buffer, kBufferSize, "  persistent_cache: %p\n",
-           static_cast<void*>(table_options_.persistent_cache.get()));
-  ret.append(buffer);
-  if (table_options_.persistent_cache) {
-    snprintf(buffer, kBufferSize, "  persistent_cache_options:\n");
-    ret.append(buffer);
-    ret.append(table_options_.persistent_cache->GetPrintableOptions());
-  }
   snprintf(buffer, kBufferSize, "  block_size: %" ROCKSDB_PRIszt "\n",
            table_options_.block_size);
   ret.append(buffer);

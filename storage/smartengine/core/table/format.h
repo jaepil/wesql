@@ -19,7 +19,6 @@
 
 #include "options/cf_options.h"
 #include "port/port.h"  // noexcept
-#include "table/persistent_cache_options.h"
 
 namespace smartengine {
 
@@ -268,15 +267,15 @@ extern common::Status ReadBlock(util::RandomAccessFileReader* file,
 
 // Read the block identified by "handle" from "file".  On failure
 // return non-OK.  On success fill *result and return OK.
-extern common::Status ReadBlockContents(
-    util::RandomAccessFileReader* file, const Footer& footer,
-    const common::ReadOptions& options, const BlockHandle& handle,
-    BlockContents* contents, const common::ImmutableCFOptions& ioptions,
-    bool do_uncompress = true,
-    const common::Slice& compression_dict = common::Slice(),
-    const common::PersistentCacheOptions& cache_options =
-        common::PersistentCacheOptions(),
-    util::AIOHandle *aio_handle = nullptr);
+extern common::Status ReadBlockContents(util::RandomAccessFileReader* file,
+                                        const Footer& footer,
+                                        const common::ReadOptions& options,
+                                        const BlockHandle& handle,
+                                        BlockContents* contents,
+                                        const common::ImmutableCFOptions& ioptions,
+                                        bool do_uncompress,
+                                        const common::Slice& compression_dict,
+                                        util::AIOHandle *aio_handle);
 
 // The 'data' points to the raw block contents read in from file.
 // This method allocates a new heap buffer and the raw block

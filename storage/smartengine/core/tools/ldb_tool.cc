@@ -89,8 +89,6 @@ void LDBCommandRunner::PrintHelp(const LDBOptions& ldb_options,
   ListColumnFamiliesCommand::Help(ret);
   DBFileDumperCommand::Help(ret);
   InternalDumpCommand::Help(ret);
-  BackupCommand::Help(ret);
-  RestoreCommand::Help(ret);
   CheckPointCommand::Help(ret);
 
   fprintf(stderr, "%s\n", ret.c_str());

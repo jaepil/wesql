@@ -55,8 +55,6 @@ LIB_SOURCES =                                                   \
   db/batch_group.cc                                             \
   db/pipline_queue_manager.cc                                   \
   env/env.cc                                                    \
-  env/env_chroot.cc                                             \
-  env/env_hdfs.cc                                               \
   env/env_posix.cc                                              \
   env/io_posix.cc                                               \
   env/memenv.cc                                                 \
@@ -176,13 +174,8 @@ LIB_SOURCES =                                                   \
 	compact/compaction_iterator.cc																\
   compact/new_compaction_iterator.cc														\
   compact/compaction_stats.cc                                   \
-  utilities/backupable/backupable_db.cc                         \
   utilities/checkpoint/checkpoint.cc                            \
   utilities/checkpoint/hotbackup_impl.cc                        \
-  utilities/compaction_filters/remove_emptyvalue_compactionfilter.cc    \
-  utilities/env_mirror.cc                                       \
-  utilities/env_timed.cc                                        \
-  utilities/memory/memory_util.cc                               \
   utilities/merge_operators/max.cc                              \
   utilities/merge_operators/put.cc                              \
   utilities/merge_operators/string_append/stringappend.cc       \
@@ -308,14 +301,10 @@ MAIN_SOURCES =                                                    \
   util/thread_list_test.cc                                              \
   util/thread_local_test.cc                                             \
   util/concurrent_direct_file_writer_test.cc                            \
-  utilities/backupable/backupable_db_test.cc                            \
   utilities/checkpoint/checkpoint_test.cc                               \
   utilities/column_aware_encoding_exp.cc                                \
   utilities/column_aware_encoding_test.cc                               \
-  utilities/memory/memory_test.cc                                       \
   utilities/merge_operators/string_append/stringappend_test.cc          \
-  utilities/object_registry_test.cc                                     \
-  utilities/options/options_util_test.cc                                \
   utilities/transactions/optimistic_transaction_test.cc                 \
   utilities/transactions/transaction_test.cc                            \
   utilities/write_batch_with_index/write_batch_with_index_test.cc       \

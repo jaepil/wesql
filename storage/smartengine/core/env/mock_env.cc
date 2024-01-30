@@ -316,102 +316,6 @@ class MockEnvFileLock : public FileLock {
   const std::string fname_;
 };
 
-class TestMemLogger : public Logger {
- private:
-  std::unique_ptr<WritableFile> file_;
-  std::atomic_size_t log_size_;
-  static const uint64_t flush_every_seconds_ = 5;
-  std::atomic_uint_fast64_t last_flush_micros_;
-  Env* env_;
-  bool flush_pending_;
-
- public:
-  TestMemLogger(std::unique_ptr<WritableFile> f, Env* env,
-                const InfoLogLevel log_level = InfoLogLevel::ERROR_LEVEL)
-      : Logger(log_level),
-        file_(std::move(f)),
-        log_size_(0),
-        last_flush_micros_(0),
-        env_(env),
-        flush_pending_(false) {}
-  virtual ~TestMemLogger() {}
-
-  virtual void Flush() override {
-    if (flush_pending_) {
-      flush_pending_ = false;
-    }
-    last_flush_micros_ = env_->NowMicros();
-  }
-
-  using Logger::Logv;
-  virtual void Logv(const char* format, va_list ap) override {
-    // We try twice: the first time with a fixed-size stack allocated buffer,
-    // and the second time with a much larger dynamically allocated buffer.
-    char buffer[500];
-    for (int iter = 0; iter < 2; iter++) {
-      char* base;
-      int bufsize;
-      if (iter == 0) {
-        bufsize = sizeof(buffer);
-        base = buffer;
-      } else {
-        bufsize = 30000;
-        base = new char[bufsize];
-      }
-      char* p = base;
-      char* limit = base + bufsize;
-
-      struct timeval now_tv;
-      gettimeofday(&now_tv, nullptr);
-      const time_t seconds = now_tv.tv_sec;
-      struct tm t;
-      localtime_r(&seconds, &t);
-      p += snprintf(p, limit - p, "%04d/%02d/%02d-%02d:%02d:%02d.%06d ",
-                    t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
-                    t.tm_min, t.tm_sec, static_cast<int>(now_tv.tv_usec));
-
-      // Print the message
-      if (p < limit) {
-        va_list backup_ap;
-        va_copy(backup_ap, ap);
-        p += vsnprintf(p, limit - p, format, backup_ap);
-        va_end(backup_ap);
-      }
-
-      // Truncate to available space if necessary
-      if (p >= limit) {
-        if (iter == 0) {
-          continue;  // Try again with larger buffer
-        } else {
-          p = limit - 1;
-        }
-      }
-
-      // Add newline if necessary
-      if (p == base || p[-1] != '\n') {
-        *p++ = '\n';
-      }
-
-      assert(p <= limit);
-      const size_t write_size = p - base;
-
-      file_->Append(Slice(base, write_size));
-      flush_pending_ = true;
-      log_size_ += write_size;
-      uint64_t now_micros =
-          static_cast<uint64_t>(now_tv.tv_sec) * 1000000 + now_tv.tv_usec;
-      if (now_micros - last_flush_micros_ >= flush_every_seconds_ * 1000000) {
-        flush_pending_ = false;
-        last_flush_micros_ = now_micros;
-      }
-      if (base != buffer) {
-        delete[] base;
-      }
-      break;
-    }
-  }
-  size_t GetLogFileSize() const override { return log_size_; }
-};
 
 }  // Anonymous namespace
 
@@ -652,24 +556,6 @@ Status MockEnv::LinkFile(const std::string& src, const std::string& dest) {
   DeleteFileInternal(t);
   file_map_[t] = file_map_[s];
   file_map_[t]->Ref();  // Otherwise it might get deleted when noone uses s
-  return Status::OK();
-}
-
-Status MockEnv::NewLogger(const std::string& fname,
-                          shared_ptr<Logger>* result) {
-  auto fn = NormalizePath(fname);
-  MutexLock lock(&mutex_);
-  auto iter = file_map_.find(fn);
-  MemFile* file = nullptr;
-  if (iter == file_map_.end()) {
-    file = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, MemFile, this, fn, false);
-    file->Ref();
-    file_map_[fn] = file;
-  } else {
-    file = iter->second;
-  }
-  std::unique_ptr<WritableFile> f(MOD_NEW_OBJECT(memory::ModId::kDefaultMod, MockWritableFile, file, nullptr));
-  result->reset(new TestMemLogger(std::move(f), this));
   return Status::OK();
 }
 

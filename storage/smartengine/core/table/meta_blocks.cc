@@ -192,8 +192,15 @@ Status ReadProperties(const Slice& handle_value, RandomAccessFileReader* file,
   ReadOptions read_options;
   read_options.verify_checksums = false;
   Status s;
-  s = ReadBlockContents(file, footer, read_options, handle, &block_contents,
-                        ioptions, false /* decompress */);
+  s = ReadBlockContents(file,
+                        footer,
+                        read_options,
+                        handle,
+                        &block_contents,
+                        ioptions,
+                        false /* decompress */,
+                        Slice() /* compress_dict*/,
+                        nullptr /* aio_handle*/);
 
   if (!s.ok()) {
     return s;
@@ -301,8 +308,15 @@ Status ReadTableProperties(RandomAccessFileReader* file, uint64_t file_size,
   BlockContents metaindex_contents;
   ReadOptions read_options;
   read_options.verify_checksums = false;
-  s = ReadBlockContents(file, footer, read_options, metaindex_handle,
-                        &metaindex_contents, ioptions, false /* decompress */);
+  s = ReadBlockContents(file,
+                        footer,
+                        read_options,
+                        metaindex_handle,
+                        &metaindex_contents,
+                        ioptions,
+                        false /* decompress */,
+                        Slice() /* compress_dict */,
+                        nullptr /* aio_handle */);
   if (!s.ok()) {
     return s;
   }
@@ -356,9 +370,15 @@ Status FindMetaBlock(RandomAccessFileReader* file, uint64_t file_size,
   BlockContents metaindex_contents;
   ReadOptions read_options;
   read_options.verify_checksums = false;
-  s = ReadBlockContents(file, footer, read_options, metaindex_handle,
-                        &metaindex_contents, ioptions,
-                        false /* do decompression */);
+  s = ReadBlockContents(file,
+                        footer,
+                        read_options,
+                        metaindex_handle,
+                        &metaindex_contents,
+                        ioptions,
+                        false /* do decompression */,
+                        Slice() /* compress_dict */,
+                        nullptr /* aio_handle */);
   if (!s.ok()) {
     return s;
   }
@@ -389,8 +409,15 @@ Status ReadMetaBlock(RandomAccessFileReader* file, uint64_t file_size,
   ReadOptions read_options;
   read_options.verify_checksums = false;
   status =
-      ReadBlockContents(file, footer, read_options, metaindex_handle,
-                        &metaindex_contents, ioptions, false /* decompress */);
+      ReadBlockContents(file,
+                        footer,
+                        read_options,
+                        metaindex_handle,
+                        &metaindex_contents,
+                        ioptions,
+                        false /* decompress */,
+                        Slice() /* compress_dict */,
+                        nullptr /* aio_handle */);
   if (!status.ok()) {
     return status;
   }
@@ -410,8 +437,15 @@ Status ReadMetaBlock(RandomAccessFileReader* file, uint64_t file_size,
   }
 
   // Reading metablock
-  return ReadBlockContents(file, footer, read_options, block_handle, contents,
-                           ioptions, false /* decompress */);
+  return ReadBlockContents(file,
+                           footer,
+                           read_options,
+                           block_handle,
+                           contents,
+                           ioptions,
+                           false /* decompress */,
+                           Slice() /* compress_dict */,
+                           nullptr /* aio_handle */);
 }
 
 }  // namespace table

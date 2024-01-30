@@ -82,9 +82,6 @@ class MockEnv : public EnvWrapper {
   virtual common::Status LinkFile(const std::string& src,
                                   const std::string& target) override;
 
-  virtual common::Status NewLogger(const std::string& fname,
-                                   shared_ptr<Logger>* result) override;
-
   virtual common::Status LockFile(const std::string& fname,
                                   FileLock** flock) override;
 

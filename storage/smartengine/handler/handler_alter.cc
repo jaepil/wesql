@@ -68,7 +68,6 @@
 #include "smartengine/slice_transform.h"
 #include "smartengine/utilities/checkpoint.h"
 #include "smartengine/utilities/convenience.h"
-#include "smartengine/utilities/memory_util.h"
 #include "smartengine/perf_level.h"
 #include "core/util/memory_stat.h"
 #include "core/util/sync_point.h"

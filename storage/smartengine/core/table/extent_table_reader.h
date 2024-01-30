@@ -29,7 +29,6 @@
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
 #include "smartengine/options.h"
-#include "smartengine/persistent_cache.h"
 #include "smartengine/statistics.h"
 #include "smartengine/status.h"
 #include "smartengine/table.h"
@@ -250,9 +249,6 @@ class ExtentBasedTable : public TableReader {
   // get compressed data (on disk version) to data_block, with block trailer
   int get_data_block(const BlockHandle& handle, common::Slice& data_block,
                      bool verify_checksums = false);
-  // get uncompressed data (on disk version) to block
-  int get_uncompressed_data_block(const BlockHandle& handle,
-      table::BlockContents& block_contents);
 
   void set_mod_id(const size_t mod_id) const override;
 
@@ -507,9 +503,7 @@ struct ExtentBasedTable::Rep {
   size_t persistent_cache_key_prefix_size = 0;
   char compressed_cache_key_prefix[kMaxCacheKeyPrefixSize];
   size_t compressed_cache_key_prefix_size = 0;
-  uint64_t dummy_index_reader_offset =
-      0;  // ID that is unique for the block cache.
-  common::PersistentCacheOptions persistent_cache_options;
+  uint64_t dummy_index_reader_offset = 0;  // ID that is unique for the block cache.
 
   // Footer contains the fixed table information
   Footer footer;
