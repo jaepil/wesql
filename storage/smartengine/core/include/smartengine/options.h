@@ -1111,21 +1111,6 @@ struct ReadOptions {
   // Default: kReadAllTier
   ReadTier read_tier;
 
-  // Specify to create a tailing iterator -- a special iterator that has a
-  // view of the complete database (i.e. it can also be used to read newly
-  // added data) and is optimized for sequential reads. It will return records
-  // that were inserted into the database after the creation of the iterator.
-  // Default: false
-  // Not supported in ROCKSDB_LITE mode!
-  bool tailing;
-
-  // Specify to create a managed iterator -- a special iterator that
-  // uses less resources by having the ability to free its underlying
-  // resources on request.
-  // Default: false
-  // Not supported in ROCKSDB_LITE mode!
-  bool managed;
-
   // Enable a total order seek regardless of index format (e.g. hash index)
   // used in the table. Some table format (e.g. plain table) may not support
   // this option.

@@ -427,21 +427,6 @@ class DBQuerierCommand : public tools::LDBCommand {
   static const char* DELETE_CMD;
 };
 
-class CheckConsistencyCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "checkconsistency"; }
-
-  CheckConsistencyCommand(const std::vector<std::string>& params,
-                          const std::map<std::string, std::string>& options,
-                          const std::vector<std::string>& flags);
-
-  virtual void DoCommand() override;
-
-  virtual bool NoDBOpen() override { return true; }
-
-  static void Help(std::string& ret);
-};
-
 class CheckPointCommand : public tools::LDBCommand {
  public:
   static std::string Name() { return "checkpoint"; }

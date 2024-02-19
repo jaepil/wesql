@@ -244,10 +244,6 @@ class DBImpl : public DB {
   using DB::NewIterator;
   virtual Iterator* NewIterator(const common::ReadOptions& options,
                                 ColumnFamilyHandle* column_family) override;
-  virtual common::Status NewIterators(
-      const common::ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_families,
-      std::vector<Iterator*>* iterators) override;
   virtual const Snapshot* GetSnapshot() override;
   virtual void ReleaseSnapshot(const Snapshot* snapshot) override;
 
@@ -400,13 +396,6 @@ class DBImpl : public DB {
       common::ColumnFamilyMetaData* metadata) override;
 
   VersionSet* get_version_set() { return versions_.get(); }
-
-  // experimental API
-  common::Status SuggestCompactRange(ColumnFamilyHandle* column_family,
-                                     const common::Slice* begin,
-                                     const common::Slice* end);
-
-  common::Status PromoteL0(ColumnFamilyHandle* column_family, int target_level);
 
   // Similar to Write() but will call the callback once on the single write
   // thread to determine whether it is safe to perform the write.

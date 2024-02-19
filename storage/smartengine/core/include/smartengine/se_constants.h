@@ -70,4 +70,14 @@ static const int64_t MAX_LOB_KV_SIZE = 36 * 1024;
     __SE_LOG(ERROR, fmt, __VA_ARGS__); \
     return ret;                             \
   }
+
+/**Abort execution if EXPR does not evaluate to nonzero.*/
+#define se_assert(EXPR)                     \
+  do {                                      \
+    if (UNLIKELY(false == (bool)(EXPR))) {  \
+      abort();                              \
+    }                                       \
+  } while (0)
+
+
 #endif

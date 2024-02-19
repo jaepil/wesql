@@ -137,13 +137,6 @@ class StackableDB : public db::DB {
     return db_->NewIterator(opts, column_family);
   }
 
-  virtual common::Status NewIterators(
-      const common::ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_families,
-      std::vector<Iterator*>* iterators) override {
-    return db_->NewIterators(options, column_families, iterators);
-  }
-
   virtual const Snapshot* GetSnapshot() override { return db_->GetSnapshot(); }
 
   virtual void ReleaseSnapshot(const Snapshot* snapshot) override {

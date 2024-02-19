@@ -385,8 +385,6 @@ set(SOURCES
         cache/row_cache.cc
         db/builder.cc
         db/column_family.cc
-        db/compacted_db_impl.cc
-        #        db/major_compaction_iterator.cc
         db/convenience.cc
         db/db_filesnapshot.cc
         db/db_impl.cc
@@ -395,22 +393,15 @@ set(SOURCES
         db/db_impl_files.cc
         db/db_impl_open.cc
         db/db_impl_debug.cc
-        db/db_impl_experimental.cc
-        db/db_impl_readonly.cc
         db/db_info_dumper.cc
         db/db_iter.cc
         db/dbformat.cc
         db/dump_job.cc
-        db/event_helpers.cc
-        db/experimental.cc
-        db/file_indexer.cc
         db/flush_job.cc
         db/flush_scheduler.cc
-        db/forward_iterator.cc
         db/internal_stats.cc
         db/log_reader.cc
         db/log_writer.cc
-        db/managed_iterator.cc
         db/memtable.cc
         db/memtable_list.cc
         db/merge_helper.cc
@@ -421,7 +412,6 @@ set(SOURCES
         db/table_cache.cc
         db/table_properties_collector.cc
         db/transaction_log_impl.cc
-        db/version_builder.cc
         db/version_edit.cc
         db/version_set.cc
         db/wal_manager.cc
@@ -504,7 +494,6 @@ set(SOURCES
         table/sstable_scan_iterator.cc
         tools/backup_check_tool.cc
         tools/db_bench_tool.cc
-        tools/dump/db_dump_tool.cc
         tools/ldb_cmd.cc
         tools/ldb_tool.cc
         tools/sst_dump_tool.cc
@@ -705,7 +694,6 @@ set(TESTS
         #db/external_sst_file_basic_test.cc
         #db/external_sst_file_test.cc
         #db/fault_injection_test.cc
-        db/file_indexer_test.cc
         db/filename_test.cc
         #db/flush_job_test.cc
         #db/listener_test.cc

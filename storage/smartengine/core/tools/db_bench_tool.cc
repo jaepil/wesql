@@ -46,7 +46,6 @@
 #include "util/crc32c.h"
 #include "util/mutexlock.h"
 #include "util/random.h"
-#include "util/stderr_logger.h"
 #include "util/string_util.h"
 #include "util/testutil.h"
 #include "util/transaction_test_util.h"
@@ -599,9 +598,6 @@ DEFINE_bool(disable_wal, false, "If true, do not write WAL for write.");
 
 DEFINE_string(wal_dir, "", "If not empty, use the given dir for WAL");
 
-DEFINE_string(truth_db, "/dev/shm/truth_db/dbbench",
-              "Truth key/values used when using verify");
-
 DEFINE_int32(num_levels, 7, "The total number of levels");
 
 DEFINE_int64(target_file_size_base, Options().target_file_size_base,
@@ -925,9 +921,6 @@ DEFINE_uint64(
 DEFINE_uint64(max_compaction_bytes, Options().max_compaction_bytes,
               "Max bytes allowed in one compaction");
 
-#ifndef ROCKSDB_LITE
-DEFINE_bool(readonly, false, "Run read only benchmarks.");
-#endif  // ROCKSDB_LITE
 
 DEFINE_bool(disable_auto_compactions, false, "Do not auto trigger compactions");
 
@@ -957,9 +950,6 @@ DEFINE_string(compaction_fadvice, "NORMAL",
               "Access pattern advice when a file is compacted");
 static auto FLAGS_compaction_fadvice_e =
     Options().access_hint_on_compaction_start;
-
-DEFINE_bool(use_tailing_iterator, false,
-            "Use tailing iterator to access a series of keys instead of get");
 
 DEFINE_bool(use_adaptive_mutex, Options().use_adaptive_mutex,
             "Use adaptive mutex");
@@ -2870,39 +2860,6 @@ class Benchmark {
     return base_name + ToString(id);
   }
 
-  void VerifyDBFromDB(std::string& truth_db_name) {
-    DBWithColumnFamilies truth_db;
-    auto s = DB::OpenForReadOnly(open_options_, truth_db_name, &truth_db.db);
-    if (!s.ok()) {
-      fprintf(stderr, "open error: %s\n", s.ToString().c_str());
-      exit(1);
-    }
-    ReadOptions ro;
-    ro.total_order_seek = true;
-    std::unique_ptr<db::Iterator> truth_iter(truth_db.db->NewIterator(ro));
-    std::unique_ptr<db::Iterator> db_iter(db_.db->NewIterator(ro));
-    // Verify that all the key/values in truth_db are retrivable in db with
-    // ::Get
-    fprintf(stderr, "Verifying db >= truth_db with ::Get...\n");
-    for (truth_iter->SeekToFirst(); truth_iter->Valid(); truth_iter->Next()) {
-      std::string value;
-      s = db_.db->Get(ro, truth_iter->key(), &value);
-      assert(s.ok());
-      // TODO(myabandeh): provide debugging hints
-      assert(Slice(value) == truth_iter->value());
-    }
-    // Verify that the db iterator does not give any extra key/value
-    fprintf(stderr, "Verifying db == truth_db...\n");
-    for (db_iter->SeekToFirst(), truth_iter->SeekToFirst(); db_iter->Valid();
-         db_iter->Next(), truth_iter->Next()) {
-      assert(truth_iter->Valid());
-      assert(truth_iter->value() == db_iter->value());
-    }
-    // No more key should be left unchecked in truth_db
-    assert(!truth_iter->Valid());
-    fprintf(stderr, "...Verified\n");
-  }
-
   void Run() {
     if (!SanityCheck()) {
       exit(1);
@@ -3154,8 +3111,6 @@ class Benchmark {
         PrintStats("smartengine.stats");
       } else if (name == "resetstats") {
         ResetStats();
-      } else if (name == "verify") {
-        VerifyDBFromDB(FLAGS_truth_db);
       } else if (name == "levelstats") {
         PrintStats("smartengine.levelstats");
       } else if (name == "sstables") {
@@ -3794,12 +3749,6 @@ class Benchmark {
     else 
       fprintf(stderr,"Error: valid compaction_mode is (0,1,2)\n");
 
-#ifndef ROCKSDB_LITE
-    if (FLAGS_readonly && FLAGS_transaction_db) {
-      fprintf(stderr, "Cannot use readonly flag with transaction_db\n");
-      exit(1);
-    }
-#endif  // ROCKSDB_LITE
   }
 
   void InitializeOptionsGeneral(Options* opts) {
@@ -3861,10 +3810,7 @@ class Benchmark {
             ColumnFamilyName(i), ColumnFamilyOptions(options)));
       }
 #ifndef ROCKSDB_LITE
-      if (FLAGS_readonly) {
-        s = DB::OpenForReadOnly(options, db_name, column_families, &db->cfh,
-                                &db->db);
-      } else if (FLAGS_optimistic_transaction_db) {
+      if (FLAGS_optimistic_transaction_db) {
         s = OptimisticTransactionDB::Open(options, db_name, column_families,
                                           &db->cfh, &db->opt_txn_db);
         if (s.ok()) {
@@ -3909,8 +3855,6 @@ class Benchmark {
       db->num_created = num_hot;
       db->num_hot = num_hot;
 #ifndef ROCKSDB_LITE
-    } else if (FLAGS_readonly) {
-      s = DB::OpenForReadOnly(options, db_name, &db->db);
     } else if (FLAGS_optimistic_transaction_db) {
       s = OptimisticTransactionDB::Open(options, db_name, &db->opt_txn_db);
       if (s.ok()) {
@@ -4494,7 +4438,6 @@ class Benchmark {
 
   void ReadSequential(ThreadState* thread, DB* db) {
     ReadOptions options(FLAGS_verify_checksum, true);
-    options.tailing = FLAGS_use_tailing_iterator;
 
     Iterator* iter = db->NewIterator(options);
     int64_t i = 0;
@@ -4763,7 +4706,6 @@ class Benchmark {
     int64_t found = 0;
     int64_t bytes = 0;
     ReadOptions options(FLAGS_verify_checksum, true);
-    options.tailing = FLAGS_use_tailing_iterator;
 
     Iterator* single_iter = nullptr;
     std::vector<Iterator*> multi_iters;
@@ -4781,18 +4723,16 @@ class Benchmark {
     Duration duration(FLAGS_duration, reads_);
     char value_buffer[256];
     while (!duration.Done(1)) {
-      if (!FLAGS_use_tailing_iterator) {
-        if (db_.db != nullptr) {
-          delete single_iter;
-          single_iter = db_.db->NewIterator(options);
-        } else {
-          for (auto iter : multi_iters) {
-            delete iter;
-          }
-          multi_iters.clear();
-          for (const auto& db_with_cfh : multi_dbs_) {
-            multi_iters.push_back(db_with_cfh.db->NewIterator(options));
-          }
+      if (db_.db != nullptr) {
+        delete single_iter;
+        single_iter = db_.db->NewIterator(options);
+      } else {
+        for (auto iter : multi_iters) {
+          delete iter;
+        }
+        multi_iters.clear();
+        for (const auto& db_with_cfh : multi_dbs_) {
+          multi_iters.push_back(db_with_cfh.db->NewIterator(options));
         }
       }
       // Pick a Iterator to use
@@ -5598,10 +5538,8 @@ class Benchmark {
           break;
         }
       }
-      if (!FLAGS_use_tailing_iterator) {
-        delete iter;
-        iter = db_.db->NewIterator(options);
-      }
+      delete iter;
+      iter = db_.db->NewIterator(options);
       // Pick a Iterator to use
 
       int64_t key_id = thread->rand.Next() % FLAGS_key_id_range;

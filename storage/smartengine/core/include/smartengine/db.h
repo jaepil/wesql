@@ -207,31 +207,6 @@ class DB {
   static common::Status Open(const common::Options& options,
                              const std::string& name, DB** dbptr);
 
-  // Open the database for read only. All DB interfaces
-  // that modify data, like put/delete, will return error.
-  // If the db is opened in read only mode, then no compactions
-  // will happen.
-  //
-  // Not supported in ROCKSDB_LITE, in which case the function will
-  // return common::Status::NotSupported.
-  static common::Status OpenForReadOnly(const common::Options& options,
-                                        const std::string& name, DB** dbptr,
-                                        bool error_if_log_file_exist = false);
-
-  // Open the database for read only with column families. When opening DB with
-  // read only, you can specify only a subset of column families in the
-  // database that should be opened. However, you always need to specify default
-  // column family. The default column family name is 'default' and it's stored
-  // in smartengine::db::kDefaultColumnFamilyName
-  //
-  // Not supported in ROCKSDB_LITE, in which case the function will
-  // return common::Status::NotSupported.
-  static common::Status OpenForReadOnly(
-      const common::DBOptions& db_options, const std::string& name,
-      const std::vector<ColumnFamilyDescriptor>& column_families,
-      std::vector<ColumnFamilyHandle*>* handles, DB** dbptr,
-      bool error_if_log_file_exist = false);
-
   // Open DB with column families.
   // db_options specify database specific options
   // column_families is the vector of all column families in the database,
@@ -462,13 +437,6 @@ class DB {
   virtual Iterator* NewIterator(const common::ReadOptions& options) {
     return NewIterator(options, DefaultColumnFamily());
   }
-  // Returns iterators from a consistent database state across multiple
-  // column families. Iterators are heap allocated and need to be deleted
-  // before the db is deleted
-  virtual common::Status NewIterators(
-      const common::ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_families,
-      std::vector<Iterator*>* iterators) = 0;
 
   // Return a handle to the current DB state.  Iterators created with
   // this handle will all observe a stable snapshot of the current DB

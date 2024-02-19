@@ -32,11 +32,9 @@
 
 #include "db/column_family.h"
 #include "db/dbformat.h"
-#include "db/file_indexer.h"
 #include "db/log_reader.h"
 #include "db/range_del_aggregator.h"
 #include "db/table_cache.h"
-#include "db/version_builder.h"
 #include "db/version_edit.h"
 #include "db/write_controller.h"
 #include "monitoring/instrumented_mutex.h"
@@ -362,9 +360,6 @@ class VersionSet {
 
   // Save current contents to *log
   common::Status WriteSnapshot(log::Writer* log);
-
-  ColumnFamilyData* CreateColumnFamily(
-      const common::ColumnFamilyOptions& cf_options, VersionEdit* edit);
   // create it at start up most of the time no need file_name
   common::Status create_descriptor_log_writer();
   int write_big_subtable(util::WritableFile *checkpoint_writer, ColumnFamilyData *sub_table);

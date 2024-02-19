@@ -17,7 +17,6 @@
 
 #include "compact/compaction_iterator.h"
 #include "db/dbformat.h"
-#include "db/event_helpers.h"
 #include "db/internal_stats.h"
 #include "db/merge_helper.h"
 #include "db/table_cache.h"

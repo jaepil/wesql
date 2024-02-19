@@ -48,13 +48,10 @@
 #include "db/db_info_dumper.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
-#include "db/event_helpers.h"
 #include "db/flush_job.h"
-#include "db/forward_iterator.h"
 #include "db/job_context.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
-#include "db/managed_iterator.h"
 #include "db/memtable.h"
 #include "db/memtable_list.h"
 #include "db/merge_context.h"
@@ -1990,174 +1987,71 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
   }
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
-  if (read_options.managed) {
-#ifdef ROCKSDB_LITE
-    // not supported in lite version
-    return NewErrorIterator(Status::InvalidArgument(
-        "Managed Iterators not supported in RocksDBLite."));
-#else
-    if ((read_options.tailing) || (read_options.snapshot != nullptr) ||
-        (is_snapshot_supported_)) {
-      return new ManagedIterator(this, read_options, cfd);
-    }
-    // Managed iter not supported
-    return NewErrorIterator(Status::InvalidArgument(
-        "Managed Iterators not supported without snapshots."));
-#endif
-  } else if (read_options.tailing) {
-#ifdef ROCKSDB_LITE
-    // not supported in lite version
-    return nullptr;
-#else
-    SuperVersion* sv = cfd->GetReferencedSuperVersion(&mutex_);
-    auto iter = new ForwardIterator(this, read_options, cfd, sv);
-    return NewDBIterator(
-        env_, read_options, *cfd->ioptions(), cfd->user_comparator(), iter,
-        kMaxSequenceNumber,
-        sv->mutable_cf_options.max_sequential_skip_in_iterations,
-        sv->version_number, nullptr, extent_space_manager_);
-#endif
-  } else {
-    QUERY_TRACE_BEGIN(TracePoint::DB_ITER_NEW_OBJECT);
-    SequenceNumber latest_snapshot = versions_->LastSequence();
-    SuperVersion* sv = cfd->GetReferencedSuperVersion(&mutex_);
+  QUERY_TRACE_BEGIN(TracePoint::DB_ITER_NEW_OBJECT);
+  SequenceNumber latest_snapshot = versions_->LastSequence();
+  SuperVersion* sv = cfd->GetReferencedSuperVersion(&mutex_);
 
-    auto snapshot =
-        read_options.snapshot != nullptr
-            ? reinterpret_cast<const SnapshotImpl*>(read_options.snapshot)
-                  ->number_
-            : latest_snapshot;
-    STRESS_CHECK_SAVE(LAST_ITER_SEQUENCE, snapshot);
+  auto snapshot =
+      read_options.snapshot != nullptr
+          ? reinterpret_cast<const SnapshotImpl*>(read_options.snapshot)
+                ->number_
+          : latest_snapshot;
+  STRESS_CHECK_SAVE(LAST_ITER_SEQUENCE, snapshot);
 
-    // Try to generate a DB iterator tree in continuous memory area to be
-    // cache friendly. Here is an example of result:
-    // +-------------------------------+
-    // |                               |
-    // | ArenaWrappedDBIter            |
-    // |  +                            |
-    // |  +---> Inner Iterator   ------------+
-    // |  |                            |     |
-    // |  |    +-- -- -- -- -- -- -- --+     |
-    // |  +--- | Arena                 |     |
-    // |       |                       |     |
-    // |          Allocated Memory:    |     |
-    // |       |   +-------------------+     |
-    // |       |   | DBIter            | <---+
-    // |           |  +                |
-    // |       |   |  +-> iter_  ------------+
-    // |       |   |                   |     |
-    // |       |   +-------------------+     |
-    // |       |   | MergingIterator   | <---+
-    // |           |  +                |
-    // |       |   |  +->child iter1  ------------+
-    // |       |   |  |                |          |
-    // |           |  +->child iter2  ----------+ |
-    // |       |   |  |                |        | |
-    // |       |   |  +->child iter3  --------+ | |
-    // |           |                   |      | | |
-    // |       |   +-------------------+      | | |
-    // |       |   | Iterator1         | <--------+
-    // |       |   +-------------------+      | |
-    // |       |   | Iterator2         | <------+
-    // |       |   +-------------------+      |
-    // |       |   | Iterator3         | <----+
-    // |       |   +-------------------+
-    // |       |                       |
-    // +-------+-----------------------+
-    //
-    // ArenaWrappedDBIter inlines an arena area where all the iterators in
-    // the iterator tree are allocated in the order of being accessed when
-    // querying.
-    // Laying out the iterators in the order of being accessed makes it more
-    // likely that any iterator pointer is close to the iterator it points to so
-    // that they are likely to be in the same cache line and/or page.
-    ArenaWrappedDBIter* db_iter = NewArenaWrappedDbIterator(
-        env_, read_options, *cfd->ioptions(), cfd->user_comparator(), snapshot,
-        sv->mutable_cf_options.max_sequential_skip_in_iterations,
-        sv->version_number, extent_space_manager_);
-    QUERY_TRACE_END();
+  // Try to generate a DB iterator tree in continuous memory area to be
+  // cache friendly. Here is an example of result:
+  // +-------------------------------+
+  // |                               |
+  // | ArenaWrappedDBIter            |
+  // |  +                            |
+  // |  +---> Inner Iterator   ------------+
+  // |  |                            |     |
+  // |  |    +-- -- -- -- -- -- -- --+     |
+  // |  +--- | Arena                 |     |
+  // |       |                       |     |
+  // |          Allocated Memory:    |     |
+  // |       |   +-------------------+     |
+  // |       |   | DBIter            | <---+
+  // |           |  +                |
+  // |       |   |  +-> iter_  ------------+
+  // |       |   |                   |     |
+  // |       |   +-------------------+     |
+  // |       |   | MergingIterator   | <---+
+  // |           |  +                |
+  // |       |   |  +->child iter1  ------------+
+  // |       |   |  |                |          |
+  // |           |  +->child iter2  ----------+ |
+  // |       |   |  |                |        | |
+  // |       |   |  +->child iter3  --------+ | |
+  // |           |                   |      | | |
+  // |       |   +-------------------+      | | |
+  // |       |   | Iterator1         | <--------+
+  // |       |   +-------------------+      | |
+  // |       |   | Iterator2         | <------+
+  // |       |   +-------------------+      |
+  // |       |   | Iterator3         | <----+
+  // |       |   +-------------------+
+  // |       |                       |
+  // +-------+-----------------------+
+  //
+  // ArenaWrappedDBIter inlines an arena area where all the iterators in
+  // the iterator tree are allocated in the order of being accessed when
+  // querying.
+  // Laying out the iterators in the order of being accessed makes it more
+  // likely that any iterator pointer is close to the iterator it points to so
+  // that they are likely to be in the same cache line and/or page.
+  ArenaWrappedDBIter* db_iter = NewArenaWrappedDbIterator(
+      env_, read_options, *cfd->ioptions(), cfd->user_comparator(), snapshot,
+      sv->mutable_cf_options.max_sequential_skip_in_iterations,
+      sv->version_number, extent_space_manager_);
+  QUERY_TRACE_END();
 
-    InternalIterator* internal_iter =
-        NewInternalIterator(read_options, cfd, sv, db_iter->GetArena(),
-                            db_iter->GetRangeDelAggregator());
-    db_iter->SetIterUnderDBIter(internal_iter);
+  InternalIterator* internal_iter =
+      NewInternalIterator(read_options, cfd, sv, db_iter->GetArena(),
+                          db_iter->GetRangeDelAggregator());
+  db_iter->SetIterUnderDBIter(internal_iter);
 
-    return db_iter;
-  }
-  // To stop compiler from complaining
-  return nullptr;
-}
-
-Status DBImpl::NewIterators(
-    const ReadOptions& read_options,
-    const std::vector<ColumnFamilyHandle*>& column_families,
-    std::vector<Iterator*>* iterators) {
-  QUERY_TRACE_SCOPE(TracePoint::DB_ITER_CREATE);
-  if (read_options.read_tier == kPersistedTier) {
-    return Status::NotSupported(
-        "ReadTier::kPersistedData is not yet supported in iterators.");
-  }
-  iterators->clear();
-  iterators->reserve(column_families.size());
-  if (read_options.managed) {
-#ifdef ROCKSDB_LITE
-    return Status::InvalidArgument(
-        "Managed interator not supported in RocksDB lite");
-#else
-    if ((!read_options.tailing) && (read_options.snapshot == nullptr) &&
-        (!is_snapshot_supported_)) {
-      return Status::InvalidArgument(
-          "Managed interator not supported without snapshots");
-    }
-    for (auto cfh : column_families) {
-      auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(cfh)->cfd();
-      auto iter = new ManagedIterator(this, read_options, cfd);
-      iterators->push_back(iter);
-    }
-#endif
-  } else if (read_options.tailing) {
-#ifdef ROCKSDB_LITE
-    return Status::InvalidArgument(
-        "Tailing interator not supported in RocksDB lite");
-#else
-    for (auto cfh : column_families) {
-      auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(cfh)->cfd();
-      SuperVersion* sv = cfd->GetReferencedSuperVersion(&mutex_);
-      auto iter = new ForwardIterator(this, read_options, cfd, sv);
-      iterators->push_back(NewDBIterator(
-          env_, read_options, *cfd->ioptions(), cfd->user_comparator(), iter,
-          kMaxSequenceNumber,
-          sv->mutable_cf_options.max_sequential_skip_in_iterations,
-          sv->version_number, nullptr, extent_space_manager_));
-    }
-#endif
-  } else {
-    SequenceNumber latest_snapshot = versions_->LastSequence();
-
-    for (size_t i = 0; i < column_families.size(); ++i) {
-      auto* cfd =
-          reinterpret_cast<ColumnFamilyHandleImpl*>(column_families[i])->cfd();
-      SuperVersion* sv = cfd->GetReferencedSuperVersion(&mutex_);
-
-      auto snapshot =
-          read_options.snapshot != nullptr
-              ? reinterpret_cast<const SnapshotImpl*>(read_options.snapshot)
-                    ->number_
-              : latest_snapshot;
-
-      ArenaWrappedDBIter* db_iter = NewArenaWrappedDbIterator(
-          env_, read_options, *cfd->ioptions(), cfd->user_comparator(),
-          snapshot, sv->mutable_cf_options.max_sequential_skip_in_iterations,
-          sv->version_number);
-      InternalIterator* internal_iter =
-          NewInternalIterator(read_options, cfd, sv, db_iter->GetArena(),
-                              db_iter->GetRangeDelAggregator());
-      db_iter->SetIterUnderDBIter(internal_iter);
-      iterators->push_back(db_iter);
-    }
-  }
-
-  return Status::OK();
+  return db_iter;
 }
 
 const Snapshot* DBImpl::GetSnapshot() { return GetSnapshotImpl(false); }

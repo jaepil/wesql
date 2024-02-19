@@ -912,12 +912,6 @@ class DBTestBase : public testing::Test {
   std::vector<std::uint64_t> ListTableFiles(util::Env* env,
                                             const std::string& path);
 
-  void VerifyDBFromMap(std::map<std::string, std::string> true_data,
-                       size_t* total_reads_res = nullptr,
-                       bool tailing_iter = false,
-                       std::map<std::string, common::Status> status =
-                           std::map<std::string, common::Status>());
-
   void VerifyDBInternal(
       std::vector<std::pair<std::string, std::string>> true_data);
 

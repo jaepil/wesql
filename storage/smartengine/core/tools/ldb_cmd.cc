@@ -231,10 +231,6 @@ LDBCommand* LDBCommand::SelectCommand(const ParsedParams& parsed_params) {
     return new InternalDumpCommand(parsed_params.cmd_params,
                                    parsed_params.option_map,
                                    parsed_params.flags);
-  } else if (parsed_params.cmd == CheckConsistencyCommand::Name()) {
-    return new CheckConsistencyCommand(parsed_params.cmd_params,
-                                       parsed_params.option_map,
-                                       parsed_params.flags);
   } else if (parsed_params.cmd == CheckPointCommand::Name()) {
     return new CheckPointCommand(parsed_params.cmd_params,
                                  parsed_params.option_map, parsed_params.flags);
@@ -265,11 +261,11 @@ void LDBCommand::Run() {
   }
 }
 
-LDBCommand::LDBCommand(const std::map<std::string, std::string>& options,
-                       const std::vector<std::string>& flags, bool is_read_only,
+LDBCommand::LDBCommand(const std::map<std::string,
+                       std::string>& options,
+                       const std::vector<std::string>& flags,
                        const std::vector<std::string>& valid_cmd_line_options)
     : db_(nullptr),
-      is_read_only_(is_read_only),
       is_key_hex_(false),
       is_value_hex_(false),
       timestamp_(false),
@@ -316,19 +312,10 @@ void LDBCommand::OpenDB() {
       }
     }
   }
-  if (is_read_only_) {
-    if (column_families_.empty()) {
-      st = DB::OpenForReadOnly(opt, db_path_, &db_);
-    } else {
-      st = DB::OpenForReadOnly(opt, db_path_, column_families_,
-                               &handles_opened, &db_);
-    }
+  if (column_families_.empty()) {
+    st = DB::Open(opt, db_path_, &db_);
   } else {
-    if (column_families_.empty()) {
-      st = DB::Open(opt, db_path_, &db_);
-    } else {
-      st = DB::Open(opt, db_path_, column_families_, &handles_opened, &db_);
-    }
+    st = DB::Open(opt, db_path_, column_families_, &handles_opened, &db_);
   }
   
   if (!st.ok()) {
@@ -712,7 +699,8 @@ CompactorCommand::CompactorCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions({ARG_FROM, ARG_TO, ARG_HEX, ARG_KEY_HEX,
                                       ARG_VALUE_HEX, ARG_TTL})),
       null_from_(true),
@@ -871,11 +859,11 @@ DBLoaderCommand::DBLoaderCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(
-          options, flags, false,
-          BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX, ARG_FROM,
-                               ARG_TO, ARG_CREATE_IF_MISSING, ARG_DISABLE_WAL,
-                               ARG_BULK_LOAD, ARG_COMPACT})),
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX, ARG_FROM,
+                                     ARG_TO, ARG_CREATE_IF_MISSING, ARG_DISABLE_WAL,
+                                     ARG_BULK_LOAD, ARG_COMPACT})),
       create_if_missing_(false),
       disable_wal_(false),
       bulk_load_(false),
@@ -1051,9 +1039,9 @@ ManifestDumpCommand::ManifestDumpCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(
-          options, flags, false,
-          BuildCmdLineOptions({ARG_VERBOSE, ARG_PATH, ARG_HEX, ARG_JSON})),
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_VERBOSE, ARG_PATH, ARG_HEX, ARG_JSON})),
       verbose_(false),
       json_(false),
       path_("") {
@@ -1578,9 +1566,9 @@ CheckpointDumpCommand::CheckpointDumpCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(
-          options, flags, false,
-          BuildCmdLineOptions({ARG_VERBOSE, ARG_PATH, ARG_HEX, ARG_JSON})),
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_VERBOSE, ARG_PATH, ARG_HEX, ARG_JSON})),
       verbose_(false),
       json_(false),
       path_("") {
@@ -1635,7 +1623,7 @@ ListColumnFamiliesCommand::ListColumnFamiliesCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false, {}) {
+    : LDBCommand(options, flags, {}) {
   if (params.size() != 1) {
     exec_state_ = LDBCommandExecuteResult::Failed(
         "dbname must be specified for the list_column_families command");
@@ -1675,7 +1663,7 @@ CreateColumnFamilyCommand::CreateColumnFamilyCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, true, {ARG_DB}) {
+    : LDBCommand(options, flags, {ARG_DB}) {
   if (params.size() != 1) {
     exec_state_ = LDBCommandExecuteResult::Failed(
         "new sub table name must be specified");
@@ -1711,11 +1699,11 @@ InternalDumpCommand::InternalDumpCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(
-          options, flags, true,
-          BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX, ARG_FROM,
-                               ARG_TO, ARG_MAX_KEYS, ARG_COUNT_ONLY,
-                               ARG_COUNT_DELIM, ARG_STATS, ARG_INPUT_KEY_HEX})),
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX, ARG_FROM,
+                                     ARG_TO, ARG_MAX_KEYS, ARG_COUNT_ONLY,
+                                     ARG_COUNT_DELIM, ARG_STATS, ARG_INPUT_KEY_HEX})),
       has_from_(false),
       has_to_(false),
       max_keys_(-1),
@@ -1872,7 +1860,8 @@ ReduceDBLevelsCommand::ReduceDBLevelsCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions({ARG_NEW_LEVELS, ARG_PRINT_OLD_LEVELS})),
       old_levels_(1 << 7),
       new_levels_(-1),
@@ -1996,9 +1985,9 @@ ChangeCompactionStyleCommand::ChangeCompactionStyleCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false,
-                 BuildCmdLineOptions(
-                     {ARG_OLD_COMPACTION_STYLE, ARG_NEW_COMPACTION_STYLE})),
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_OLD_COMPACTION_STYLE, ARG_NEW_COMPACTION_STYLE})),
       old_compaction_style_(-1),
       new_compaction_style_(-1) {
   ParseIntOption(option_map_, ARG_OLD_COMPACTION_STYLE, old_compaction_style_,
@@ -2300,9 +2289,9 @@ WALDumperCommand::WALDumperCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, true,
-                 BuildCmdLineOptions(
-                     {ARG_WAL_FILE, ARG_PRINT_HEADER, ARG_PRINT_VALUE})),
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_WAL_FILE, ARG_PRINT_HEADER, ARG_PRINT_VALUE})),
       print_header_(false),
       print_values_(false) {
   wal_file_.clear();
@@ -2339,9 +2328,9 @@ void WALDumperCommand::DoCommand() {
 GetCommand::GetCommand(const std::vector<std::string>& params,
                        const std::map<std::string, std::string>& options,
                        const std::vector<std::string>& flags)
-    : LDBCommand(
-          options, flags, true,
-          BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX})) {
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX})) {
   if (params.size() != 1) {
     exec_state_ = LDBCommandExecuteResult::Failed(
         "<key> must be specified for the get command");
@@ -2383,7 +2372,8 @@ ApproxSizeCommand::ApproxSizeCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, true,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions(
                      {ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX, ARG_FROM, ARG_TO})) {
   if (options.find(ARG_FROM) != options.end()) {
@@ -2439,7 +2429,8 @@ BatchPutCommand::BatchPutCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX,
                                       ARG_VALUE_HEX, ARG_CREATE_IF_MISSING})) {
   if (params.size() < 2) {
@@ -2496,7 +2487,8 @@ Options BatchPutCommand::PrepareOptionsForOpenDB() {
 DeleteCommand::DeleteCommand(const std::vector<std::string>& params,
                              const std::map<std::string, std::string>& options,
                              const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX})) {
   if (params.size() != 1) {
     exec_state_ = LDBCommandExecuteResult::Failed(
@@ -2532,7 +2524,8 @@ DeleteRangeCommand::DeleteRangeCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX})) {
   if (params.size() != 2) {
     exec_state_ = LDBCommandExecuteResult::Failed(
@@ -2570,7 +2563,8 @@ void DeleteRangeCommand::DoCommand() {
 PutCommand::PutCommand(const std::vector<std::string>& params,
                        const std::map<std::string, std::string>& options,
                        const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX,
                                       ARG_VALUE_HEX, ARG_CREATE_IF_MISSING})) {
   if (params.size() != 2) {
@@ -2628,9 +2622,9 @@ DBQuerierCommand::DBQuerierCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(
-          options, flags, false,
-          BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX})) {
+    : LDBCommand(options,
+                 flags,
+                 BuildCmdLineOptions({ARG_TTL, ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX})) {
 
 }
 
@@ -2702,45 +2696,14 @@ void DBQuerierCommand::DoCommand() {
   }
 }
 
-// ----------------------------------------------------------------------------
-
-CheckConsistencyCommand::CheckConsistencyCommand(
-    const std::vector<std::string>& params,
-    const std::map<std::string, std::string>& options,
-    const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false, BuildCmdLineOptions({})) {}
-
-void CheckConsistencyCommand::Help(std::string& ret) {
-  ret.append("  ");
-  ret.append(CheckConsistencyCommand::Name());
-  ret.append("\n");
-}
-
-void CheckConsistencyCommand::DoCommand() {
-  Options opt = PrepareOptionsForOpenDB();
-  opt.paranoid_checks = true;
-  if (!exec_state_.IsNotStarted()) {
-    return;
-  }
-  DB* db;
-  Status st = DB::OpenForReadOnly(opt, db_path_, &db, false);
-  delete db;
-  if (st.ok()) {
-    fprintf(stdout, "OK\n");
-  } else {
-    exec_state_ = LDBCommandExecuteResult::Failed(st.ToString());
-  }
-}
-
-// ----------------------------------------------------------------------------
-
 const std::string CheckPointCommand::ARG_CHECKPOINT_DIR = "checkpoint_dir";
 
 CheckPointCommand::CheckPointCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, false /* is_read_only */,
+    : LDBCommand(options,
+                 flags,
                  BuildCmdLineOptions({ARG_CHECKPOINT_DIR})) {
   auto itr = options.find(ARG_CHECKPOINT_DIR);
   if (itr == options.end()) {
@@ -2822,7 +2785,7 @@ DBFileDumperCommand::DBFileDumperCommand(
     const std::vector<std::string>& params,
     const std::map<std::string, std::string>& options,
     const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, true, BuildCmdLineOptions({})) {}
+    : LDBCommand(options, flags, BuildCmdLineOptions({})) {}
 
 void DBFileDumperCommand::Help(std::string& ret) {
   ret.append("  ");

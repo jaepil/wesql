@@ -134,12 +134,6 @@ class LDBCommand {
   db::DB* db_;
   std::map<std::string, db::ColumnFamilyHandle*> cf_handles_;
 
-  /**
-   * true implies that this command can work if the db is opened in read-only
-   * mode.
-   */
-  bool is_read_only_;
-
   /** If true, the key is input/output as hex in get/put/scan/delete etc. */
   bool is_key_hex_;
 
@@ -167,7 +161,7 @@ class LDBCommand {
                      std::string* value, bool is_key_hex, bool is_value_hex);
 
   LDBCommand(const std::map<std::string, std::string>& options,
-             const std::vector<std::string>& flags, bool is_read_only,
+             const std::vector<std::string>& flags,
              const std::vector<std::string>& valid_cmd_line_options);
 
   void OpenDB();

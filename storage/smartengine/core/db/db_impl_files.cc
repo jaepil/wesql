@@ -14,7 +14,6 @@
 #define __STDC_FORMAT_MACROS
 #endif
 #include <inttypes.h>
-#include "db/event_helpers.h"
 #include "util/file_util.h"
 #include "util/sst_file_manager_impl.h"
 
@@ -370,12 +369,8 @@ bool CompareCandidateFile(const JobContext::CandidateFileInfo& first,
 void DBImpl::DeleteObsoleteFileImpl(Status file_deletion_status, int job_id,
                                     const std::string& fname, FileType type,
                                     uint64_t number, uint32_t path_id) {
-  if (type == kTableFile) {
-    file_deletion_status =
-        DeleteSSTFile(&immutable_db_options_, fname, path_id);
-  } else {
-    file_deletion_status = env_->DeleteFile(fname);
-  }
+  se_assert(kTableFile != type);
+  file_deletion_status = env_->DeleteFile(fname);
   if (file_deletion_status.ok()) {
     SE_LOG(INFO, "success to delete wal file", K(fname), K(number), K((int32_t)(type)), K(file_deletion_status.ToString()));
   } else if (env_->FileExists(fname).IsNotFound()) {
@@ -384,11 +379,6 @@ void DBImpl::DeleteObsoleteFileImpl(Status file_deletion_status, int job_id,
   } else {
     __SE_LOG(ERROR, "[JOB %d] Failed to delete %s type=%d #%" PRIu64 " -- %s\n",
         job_id, fname.c_str(), type, number, file_deletion_status.ToString().c_str());
-  }
-  if (type == kTableFile) {
-    EventHelpers::LogAndNotifyTableFileDeletion(
-        job_id, number, fname, file_deletion_status, GetName(),
-        immutable_db_options_.listeners);
   }
 }
 

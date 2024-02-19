@@ -60,7 +60,7 @@ uint64_t TestGetThreadCosts(monitor::TracePoint point) {
   return monitor::get_tls_query_perf_context()->get_costs(point);
 }
 
-DB* OpenDb(bool read_only = false) {
+DB* OpenDb() {
   DB* db;
   Options options;
   options.create_if_missing = true;
@@ -78,11 +78,7 @@ DB* OpenDb(bool read_only = false) {
   }
 
   Status s;
-  if (!read_only) {
-    s = DB::Open(options, kDbName, &db);
-  } else {
-    s = DB::OpenForReadOnly(options, kDbName, &db);
-  }
+  s = DB::Open(options, kDbName, &db);
   EXPECT_OK(s);
   return db;
 }
