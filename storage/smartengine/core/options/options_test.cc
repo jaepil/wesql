@@ -1471,21 +1471,6 @@ TEST_F(OptionsSanityCheckTest, SanityCheck) {
       ASSERT_OK(SanityCheckCFOptions(opts, kSanityLevelExactMatch));
     }
   }
-
-  // merge_operator
-  {
-    for (int test = 0; test < 5; ++test) {
-      // change the merge operator
-      opts.merge_operator.reset(test::RandomMergeOperator(&rnd));
-      ASSERT_NOK(SanityCheckCFOptions(opts, kSanityLevelLooselyCompatible));
-      ASSERT_OK(SanityCheckCFOptions(opts, kSanityLevelNone));
-
-      // persist the change
-      ASSERT_OK(PersistCFOptions(opts));
-      ASSERT_OK(SanityCheckCFOptions(opts, kSanityLevelExactMatch));
-    }
-  }
-
   // compaction_filter
   {
     for (int test = 0; test < 5; ++test) {

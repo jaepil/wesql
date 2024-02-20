@@ -147,26 +147,6 @@ class WriteBatch : public WriteBatchBase {
     return DeleteRange(nullptr, begin_key, end_key);
   }
 
-  using WriteBatchBase::Merge;
-  // Merge "value" with the existing value of "key" in the database.
-  // "key->merge(existing, value)"
-  common::Status Merge(db::ColumnFamilyHandle* column_family,
-                       const common::Slice& key,
-                       const common::Slice& value) override;
-  common::Status Merge(const common::Slice& key,
-                       const common::Slice& value) override {
-    return Merge(nullptr, key, value);
-  }
-
-  // variant that takes common::SliceParts
-  common::Status Merge(db::ColumnFamilyHandle* column_family,
-                       const common::SliceParts& key,
-                       const common::SliceParts& value) override;
-  common::Status Merge(const common::SliceParts& key,
-                       const common::SliceParts& value) override {
-    return Merge(nullptr, key, value);
-  }
-
   using WriteBatchBase::PutLogData;
   // Append a blob of arbitrary size to the records in this batch. The blob will
   // be stored in the transaction log but not in any other file. In particular,
@@ -188,7 +168,7 @@ class WriteBatch : public WriteBatchBase {
   // May be called multiple times to set multiple save points.
   void SetSavePoint() override;
 
-  // Remove all entries in this batch (Put, Merge, Delete, PutLogData) since the
+  // Remove all entries in this batch (Put, Delete, PutLogData) since the
   // most recent call to SetSavePoint() and removes the most recent save point.
   // If there is no previous call to SetSavePoint(), common::Status::NotFound()
   // will be returned.
@@ -252,19 +232,6 @@ class WriteBatch : public WriteBatchBase {
       return common::Status::InvalidArgument("DeleteRangeCF not implemented");
     }
 
-    virtual common::Status MergeCF(uint32_t column_family_id,
-                                   const common::Slice& key,
-                                   const common::Slice& value) {
-      if (column_family_id == 0) {
-        Merge(key, value);
-        return common::Status::OK();
-      }
-      return common::Status::InvalidArgument(
-          "non-default sub table and MergeCF not implemented");
-    }
-    virtual void Merge(const common::Slice& /*key*/,
-                       const common::Slice& /*value*/) {}
-
     // The default implementation of LogData does nothing.
     virtual void LogData(const common::Slice& blob);
 
@@ -322,9 +289,6 @@ class WriteBatch : public WriteBatchBase {
 
   // Returns true if DeleteRangeCF will be called during Iterate
   bool HasDeleteRange() const;
-
-  // Returns true if MergeCF will be called during Iterate
-  bool HasMerge() const;
 
   // Returns true if MarkBeginPrepare will be called during Iterate
   bool HasBeginPrepare() const;

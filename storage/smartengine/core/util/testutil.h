@@ -25,7 +25,6 @@
 #include "smartengine/compaction_filter.h"
 #include "smartengine/env.h"
 #include "smartengine/iterator.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/options.h"
 #include "smartengine/slice.h"
 #include "smartengine/table.h"
@@ -652,34 +651,6 @@ void RandomInitDBOptions(common::DBOptions* db_opt, util::Random* rnd);
 // cf_opt->compaction_filter.
 void RandomInitCFOptions(common::ColumnFamilyOptions* cf_opt,
                          util::Random* rnd);
-
-// A dummy merge operator which can change its name
-class ChanglingMergeOperator : public db::MergeOperator {
- public:
-  explicit ChanglingMergeOperator(const std::string& name)
-      : name_(name + "MergeOperator") {}
-  ~ChanglingMergeOperator() {}
-
-  void SetName(const std::string& name) { name_ = name; }
-
-  virtual bool FullMergeV2(
-      const db::MergeOperator::MergeOperationInput& merge_in,
-      MergeOperationOutput* merge_out) const override {
-    return false;
-  }
-  virtual bool PartialMergeMulti(const common::Slice& key,
-                                 const std::deque<common::Slice>& operand_list,
-                                 std::string* new_value) const override {
-    return false;
-  }
-  virtual const char* Name() const override { return name_.c_str(); }
-
- protected:
-  std::string name_;
-};
-
-// Returns a dummy merge operator with random name.
-db::MergeOperator* RandomMergeOperator(Random* rnd);
 
 // A dummy compaction filter which can change its name
 class ChanglingCompactionFilter : public storage::CompactionFilter {

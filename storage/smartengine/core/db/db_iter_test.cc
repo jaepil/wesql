@@ -19,7 +19,6 @@
 #include "util/string_util.h"
 #include "util/sync_point.h"
 #include "util/testharness.h"
-#include "utilities/merge_operators.h"
 #include "smartengine/comparator.h"
 #include "smartengine/options.h"
 #include "smartengine/perf_context.h"
@@ -62,9 +61,6 @@ class TestIterator : public InternalIterator {
     Add(argkey, kTypeSingleDeletion, std::string());
   }
 
-  void AddMerge(std::string argkey, std::string argvalue) {
-    Add(argkey, kTypeMerge, argvalue);
-  }
 
   void Add(std::string argkey, ValueType type, std::string argvalue) {
     Add(argkey, type, argvalue, sequence_number_++);
@@ -632,7 +628,6 @@ TEST_F(DBIteratorTest, DBIteratorUseSkipCountSkips) {
   ReadOptions ro;
   Options options;
   options.statistics = CreateDBStatistics();
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   for (size_t i = 0; i < 200; ++i) {
@@ -672,14 +667,11 @@ TEST_F(DBIteratorTest, DBIteratorUseSkipCountSkips) {
 TEST_F(DBIteratorTest, DBIteratorUseSkip) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
   ImmutableCFOptions cf_options = ImmutableCFOptions(options);
 
   {
     for (size_t i = 0; i < 200; ++i) {
       TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-      internal_iter->AddMerge("b", "merge_1");
-      internal_iter->AddMerge("a", "merge_2");
       for (size_t k = 0; k < 200; ++k) {
         internal_iter->AddPut("c", ToString(k));
       }
@@ -687,7 +679,7 @@ TEST_F(DBIteratorTest, DBIteratorUseSkip) {
 
       options.statistics = CreateDBStatistics();
       std::unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
-          env_, ro, cf_options, BytewiseComparator(), internal_iter, i + 2,
+          env_, ro, cf_options, BytewiseComparator(), internal_iter, i,
           options.max_sequential_skip_in_iterations, 0));
       db_iter->SeekToLast();
       ASSERT_TRUE(db_iter->Valid());
@@ -695,17 +687,6 @@ TEST_F(DBIteratorTest, DBIteratorUseSkip) {
       ASSERT_EQ(db_iter->key().ToString(), "c");
       ASSERT_EQ(db_iter->value().ToString(), ToString(i));
       db_iter->Prev();
-      ASSERT_TRUE(db_iter->Valid());
-
-      ASSERT_EQ(db_iter->key().ToString(), "b");
-      ASSERT_EQ(db_iter->value().ToString(), "merge_1");
-      db_iter->Prev();
-      ASSERT_TRUE(db_iter->Valid());
-
-      ASSERT_EQ(db_iter->key().ToString(), "a");
-      ASSERT_EQ(db_iter->value().ToString(), "merge_2");
-      db_iter->Prev();
-
       ASSERT_TRUE(!db_iter->Valid());
     }
   }
@@ -713,8 +694,8 @@ TEST_F(DBIteratorTest, DBIteratorUseSkip) {
   {
     for (size_t i = 0; i < 200; ++i) {
       TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-      internal_iter->AddMerge("b", "merge_1");
-      internal_iter->AddMerge("a", "merge_2");
+      internal_iter->AddPut("b", "merge_1");
+      internal_iter->AddPut("a", "merge_2");
       for (size_t k = 0; k < 200; ++k) {
         internal_iter->AddDeletion("c");
       }
@@ -741,8 +722,8 @@ TEST_F(DBIteratorTest, DBIteratorUseSkip) {
 
     {
       TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-      internal_iter->AddMerge("b", "merge_1");
-      internal_iter->AddMerge("a", "merge_2");
+      internal_iter->AddPut("b", "merge_1");
+      internal_iter->AddPut("a", "merge_2");
       for (size_t i = 0; i < 200; ++i) {
         internal_iter->AddDeletion("c");
       }
@@ -820,8 +801,8 @@ TEST_F(DBIteratorTest, DBIteratorUseSkip) {
   {
     for (size_t i = 0; i < 200; ++i) {
       TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-      internal_iter->AddMerge("b", "merge_1");
-      internal_iter->AddMerge("a", "merge_2");
+      internal_iter->AddPut("b", "merge_1");
+      internal_iter->AddPut("a", "merge_2");
       for (size_t k = 0; k < 200; ++k) {
         internal_iter->AddPut("d", ToString(k));
       }
@@ -851,44 +832,6 @@ TEST_F(DBIteratorTest, DBIteratorUseSkip) {
       ASSERT_EQ(db_iter->value().ToString(), "merge_2");
       db_iter->Prev();
 
-      ASSERT_TRUE(!db_iter->Valid());
-    }
-  }
-
-  {
-    for (size_t i = 0; i < 200; ++i) {
-      TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-      internal_iter->AddMerge("b", "b");
-      internal_iter->AddMerge("a", "a");
-      for (size_t k = 0; k < 200; ++k) {
-        internal_iter->AddMerge("c", ToString(k));
-      }
-      internal_iter->Finish();
-
-      unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
-          env_, ro, cf_options, BytewiseComparator(), internal_iter, i + 2,
-          options.max_sequential_skip_in_iterations, 0));
-      db_iter->SeekToLast();
-      ASSERT_TRUE(db_iter->Valid());
-
-      ASSERT_EQ(db_iter->key().ToString(), "c");
-      std::string merge_result = "0";
-      for (size_t j = 1; j <= i; ++j) {
-        merge_result += "," + ToString(j);
-      }
-      ASSERT_EQ(db_iter->value().ToString(), merge_result);
-
-      db_iter->Prev();
-      ASSERT_TRUE(db_iter->Valid());
-      ASSERT_EQ(db_iter->key().ToString(), "b");
-      ASSERT_EQ(db_iter->value().ToString(), "b");
-
-      db_iter->Prev();
-      ASSERT_TRUE(db_iter->Valid());
-      ASSERT_EQ(db_iter->key().ToString(), "a");
-      ASSERT_EQ(db_iter->value().ToString(), "a");
-
-      db_iter->Prev();
       ASSERT_TRUE(!db_iter->Valid());
     }
   }
@@ -1261,14 +1204,11 @@ TEST_F(DBIteratorTest, DBIteratorSkipInternalKeys) {
 TEST_F(DBIteratorTest, DBIterator1) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddPut("a", "0");
   internal_iter->AddPut("b", "0");
   internal_iter->AddDeletion("b");
-  internal_iter->AddMerge("a", "1");
-  internal_iter->AddMerge("b", "2");
   internal_iter->Finish();
 
   unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
@@ -1288,14 +1228,11 @@ TEST_F(DBIteratorTest, DBIterator1) {
 TEST_F(DBIteratorTest, DBIterator2) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddPut("a", "0");
   internal_iter->AddPut("b", "0");
   internal_iter->AddDeletion("b");
-  internal_iter->AddMerge("a", "1");
-  internal_iter->AddMerge("b", "2");
   internal_iter->Finish();
 
   unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
@@ -1312,14 +1249,11 @@ TEST_F(DBIteratorTest, DBIterator2) {
 TEST_F(DBIteratorTest, DBIterator3) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddPut("a", "0");
   internal_iter->AddPut("b", "0");
   internal_iter->AddDeletion("b");
-  internal_iter->AddMerge("a", "1");
-  internal_iter->AddMerge("b", "2");
   internal_iter->Finish();
 
   unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
@@ -1336,14 +1270,13 @@ TEST_F(DBIteratorTest, DBIterator3) {
 TEST_F(DBIteratorTest, DBIterator4) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddPut("a", "0");
   internal_iter->AddPut("b", "0");
   internal_iter->AddDeletion("b");
-  internal_iter->AddMerge("a", "1");
-  internal_iter->AddMerge("b", "2");
+  internal_iter->AddPut("a", "1");
+  internal_iter->AddPut("b", "2");
   internal_iter->Finish();
 
   unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
@@ -1352,7 +1285,7 @@ TEST_F(DBIteratorTest, DBIterator4) {
   db_iter->SeekToFirst();
   ASSERT_TRUE(db_iter->Valid());
   ASSERT_EQ(db_iter->key().ToString(), "a");
-  ASSERT_EQ(db_iter->value().ToString(), "0,1");
+  ASSERT_EQ(db_iter->value().ToString(), "1");
   db_iter->Next();
   ASSERT_TRUE(db_iter->Valid());
   ASSERT_EQ(db_iter->key().ToString(), "b");
@@ -1364,18 +1297,11 @@ TEST_F(DBIteratorTest, DBIterator4) {
 TEST_F(DBIteratorTest, DBIterator5) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
   ImmutableCFOptions cf_options = ImmutableCFOptions(options);
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
     internal_iter->AddPut("a", "put_1");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1384,20 +1310,14 @@ TEST_F(DBIteratorTest, DBIterator5) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
     internal_iter->AddPut("a", "put_1");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1406,20 +1326,14 @@ TEST_F(DBIteratorTest, DBIterator5) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1,merge_2");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
     internal_iter->AddPut("a", "put_1");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1428,20 +1342,14 @@ TEST_F(DBIteratorTest, DBIterator5) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1,merge_2,merge_3");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
     internal_iter->AddPut("a", "put_1");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1457,13 +1365,7 @@ TEST_F(DBIteratorTest, DBIterator5) {
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
     internal_iter->AddPut("a", "put_1");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1472,20 +1374,14 @@ TEST_F(DBIteratorTest, DBIterator5) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "put_1,merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
     internal_iter->AddPut("a", "put_1");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1494,20 +1390,14 @@ TEST_F(DBIteratorTest, DBIterator5) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "put_1,merge_4,merge_5");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
     internal_iter->AddPut("a", "put_1");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1516,7 +1406,7 @@ TEST_F(DBIteratorTest, DBIterator5) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "put_1,merge_4,merge_5,merge_6");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
@@ -1526,8 +1416,6 @@ TEST_F(DBIteratorTest, DBIterator5) {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
     internal_iter->AddPut("a", "val_a");
     internal_iter->AddSingleDeletion("a");
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
     internal_iter->AddPut("b", "val_b");
     internal_iter->Finish();
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1537,26 +1425,24 @@ TEST_F(DBIteratorTest, DBIterator5) {
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
     db_iter->Prev();
-    ASSERT_TRUE(db_iter->Valid());
-    ASSERT_EQ(db_iter->key().ToString(), "a");
+    ASSERT_TRUE(!db_iter->Valid());
   }
 }
 
 TEST_F(DBIteratorTest, DBIterator6) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
   ImmutableCFOptions cf_options = ImmutableCFOptions(options);
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("a", "put_3");
     internal_iter->AddDeletion("a");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
+    internal_iter->AddPut("a", "put_4");
+    internal_iter->AddPut("a", "put_5");
+    internal_iter->AddPut("a", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1565,20 +1451,20 @@ TEST_F(DBIteratorTest, DBIterator6) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("a", "put_3");
     internal_iter->AddDeletion("a");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
+    internal_iter->AddPut("a", "put_4");
+    internal_iter->AddPut("a", "put_5");
+    internal_iter->AddPut("a", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1587,20 +1473,20 @@ TEST_F(DBIteratorTest, DBIterator6) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1,merge_2");
+    ASSERT_EQ(db_iter->value().ToString(), "put_2");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("a", "put_3");
     internal_iter->AddDeletion("a");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
+    internal_iter->AddPut("a", "put_4");
+    internal_iter->AddPut("a", "put_5");
+    internal_iter->AddPut("a", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1609,20 +1495,20 @@ TEST_F(DBIteratorTest, DBIterator6) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1,merge_2,merge_3");
+    ASSERT_EQ(db_iter->value().ToString(), "put_3");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("a", "put_3");
     internal_iter->AddDeletion("a");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
+    internal_iter->AddPut("a", "put_4");
+    internal_iter->AddPut("a", "put_5");
+    internal_iter->AddPut("a", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1634,13 +1520,13 @@ TEST_F(DBIteratorTest, DBIterator6) {
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("a", "put_3");
     internal_iter->AddDeletion("a");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
+    internal_iter->AddPut("a", "put_4");
+    internal_iter->AddPut("a", "put_5");
+    internal_iter->AddPut("a", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1649,20 +1535,20 @@ TEST_F(DBIteratorTest, DBIterator6) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_4");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("a", "put_3");
     internal_iter->AddDeletion("a");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
+    internal_iter->AddPut("a", "put_4");
+    internal_iter->AddPut("a", "put_5");
+    internal_iter->AddPut("a", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1671,20 +1557,20 @@ TEST_F(DBIteratorTest, DBIterator6) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4,merge_5");
+    ASSERT_EQ(db_iter->value().ToString(), "put_5");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("a", "merge_3");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("a", "put_3");
     internal_iter->AddDeletion("a");
-    internal_iter->AddMerge("a", "merge_4");
-    internal_iter->AddMerge("a", "merge_5");
-    internal_iter->AddMerge("a", "merge_6");
+    internal_iter->AddPut("a", "put_4");
+    internal_iter->AddPut("a", "put_5");
+    internal_iter->AddPut("a", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(
@@ -1693,7 +1579,7 @@ TEST_F(DBIteratorTest, DBIterator6) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4,merge_5,merge_6");
+    ASSERT_EQ(db_iter->value().ToString(), "put_6");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
@@ -1702,28 +1588,27 @@ TEST_F(DBIteratorTest, DBIterator6) {
 TEST_F(DBIteratorTest, DBIterator7) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
   ImmutableCFOptions cf_options = ImmutableCFOptions(options);
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -1734,30 +1619,30 @@ TEST_F(DBIteratorTest, DBIterator7) {
     db_iter->SeekToLast();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -1769,35 +1654,35 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "val,merge_2");
+    ASSERT_EQ(db_iter->value().ToString(), "put_2");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -1809,35 +1694,35 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3");
+    ASSERT_EQ(db_iter->value().ToString(), "put_3");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -1849,40 +1734,40 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "c");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_4");
     db_iter->Prev();
 
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3");
+    ASSERT_EQ(db_iter->value().ToString(), "put_3");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -1894,41 +1779,41 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "c");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4,merge_5");
+    ASSERT_EQ(db_iter->value().ToString(), "put_5");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3");
+    ASSERT_EQ(db_iter->value().ToString(), "put_3");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -1940,35 +1825,35 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "c");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4,merge_5");
+    ASSERT_EQ(db_iter->value().ToString(), "put_5");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -1980,41 +1865,41 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "c");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4,merge_5");
+    ASSERT_EQ(db_iter->value().ToString(), "put_5");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_6,merge_7");
+    ASSERT_EQ(db_iter->value().ToString(), "put_7");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -2026,42 +1911,41 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "c");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_4,merge_5");
+    ASSERT_EQ(db_iter->value().ToString(), "put_5");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(),
-              "merge_6,merge_7,merge_8,merge_9,merge_10,merge_11");
+    ASSERT_EQ(db_iter->value().ToString(), "put_11");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
 
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
+    internal_iter->AddPut("a", "put_1");
     internal_iter->AddPut("b", "val");
-    internal_iter->AddMerge("b", "merge_2");
+    internal_iter->AddPut("b", "put_2");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_3");
+    internal_iter->AddPut("b", "put_3");
 
-    internal_iter->AddMerge("c", "merge_4");
-    internal_iter->AddMerge("c", "merge_5");
+    internal_iter->AddPut("c", "put_4");
+    internal_iter->AddPut("c", "put_5");
 
     internal_iter->AddDeletion("b");
-    internal_iter->AddMerge("b", "merge_6");
-    internal_iter->AddMerge("b", "merge_7");
-    internal_iter->AddMerge("b", "merge_8");
-    internal_iter->AddMerge("b", "merge_9");
-    internal_iter->AddMerge("b", "merge_10");
-    internal_iter->AddMerge("b", "merge_11");
+    internal_iter->AddPut("b", "put_6");
+    internal_iter->AddPut("b", "put_7");
+    internal_iter->AddPut("b", "put_8");
+    internal_iter->AddPut("b", "put_9");
+    internal_iter->AddPut("b", "put_10");
+    internal_iter->AddPut("b", "put_11");
 
     internal_iter->AddDeletion("c");
     internal_iter->Finish();
@@ -2073,13 +1957,12 @@ TEST_F(DBIteratorTest, DBIterator7) {
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(),
-              "merge_6,merge_7,merge_8,merge_9,merge_10,merge_11");
+    ASSERT_EQ(db_iter->value().ToString(), "put_11");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
 
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1");
+    ASSERT_EQ(db_iter->value().ToString(), "put_1");
     db_iter->Prev();
     ASSERT_TRUE(!db_iter->Valid());
   }
@@ -2088,7 +1971,6 @@ TEST_F(DBIteratorTest, DBIterator7) {
 TEST_F(DBIteratorTest, DBIterator8) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddDeletion("a");
@@ -2115,15 +1997,14 @@ TEST_F(DBIteratorTest, DBIterator8) {
 TEST_F(DBIteratorTest, DBIterator9) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
   {
     TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
-    internal_iter->AddMerge("a", "merge_1");
-    internal_iter->AddMerge("a", "merge_2");
-    internal_iter->AddMerge("b", "merge_3");
-    internal_iter->AddMerge("b", "merge_4");
-    internal_iter->AddMerge("d", "merge_5");
-    internal_iter->AddMerge("d", "merge_6");
+    internal_iter->AddPut("a", "put_1");
+    internal_iter->AddPut("a", "put_2");
+    internal_iter->AddPut("b", "put_3");
+    internal_iter->AddPut("b", "put_4");
+    internal_iter->AddPut("d", "put_5");
+    internal_iter->AddPut("d", "put_6");
     internal_iter->Finish();
 
     unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
@@ -2135,47 +2016,47 @@ TEST_F(DBIteratorTest, DBIterator9) {
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3,merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_4");
     db_iter->Next();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "d");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_5,merge_6");
+    ASSERT_EQ(db_iter->value().ToString(), "put_6");
 
     db_iter->Seek("b");
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3,merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_4");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "a");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_1,merge_2");
+    ASSERT_EQ(db_iter->value().ToString(), "put_2");
 
     db_iter->SeekForPrev("b");
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3,merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_4");
     db_iter->Next();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "d");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_5,merge_6");
+    ASSERT_EQ(db_iter->value().ToString(), "put_6");
 
     db_iter->Seek("c");
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "d");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_5,merge_6");
+    ASSERT_EQ(db_iter->value().ToString(), "put_6");
     db_iter->Prev();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3,merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_4");
 
     db_iter->SeekForPrev("c");
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "b");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_3,merge_4");
+    ASSERT_EQ(db_iter->value().ToString(), "put_4");
     db_iter->Next();
     ASSERT_TRUE(db_iter->Valid());
     ASSERT_EQ(db_iter->key().ToString(), "d");
-    ASSERT_EQ(db_iter->value().ToString(), "merge_5,merge_6");
+    ASSERT_EQ(db_iter->value().ToString(), "put_6");
   }
 }
 
@@ -2224,7 +2105,7 @@ TEST_F(DBIteratorTest, DBIterator10) {
 TEST_F(DBIteratorTest, SeekToLastOccurrenceSeq0) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = nullptr;
+  //options.merge_operator = nullptr;
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddPut("a", "1");
@@ -2249,14 +2130,11 @@ TEST_F(DBIteratorTest, SeekToLastOccurrenceSeq0) {
 TEST_F(DBIteratorTest, DBIterator11) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddPut("a", "0");
   internal_iter->AddPut("b", "0");
   internal_iter->AddSingleDeletion("b");
-  internal_iter->AddMerge("a", "1");
-  internal_iter->AddMerge("b", "2");
   internal_iter->Finish();
 
   unique_ptr<Iterator, ptr_destruct_delete<Iterator>> db_iter(NewDBIterator(
@@ -2276,7 +2154,6 @@ TEST_F(DBIteratorTest, DBIterator11) {
 TEST_F(DBIteratorTest, DBIterator12) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = nullptr;
 
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
   internal_iter->AddPut("a", "1");
@@ -2303,7 +2180,6 @@ TEST_F(DBIteratorTest, DBIterator12) {
 TEST_F(DBIteratorTest, DBIterator13) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = nullptr;
 
   std::string key;
   key.resize(9);
@@ -2334,7 +2210,6 @@ TEST_F(DBIteratorTest, DBIterator13) {
 TEST_F(DBIteratorTest, DBIterator14) {
   ReadOptions ro;
   Options options;
-  options.merge_operator = nullptr;
 
   std::string key("b");
   TestIterator* internal_iter = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
@@ -2366,7 +2241,6 @@ class DBIterWithMergeIterTest : public testing::Test {
  public:
   DBIterWithMergeIterTest()
       : env_(Env::Default()), icomp_(BytewiseComparator()) {
-    options_.merge_operator = nullptr;
 
     internal_iter1_ = MOD_NEW_OBJECT(ModId::kDefaultMod, TestIterator, BytewiseComparator());
     internal_iter1_->Add("a", kTypeValue, "1", 3u);
@@ -2386,7 +2260,7 @@ class DBIterWithMergeIterTest : public testing::Test {
     child_iters.push_back(internal_iter2_);
     InternalKeyComparator icomp(BytewiseComparator());
     InternalIterator* merge_iter =
-        NewMergingIterator(&icomp_, &child_iters[0], 2u);
+        NewMergingIterator(&icomp_, &child_iters[0], 2u, nullptr /*arena*/);
 
     db_iter_.reset(NewDBIterator(env_, ro_, ImmutableCFOptions(options_),
                                  BytewiseComparator(), merge_iter,

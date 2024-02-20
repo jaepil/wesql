@@ -42,7 +42,6 @@ ImmutableCFOptions::ImmutableCFOptions(const ImmutableDBOptions& db_options,
       prefix_extractor(cf_options.prefix_extractor.get()),
       user_comparator(cf_options.comparator),
       internal_comparator(InternalKeyComparator(cf_options.comparator)),
-      merge_operator(cf_options.merge_operator.get()),
       compaction_filter(cf_options.compaction_filter),
       compaction_filter_factory(cf_options.compaction_filter_factory.get()),
       min_write_buffer_number_to_merge(
@@ -141,9 +140,6 @@ void MutableCFOptions::Dump() const {
   __SE_LOG(INFO,
                  "                  memtable_huge_page_size: %" ROCKSDB_PRIszt,
                  memtable_huge_page_size);
-  __SE_LOG(INFO,
-                 "                    max_successive_merges: %" ROCKSDB_PRIszt,
-                 max_successive_merges);
   __SE_LOG(INFO,
                  "                 inplace_update_num_locks: %" ROCKSDB_PRIszt,
                  inplace_update_num_locks);

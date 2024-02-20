@@ -47,21 +47,6 @@ class WriteBatchBase {
   virtual common::Status Put(const common::SliceParts& key,
                              const common::SliceParts& value);
 
-  // Merge "value" with the existing value of "key" in the database.
-  // "key->merge(existing, value)"
-  virtual common::Status Merge(ColumnFamilyHandle* column_family,
-                               const common::Slice& key,
-                               const common::Slice& value) = 0;
-  virtual common::Status Merge(const common::Slice& key,
-                               const common::Slice& value) = 0;
-
-  // variant that takes common::SliceParts
-  virtual common::Status Merge(ColumnFamilyHandle* column_family,
-                               const common::SliceParts& key,
-                               const common::SliceParts& value);
-  virtual common::Status Merge(const common::SliceParts& key,
-                               const common::SliceParts& value);
-
   // If the database contains a mapping for "key", erase it.  Else do nothing.
   virtual common::Status Delete(ColumnFamilyHandle* column_family,
                                 const common::Slice& key) = 0;
@@ -122,7 +107,7 @@ class WriteBatchBase {
   // May be called multiple times to set multiple save points.
   virtual void SetSavePoint() = 0;
 
-  // Remove all entries in this batch (Put, Merge, Delete, PutLogData) since the
+  // Remove all entries in this batch (Put, Delete, PutLogData) since the
   // most recent call to SetSavePoint() and removes the most recent save point.
   // If there is no previous call to SetSavePoint(), behaves the same as
   // Clear().

@@ -44,14 +44,11 @@
 #include "db/dbformat.h"
 #include "db/flush_scheduler.h"
 #include "db/memtable.h"
-#include "db/merge_context.h"
-#include "db/merge_helper.h"
 #include "db/snapshot_impl.h"
 #include "db/write_batch_internal.h"
 #include "monitoring/statistics.h"
 #include "util/coding.h"
 #include "util/string_util.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/utilities/transaction.h"
 
 using namespace smartengine;
@@ -70,7 +67,7 @@ enum ContentFlags : uint32_t {
   HAS_PUT = 1 << 1,
   HAS_DELETE = 1 << 2,
   HAS_SINGLE_DELETE = 1 << 3,
-  HAS_MERGE = 1 << 4,
+  HAS_MERGE = 1 << 4, //deprecated
   HAS_BEGIN_PREPARE = 1 << 5,
   HAS_END_PREPARE = 1 << 6,
   HAS_COMMIT = 1 << 7,
@@ -100,12 +97,6 @@ struct BatchContentClassifier : public WriteBatch::Handler {
   common::Status DeleteRangeCF(uint32_t, const common::Slice&,
                                const common::Slice&) override {
     content_flags |= ContentFlags::HAS_DELETE_RANGE;
-    return common::Status::OK();
-  }
-
-  common::Status MergeCF(uint32_t, const common::Slice&,
-                         const common::Slice&) override {
-    content_flags |= ContentFlags::HAS_MERGE;
     return common::Status::OK();
   }
 
@@ -252,10 +243,6 @@ bool WriteBatch::HasDeleteRange() const {
   return (ComputeContentFlags() & ContentFlags::HAS_DELETE_RANGE) != 0;
 }
 
-bool WriteBatch::HasMerge() const {
-  return (ComputeContentFlags() & ContentFlags::HAS_MERGE) != 0;
-}
-
 bool ReadKeyFromWriteBatchEntry(common::Slice* input, common::Slice* key,
                                 bool cf_record) {
   assert(input != nullptr && key != nullptr);
@@ -342,18 +329,6 @@ common::Status ReadRecordFromWriteBatch(common::Slice* input, char* tag,
         return common::Status::Corruption("bad WriteBatch DeleteRange");
       }
       break;
-    case kTypeColumnFamilyMerge:
-      if (!GetVarint32(input, column_family)) {
-        return common::Status::Corruption("bad WriteBatch Merge");
-      }
-      [[fallthrough]];
-    // intentional fallthrough
-    case kTypeMerge:
-      if (!GetLengthPrefixedSlice(input, key) ||
-          !GetLengthPrefixedSlice(input, value)) {
-        return common::Status::Corruption("bad WriteBatch Merge");
-      }
-      break;
     case kTypeLogData:
       assert(blob != nullptr);
       if (!GetLengthPrefixedSlice(input, blob)) {
@@ -388,6 +363,7 @@ common::Status ReadRecordFromWriteBatch(common::Slice* input, char* tag,
       }
       break;
     default:
+      se_assert(false);
       return common::Status::Corruption("unknown WriteBatch tag");
   }
   return common::Status::OK();
@@ -455,13 +431,6 @@ common::Status WriteBatch::Iterate(Handler* handler, bool is_parallel_recovering
         s = handler->DeleteRangeCF(column_family, key, value);
         found++;
         break;
-      case kTypeColumnFamilyMerge:
-      case kTypeMerge:
-        assert(content_flags_.load(std::memory_order_relaxed) &
-               (ContentFlags::DEFERRED | ContentFlags::HAS_MERGE));
-        s = handler->MergeCF(column_family, key, value);
-        found++;
-        break;
       case kTypeLogData:
         handler->LogData(blob);
         break;
@@ -498,6 +467,7 @@ common::Status WriteBatch::Iterate(Handler* handler, bool is_parallel_recovering
       case kTypeNoop:
         break;
       default:
+        se_assert(false);
         return common::Status::Corruption("unknown WriteBatch tag");
     }
   }
@@ -823,60 +793,6 @@ common::Status WriteBatch::DeleteRange(ColumnFamilyHandle* column_family,
                                        const common::SliceParts& end_key) {
   return WriteBatchInternal::DeleteRange(this, GetColumnFamilyID(column_family),
                                          begin_key, end_key);
-}
-
-common::Status WriteBatchInternal::Merge(WriteBatch* b,
-                                         uint32_t column_family_id,
-                                         const common::Slice& key,
-                                         const common::Slice& value) {
-  LocalSavePoint save(b);
-  WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);
-  if (column_family_id == 0) {
-    b->rep_.push_back(static_cast<char>(kTypeMerge));
-  } else {
-    b->rep_.push_back(static_cast<char>(kTypeColumnFamilyMerge));
-    PutVarint32(&b->rep_, column_family_id);
-  }
-  PutLengthPrefixedSlice(&b->rep_, key);
-  PutLengthPrefixedSlice(&b->rep_, value);
-  b->content_flags_.store(b->content_flags_.load(std::memory_order_relaxed) |
-                              ContentFlags::HAS_MERGE,
-                          std::memory_order_relaxed);
-  return save.commit();
-}
-
-common::Status WriteBatch::Merge(ColumnFamilyHandle* column_family,
-                                 const common::Slice& key,
-                                 const common::Slice& value) {
-  return WriteBatchInternal::Merge(this, GetColumnFamilyID(column_family), key,
-                                   value);
-}
-
-common::Status WriteBatchInternal::Merge(WriteBatch* b,
-                                         uint32_t column_family_id,
-                                         const common::SliceParts& key,
-                                         const common::SliceParts& value) {
-  LocalSavePoint save(b);
-  WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);
-  if (column_family_id == 0) {
-    b->rep_.push_back(static_cast<char>(kTypeMerge));
-  } else {
-    b->rep_.push_back(static_cast<char>(kTypeColumnFamilyMerge));
-    PutVarint32(&b->rep_, column_family_id);
-  }
-  PutLengthPrefixedSliceParts(&b->rep_, key);
-  PutLengthPrefixedSliceParts(&b->rep_, value);
-  b->content_flags_.store(b->content_flags_.load(std::memory_order_relaxed) |
-                              ContentFlags::HAS_MERGE,
-                          std::memory_order_relaxed);
-  return save.commit();
-}
-
-common::Status WriteBatch::Merge(ColumnFamilyHandle* column_family,
-                                 const common::SliceParts& key,
-                                 const common::SliceParts& value) {
-  return WriteBatchInternal::Merge(this, GetColumnFamilyID(column_family), key,
-                                   value);
 }
 
 common::Status WriteBatch::PutLogData(const common::Slice& blob) {
@@ -1271,92 +1187,6 @@ class MemTableInserter : public WriteBatch::Handler {
     return DeleteImpl(column_family_id, begin_key, end_key, kTypeRangeDeletion);
   }
 
-  virtual common::Status MergeCF(uint32_t column_family_id,
-                                 const common::Slice& key,
-                                 const common::Slice& value) override {
-    assert(!concurrent_memtable_writes_);
-    if (recovering_log_number_ != 0 && !uncommit_transaction_list_.empty()) {
-      return common::Status::OK();
-    }
-    if (rebuilding_trx_ != nullptr) {
-      WriteBatchInternal::Merge(rebuilding_trx_, column_family_id, key, value);
-      return common::Status::OK();
-    }
-
-    common::Status seek_status;
-    if (!SeekToColumnFamily(column_family_id, &seek_status)) {
-      ++sequence_;
-      return seek_status;
-    }
-
-    MemTable* mem = cf_mems_->GetMemTable();
-    auto* moptions = mem->GetMemTableOptions();
-    bool perform_merge = false;
-
-    // If we pass DB through and options.max_successive_merges is hit
-    // during recovery, Get() will be issued which will try to acquire
-    // DB mutex and cause deadlock, as DB mutex is already held.
-    // So we disable merge in recovery
-    if (moptions->max_successive_merges > 0 && db_ != nullptr &&
-        recovering_log_number_ == 0) {
-      LookupKey lkey(key, sequence_);
-
-      // Count the number of successive merges at the head
-      // of the key in the memtable
-      size_t num_merges = mem->CountSuccessiveMergeEntries(lkey);
-
-      if (num_merges >= moptions->max_successive_merges) {
-        perform_merge = true;
-      }
-    }
-
-    if (perform_merge) {
-      // 1) Get the existing value
-      std::string get_value;
-
-      // Pass in the sequence number so that we also include previous merge
-      // operations in the same batch.
-      SnapshotImpl read_from_snapshot;
-      read_from_snapshot.number_ = sequence_;
-      ReadOptions read_options;
-      read_options.snapshot = &read_from_snapshot;
-
-      auto cf_handle = cf_mems_->GetColumnFamilyHandle();
-      if (cf_handle == nullptr) {
-        cf_handle = db_->DefaultColumnFamily();
-      }
-      db_->Get(read_options, cf_handle, key, &get_value);
-//      common::Slice get_value_slice = common::Slice(get_value);
-
-      // 2) Apply this merge
-      auto merge_operator = moptions->merge_operator;
-      assert(merge_operator);
-
-      std::string new_value;
-      common::Status merge_status = common::Status::OK();
-          /*MergeHelper::TimedFullMerge(
-          merge_operator, key, &get_value_slice, {value}, &new_value,
-          moptions->info_log, moptions->statistics, Env::Default());*/
-
-      if (!merge_status.ok()) {
-        // Failed to merge!
-        // Store the delta in memtable
-        perform_merge = false;
-      } else {
-        // 3) Add value to memtable
-        mem->Add(sequence_, kTypeValue, key, new_value);
-      }
-    }
-
-    if (!perform_merge) {
-      // Add merge operator to memtable
-      mem->Add(sequence_, kTypeMerge, key, value);
-    }
-
-    sequence_++;
-    CheckMemtableFull();
-    return common::Status::OK();
-  }
 
   void CheckMemtableFull() {
     if (flush_scheduler_ != nullptr) {

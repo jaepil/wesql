@@ -148,11 +148,6 @@ Status ReplayTaskParser::parse_replay_writebatch_from_record(Slice& record,
         s = WriteBatchInternal::DeleteRange(*write_batch, column_family, key, value);
         found++;
         break;
-      case kTypeColumnFamilyMerge:
-      case kTypeMerge:
-        s = WriteBatchInternal::Merge(*write_batch, column_family, key, value);
-        found++;
-        break;
       case kTypeLogData:
         s = (*write_batch)->PutLogData(blob);
         break;
@@ -188,6 +183,7 @@ Status ReplayTaskParser::parse_replay_writebatch_from_record(Slice& record,
         WriteBatchInternal::InsertNoop(*write_batch);
         break;
       default:
+        se_assert(false);
         return Status::Corruption("unknown WriteBatch tag");
     }
   }

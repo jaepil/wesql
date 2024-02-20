@@ -21,10 +21,6 @@
 #include "smartengine/utilities/write_batch_with_index.h"
 
 namespace smartengine {
-namespace db {
-class MergeContext;
-}
-
 namespace util {
 
 struct Options;
@@ -99,21 +95,21 @@ class WriteBatchEntryComparator {
 
 class WriteBatchWithIndexInternal {
  public:
-  enum Result { kFound, kDeleted, kNotFound, kMergeInProgress, kError };
+  enum Result { kFound, kDeleted, kNotFound, kError };
 
   // If batch contains a value for key, store it in *value and return kFound.
   // If batch contains a deletion for key, return Deleted.
-  // If batch contains Merge operations as the most recent entry for a key,
-  //   and the merge process does not stop (not reaching a value or delete),
-  //   prepend the current merge operands to *operands,
-  //   and return kMergeInProgress
   // If batch does not contain this key, return kNotFound
   // Else, return kError on error with error Status stored in *s.
   static WriteBatchWithIndexInternal::Result GetFromBatch(
-      const common::ImmutableDBOptions& ioptions, WriteBatchWithIndex* batch,
-      db::ColumnFamilyHandle* column_family, const common::Slice& key,
-      db::MergeContext* merge_context, WriteBatchEntryComparator* cmp,
-      std::string* value, bool overwrite_key, common::Status* s);
+      const common::ImmutableDBOptions& ioptions,
+      WriteBatchWithIndex* batch,
+      db::ColumnFamilyHandle* column_family,
+      const common::Slice& key,
+      WriteBatchEntryComparator* cmp,
+      std::string* value,
+      bool overwrite_key,
+      common::Status* s);
 };
 
 }  //  namespace util

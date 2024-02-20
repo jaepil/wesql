@@ -37,16 +37,6 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
   return DB::Put(o, column_family, key, val);
 }
 
-Status DBImpl::Merge(const WriteOptions& o, ColumnFamilyHandle* column_family,
-                     const Slice& key, const Slice& val) {
-  auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  if (!cfh->cfd()->ioptions()->merge_operator) {
-    return Status::NotSupported("Provide a merge_operator when opening DB");
-  } else {
-    return DB::Merge(o, column_family, key, val);
-  }
-}
-
 Status DBImpl::Delete(const WriteOptions& write_options,
                       ColumnFamilyHandle* column_family, const Slice& key) {
   return DB::Delete(write_options, column_family, key);
@@ -163,8 +153,6 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
   for (auto writer : w_request->follower_vector_) {
     if (writer->should_write_to_memtable()) {
       total_count += WriteBatchInternal::Count(writer->batch_);
-      w_request->group_run_in_parallel_ =
-          (w_request->group_run_in_parallel_ && !writer->batch_->HasMerge());
     }
     if (writer->should_write_to_wal()) {
       WriteBatchInternal::Append(merged_batch, writer->batch_,
@@ -204,7 +192,6 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
                            &write_context);
   TEST_SYNC_POINT("DBimpl::WriteImplAsync::AfterPreprocessWrite");
 
-  // if we have merge operation, run in serialization mode
   this->increase_active_thread(!w_request->group_run_in_parallel_);
 
   uint64_t last_sequence =
@@ -780,7 +767,6 @@ int DBImpl::do_commit_job() {
 }
 
 void DBImpl::increase_active_thread(bool serialization_mode) {
-  // for merge op ,we run in serialization mode
   if (serialization_mode || this->last_write_in_serialization_mode_.load()) {
     this->wait_all_active_thread_exit();
     assert(false == last_write_in_serialization_mode_.load());
@@ -1825,13 +1811,6 @@ Status DB::DeleteRange(const WriteOptions& opt,
   return Status::NotSupported();
   WriteBatch batch;
   batch.DeleteRange(column_family, begin_key, end_key);
-  return Write(opt, &batch);
-}
-
-Status DB::Merge(const WriteOptions& opt, ColumnFamilyHandle* column_family,
-                 const Slice& key, const Slice& value) {
-  WriteBatch batch;
-  batch.Merge(column_family, key, value);
   return Write(opt, &batch);
 }
 

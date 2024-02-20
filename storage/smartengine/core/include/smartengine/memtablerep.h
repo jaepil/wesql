@@ -212,10 +212,6 @@ class MemTableRep {
     return GetIterator(arena);
   }
 
-  // Return true if the current MemTableRep supports merge operator.
-  // Default: true
-  virtual bool IsMergeOperatorSupported() const { return true; }
-
   // Return true if the current MemTableRep supports snapshot
   // Default: true
   virtual bool IsSnapshotSupported() const { return true; }

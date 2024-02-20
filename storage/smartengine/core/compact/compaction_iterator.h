@@ -14,18 +14,12 @@
 #include <vector>
 
 #include "compact/compaction_iteration_stats.h"
-#include "db/merge_helper.h"
 #include "db/pinned_iterators_manager.h"
 #include "db/range_del_aggregator.h"
 #include "smartengine/compaction_filter.h"
 #include "memory/page_arena.h"
 
 namespace smartengine {
-
-namespace common {
-class CompactionEventListener;
-}
-
 namespace storage {
 
 // A wrapper around Compaction. Has a much smaller interface, only what
@@ -48,16 +42,17 @@ class CompactionIterator {
  public:
   // Constructor with custom CompactionProxy, used for tests.
   CompactionIterator(
-      table::InternalIterator* input, const util::Comparator* cmp,
-      db::MergeHelper* merge_helper, common::SequenceNumber last_sequence,
+      table::InternalIterator* input,
+      const util::Comparator* cmp,
+      common::SequenceNumber last_sequence,
       std::vector<common::SequenceNumber>* snapshots,
-      common::SequenceNumber earliest_write_conflict_snapshot, util::Env* env,
+      common::SequenceNumber earliest_write_conflict_snapshot,
+      util::Env* env,
       bool expect_valid_internal_key,
       storage::ChangeInfo &change_info,
       memory::ArenaAllocator &arena,
       std::unique_ptr<CompactionProxy> compaction,
       const storage::CompactionFilter* compaction_filter = nullptr,
-      common::CompactionEventListener* compaction_listener = nullptr,
       const std::atomic<bool>* shutting_down = nullptr,
       const std::atomic<bool>* bg_stopped = nullptr,
       const std::atomic<int64_t>* cancel_type = nullptr,
@@ -120,7 +115,6 @@ class CompactionIterator {
 
   table::InternalIterator* input_;
   const util::Comparator* cmp_;
-  db::MergeHelper* merge_helper_;
   const std::vector<common::SequenceNumber>* snapshots_;
   const common::SequenceNumber earliest_write_conflict_snapshot_;
   util::Env* env_;
@@ -128,7 +122,6 @@ class CompactionIterator {
 //  db::RangeDelAggregator* range_del_agg_;
   std::unique_ptr<CompactionProxy> compaction_;
   const storage::CompactionFilter* compaction_filter_;
-  common::CompactionEventListener* compaction_listener_;
   const std::atomic<bool>* shutting_down_;
   const std::atomic<bool>* bg_stopped_;
   const std::atomic<int64_t>* cancel_type_;

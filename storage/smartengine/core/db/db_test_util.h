@@ -55,7 +55,6 @@
 #endif  // !(defined NDEBUG) || !defined(OS_WIN)
 #include "util/testharness.h"
 #include "util/testutil.h"
-#include "utilities/merge_operators.h"
 
 namespace smartengine {
 namespace db {
@@ -773,12 +772,6 @@ class DBTestBase : public testing::Test {
 
   common::Status Put(int cf, const common::Slice& k, const common::Slice& v,
                      common::WriteOptions wo = common::WriteOptions());
-
-  common::Status Merge(const common::Slice& k, const common::Slice& v,
-                       common::WriteOptions wo = common::WriteOptions());
-
-  common::Status Merge(int cf, const common::Slice& k, const common::Slice& v,
-                       common::WriteOptions wo = common::WriteOptions());
 
   common::Status Delete(const std::string& k);
 

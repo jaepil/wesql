@@ -2149,13 +2149,6 @@ class InMemoryHandler : public WriteBatch::Handler {
     return Status::OK();
   }
 
-  virtual Status MergeCF(uint32_t cf, const Slice& key,
-                         const Slice& value) override {
-    row_ << "MERGE(" << cf << ") : ";
-    commonPutMerge(key, value);
-    return Status::OK();
-  }
-
   virtual Status DeleteCF(uint32_t cf, const Slice& key) override {
     row_ << "DELETE(" << cf << ") : ";
     row_ << LDBCommand::StringToHex(key.ToString()) << " ";

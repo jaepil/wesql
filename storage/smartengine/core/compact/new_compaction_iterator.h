@@ -22,17 +22,11 @@
 
 #include "compact/compaction.h"
 #include "compact/compaction_iteration_stats.h"
-#include "db/merge_helper.h"
 #include "db/pinned_iterators_manager.h"
 #include "db/range_del_aggregator.h"
 #include "smartengine/compaction_filter.h"
 
 namespace smartengine {
-
-namespace common {
-class CompactionEventListener;
-}
-
 namespace storage {
 
 class NewCompactionIterator {
@@ -81,8 +75,6 @@ class NewCompactionIterator {
   int next_item();
   int do_compaction_filter(bool& need_skip);
   int do_single_deletion(const common::SequenceNumber prev_snapshot);
-  int do_merge_operator(common::Slice& skip_until, bool& need_skip,
-                        const common::SequenceNumber prev_snapshot);
   // Getters
   const common::Slice& key() const { return key_; }
   const common::Slice& value() const { return value_; }

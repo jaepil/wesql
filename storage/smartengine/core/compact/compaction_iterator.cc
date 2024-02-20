@@ -12,6 +12,7 @@
 //#include "utilities/field_extractor/field_extractor.h"
 #include "smartengine/slice.h"
 #include "storage/storage_manager.h"
+#include "util/stop_watch.h"
 
 using namespace smartengine;
 using namespace common;
@@ -25,48 +26,25 @@ namespace smartengine {
 
 namespace storage {
 
-#ifndef ROCKSDB_LITE
-CompactionEventListener::CompactionListenerValueType fromInternalValueType(
-    db::ValueType vt) {
-  switch (vt) {
-    case kTypeDeletion:
-      return CompactionEventListener::CompactionListenerValueType::kDelete;
-    case kTypeValue:
-      return CompactionEventListener::CompactionListenerValueType::kValue;
-    case kTypeMerge:
-      return CompactionEventListener::CompactionListenerValueType::
-          kMergeOperand;
-    case kTypeSingleDeletion:
-      return CompactionEventListener::CompactionListenerValueType::
-          kSingleDelete;
-    case kTypeRangeDeletion:
-      return CompactionEventListener::CompactionListenerValueType::kRangeDelete;
-    default:
-      assert(false);
-      return CompactionEventListener::CompactionListenerValueType::kInvalid;
-  }
-}
-#endif  // ROCKSDB_LITE
-
 CompactionIterator::CompactionIterator(
-    InternalIterator* input, const Comparator* cmp, MergeHelper* merge_helper,
-    SequenceNumber last_sequence, std::vector<SequenceNumber>* snapshots,
-    SequenceNumber earliest_write_conflict_snapshot, Env* env,
+    InternalIterator* input,
+    const Comparator* cmp,
+    SequenceNumber last_sequence,
+    std::vector<SequenceNumber>* snapshots,
+    SequenceNumber earliest_write_conflict_snapshot,
+    Env* env,
     bool expect_valid_internal_key,
-    ChangeInfo &change_info, ArenaAllocator  &arena,
+    ChangeInfo &change_info,
+    ArenaAllocator  &arena,
     std::unique_ptr<CompactionProxy> compaction,
     const CompactionFilter* compaction_filter,
-    CompactionEventListener* compaction_listener,
     const std::atomic<bool>* shutting_down,
     const std::atomic<bool>* bg_stopped,
     const std::atomic<int64_t>* cancel_type,
-//    ArenaAllocator* row_arena,
-//    const SeSchema *schema,
     const Slice *l2_largest_key,
     const bool background_disable_merge)
     : input_(input),
       cmp_(cmp),
-      merge_helper_(merge_helper),
       snapshots_(snapshots),
       earliest_write_conflict_snapshot_(earliest_write_conflict_snapshot),
       env_(env),
@@ -74,14 +52,11 @@ CompactionIterator::CompactionIterator(
 //      range_del_agg_(range_del_agg),
       compaction_(std::move(compaction)),
       compaction_filter_(compaction_filter),
-      compaction_listener_(compaction_listener),
       shutting_down_(shutting_down),
       bg_stopped_(bg_stopped),
       cancel_type_(cancel_type),
       valid_(false),
       ignore_snapshots_(false),
-//      row_arena_(row_arena), for schema switch
-//      dst_schema_(schema),
       change_info_(change_info),
       arena_(arena),
       l2_largest_key_(l2_largest_key),
@@ -219,14 +194,6 @@ void CompactionIterator::NextFromInput() {
       current_user_key_sequence_ = kMaxSequenceNumber;
       current_user_key_snapshot_ = 0;
 
-#ifndef ROCKSDB_LITE
-      if (compaction_listener_) {
-        compaction_listener_->OnCompaction(compaction_->level(), ikey_.user_key,
-                                           fromInternalValueType(ikey_.type),
-                                           value_, ikey_.sequence, true);
-      }
-#endif  // ROCKSDB_LITE
-
       // apply the compaction filter to the first occurrence of the user key
       if (compaction_filter_ != nullptr && ikey_.type == kTypeValue &&
           (visible_at_tip_ || ikey_.sequence > latest_snapshot_ ||
@@ -274,13 +241,6 @@ void CompactionIterator::NextFromInput() {
         }
       }
     } else {
-#ifndef ROCKSDB_LITE
-      if (compaction_listener_) {
-        compaction_listener_->OnCompaction(compaction_->level(), ikey_.user_key,
-                                           fromInternalValueType(ikey_.type),
-                                           value_, ikey_.sequence, false);
-      }
-#endif  // ROCKSDB_LITE
 
       // Update the current key to reflect the new sequence number/type without
       // copying the user key.

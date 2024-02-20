@@ -49,7 +49,6 @@ struct ChangeInfo;
 namespace db {
 
 class MemTableIterator;
-class MergeContext;
 
 struct MemTableOptions {
   explicit MemTableOptions(const common::ImmutableCFOptions& ioptions,
@@ -67,9 +66,7 @@ struct MemTableOptions {
                                            uint32_t* existing_value_size,
                                            common::Slice delta_value,
                                            std::string* merged_value);
-  size_t max_successive_merges;
   monitor::Statistics* statistics;
-  MergeOperator* merge_operator;
 };
 
 // Batched counters to updated when inserting keys in one write batch.
@@ -209,25 +206,26 @@ class MemTable {
   // If memtable contains a value for key, store it in *value and return true.
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
-  // If memtable contains Merge operation as the most recent entry for a key,
-  //   and the merge process does not stop (not reaching a value or delete),
-  //   prepend the current merge operand to *operands.
-  //   store MergeInProgress in s, and return false.
-  // Else, return false.
   // If any operation was found, its most recent sequence number
   // will be stored in *seq on success (regardless of whether true/false is
   // returned).  Otherwise, *seq will be set to kMaxSequenceNumber.
-  // On success, *s may be set to OK, NotFound, or MergeInProgress.  Any other
+  // On success, *s may be set to OK, NotFound.  Any other
   // status returned indicates a corruption or other unexpected error.
-  bool Get(LookupKey& key, std::string* value, common::Status* s,
-           MergeContext* merge_context, RangeDelAggregator* range_del_agg,
-           common::SequenceNumber* seq, const common::ReadOptions& read_opts);
+  bool Get(LookupKey& key,
+           std::string* value,
+           common::Status* s,
+           RangeDelAggregator* range_del_agg,
+           common::SequenceNumber* seq,
+           const common::ReadOptions& read_opts);
 
-  bool Get(LookupKey& key, std::string* value, common::Status* s,
-           MergeContext* merge_context, RangeDelAggregator* range_del_agg,
-           const common::ReadOptions& read_opts) {
+  bool Get(LookupKey& key,
+           std::string* value,
+           common::Status* s,
+           RangeDelAggregator* range_del_agg,
+           const common::ReadOptions& read_opts)
+  {
     common::SequenceNumber seq;
-    return Get(key, value, s, merge_context, range_del_agg, &seq, read_opts);
+    return Get(key, value, s, range_del_agg, &seq, read_opts);
   }
 
   // Attempts to update the new_value inplace, else does normal Add
@@ -263,11 +261,6 @@ class MemTable {
   // REQUIRES: external synchronization to prevent simultaneous
   // operations on the same MemTable.
   void update_delete_trigger();
-
-  // Returns the number of successive merge entries starting from the newest
-  // entry for the key up to the last non-merge entry or last entry for the
-  // key in the memtable.
-  size_t CountSuccessiveMergeEntries(const LookupKey& key);
 
   // Update counters and flush status after inserting a whole write batch
   // Used in concurrent memtable inserts.
@@ -369,11 +362,6 @@ class MemTable {
   void MarkImmutable() {
     table_->MarkReadOnly();
     allocator_.DoneAllocating();
-  }
-
-  // return true if the current memtable::MemTableRep supports merge operator.
-  bool IsMergeOperatorSupported() const {
-    return table_->IsMergeOperatorSupported();
   }
 
   // return true if the current memtable::MemTableRep supports snapshots.

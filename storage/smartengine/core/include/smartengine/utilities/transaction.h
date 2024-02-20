@@ -86,7 +86,7 @@ class Transaction {
   virtual void SetSnapshot() = 0;
 
   // Similar to SetSnapshot(), but will not change the current snapshot
-  // until Put/Merge/Delete/GetForUpdate/MultigetForUpdate is called.
+  // until Put/Delete/GetForUpdate/MultigetForUpdate is called.
   // By calling this function, the transaction will essentially call
   // SetSnapshot() for you right before performing the next write/GetForUpdate.
   //
@@ -166,7 +166,7 @@ class Transaction {
   // points.
   virtual void SetSavePoint() = 0;
 
-  // Undo all operations in this transaction (Put, Merge, Delete, PutLogData)
+  // Undo all operations in this transaction (Put, Delete, PutLogData)
   // since the most recent call to SetSavePoint() and removes the most recent
   // SetSavePoint().
   // If there is no previous call to SetSavePoint(), returns
@@ -174,10 +174,7 @@ class Transaction {
   virtual common::Status RollbackToSavePoint() = 0;
 
   // This function is similar to DB::Get() except it will also read pending
-  // changes in this transaction.  Currently, this function will return
-  // common::Status::MergeInProgress if the most recent write to the queried key
-  // in
-  // this batch is a Merge.
+  // changes in this transaction.
   //
   // If read_options.snapshot is not set, the current version of the key will
   // be read.  Calling SetSnapshot() does not affect the version of the data
@@ -211,9 +208,6 @@ class Transaction {
   // snapshot is set in this transaction).  The transaction behavior is the
   // same regardless of whether the key exists or not.
   //
-  // Note: Currently, this function will return common::Status::MergeInProgress
-  // if the most recent write to the queried key in this batch is a Merge.
-  //
   // The values returned by this function are similar to Transaction::Get().
   // If value==nullptr, then this function will not read any data, but will
   // still ensure that this key cannot be written to by outside of this
@@ -229,7 +223,6 @@ class Transaction {
   // common::Status::TimedOut() if a lock could not be acquired,
   // common::Status::TryAgain() if the memtable history size is not large enough
   //  (See max_write_buffer_number_to_maintain)
-  // common::Status::MergeInProgress() if merge operations cannot be resolved.
   // or other errors if this key could not be read.
   virtual common::Status GetForUpdate(const common::ReadOptions& options,
                                       db::ColumnFamilyHandle* column_family,
@@ -276,7 +269,7 @@ class Transaction {
   virtual db::Iterator* GetIterator(const common::ReadOptions& read_options,
                                     db::ColumnFamilyHandle* column_family) = 0;
 
-  // Put, Merge, Delete, and SingleDelete behave similarly to the corresponding
+  // Put, Delete, and SingleDelete behave similarly to the corresponding
   // functions in WriteBatch, but will also do conflict checking on the
   // keys being written.
   //
@@ -301,12 +294,6 @@ class Transaction {
                              const common::SliceParts& value) = 0;
   virtual common::Status Put(const common::SliceParts& key,
                              const common::SliceParts& value) = 0;
-
-  virtual common::Status Merge(db::ColumnFamilyHandle* column_family,
-                               const common::Slice& key,
-                               const common::Slice& value) = 0;
-  virtual common::Status Merge(const common::Slice& key,
-                               const common::Slice& value) = 0;
 
   virtual common::Status Delete(db::ColumnFamilyHandle* column_family,
                                 const common::Slice& key) = 0;
@@ -341,12 +328,6 @@ class Transaction {
   virtual common::Status PutUntracked(const common::SliceParts& key,
                                       const common::SliceParts& value) = 0;
 
-  virtual common::Status MergeUntracked(db::ColumnFamilyHandle* column_family,
-                                        const common::Slice& key,
-                                        const common::Slice& value) = 0;
-  virtual common::Status MergeUntracked(const common::Slice& key,
-                                        const common::Slice& value) = 0;
-
   virtual common::Status DeleteUntracked(db::ColumnFamilyHandle* column_family,
                                          const common::Slice& key) = 0;
 
@@ -358,16 +339,16 @@ class Transaction {
   // Similar to WriteBatch::PutLogData
   virtual void PutLogData(const common::Slice& blob) = 0;
 
-  // By default, all Put/Merge/Delete operations will be indexed in the
+  // By default, all Put/Delete operations will be indexed in the
   // transaction so that Get/GetForUpdate/GetIterator can search for these
   // keys.
   //
   // If the caller does not want to fetch the keys about to be written,
   // they may want to avoid indexing as a performance optimization.
   // Calling DisableIndexing() will turn off indexing for all future
-  // Put/Merge/Delete operations until EnableIndexing() is called.
+  // Put/Delete operations until EnableIndexing() is called.
   //
-  // If a key is Put/Merge/Deleted after DisableIndexing is called and then
+  // If a key is Put/Deleted after DisableIndexing is called and then
   // is fetched via Get/GetForUpdate/GetIterator, the result of the fetch is
   // undefined.
   virtual void DisableIndexing() = 0;
@@ -380,11 +361,10 @@ class Transaction {
   // number of keys that need to be checked for conflicts at commit time.
   virtual uint64_t GetNumKeys() const = 0;
 
-  // Returns the number of Puts/Deletes/Merges that have been applied to this
+  // Returns the number of Puts/Deletes that have been applied to this
   // transaction so far.
   virtual uint64_t GetNumPuts() const = 0;
   virtual uint64_t GetNumDeletes() const = 0;
-  virtual uint64_t GetNumMerges() const = 0;
 
   // Returns the elapsed time in milliseconds since this Transaction began.
   virtual uint64_t GetElapsedTime() const = 0;

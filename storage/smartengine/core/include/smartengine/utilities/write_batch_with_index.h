@@ -43,7 +43,6 @@ namespace util {
 class Comparator;
 enum WriteType {
   kPutRecord,
-  kMergeRecord,
   kDeleteRecord,
   kSingleDeleteRecord,
   kDeleteRangeRecord,
@@ -51,7 +50,7 @@ enum WriteType {
   kXIDRecord,
 };
 
-// an entry for Put, Merge, Delete, or SingleDelete entry for write batches.
+// an entry for Put, Delete, or SingleDelete entry for write batches.
 // Used in WBWIIterator.
 struct WriteEntry {
   WriteType type;
@@ -97,7 +96,7 @@ protected:
 
 // A WriteBatchWithIndex with a binary searchable index built for all the keys
 // inserted.
-// In Put(), Merge() Delete(), or SingleDelete(), the same function of the
+// In Put(), Delete(), or SingleDelete(), the same function of the
 // wrapped will be called. At the same time, indexes will be built.
 // By calling GetWriteBatch(), a user will get the WriteBatch for the data
 // they inserted, which can be used for DB::Write().
@@ -127,14 +126,6 @@ class WriteBatchWithIndex : public db::WriteBatchBase {
 
   common::Status Put(const common::Slice& key,
                      const common::Slice& value) override;
-
-  using smartengine::db::WriteBatchBase::Merge;
-  common::Status Merge(db::ColumnFamilyHandle* column_family,
-                       const common::Slice& key,
-                       const common::Slice& value) override;
-
-  common::Status Merge(const common::Slice& key,
-                       const common::Slice& value) override;
 
   using smartengine::db::WriteBatchBase::Delete;
   common::Status Delete(db::ColumnFamilyHandle* column_family,
@@ -188,15 +179,11 @@ class WriteBatchWithIndex : public db::WriteBatchBase {
   db::Iterator* NewIteratorWithBase(db::Iterator* base_iterator);
 
   // Similar to DB::Get() but will only read the key from this batch.
-  // If the batch does not have enough data to resolve Merge operations,
-  // MergeInProgress status may be returned.
   common::Status GetFromBatch(db::ColumnFamilyHandle* column_family,
                               const common::DBOptions& options,
                               const common::Slice& key, std::string* value);
 
   // Similar to previous function but does not require a column_family.
-  // Note:  An InvalidArgument status will be returned if there are any Merge
-  // operators for this key.  Use previous method instead.
   common::Status GetFromBatch(const common::DBOptions& options,
                               const common::Slice& key, std::string* value) {
     return GetFromBatch(nullptr, options, key, value);
@@ -226,7 +213,7 @@ class WriteBatchWithIndex : public db::WriteBatchBase {
   // May be called multiple times to set multiple save points.
   void SetSavePoint() override;
 
-  // Remove all entries in this batch (Put, Merge, Delete, SingleDelete,
+  // Remove all entries in this batch (Put, Delete, SingleDelete,
   // PutLogData) since the most recent call to SetSavePoint() and removes the
   // most recent save point.
   // If there is no previous call to SetSavePoint(), behaves the same as
@@ -410,8 +397,7 @@ class BaseDeltaIterator : public db::Iterator {
       return;
     }
     // we don't support those yet
-    assert(delta_iterator_->Entry().type != kMergeRecord &&
-           delta_iterator_->Entry().type != kLogDataRecord);
+    assert(delta_iterator_->Entry().type != kLogDataRecord);
     int compare = comparator_->Compare(delta_iterator_->Entry().key,
                                        base_iterator_->key());
     if (forward_) {

@@ -977,16 +977,16 @@ int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_o
   } else {
     Slice ikey = key.internal_key();
     Slice user_key = key.user_key();
-    PinnedIteratorsManager pinned_iters_mgr;
-    MergeContext merge_context;
     RangeDelAggregator range_del_agg(this->internal_comparator(),
                                      kMaxSequenceNumber);
-    GetContext get_context(
-      internal_comparator_.user_comparator(), ioptions_.merge_operator,
-      ioptions_.statistics, GetContext::kNotFound,
-      user_key, &value, &may_key_exist, &merge_context, &range_del_agg,
-      ioptions_.env, seq,
-      ioptions_.merge_operator ? &pinned_iters_mgr : nullptr);
+    GetContext get_context(internal_comparator_.user_comparator(),
+                           GetContext::kNotFound,
+                           user_key,
+                           &value,
+                           &may_key_exist,
+                           &range_del_agg,
+                           ioptions_.env,
+                           seq);
     Arena arena;
     std::function<int(const ExtentMeta *extent_meta, int32_t level, bool &found)>
       save_value = [&](const ExtentMeta *extent_meta, int32_t level, bool &found) {
@@ -1014,7 +1014,6 @@ int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_o
               found = true;
               func_ret = Status::kNotFound;
               break;
-            case GetContext::kMerge:
             case GetContext::kCorrupt:
             default:
               found = true;

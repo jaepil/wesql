@@ -52,7 +52,6 @@ int main() {
 #include "util/random.h"
 #include "util/string_util.h"
 #include "util/testutil.h"
-#include "utilities/merge_operators.h"
 #include "smartengine/cache.h"
 #include "smartengine/env.h"
 #include "smartengine/slice.h"
@@ -485,14 +484,6 @@ static bool ValidatePrefixSize(const char* flagname, int32_t value) {
 DEFINE_int32(prefix_size, 7, "Control the prefix size for HashSkipListRep");
 static const bool FLAGS_prefix_size_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_prefix_size, &ValidatePrefixSize);
-
-DEFINE_bool(use_merge, false,
-            "On true, replaces all writes with a Merge "
-            "that behaves like a Put");
-
-DEFINE_bool(use_full_merge_v1, false,
-            "On true, use a merge operator that implement the deprecated "
-            "version of FullMerge");
 
 namespace smartengine {
 namespace tools {
@@ -1084,7 +1075,6 @@ class StressTest {
         {"memtable_prefix_bloom_bits", {"0", "8", "10"}},
         {"memtable_prefix_bloom_probes", {"4", "5", "6"}},
         {"memtable_huge_page_size", {"0", ToString(2 * 1024 * 1024)}},
-        {"max_successive_merges", {"0", "2", "4"}},
         {"inplace_update_num_locks", {"100", "200", "300"}},
         // TODO(ljin): enable test for this option
         // {"disable_auto_compactions", {"100", "200", "300"}},
@@ -1337,11 +1327,7 @@ class StressTest {
       keys[i] += key.ToString();
       values[i] += value.ToString();
       value_slices[i] = values[i];
-      if (FLAGS_use_merge) {
-        batch.Merge(column_family, keys[i], value_slices[i]);
-      } else {
-        batch.Put(column_family, keys[i], value_slices[i]);
-      }
+      batch.Put(column_family, keys[i], value_slices[i]);
     }
 
     s = db_->Write(writeoptions, &batch);
@@ -1801,11 +1787,7 @@ class StressTest {
           }
           shared->Put(rand_column_family, rand_key, value_base);
           Status s;
-          if (FLAGS_use_merge) {
-            s = db_->Merge(write_opts, column_family, key, v);
-          } else {
-            s = db_->Put(write_opts, column_family, key, v);
-          }
+          s = db_->Put(write_opts, column_family, key, v);
           if (!s.ok()) {
             fprintf(stderr, "put or merge error: %s\n", s.ToString().c_str());
             std::terminate();
@@ -2199,12 +2181,6 @@ class StressTest {
                 "RocksdbLite only supports skip list mem table. Skip "
                 "--rep_factory\n");
 #endif  // ROCKSDB_LITE
-    }
-
-    if (FLAGS_use_full_merge_v1) {
-      options_.merge_operator = MergeOperators::CreateDeprecatedPutOperator();
-    } else {
-      options_.merge_operator = MergeOperators::CreatePutOperator();
     }
 
     // set universal style compaction configurations, if applicable

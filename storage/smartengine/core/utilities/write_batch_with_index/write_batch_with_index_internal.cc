@@ -10,8 +10,6 @@
 #include "utilities/write_batch_with_index/write_batch_with_index_internal.h"
 
 #include "db/column_family.h"
-#include "db/merge_context.h"
-#include "db/merge_helper.h"
 #include "util/coding.h"
 #include "util/string_util.h"
 #include "smartengine/comparator.h"
@@ -66,10 +64,6 @@ Status ReadableWriteBatch::GetEntryFromDataOffset(size_t data_offset,
     case kTypeRangeDeletion:
       *type = kDeleteRangeRecord;
       break;
-    case kTypeColumnFamilyMerge:
-    case kTypeMerge:
-      *type = kMergeRecord;
-      break;
     case kTypeLogData:
       *type = kLogDataRecord;
       break;
@@ -80,6 +74,7 @@ Status ReadableWriteBatch::GetEntryFromDataOffset(size_t data_offset,
       *type = kXIDRecord;
       break;
     default:
+      se_assert(false);
       return Status::Corruption("unknown WriteBatch tag");
   }
   return Status::OK();
@@ -137,10 +132,15 @@ int WriteBatchEntryComparator::CompareKey(uint32_t column_family,
 }
 
 WriteBatchWithIndexInternal::Result WriteBatchWithIndexInternal::GetFromBatch(
-    const ImmutableDBOptions& immuable_db_options, WriteBatchWithIndex* batch,
-    ColumnFamilyHandle* column_family, const Slice& key,
-    MergeContext* merge_context, WriteBatchEntryComparator* cmp,
-    std::string* value, bool overwrite_key, Status* s) {
+    const ImmutableDBOptions& immuable_db_options,
+    WriteBatchWithIndex* batch,
+    ColumnFamilyHandle* column_family,
+    const Slice& key,
+    WriteBatchEntryComparator* cmp,
+    std::string* value,
+    bool overwrite_key,
+    Status* s)
+{
   uint32_t cf_id = GetColumnFamilyID(column_family);
   *s = Status::OK();
   WriteBatchWithIndexInternal::Result result =
@@ -188,11 +188,6 @@ WriteBatchWithIndexInternal::Result WriteBatchWithIndexInternal::GetFromBatch(
         entry_value = &entry.value;
         break;
       }
-      case kMergeRecord: {
-        result = WriteBatchWithIndexInternal::Result::kMergeInProgress;
-        merge_context->PushOperand(entry.value);
-        break;
-      }
       case kDeleteRecord:
       case kSingleDeleteRecord: {
         result = WriteBatchWithIndexInternal::Result::kDeleted;
@@ -216,53 +211,12 @@ WriteBatchWithIndexInternal::Result WriteBatchWithIndexInternal::GetFromBatch(
       // We can stop iterating once we find a PUT or DELETE
       break;
     }
-    if (result == WriteBatchWithIndexInternal::Result::kMergeInProgress &&
-        overwrite_key == true) {
-      // Since we've overwritten keys, we do not know what other operations are
-      // in this batch for this key, so we cannot do a Merge to compute the
-      // result.  Instead, we will simply return MergeInProgress.
-      break;
-    }
 
     iter->Prev();
   }
 
-  if ((*s).ok()) {
-    if (result == WriteBatchWithIndexInternal::Result::kFound ||
-        result == WriteBatchWithIndexInternal::Result::kDeleted) {
-      // Found a Put or Delete.  Merge if necessary.
-      if (merge_context->GetNumOperands() > 0) {
-        const MergeOperator* merge_operator;
-
-        if (column_family != nullptr) {
-          auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-          merge_operator = cfh->cfd()->ioptions()->merge_operator;
-        } else {
-          *s = Status::InvalidArgument("Must provide a column_family");
-          result = WriteBatchWithIndexInternal::Result::kError;
-          return result;
-        }
-        Statistics* statistics = immuable_db_options.statistics.get();
-        Env* env = immuable_db_options.env;
-
-        if (merge_operator) {
-          *s = MergeHelper::TimedFullMerge(merge_operator, key, entry_value,
-                                           merge_context->GetOperands(), value,
-                                           statistics, env);
-        } else {
-          *s = Status::InvalidArgument("Options::merge_operator must be set");
-        }
-        if ((*s).ok()) {
-          result = WriteBatchWithIndexInternal::Result::kFound;
-        } else {
-          result = WriteBatchWithIndexInternal::Result::kError;
-        }
-      } else {  // nothing to merge
-        if (result == WriteBatchWithIndexInternal::Result::kFound) {  // PUT
-          value->assign(entry_value->data(), entry_value->size());
-        }
-      }
-    }
+  if ((*s).ok() && (WriteBatchWithIndexInternal::Result::kFound == result)) {
+    value->assign(entry_value->data(), entry_value->size());
   }
 
   return result;

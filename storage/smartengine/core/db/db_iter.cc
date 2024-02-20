@@ -17,8 +17,6 @@
 
 #include "table/format.h"
 #include "db/dbformat.h"
-#include "db/merge_context.h"
-#include "db/merge_helper.h"
 #include "db/pinned_iterators_manager.h"
 #include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
@@ -30,7 +28,6 @@
 #include "util/string_util.h"
 #include "smartengine/env.h"
 #include "smartengine/iterator.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/options.h"
 #include "smartengine/se_constants.h"
 #include "storage/extent_space_manager.h"
@@ -81,7 +78,6 @@ class DBIter : public Iterator {
       : arena_mode_(arena_mode),
         env_(env),
         user_comparator_(cmp),
-        merge_operator_(cf_options.merge_operator),
         iter_(iter),
         sequence_(s),
         oob_aligned_buf_(nullptr, memory::base_memalign_free),
@@ -90,7 +86,6 @@ class DBIter : public Iterator {
         oob_unzip_size_(0),
         direction_(kForward),
         valid_(false),
-        current_entry_is_merged_(false),
         statistics_(cf_options.statistics),
         version_number_(version_number),
         iterate_upper_bound_(read_options.iterate_upper_bound),
@@ -141,11 +136,6 @@ class DBIter : public Iterator {
   }
   virtual Slice value() const override {
     assert(valid_);
-    if (UNLIKELY(current_entry_is_merged_)) {
-      // If pinned_value_ is set then the result of merge operator is one of
-      // the merge operands and we should return it.
-      return pinned_value_.data() ? pinned_value_ : saved_value_;
-    }
     Slice plain_value;
     ValueType type = kTypeValue;
     if (direction_ == kReverse) {
@@ -237,7 +227,6 @@ class DBIter : public Iterator {
   inline void FindNextUserEntry(bool skipping, bool prefix_check);
   void FindNextUserEntryInternal(bool skipping, bool prefix_check, bool uniq_check, bool &deleted);
   bool ParseKey(ParsedInternalKey* key);
-  void MergeValuesNewToOld();
   bool TooManyInternalKeysSkipped(bool increment = true);
 
   // Temporarily pin the blocks that we encounter until ReleaseTempPinnedData()
@@ -272,7 +261,6 @@ class DBIter : public Iterator {
   bool arena_mode_;
   Env* const env_;
   const Comparator* const user_comparator_;
-  const MergeOperator* const merge_operator_;
   InternalIterator* iter_;
   SequenceNumber const sequence_;
 
@@ -288,7 +276,6 @@ class DBIter : public Iterator {
   ValueType pinned_key_type_;  // key type of pinned_value_
   Direction direction_;
   bool valid_;
-  bool current_entry_is_merged_;
   // for prefix seek mode to support prev()
   Statistics* statistics_;
   uint64_t max_skip_;
@@ -303,8 +290,6 @@ class DBIter : public Iterator {
   // is not deleted, will be true if ReadOptions::pin_data is true
   const bool pin_thru_lifetime_;
   const bool total_order_seek_;
-  // List of operands for merge operator.
-  MergeContext merge_context_;
   RangeDelAggregator range_del_agg_;
   PinnedIteratorsManager pinned_iters_mgr_;
   storage::ExtentSpaceManager* space_manager_;
@@ -343,19 +328,15 @@ public:
     ResetInternalKeysSkippedCounter();
     if (direction_ == kReverse) {
       ReverseToForward();
-    } else if (iter_->Valid() && !current_entry_is_merged_) {
-      // If the current value is not a merge, the iter position is the
-      // current key, which is already returned. We can safely issue a
+    } else if (iter_->Valid()) {
+      // The iter position is the current key, which is already returned. We can safely issue a
       // Next() without checking the current key.
-      // If the current key is a merge, very likely iter already points
-      // to the next internal position.
       iter_->Next();
       QUERY_COUNT(CountPoint::INTERNAL_KEY_SKIPPED);
     }
 
     key_status_ = kNonExist;
-    // Now we point to the next internal position, for both of merge and
-    // not merge cases.
+    // Now we point to the next internal position.
     if (iter_->Valid()) {
       bool deleted = false;
       // valid_ will be set by FindNextUserEntryInternal
@@ -480,18 +461,14 @@ void DBIter::Next() {
   ResetInternalKeysSkippedCounter();
   if (direction_ == kReverse) {
     ReverseToForward();
-  } else if (iter_->Valid() && !current_entry_is_merged_) {
-    // If the current value is not a merge, the iter position is the
-    // current key, which is already returned. We can safely issue a
+  } else if (iter_->Valid()) {
+    // The iter position is the current key, which is already returned. We can safely issue a
     // Next() without checking the current key.
-    // If the current key is a merge, very likely iter already points
-    // to the next internal position.
     iter_->Next();
     QUERY_COUNT(CountPoint::INTERNAL_KEY_SKIPPED);
   }
 
-  // Now we point to the next internal position, for both of merge and
-  // not merge cases.
+  // Now we point to the next internal position.
   if (!iter_->Valid()) {
     valid_ = false;
     return;
@@ -502,9 +479,6 @@ void DBIter::Next() {
 
 // PRE: saved_key_ has the current user key if skipping
 // POST: saved_key_ should have the next user key if valid_,
-//       if the current entry is a result of merge
-//           current_entry_is_merged_ => true
-//           saved_value_             => the merged value
 //
 // NOTE: In between, saved_key_ can point to a user key that has
 //       a delete marker or a sequence number higher than sequence_
@@ -527,7 +501,6 @@ void DBIter::FindNextUserEntryInternal(bool skipping, bool prefix_check, bool un
   assert(iter_->Valid());
   QUERY_TRACE_SCOPE(TracePoint::DB_ITER_NEXT_USER_ENTRY);
   assert(direction_ == kForward);
-  current_entry_is_merged_ = false;
   deleted = false;
 
   // How many times in a row we have skipped an entry with user key less than
@@ -608,18 +581,8 @@ void DBIter::FindNextUserEntryInternal(bool skipping, bool prefix_check, bool un
                 !iter_->IsKeyPinned() || !pin_thru_lifetime_ /* copy */);
             valid_ = true;
             return;
-          case kTypeMerge:
-            saved_key_.SetUserKey(
-                ikey.user_key,
-                !iter_->IsKeyPinned() || !pin_thru_lifetime_ /* copy */);
-            // By now, we are sure the current ikey is going to yield a
-            // value
-            current_entry_is_merged_ = true;
-            valid_ = true;
-            MergeValuesNewToOld();  // Go to a different state machine
-            return;
           default:
-            assert(false);
+            se_assert(false);
             break;
         }
       }
@@ -678,83 +641,6 @@ void DBIter::FindNextUserEntryInternal(bool skipping, bool prefix_check, bool un
   valid_ = false;
 }
 
-// Merge values of the same user key starting from the current iter_ position
-// Scan from the newer entries to older entries.
-// PRE: iter_->key() points to the first merge type entry
-//      saved_key_ stores the user key
-// POST: saved_value_ has the merged value for the user key
-//       iter_ points to the next entry (or invalid)
-void DBIter::MergeValuesNewToOld() {
-  if (!merge_operator_) {
-    __SE_LOG(ERROR, "Options::merge_operator is null.");
-    status_ = Status::InvalidArgument("merge_operator_ must be set.");
-    valid_ = false;
-    return;
-  }
-
-  // Temporarily pin the blocks that hold merge operands
-  TempPinData();
-  merge_context_.Clear();
-  // Start the merge process by pushing the first operand
-  merge_context_.PushOperand(iter_->value(),
-                             iter_->IsValuePinned() /* operand_pinned */);
-
-  ParsedInternalKey ikey;
-  Status s;
-  for (iter_->Next(); iter_->Valid(); iter_->Next()) {
-    if (!ParseKey(&ikey)) {
-      // skip corrupted key
-      continue;
-    }
-
-    if (!user_comparator_->Equal(ikey.user_key, saved_key_.GetUserKey())) {
-      // hit the next user key, stop right here
-      break;
-    } else if (kTypeDeletion == ikey.type || kTypeSingleDeletion == ikey.type ||
-               range_del_agg_.ShouldDelete(
-                   ikey, RangeDelAggregator::RangePositioningMode::
-                             kForwardTraversal)) {
-      // hit a delete with the same user key, stop right here
-      // iter_ is positioned after delete
-      iter_->Next();
-      break;
-    } else if (kTypeValue == ikey.type) {
-      // hit a put, merge the put value with operands and store the
-      // final result in saved_value_. We are done!
-      // ignore corruption if there is any.
-      const Slice val = iter_->value();
-      s = MergeHelper::TimedFullMerge(
-          merge_operator_, ikey.user_key, &val, merge_context_.GetOperands(),
-          &saved_value_, statistics_, env_, &pinned_value_);
-      if (!s.ok()) {
-        status_ = s;
-      }
-      // iter_ is positioned after put
-      iter_->Next();
-      return;
-    } else if (kTypeMerge == ikey.type) {
-      // hit a merge, add the value as an operand and run associative merge.
-      // when complete, add result to operands and continue.
-      merge_context_.PushOperand(iter_->value(),
-                                 iter_->IsValuePinned() /* operand_pinned */);
-    } else {
-      assert(false);
-    }
-  }
-
-  // we either exhausted all internal keys under this user key, or hit
-  // a deletion marker.
-  // feed null as the existing value to the merge operator, such that
-  // client can differentiate this scenario and do things accordingly.
-  s = MergeHelper::TimedFullMerge(merge_operator_, saved_key_.GetUserKey(),
-                                  nullptr, merge_context_.GetOperands(),
-                                  &saved_value_, statistics_, env_,
-                                  &pinned_value_);
-  if (!s.ok()) {
-    status_ = s;
-  }
-}
-
 void DBIter::Prev() {
   assert(valid_);
   QUERY_TRACE_SCOPE(TracePoint::DB_ITER_PREV);
@@ -788,27 +674,7 @@ void DBIter::ReverseToBackward() {
                                               kValueTypeForSeekForPrev));
     iter_->SeekForPrev(last_key.GetInternalKey());
   }
-  if (current_entry_is_merged_) {
-    // Not placed in the same key. Need to call Prev() until finding the
-    // previous key.
-    if (!iter_->Valid()) {
-      iter_->SeekToLast();
-      range_del_agg_.InvalidateTombstoneMapPositions();
-    }
-    ParsedInternalKey ikey;
-    FindParseableKey(&ikey, kReverse);
-    while (iter_->Valid() &&
-           user_comparator_->Compare(ikey.user_key, saved_key_.GetUserKey()) >
-               0) {
-      if (ikey.sequence > sequence_) {
-        QUERY_COUNT(CountPoint::INTERNAL_UPD_SKIPPED);
-      } else {
-        QUERY_COUNT(CountPoint::INTERNAL_KEY_SKIPPED);
-      }
-      iter_->Prev();
-      FindParseableKey(&ikey, kReverse);
-    }
-  }
+
 #ifndef NDEBUG
   if (iter_->Valid()) {
     ParsedInternalKey ikey;
@@ -876,17 +742,11 @@ void DBIter::PrevInternal() {
 // saved_value_
 bool DBIter::FindValueForCurrentKey() {
   assert(iter_->Valid());
-  merge_context_.Clear();
-  current_entry_is_merged_ = false;
-  // last entry before merge (could be kTypeDeletion, kTypeSingleDeletion or
-  // kTypeValue)
-  ValueType last_not_merge_type = kTypeDeletion;
   ValueType last_key_entry_type = kTypeDeletion;
 
   ParsedInternalKey ikey;
   FindParseableKey(&ikey, kReverse);
 
-  // Temporarily pin blocks that hold (merge operands / the value)
   ReleaseTempPinnedData();
   TempPinData();
   size_t num_skipped = 0;
@@ -916,31 +776,13 @@ bool DBIter::FindValueForCurrentKey() {
           pinned_value_ = iter_->value();
           pinned_key_type_ = last_key_entry_type;
         }
-        merge_context_.Clear();
-        last_not_merge_type = last_key_entry_type;
         break;
       case kTypeDeletion:
       case kTypeSingleDeletion:
-        merge_context_.Clear();
-        last_not_merge_type = last_key_entry_type;
         QUERY_COUNT(CountPoint::INTERNAL_DEL_SKIPPED);
         break;
-      case kTypeMerge:
-        if (range_del_agg_.ShouldDelete(
-                ikey,
-                RangeDelAggregator::RangePositioningMode::kBackwardTraversal)) {
-          merge_context_.Clear();
-          last_key_entry_type = kTypeRangeDeletion;
-          last_not_merge_type = last_key_entry_type;
-          QUERY_COUNT(CountPoint::INTERNAL_DEL_SKIPPED);
-        } else {
-          assert(merge_operator_ != nullptr);
-          merge_context_.PushOperandBack(
-              iter_->value(), iter_->IsValuePinned() /* operand_pinned */);
-        }
-        break;
       default:
-        assert(false);
+        se_assert(false);
     }
 
     QUERY_COUNT(CountPoint::INTERNAL_KEY_SKIPPED);
@@ -957,29 +799,12 @@ bool DBIter::FindValueForCurrentKey() {
     case kTypeRangeDeletion:
       valid_ = false;
       return false;
-    case kTypeMerge:
-      current_entry_is_merged_ = true;
-      if (last_not_merge_type == kTypeDeletion ||
-          last_not_merge_type == kTypeSingleDeletion ||
-          last_not_merge_type == kTypeRangeDeletion) {
-        s = MergeHelper::TimedFullMerge(
-            merge_operator_, saved_key_.GetUserKey(), nullptr,
-            merge_context_.GetOperands(), &saved_value_, statistics_,
-            env_, &pinned_value_);
-      } else {
-        assert(last_not_merge_type == kTypeValue);
-        s = MergeHelper::TimedFullMerge(
-            merge_operator_, saved_key_.GetUserKey(), &pinned_value_,
-            merge_context_.GetOperands(), &saved_value_, statistics_,
-            env_, &pinned_value_);
-      }
-      break;
     case kTypeValue:
     case kTypeValueLarge:
       // do nothing - we've already has value in saved_value_
       break;
     default:
-      assert(false);
+      se_assert(false);
       break;
   }
   valid_ = true;
@@ -1019,54 +844,7 @@ bool DBIter::FindValueForCurrentKeyUsingSeek() {
     return true;
   }
 
-  // kTypeMerge. We need to collect all kTypeMerge values and save them
-  // in operands
-  current_entry_is_merged_ = true;
-  merge_context_.Clear();
-  while (
-      iter_->Valid() &&
-      user_comparator_->Equal(ikey.user_key, saved_key_.GetUserKey()) &&
-      ikey.type == kTypeMerge &&
-      !range_del_agg_.ShouldDelete(
-          ikey, RangeDelAggregator::RangePositioningMode::kBackwardTraversal)) {
-    merge_context_.PushOperand(iter_->value(),
-                               iter_->IsValuePinned() /* operand_pinned */);
-    iter_->Next();
-    FindParseableKey(&ikey, kForward);
-  }
-
-  Status s;
-  if (!iter_->Valid() ||
-      !user_comparator_->Equal(ikey.user_key, saved_key_.GetUserKey()) ||
-      ikey.type == kTypeDeletion || ikey.type == kTypeSingleDeletion ||
-      range_del_agg_.ShouldDelete(
-          ikey, RangeDelAggregator::RangePositioningMode::kBackwardTraversal)) {
-    s = MergeHelper::TimedFullMerge(merge_operator_, saved_key_.GetUserKey(),
-                                    nullptr, merge_context_.GetOperands(),
-                                    &saved_value_, statistics_, env_,
-                                    &pinned_value_);
-    // Make iter_ valid and point to saved_key_
-    if (!iter_->Valid() ||
-        !user_comparator_->Equal(ikey.user_key, saved_key_.GetUserKey())) {
-      iter_->Seek(last_key);
-      QUERY_COUNT(CountPoint::NUMBER_OF_RESEEKS_IN_ITERATION);
-    }
-    valid_ = true;
-    if (!s.ok()) {
-      status_ = s;
-    }
-    return true;
-  }
-
-  const Slice& val = iter_->value();
-  s = MergeHelper::TimedFullMerge(merge_operator_, saved_key_.GetUserKey(),
-                                  &val, merge_context_.GetOperands(),
-                                  &saved_value_, statistics_, env_,
-                                  &pinned_value_);
-  valid_ = true;
-  if (!s.ok()) {
-    status_ = s;
-  }
+  se_assert(false);
   return true;
 }
 

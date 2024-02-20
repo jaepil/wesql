@@ -30,8 +30,6 @@
 #include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "db/memtable.h"
-#include "db/merge_context.h"
-#include "db/merge_helper.h"
 #include "db/pinned_iterators_manager.h"
 #include "db/table_cache.h"
 #include "memory/base_malloc.h"
@@ -53,7 +51,6 @@
 #include "util/string_util.h"
 #include "util/sync_point.h"
 #include "smartengine/env.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/write_buffer_manager.h"
 #include "smartengine/se_constants.h"  // MAX_EXTENT_SIZE
 

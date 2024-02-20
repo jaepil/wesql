@@ -304,12 +304,12 @@ Transaction* TransactionDBImpl::BeginTransactionWrap(const WriteOptions& opts) {
   return txn;
 }
 
-// All user Put, Merge, Delete, and Write requests must be intercepted to make
+// All user Put, Delete, and Write requests must be intercepted to make
 // sure that they lock all keys that they are writing to avoid causing conflicts
 // with any concurent transactions. The easiest way to do this is to wrap all
 // write operations in a transaction.
 //
-// Put(), Merge(), and Delete() only lock a single key per call.  Write() will
+// Put(), and Delete() only lock a single key per call.  Write() will
 // sort its keys before locking them.  This guarantees that TransactionDB write
 // methods cannot deadlock with eachother (but still could deadlock with a
 // Transaction).
@@ -344,26 +344,6 @@ Status TransactionDBImpl::Delete(const WriteOptions& opts,
   // conflict checking for this write.  So we just need to do
   // DeleteUntracked().
   s = txn->DeleteUntracked(column_family, key);
-
-  if (s.ok()) {
-    s = txn->Commit();
-  }
-
-  return s;
-}
-
-Status TransactionDBImpl::Merge(const WriteOptions& opts,
-                                ColumnFamilyHandle* column_family,
-                                const Slice& key, const Slice& value) {
-  Status s;
-
-  Transaction* txn = BeginTransactionWrap(opts);
-  txn->DisableIndexing();
-
-  // Since the client didn't create a transaction, they don't care about
-  // conflict checking for this write.  So we just need to do
-  // MergeUntracked().
-  s = txn->MergeUntracked(column_family, key, value);
 
   if (s.ok()) {
     s = txn->Commit();

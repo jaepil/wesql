@@ -38,7 +38,6 @@
 #include "smartengine/convenience.h"
 #include "smartengine/filter_policy.h"
 #include "smartengine/memtablerep.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/slice_transform.h"
 #include "smartengine/utilities/transaction_db.h"
 #include "./core/db/db_impl.h"
@@ -482,7 +481,6 @@ static int se_i_s_cfoptions_fill_table(
       {"MEMTABLE_PREFIX_BLOOM_HUGE_PAGE_TLB_SIZE",
         std::to_string(opts.memtable_huge_page_size)},
       {"BLOOM_LOCALITY", std::to_string(opts.bloom_locality)},
-      {"MAX_SUCCESSIVE_MERGES", std::to_string(opts.max_successive_merges)},
       {"OPTIMIZE_FILTERS_FOR_HITS",
         (opts.optimize_filters_for_hits ? "ON" : "OFF")},
   };

@@ -21,7 +21,6 @@
 #include "smartengine/convenience.h"
 #include "smartengine/filter_policy.h"
 #include "smartengine/memtablerep.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/options.h"
 #include "smartengine/rate_limiter.h"
 #include "smartengine/slice_transform.h"
@@ -187,7 +186,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
   cf_opts.memtable_prefix_bloom_size_ratio =
       mutable_cf_options.memtable_prefix_bloom_size_ratio;
   cf_opts.memtable_huge_page_size = mutable_cf_options.memtable_huge_page_size;
-  cf_opts.max_successive_merges = mutable_cf_options.max_successive_merges;
   cf_opts.inplace_update_num_locks =
       mutable_cf_options.inplace_update_num_locks;
 
@@ -638,12 +636,6 @@ bool SerializeSingleOptionHelper(const char* opt_address,
       const auto* ptr =
           reinterpret_cast<const std::shared_ptr<MemTableRepFactory>*>(
               opt_address);
-      *value = ptr->get() ? ptr->get()->Name() : kNullptrString;
-      break;
-    }
-    case OptionType::kMergeOperator: {
-      const auto* ptr =
-          reinterpret_cast<const std::shared_ptr<MergeOperator>*>(opt_address);
       *value = ptr->get() ? ptr->get()->Name() : kNullptrString;
       break;
     }

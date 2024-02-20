@@ -326,9 +326,6 @@ Options DBTestBase::CurrentOptions(
       options.allow_concurrent_memtable_write = false;
       break;
 #endif  // ROCKSDB_LITE
-    case kMergePut:
-      options.merge_operator = util::MergeOperators::CreatePutOperator();
-      break;
     case kFilter:
       table_options.filter_policy.reset(NewBloomFilterPolicy(10, true));
       break;
@@ -699,35 +696,12 @@ int DBTestBase::test_get_data_file_stats(const int64_t table_space_id,
 }
 
 Status DBTestBase::Put(const Slice& k, const Slice& v, WriteOptions wo) {
-  /*
-  if (kMergePut == option_config_) {
-    return db_->Merge(wo, k, v);
-  } else {
-    return db_->Put(wo, k, v);
-  }
-  */
   return Put(0, k, v, wo);
 }
 
 Status DBTestBase::Put(int cf, const Slice& k, const Slice& v,
                        WriteOptions wo) {
-  /*
-  if (kMergePut == option_config_) {
-    return db_->Merge(wo, handles_[cf], k, v);
-  } else {
-    return db_->Put(wo, handles_[cf], k, v);
-  }
-  */
   return db_->Put(wo, get_column_family_handle(cf), k, v);
-}
-
-Status DBTestBase::Merge(const Slice& k, const Slice& v, WriteOptions wo) {
-  return db_->Merge(wo, k, v);
-}
-
-Status DBTestBase::Merge(int cf, const Slice& k, const Slice& v,
-                         WriteOptions wo) {
-  return db_->Merge(wo, get_column_family_handle(cf), k, v);
 }
 
 Status DBTestBase::Delete(const std::string& k) {
@@ -850,10 +824,6 @@ std::string DBTestBase::AllEntriesFor(const Slice& user_key, int cf) {
         first = false;
         switch (ikey.type) {
           case kTypeValue:
-            result += iter->value().ToString();
-            break;
-          case kTypeMerge:
-            // keep it the same as kTypeValue for testing kMergePut
             result += iter->value().ToString();
             break;
           case kTypeDeletion:

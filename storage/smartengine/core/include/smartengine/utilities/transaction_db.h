@@ -54,7 +54,7 @@ struct TransactionDBOptions {
   int64_t transaction_lock_timeout = 1000;  // 1 second
 
   // If positive, specifies the wait timeout in milliseconds when writing a key
-  // OUTSIDE of a transaction (ie by calling DB::Put(),Merge(),Delete(),Write()
+  // OUTSIDE of a transaction (ie by calling DB::Put(),Delete(),Write()
   // directly).
   // If 0, no waiting is done if a lock cannot instantly be acquired.
   // If negative, there is no timeout and will block indefinitely when acquiring

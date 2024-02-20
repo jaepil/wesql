@@ -495,19 +495,6 @@ struct AdvancedColumnFamilyOptions {
       TablePropertiesCollectorFactories;
   TablePropertiesCollectorFactories table_properties_collector_factories;
 
-  // Maximum number of successive merge operations on a key in the memtable.
-  //
-  // When a merge operation is added to the memtable and the maximum number of
-  // successive merges is reached, the value of the key will be calculated and
-  // inserted into the memtable instead of the merge operation. This will
-  // ensure that there are never more than max_successive_merges merge
-  // operations in the memtable.
-  //
-  // Default: 0 (disabled)
-  //
-  // Dynamically changeable through SetOptions() API
-  size_t max_successive_merges = 0;
-
   // This flag specifies that the implementation should optimize the filters
   // mainly for cases where keys are found rather than also optimize for keys
   // missed. This would be used in cases where the application knows that

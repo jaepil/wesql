@@ -80,21 +80,5 @@ Status WriteBatchBase::DeleteRange(const SliceParts& begin_key,
   return DeleteRange(begin_key_slice, end_key_slice);
 }
 
-Status WriteBatchBase::Merge(ColumnFamilyHandle* column_family,
-                             const SliceParts& key, const SliceParts& value) {
-  std::string key_buf, value_buf;
-  Slice key_slice(key, &key_buf);
-  Slice value_slice(value, &value_buf);
-
-  return Merge(column_family, key_slice, value_slice);
-}
-
-Status WriteBatchBase::Merge(const SliceParts& key, const SliceParts& value) {
-  std::string key_buf, value_buf;
-  Slice key_slice(key, &key_buf);
-  Slice value_slice(value, &value_buf);
-
-  return Merge(key_slice, value_slice);
-}
 }  // namespace db
 }  // namespace smartengine

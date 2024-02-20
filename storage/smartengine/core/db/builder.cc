@@ -18,7 +18,6 @@
 #include "compact/compaction_iterator.h"
 #include "db/dbformat.h"
 #include "db/internal_stats.h"
-#include "db/merge_helper.h"
 #include "db/table_cache.h"
 #include "db/version_edit.h"
 #include "monitoring/iostats_context_imp.h"
@@ -111,13 +110,22 @@ int BuildTable(
         compression_opts, output_layer_position, nullptr, false, is_flush);
     storage::ChangeInfo change_info;
     memory::ArenaAllocator arena;
-    CompactionIterator comp_iter(
-        iter, internal_comparator.user_comparator(), nullptr, kMaxSequenceNumber,
-        &snapshots, earliest_write_conflict_snapshot, nullptr,
-        true /* internal key corruption is not ok */,
-        change_info, arena, nullptr, nullptr, nullptr, nullptr,
-        nullptr, cancel_type, nullptr,
-        mutable_cf_options.background_disable_merge);
+    CompactionIterator comp_iter(iter,
+                                 internal_comparator.user_comparator(),
+                                 kMaxSequenceNumber,
+                                 &snapshots,
+                                 earliest_write_conflict_snapshot,
+                                 nullptr,
+                                 true /* internal key corruption is not ok */,
+                                 change_info,
+                                 arena,
+                                 nullptr,
+                                 nullptr,
+                                 nullptr,
+                                 nullptr,
+                                 cancel_type,
+                                 nullptr,
+                                 mutable_cf_options.background_disable_merge);
     comp_iter.SeekToFirst();
     while (SUCC(ret) && comp_iter.Valid()) {
       const Slice& key = comp_iter.key();

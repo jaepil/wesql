@@ -308,7 +308,6 @@ Status TableCache::Get(const ReadOptions& options,
   if (s.ok()) {
     s = t->Get(options, k, get_context, skip_filters);
     STRESS_CHECK_APPEND(GET_FROM_EXTENT, s.code());
-    get_context->SetReplayLog(nullptr);
   } else if (options.read_tier == kBlockCacheTier && s.IsIncomplete()) {
     // Couldn't find Table in cache but treat as kFound if no_io set
     get_context->MarkKeyMayExist();

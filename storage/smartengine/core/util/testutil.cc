@@ -235,10 +235,6 @@ BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
   return opt;
 }
 
-MergeOperator* RandomMergeOperator(Random* rnd) {
-  return new ChanglingMergeOperator(RandomName(rnd, 10));
-}
-
 CompactionFilter* RandomCompactionFilter(Random* rnd) {
   return new ChanglingCompactionFilter(RandomName(rnd, 10));
 }
@@ -348,7 +344,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
   // size_t options
   cf_opt->arena_block_size = rnd->Uniform(10000);
   cf_opt->inplace_update_num_locks = rnd->Uniform(10000);
-  cf_opt->max_successive_merges = rnd->Uniform(10000);
   cf_opt->memtable_huge_page_size = rnd->Uniform(10000);
   cf_opt->write_buffer_size = rnd->Uniform(10000);
 
@@ -368,7 +363,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
 
   // pointer typed options
   cf_opt->prefix_extractor.reset(RandomSliceTransform(rnd));
-  cf_opt->merge_operator.reset(RandomMergeOperator(rnd));
   if (cf_opt->compaction_filter) {
     delete cf_opt->compaction_filter;
   }

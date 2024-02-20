@@ -194,11 +194,6 @@ class DBImpl : public DB {
                              ColumnFamilyHandle* column_family,
                              const common::Slice& key,
                              const common::Slice& value) override;
-  using DB::Merge;
-  virtual common::Status Merge(const common::WriteOptions& options,
-                               ColumnFamilyHandle* column_family,
-                               const common::Slice& key,
-                               const common::Slice& value) override;
   using DB::Delete;
   virtual common::Status Delete(const common::WriteOptions& options,
                                 ColumnFamilyHandle* column_family,

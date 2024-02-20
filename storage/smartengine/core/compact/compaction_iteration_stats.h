@@ -21,8 +21,6 @@ struct CompactionIterationStats {
   uint64_t total_filter_time = 0;
 
   // Input statistics
-  // TODO(noetzli): The stats are incomplete. They are lacking everything
-  // consumed by MergeHelper.
   uint64_t num_input_records = 0;
   uint64_t num_input_deletion_records = 0;
   uint64_t num_input_corrupt_records = 0;

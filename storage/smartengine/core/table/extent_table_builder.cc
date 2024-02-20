@@ -28,7 +28,6 @@
 #include "smartengine/env.h"
 #include "smartengine/filter_policy.h"
 #include "smartengine/flush_block_policy.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/table.h"
 #include "smartengine/se_constants.h"
 
@@ -339,6 +338,7 @@ int ExtentBasedTableBuilder::init()
 int ExtentBasedTableBuilder::update_block_stats(const Slice& key,
                                                 const Slice& value,
                                                 const ParsedInternalKey &ikey) {
+  se_assert(kTypeMerge != ikey.type);
   block_stats_.data_size_ += key.size() + value.size();
   block_stats_.key_size_ += key.size();
   block_stats_.value_size_ += value.size();
@@ -361,9 +361,6 @@ int ExtentBasedTableBuilder::update_block_stats(const Slice& key,
       // We treat both kTypeDeletion and kTypeSingleDeletion as entry_deletes_.
       block_stats_.entry_deletes_ += 1;
       block_stats_.entry_single_deletes_ += 1;
-      break;
-    case kTypeMerge:
-      block_stats_.entry_merges_ += 1;
       break;
     default:
       block_stats_.entry_others_ += 1;
@@ -985,9 +982,8 @@ int ExtentBasedTableBuilder::BuildPropertyBlock(PropertyBlockBuilder& builder) {
   props.comparator_name = ioptions_.user_comparator != nullptr
                               ? ioptions_.user_comparator->Name()
                               : "nullptr";
-  props.merge_operator_name = ioptions_.merge_operator != nullptr
-                                  ? ioptions_.merge_operator->Name()
-                                  : "nullptr";
+  /**TODO: Zhao Dongsheng, remove the merge_operator_name?*/
+  props.merge_operator_name = "nullptr";
   props.compression_name = CompressionTypeToString(compression_type_);
   props.prefix_extractor_name = ioptions_.prefix_extractor != nullptr
                                     ? ioptions_.prefix_extractor->Name()

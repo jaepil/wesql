@@ -289,9 +289,8 @@ class DB {
   //
   // This feature is currently an experimental performance optimization
   // for a very specific workload.  It is up to the caller to ensure that
-  // SingleDelete is only used for a key that is not deleted using Delete() or
-  // written using Merge().  Mixing SingleDelete operations with Deletes and
-  // Merges can result in undefined behavior.
+  // SingleDelete is only used for a key that is not deleted using Delete().
+  // Mixing SingleDelete operations with Deletes can result in undefined behavior.
   //
   // Note: consider setting options.sync = true.
   virtual common::Status SingleDelete(const common::WriteOptions& options,
@@ -321,20 +320,6 @@ class DB {
                                      ColumnFamilyHandle* column_family,
                                      const common::Slice& begin_key,
                                      const common::Slice& end_key);
-
-  // Merge the database entry for "key" with "value".  Returns OK on success,
-  // and a non-OK status on error. The semantics of this operation is
-  // determined by the user provided merge_operator when opening DB.
-  // Note: consider setting options.sync = true.
-  virtual common::Status Merge(const common::WriteOptions& options,
-                               ColumnFamilyHandle* column_family,
-                               const common::Slice& key,
-                               const common::Slice& value) = 0;
-  virtual common::Status Merge(const common::WriteOptions& options,
-                               const common::Slice& key,
-                               const common::Slice& value) {
-    return Merge(options, DefaultColumnFamily(), key, value);
-  }
 
   // Apply the specified updates to the database.
   // If `updates` contains no update, WAL will still be synced if

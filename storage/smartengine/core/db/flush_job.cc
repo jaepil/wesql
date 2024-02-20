@@ -29,7 +29,6 @@
 #include "db/log_writer.h"
 #include "db/memtable.h"
 #include "db/memtable_list.h"
-#include "db/merge_context.h"
 #include "db/version_set.h"
 #include "logger/log_module.h"
 #include "monitoring/iostats_context_imp.h"

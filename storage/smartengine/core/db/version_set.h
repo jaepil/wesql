@@ -71,7 +71,6 @@ class Compaction;
 class LookupKey;
 class MemTable;
 class VersionSet;
-class MergeContext;
 class ColumnFamilySet;
 class TableCache;
 

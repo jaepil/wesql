@@ -30,12 +30,11 @@ Status InternalKeyPropertiesCollector::InternalAdd(const Slice& key,
     return Status::InvalidArgument("Invalid internal key");
   }
 
+  se_assert(ValueType::kTypeMerge != ikey.type);
   // Note: We count both, deletions and single deletions here.
   if (ikey.type == ValueType::kTypeDeletion ||
       ikey.type == ValueType::kTypeSingleDeletion) {
     ++deleted_keys_;
-  } else if (ikey.type == ValueType::kTypeMerge) {
-    ++merge_operands_;
   }
 
   return Status::OK();
@@ -78,6 +77,7 @@ UserCollectedProperties InternalKeyPropertiesCollector::GetReadableProperties()
 namespace {
 
 EntryType GetEntryType(ValueType value_type) {
+  se_assert(kTypeMerge != value_type);
   switch (value_type) {
     case kTypeValue:
       return kEntryPut;
@@ -85,8 +85,6 @@ EntryType GetEntryType(ValueType value_type) {
       return kEntryDelete;
     case kTypeSingleDeletion:
       return kEntrySingleDelete;
-    case kTypeMerge:
-      return kEntryMerge;
     default:
       return kEntryOther;
   }

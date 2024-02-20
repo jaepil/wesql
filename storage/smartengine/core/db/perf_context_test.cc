@@ -18,7 +18,6 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/testharness.h"
-#include "utilities/merge_operators.h"
 #include "smartengine/db.h"
 #include "smartengine/memtablerep.h"
 #include "smartengine/slice_transform.h"
@@ -630,38 +629,6 @@ TEST_F(PerfContextTest, TraceOutputTest) {
   smartengine::monitor::QueryPerfContext::opt_trace_sum_ = false;
 }
 
-TEST_F(PerfContextTest, DISABLED_MergeOperatorTime) {
-  DestroyDB(kDbName, Options());
-  DB* db;
-  Options options;
-  options.create_if_missing = true;
-  options.merge_operator = MergeOperators::CreateStringAppendOperator();
-  Status s = DB::Open(options, kDbName, &db);
-  std::unique_ptr<DB, memory::ptr_destruct_delete<DB>>db_ptr(db);
-  EXPECT_OK(s);
-
-  std::string val;
-  ASSERT_OK(db->Merge(WriteOptions(), "k1", "val1"));
-  ASSERT_OK(db->Merge(WriteOptions(), "k1", "val2"));
-  ASSERT_OK(db->Merge(WriteOptions(), "k1", "val3"));
-  ASSERT_OK(db->Merge(WriteOptions(), "k1", "val4"));
-
-  ASSERT_OK(db->Get(ReadOptions(), "k1", &val));
-  // TODO @zhencheng : use QUERY TRACE if merge is used again.
-  // EXPECT_GT(perf_context.merge_operator_time_nanos, 0);
-
-  ASSERT_OK(db->Flush(FlushOptions()));
-
-  ASSERT_OK(db->Get(ReadOptions(), "k1", &val));
-  // TODO @zhencheng : use QUERY TRACE if merge is used again.
-  // EXPECT_GT(perf_context.merge_operator_time_nanos, 0);
-
-  ASSERT_OK(db->CompactRange(CompactRangeOptions(), nullptr, nullptr));
-
-  ASSERT_OK(db->Get(ReadOptions(), "k1", &val));
-  // TODO @zhencheng : use QUERY TRACE if merge is used again.
-  // EXPECT_GT(perf_context.merge_operator_time_nanos, 0);
-}
 }
 }
 

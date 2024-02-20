@@ -54,12 +54,6 @@ class TransactionDBImpl : public util::TransactionDB {
                                 db::ColumnFamilyHandle* column_family,
                                 const common::Slice& key) override;
 
-  using smartengine::util::StackableDB::Merge;
-  virtual common::Status Merge(const common::WriteOptions& opts,
-                               db::ColumnFamilyHandle* column_family,
-                               const common::Slice& key,
-                               const common::Slice& value) override;
-
   using smartengine::util::StackableDB::Write;
   virtual common::Status Write(const common::WriteOptions& opts,
                                db::WriteBatch* updates) override;

@@ -118,14 +118,6 @@ class StackableDB : public db::DB {
     return db_->SingleDelete(wopts, column_family, key);
   }
 
-  using DB::Merge;
-  virtual common::Status Merge(const common::WriteOptions& options,
-                               ColumnFamilyHandle* column_family,
-                               const common::Slice& key,
-                               const common::Slice& value) override {
-    return db_->Merge(options, column_family, key, value);
-  }
-
   virtual common::Status Write(const common::WriteOptions& opts,
                                db::WriteBatch* updates) override {
     return db_->Write(opts, updates);

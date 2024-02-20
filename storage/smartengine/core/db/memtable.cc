@@ -16,8 +16,6 @@
 #include <memory>
 
 #include "db/dbformat.h"
-#include "db/merge_context.h"
-#include "db/merge_helper.h"
 #include "db/pinned_iterators_manager.h"
 #include "monitoring/statistics.h"
 #include "port/port.h"
@@ -36,7 +34,6 @@
 #include "smartengine/comparator.h"
 #include "smartengine/env.h"
 #include "smartengine/iterator.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/slice_transform.h"
 #include "smartengine/write_buffer_manager.h"
 #include "storage/storage_manager.h"
@@ -89,9 +86,8 @@ MemTableOptions::MemTableOptions(const ImmutableCFOptions& ioptions,
       inplace_update_support(ioptions.inplace_update_support),
       inplace_update_num_locks(mutable_cf_options.inplace_update_num_locks),
       inplace_callback(ioptions.inplace_callback),
-      max_successive_merges(mutable_cf_options.max_successive_merges),
-      statistics(ioptions.statistics),
-      merge_operator(ioptions.merge_operator) {}
+      statistics(ioptions.statistics)
+{}
 
 MemTable::MemTable(const InternalKeyComparator& cmp,
                    const ImmutableCFOptions& ioptions,
@@ -733,12 +729,8 @@ struct Saver {
   Status* status;
   const LookupKey* key;
   bool* found_final_value;  // Is value set correctly? Used by KeyMayExist
-  bool* merge_in_progress;
   std::string* value;
   SequenceNumber seq;
-  const MergeOperator* merge_operator;
-  // the merge operations encountered;
-  MergeContext* merge_context;
   RangeDelAggregator* range_del_agg;
   MemTable* mem;
   Statistics* statistics;
@@ -749,11 +741,8 @@ struct Saver {
 
 static bool SaveValue(void* arg, const char* entry) {
   Saver* s = reinterpret_cast<Saver*>(arg);
-  MergeContext* merge_context = s->merge_context;
+  se_assert(nullptr != s);
   RangeDelAggregator* range_del_agg = s->range_del_agg;
-  const MergeOperator* merge_operator = s->merge_operator;
-
-  assert(s != nullptr && merge_context != nullptr && range_del_agg != nullptr);
 
   // entry format is:
   //    klength  varint32
@@ -773,7 +762,8 @@ static bool SaveValue(void* arg, const char* entry) {
     ValueType type;
     UnPackSequenceAndType(tag, &s->seq, &type);
 
-    if ((type == kTypeValue || type == kTypeMerge) &&
+    se_assert(kTypeMerge != type);
+    if ((type == kTypeValue) &&
         range_del_agg->ShouldDelete(Slice(key_ptr, key_length))) {
       type = kTypeRangeDeletion;
     }
@@ -784,11 +774,7 @@ static bool SaveValue(void* arg, const char* entry) {
         }
         Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
         *(s->status) = Status::OK();
-        if (*(s->merge_in_progress)) {
-          *(s->status) = MergeHelper::TimedFullMerge(
-              merge_operator, s->key->user_key(), &v,
-              merge_context->GetOperands(), s->value, s->statistics, s->env_);
-        } else if (s->value != nullptr) {
+        if (nullptr != s->value) {
           s->value->assign(v.data(), v.size());
         }
         if (s->inplace_update_support) {
@@ -800,47 +786,27 @@ static bool SaveValue(void* arg, const char* entry) {
       case kTypeDeletion:
       case kTypeSingleDeletion:
       case kTypeRangeDeletion: {
-        if (*(s->merge_in_progress)) {
-          *(s->status) = MergeHelper::TimedFullMerge(
-              merge_operator, s->key->user_key(), nullptr,
-              merge_context->GetOperands(), s->value, s->statistics, s->env_);
-        } else {
-          *(s->status) = Status::NotFound();
-        }
+        *(s->status) = Status::NotFound();
         *(s->found_final_value) = true;
         return false;
       }
-      case kTypeMerge: {
-        if (!merge_operator) {
-          *(s->status) = Status::InvalidArgument(
-              "merge_operator is not properly initialized.");
-          // Normally we continue the loop (return true) when we see a merge
-          // operand.  But in case of an error, we should stop the loop
-          // immediately and pretend we have found the value to stop further
-          // seek.  Otherwise, the later call will override this error status.
-          *(s->found_final_value) = true;
-          return false;
-        }
-        Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
-        *(s->merge_in_progress) = true;
-        merge_context->PushOperand(
-            v, s->inplace_update_support == false /* operand_pinned */);
-        return true;
-      }
       default:
-        assert(false);
+        se_assert(false);
         return true;
     }
   }
 
-  // s->state could be Corrupt, merge or notfound
+  // s->state could be Corrupt or Notfound
   return false;
 }
 
-bool MemTable::Get(LookupKey& key, std::string* value, Status* s,
-                   MergeContext* merge_context,
-                   RangeDelAggregator* range_del_agg, SequenceNumber* seq,
-                   const ReadOptions& read_opts) {
+bool MemTable::Get(LookupKey& key,
+                   std::string* value,
+                   Status* s,
+                   RangeDelAggregator* range_del_agg,
+                   SequenceNumber* seq,
+                   const ReadOptions& read_opts)
+{
   // The sequence number is updated synchronously in version_set.h
   if (IsEmpty()) {
     // Avoiding recording stats for speed.
@@ -850,7 +816,6 @@ bool MemTable::Get(LookupKey& key, std::string* value, Status* s,
 
   Slice user_key = key.user_key();
   bool found_final_value = false;
-  bool merge_in_progress = s->IsMergeInProgress();
 
   bool may_contain = false;
 
@@ -882,14 +847,11 @@ bool MemTable::Get(LookupKey& key, std::string* value, Status* s,
     Saver saver;
     saver.status = s;
     saver.found_final_value = &found_final_value;
-    saver.merge_in_progress = &merge_in_progress;
     saver.key = &key;
     saver.value = value;
     saver.seq = kMaxSequenceNumber;
     saver.mem = this;
-    saver.merge_context = merge_context;
     saver.range_del_agg = range_del_agg;
-    saver.merge_operator = moptions_.merge_operator;
     saver.inplace_update_support = moptions_.inplace_update_support;
     saver.statistics = moptions_.statistics;
     saver.env_ = env_;
@@ -898,10 +860,6 @@ bool MemTable::Get(LookupKey& key, std::string* value, Status* s,
     *seq = saver.seq;
   }
 
-  // No change to value, since we have not yet found a Put/Delete
-  if (!found_final_value && merge_in_progress) {
-    *s = Status::MergeInProgress();
-  }
   return found_final_value;
 }
 
@@ -1044,41 +1002,6 @@ void MemTable::update_delete_trigger() {
        moptions_.flush_delete_percent <= num_deletes() * 100)) {
     delete_triggered_ = true;
   }
-}
-
-size_t MemTable::CountSuccessiveMergeEntries(const LookupKey& key) {
-  Slice memkey = key.memtable_key();
-
-  // A total ordered iterator is costly for some memtablerep (prefix aware
-  // reps). By passing in the user key, we allow efficient iterator creation.
-  // The iterator only needs to be ordered within the same user key.
-  std::unique_ptr<MemTableRep::Iterator> iter(
-      table_->GetDynamicPrefixIterator());
-  iter->Seek(key.internal_key(), memkey.data());
-
-  size_t num_successive_merges = 0;
-
-  for (; iter->Valid(); iter->Next()) {
-    const char* entry = iter->key();
-    uint32_t key_length = 0;
-    const char* iter_key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
-    if (!comparator_.comparator.user_comparator()->Equal(
-            Slice(iter_key_ptr, key_length - 8), key.user_key())) {
-      break;
-    }
-
-    const uint64_t tag = DecodeFixed64(iter_key_ptr + key_length - 8);
-    ValueType type;
-    uint64_t unused;
-    UnPackSequenceAndType(tag, &unused, &type);
-    if (type != kTypeMerge) {
-      break;
-    }
-
-    ++num_successive_merges;
-  }
-
-  return num_successive_merges;
 }
 
 void MemTable::RefLogContainingPrepSection(uint64_t log) {

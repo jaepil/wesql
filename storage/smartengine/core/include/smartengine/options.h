@@ -41,7 +41,6 @@ class MemTableRepFactory;
 
 namespace db {
 class InternalKeyComparator;
-class MergeOperator;
 class Snapshot;
 class WalFilter;
 }
@@ -153,18 +152,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // here has the same name and orders keys *exactly* the same as the
   // comparator provided to previous open calls on the same DB.
   const util::Comparator* comparator = util::BytewiseComparator();
-
-  // REQUIRES: The client must provide a merge operator if Merge operation
-  // needs to be accessed. Calling Merge on a DB without a merge operator
-  // would result in Status::NotSupported. The client must ensure that the
-  // merge operator supplied here has the same name and *exactly* the same
-  // semantics as the merge operator provided to previous open calls on
-  // the same DB. The only exception is reserved for upgrade, where a DB
-  // previously without a merge operator is introduced to Merge operation
-  // for the first time. It's necessary to specify a merge operator when
-  // openning the DB in this case.
-  // Default: nullptr
-  std::shared_ptr<db::MergeOperator> merge_operator = nullptr;
 
   // A single CompactionFilter instance to call into during compaction.
   // Allows an application to modify/delete a key-value during background
@@ -429,7 +416,7 @@ struct DBOptions {
   bool error_if_exists = false;
 
   // If true, RocksDB will aggressively check consistency of the data.
-  // Also, if any of the  writes to the database fails (Put, Delete, Merge,
+  // Also, if any of the  writes to the database fails (Put, Delete,
   // Write), the database will switch to read-only mode and fail all other
   // Write operations.
   // In most cases you want this to be set to true.

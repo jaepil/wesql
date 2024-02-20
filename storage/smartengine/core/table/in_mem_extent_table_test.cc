@@ -41,9 +41,14 @@ static std::string GetFromFile(TableReader* table_reader,
                                const std::string& key, ReadOptions& ro,
                                const Comparator* comparator) {
   PinnableSlice value;
-  GetContext get_context(comparator, nullptr, nullptr,
-                         GetContext::kNotFound, Slice(key), &value, nullptr,
-                         nullptr, nullptr, nullptr);
+  GetContext get_context(comparator,
+                         GetContext::kNotFound,
+                         Slice(key),
+                         &value,
+                         nullptr,
+                         nullptr,
+                         nullptr,
+                         nullptr);
   LookupKey lk{key, kMaxSequenceNumber};
   table_reader->Get(ro, lk.internal_key(), &get_context);
   return std::string(value.data(), value.size());

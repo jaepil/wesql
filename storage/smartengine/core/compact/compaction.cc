@@ -17,7 +17,6 @@
 #include "compaction.h"
 #include "compact/new_compaction_iterator.h"
 #include "db/builder.h"
-#include "db/merge_helper.h"
 #include "db/table_cache.h"
 #include "db/table_properties_collector.h"
 #include "db/version_edit.h"

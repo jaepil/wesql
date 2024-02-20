@@ -138,7 +138,7 @@ Status TransactionUtil::CheckKey(DBImpl* db_impl, SuperVersion* sv,
     Status s = db_impl->GetLatestSequenceForKey(sv, key, !need_to_read_sst,
                                                 &seq, &found_record_for_key);
 
-    if (!(s.ok() || s.IsNotFound() || s.IsMergeInProgress())) {
+    if (!(s.ok() || s.IsNotFound())) {
       result = s;
     } else if (found_record_for_key && (seq > key_seq)) {
       // Write Conflict

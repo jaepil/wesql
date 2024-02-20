@@ -51,7 +51,6 @@
 #include "util/transaction_test_util.h"
 #include "util/xxhash.h"
 #include "memory/mod_info.h"
-#include "utilities/merge_operators.h"
 #include "util/lock_free_fixed_queue.h"
 #include "smartengine/cache.h"
 #include "smartengine/db.h"
@@ -999,10 +998,6 @@ DEFINE_int32(key_id_group_size, 32,
              "Size of group in which all the keys share the same key id "
              "but have variable-length suffixes of zeros (used in Stress only).");
 
-DEFINE_int32(max_successive_merges, 0,
-             "Maximum number of successive merge"
-             " operations on a key in the memtable");
-
 static bool ValidatePrefixSize(const char* flagname, int32_t value) {
   if (value < 0 || value >= 2000000000) {
     fprintf(stderr, "Invalid value for --%s: %d. 0<= PrefixSize <=2000000000\n",
@@ -1087,11 +1082,6 @@ DEFINE_bool(use_block_based_filter, false,
             "if use kBlockBasedFilter "
             "instead of kFullFilter for filter block. "
             "This is valid if only we use BlockTable");
-DEFINE_string(merge_operator, "",
-              "The merge operator to use with the database."
-              "If a new merge operator is specified, be sure to use fresh"
-              " database The possible merge operators are defined in"
-              " utilities/merge_operators.h");
 DEFINE_int32(skip_list_lookahead, 0,
              "Used with skip_list memtablerep; try "
              "linear search first for this many steps from the previous "
@@ -3029,24 +3019,10 @@ class Benchmark {
         method = &Benchmark::ReadWhileMerging;
       } else if (name == "readrandomwriterandom") {
         method = &Benchmark::ReadRandomWriteRandom;
-      } else if (name == "readrandommergerandom") {
-        if (FLAGS_merge_operator.empty()) {
-          fprintf(stdout, "%-12s : skipped (--merge_operator is unknown)\n",
-                  name.c_str());
-          exit(1);
-        }
-        method = &Benchmark::ReadRandomMergeRandom;
       } else if (name == "updaterandom") {
         method = &Benchmark::UpdateRandom;
       } else if (name == "appendrandom") {
         method = &Benchmark::AppendRandom;
-      } else if (name == "mergerandom") {
-        if (FLAGS_merge_operator.empty()) {
-          fprintf(stdout, "%-12s : skipped (--merge_operator is unknown)\n",
-                  name.c_str());
-          exit(1);
-        }
-        method = &Benchmark::MergeRandom;
       } else if (name == "randomwithverify") {
         method = &Benchmark::RandomWithVerify;
       } else if (name == "fillseekseq") {
@@ -3673,15 +3649,6 @@ class Benchmark {
     options.bytes_per_sync = FLAGS_bytes_per_sync;
     options.wal_bytes_per_sync = FLAGS_wal_bytes_per_sync;
 
-    // merge operator options
-    options.merge_operator =
-        MergeOperators::CreateFromStringId(FLAGS_merge_operator);
-    if (options.merge_operator == nullptr && !FLAGS_merge_operator.empty()) {
-      fprintf(stderr, "invalid merge operator: %s\n",
-              FLAGS_merge_operator.c_str());
-      exit(1);
-    }
-    options.max_successive_merges = FLAGS_max_successive_merges;
     options.report_bg_io_stats = FLAGS_report_bg_io_stats;
 
     // set universal style compaction configurations, if applicable
@@ -4897,7 +4864,7 @@ class Benchmark {
       if (write_merge == kWrite) {
         s = db->Put(write_options_, key, gen.Generate(value_size_));
       } else {
-        s = db->Merge(write_options_, key, gen.Generate(value_size_));
+        se_assert(false);
       }
       written++;
 
@@ -5221,102 +5188,6 @@ class Benchmark {
     snprintf(msg, sizeof(msg), "( updates:%" PRIu64 " found:%" PRIu64 ")",
              readwrites_, found);
     thread->stats.AddBytes(bytes);
-    thread->stats.AddMessage(msg);
-  }
-
-  // Read-modify-write for random keys (using MergeOperator)
-  // The merge operator to use should be defined by FLAGS_merge_operator
-  // Adjust FLAGS_value_size so that the keys are reasonable for this operator
-  // Assumes that the merge operator is non-null (i.e.: is well-defined)
-  //
-  // For example, use FLAGS_merge_operator="uint64add" and FLAGS_value_size=8
-  // to simulate random additions over 64-bit integers using merge.
-  //
-  // The number of merges on the same key can be controlled by adjusting
-  // FLAGS_merge_keys.
-  void MergeRandom(ThreadState* thread) {
-    RandomGenerator gen;
-    int64_t bytes = 0;
-    std::unique_ptr<const char[]> key_guard;
-    Slice key = AllocateKey(&key_guard);
-    // The number of iterations is the larger of read_ or write_
-    Duration duration(FLAGS_duration, readwrites_);
-    while (!duration.Done(1)) {
-      DB* db = SelectDB(thread);
-      GenerateKeyFromInt(thread->rand.Next() % merge_keys_, merge_keys_, &key);
-
-      Status s = db->Merge(write_options_, key, gen.Generate(value_size_));
-
-      if (!s.ok()) {
-        fprintf(stderr, "merge error: %s\n", s.ToString().c_str());
-        exit(1);
-      }
-      bytes += key.size() + value_size_;
-      thread->stats.FinishedOps(nullptr, db, 1, kMerge);
-    }
-
-    // Print some statistics
-    char msg[100];
-    snprintf(msg, sizeof(msg), "( updates:%" PRIu64 ")", readwrites_);
-    thread->stats.AddBytes(bytes);
-    thread->stats.AddMessage(msg);
-  }
-
-  // Read and merge random keys. The amount of reads and merges are controlled
-  // by adjusting FLAGS_num and FLAGS_mergereadpercent. The number of distinct
-  // keys (and thus also the number of reads and merges on the same key) can be
-  // adjusted with FLAGS_merge_keys.
-  //
-  // As with MergeRandom, the merge operator to use should be defined by
-  // FLAGS_merge_operator.
-  void ReadRandomMergeRandom(ThreadState* thread) {
-    ReadOptions options(FLAGS_verify_checksum, true);
-    RandomGenerator gen;
-    std::string value;
-    int64_t num_hits = 0;
-    int64_t num_gets = 0;
-    int64_t num_merges = 0;
-    size_t max_length = 0;
-
-    std::unique_ptr<const char[]> key_guard;
-    Slice key = AllocateKey(&key_guard);
-    // the number of iterations is the larger of read_ or write_
-    Duration duration(FLAGS_duration, readwrites_);
-    while (!duration.Done(1)) {
-      DB* db = SelectDB(thread);
-      GenerateKeyFromInt(thread->rand.Next() % merge_keys_, merge_keys_, &key);
-
-      bool do_merge = int(thread->rand.Next() % 100) < FLAGS_mergereadpercent;
-
-      if (do_merge) {
-        Status s = db->Merge(write_options_, key, gen.Generate(value_size_));
-        if (!s.ok()) {
-          fprintf(stderr, "merge error: %s\n", s.ToString().c_str());
-          exit(1);
-        }
-        num_merges++;
-        thread->stats.FinishedOps(nullptr, db, 1, kMerge);
-      } else {
-        Status s = db->Get(options, key, &value);
-        if (value.length() > max_length) max_length = value.length();
-
-        if (!s.ok() && !s.IsNotFound()) {
-          fprintf(stderr, "get error: %s\n", s.ToString().c_str());
-          // we continue after error rather than exiting so that we can
-          // find more errors if any
-        } else if (!s.IsNotFound()) {
-          num_hits++;
-        }
-        num_gets++;
-        thread->stats.FinishedOps(nullptr, db, 1, kRead);
-      }
-    }
-
-    char msg[100];
-    snprintf(msg, sizeof(msg),
-             "(reads:%" PRIu64 " merges:%" PRIu64 " total:%" PRIu64
-             " hits:%" PRIu64 " maxlength:%" ROCKSDB_PRIszt ")",
-             num_gets, num_merges, readwrites_, num_hits, max_length);
     thread->stats.AddMessage(msg);
   }
 

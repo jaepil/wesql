@@ -14,8 +14,6 @@
 
 #include "db/column_family.h"
 #include "db/db_impl.h"
-#include "db/merge_context.h"
-#include "db/merge_helper.h"
 #include "memtable/skiplist.h"
 #include "options/db_options.h"
 #include "util/arena.h"
@@ -105,8 +103,7 @@ class WBWIIteratorImpl : public WBWIIterator {
         iter_entry->offset, &ret.type, &ret.key, &ret.value, &blob, &xid);
     assert(s.ok());
     assert(ret.type == kPutRecord || ret.type == kDeleteRecord ||
-           ret.type == kSingleDeleteRecord || ret.type == kDeleteRangeRecord ||
-           ret.type == kMergeRecord);
+           ret.type == kSingleDeleteRecord || ret.type == kDeleteRangeRecord);
     return ret;
   }
 
@@ -281,8 +278,6 @@ Status WriteBatchWithIndex::Rep::ReBuildIndex() {
       case kTypeDeletion:
       case kTypeColumnFamilySingleDeletion:
       case kTypeSingleDeletion:
-      case kTypeColumnFamilyMerge:
-      case kTypeMerge:
         found++;
         if (!UpdateExistingEntryWithCfId(column_family_id, key)) {
           AddNewEntry(column_family_id);
@@ -296,6 +291,7 @@ Status WriteBatchWithIndex::Rep::ReBuildIndex() {
       case kTypeNoop:
         break;
       default:
+        se_assert(false);
         return Status::Corruption("unknown WriteBatch tag");
     }
   }
@@ -447,25 +443,6 @@ Status WriteBatchWithIndex::DeleteRange(const Slice& begin_key,
   return s;
 }
 
-Status WriteBatchWithIndex::Merge(ColumnFamilyHandle* column_family,
-                                  const Slice& key, const Slice& value) {
-  rep->SetLastEntryOffset();
-  auto s = rep->write_batch.Merge(column_family, key, value);
-  if (s.ok()) {
-    rep->AddOrUpdateIndex(column_family, key);
-  }
-  return s;
-}
-
-Status WriteBatchWithIndex::Merge(const Slice& key, const Slice& value) {
-  rep->SetLastEntryOffset();
-  auto s = rep->write_batch.Merge(key, value);
-  if (s.ok()) {
-    rep->AddOrUpdateIndex(key);
-  }
-  return s;
-}
-
 Status WriteBatchWithIndex::PutLogData(const Slice& blob) {
   return rep->write_batch.PutLogData(blob);
 }
@@ -476,13 +453,18 @@ Status WriteBatchWithIndex::GetFromBatch(ColumnFamilyHandle* column_family,
                                          const DBOptions& options,
                                          const Slice& key, std::string* value) {
   Status s;
-  db::MergeContext merge_context;
   const ImmutableDBOptions immuable_db_options(options);
 
   WriteBatchWithIndexInternal::Result result =
       WriteBatchWithIndexInternal::GetFromBatch(
-          immuable_db_options, this, column_family, key, &merge_context,
-          &rep->comparator, value, rep->overwrite_key, &s);
+          immuable_db_options,
+          this,
+          column_family,
+          key,
+          &rep->comparator,
+          value,
+          rep->overwrite_key,
+          &s);
 
   switch (result) {
     case WriteBatchWithIndexInternal::Result::kFound:
@@ -493,11 +475,8 @@ Status WriteBatchWithIndex::GetFromBatch(ColumnFamilyHandle* column_family,
     case WriteBatchWithIndexInternal::Result::kNotFound:
       s = Status::NotFound();
       break;
-    case WriteBatchWithIndexInternal::Result::kMergeInProgress:
-      s = Status::MergeInProgress();
-      break;
     default:
-      assert(false);
+      se_assert(false);
   }
 
   return s;
@@ -518,15 +497,20 @@ Status WriteBatchWithIndex::GetFromBatchAndDB(DB* db,
                                               std::string* value) {
   QUERY_TRACE_SCOPE(smartengine::monitor::TracePoint::DB_WRITE_BATCH_GET);
   Status s;
-  db::MergeContext merge_context;
   const ImmutableDBOptions& immuable_db_options =
       reinterpret_cast<DBImpl*>(db)->immutable_db_options();
 
   std::string batch_value;
   WriteBatchWithIndexInternal::Result result =
       WriteBatchWithIndexInternal::GetFromBatch(
-          immuable_db_options, this, column_family, key, &merge_context,
-          &rep->comparator, &batch_value, rep->overwrite_key, &s);
+          immuable_db_options,
+          this,
+          column_family,
+          key,
+          &rep->comparator,
+          &batch_value,
+          rep->overwrite_key,
+          &s);
 
   if (result == WriteBatchWithIndexInternal::Result::kFound) {
     value->assign(batch_value.data(), batch_value.size());
@@ -538,46 +522,11 @@ Status WriteBatchWithIndex::GetFromBatchAndDB(DB* db,
   if (result == WriteBatchWithIndexInternal::Result::kError) {
     return s;
   }
-  if (result == WriteBatchWithIndexInternal::Result::kMergeInProgress &&
-      rep->overwrite_key == true) {
-    // Since we've overwritten keys, we do not know what other operations are
-    // in this batch for this key, so we cannot do a Merge to compute the
-    // result.  Instead, we will simply return MergeInProgress.
-    return Status::MergeInProgress();
-  }
 
-  assert(result == WriteBatchWithIndexInternal::Result::kMergeInProgress ||
-         result == WriteBatchWithIndexInternal::Result::kNotFound);
+  assert(WriteBatchWithIndexInternal::Result::kNotFound == result);
 
   // Did not find key in batch OR could not resolve Merges.  Try DB.
   s = db->Get(read_options, column_family, key, value);
-
-  if (s.ok() || s.IsNotFound()) {  // DB Get Succeeded
-    if (result == WriteBatchWithIndexInternal::Result::kMergeInProgress) {
-      // Merge result from DB with merges in Batch
-      auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-      const MergeOperator* merge_operator =
-          cfh->cfd()->ioptions()->merge_operator;
-      Statistics* statistics = immuable_db_options.statistics.get();
-      Env* env = immuable_db_options.env;
-
-      Slice db_slice(*value);
-      Slice* merge_data;
-      if (s.ok()) {
-        merge_data = &db_slice;
-      } else {  // Key not present in db (s.IsNotFound())
-        merge_data = nullptr;
-      }
-
-      if (merge_operator) {
-        s = MergeHelper::TimedFullMerge(merge_operator, key, merge_data,
-                                        merge_context.GetOperands(), value,
-                                        statistics, env);
-      } else {
-        s = Status::InvalidArgument("Options::merge_operator must be set");
-      }
-    }
-  }
 
   return s;
 }

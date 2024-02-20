@@ -50,7 +50,6 @@ void TransactionBaseImpl::Clear() {
   tracked_keys_.clear();
   num_puts_ = 0;
   num_deletes_ = 0;
-  num_merges_ = 0;
 
   if (dbimpl_->allow_2pc()) {
     WriteBatchInternal::InsertNoop(write_batch_.GetWriteBatch());
@@ -128,7 +127,7 @@ void TransactionBaseImpl::SetSavePoint() {
     save_points_.reset(new std::stack<TransactionBaseImpl::SavePoint>());
   }
   save_points_->emplace(snapshot_, snapshot_needed_, snapshot_notifier_,
-                        num_puts_, num_deletes_, num_merges_);
+                        num_puts_, num_deletes_);
   write_batch_.SetSavePoint();
 }
 
@@ -141,7 +140,6 @@ Status TransactionBaseImpl::RollbackToSavePoint() {
     snapshot_notifier_ = save_point.snapshot_notifier_;
     num_puts_ = save_point.num_puts_;
     num_deletes_ = save_point.num_deletes_;
-    num_merges_ = save_point.num_merges_;
 
     // Rollback batch
     Status s = write_batch_.RollbackToSavePoint();
@@ -298,21 +296,6 @@ Status TransactionBaseImpl::Put(ColumnFamilyHandle* column_family,
   return s;
 }
 
-Status TransactionBaseImpl::Merge(ColumnFamilyHandle* column_family,
-                                  const Slice& key, const Slice& value) {
-  Status s =
-      TryLock(column_family, key, false /* read_only */, true /* exclusive */);
-
-  if (s.ok()) {
-    s = GetBatchForWrite()->Merge(column_family, key, value);
-    if (s.ok()) {
-      num_merges_++;
-    }
-  }
-
-  return s;
-}
-
 Status TransactionBaseImpl::Delete(ColumnFamilyHandle* column_family,
                                    const Slice& key) {
   Status s =
@@ -404,22 +387,6 @@ Status TransactionBaseImpl::PutUntracked(ColumnFamilyHandle* column_family,
   return s;
 }
 
-Status TransactionBaseImpl::MergeUntracked(ColumnFamilyHandle* column_family,
-                                           const Slice& key,
-                                           const Slice& value) {
-  Status s = TryLock(column_family, key, false /* read_only */,
-                     true /* exclusive */, true /* untracked */);
-
-  if (s.ok()) {
-    s = GetBatchForWrite()->Merge(column_family, key, value);
-    if (s.ok()) {
-      num_merges_++;
-    }
-  }
-
-  return s;
-}
-
 Status TransactionBaseImpl::DeleteUntracked(ColumnFamilyHandle* column_family,
                                             const Slice& key) {
   Status s = TryLock(column_family, key, false /* read_only */,
@@ -465,8 +432,6 @@ uint64_t TransactionBaseImpl::GetElapsedTime() const {
 uint64_t TransactionBaseImpl::GetNumPuts() const { return num_puts_; }
 
 uint64_t TransactionBaseImpl::GetNumDeletes() const { return num_deletes_; }
-
-uint64_t TransactionBaseImpl::GetNumMerges() const { return num_merges_; }
 
 uint64_t TransactionBaseImpl::GetNumKeys() const {
   uint64_t count = 0;
@@ -554,7 +519,7 @@ TransactionBaseImpl::GetTrackedKeysSinceSavePoint() {
   return nullptr;
 }
 
-// Gets the write batch that should be used for Put/Merge/Deletes.
+// Gets the write batch that should be used for Put/Deletes.
 //
 // Returns either a WriteBatch or WriteBatchWithIndex depending on whether
 // DisableIndexing() has been called.
@@ -657,10 +622,6 @@ Status TransactionBaseImpl::RebuildFromWriteBatch(WriteBatch* src_batch) {
 
     Status SingleDeleteCF(uint32_t cf, const Slice& key) override {
       return txn_->SingleDelete(GetColumnFamilyHandle(cf), key);
-    }
-
-    Status MergeCF(uint32_t cf, const Slice& key, const Slice& val) override {
-      return txn_->Merge(GetColumnFamilyHandle(cf), key, val);
     }
 
     // this is used for reconstructing prepared transactions upon

@@ -91,9 +91,6 @@ class HashCuckooRep : public MemTableRep {
     is_nearly_full_ = false;
   }
 
-  // return false, indicating HashCuckooRep does not support merge operator.
-  virtual bool IsMergeOperatorSupported() const override { return false; }
-
   // return false, indicating HashCuckooRep does not support snapshot.
   virtual bool IsSnapshotSupported() const override { return false; }
 

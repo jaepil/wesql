@@ -2204,13 +2204,6 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
       if (!sub_table->mem()->IsSnapshotSupported()) {
         impl->is_snapshot_supported_ = false;
       }
-      if (sub_table->ioptions()->merge_operator != nullptr &&
-          !sub_table->mem()->IsMergeOperatorSupported()) {
-        s = Status::InvalidArgument(
-            "The memtable of sub table(%s) does not support merge operator "
-            "its options.merge_operator is non-null",
-            sub_table->GetName().c_str());
-      }
       if (!s.ok()) {
         break;
       }

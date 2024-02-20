@@ -30,7 +30,6 @@
 #include "smartengine/comparator.h"
 #include "smartengine/env.h"
 #include "smartengine/memtablerep.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/slice.h"
 #include "smartengine/slice_transform.h"
 #include "smartengine/sst_file_manager.h"
@@ -91,7 +90,6 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       memtable_factory(options.memtable_factory),
       table_properties_collector_factories(
           options.table_properties_collector_factories),
-      max_successive_merges(options.max_successive_merges),
       optimize_filters_for_hits(options.optimize_filters_for_hits),
       paranoid_file_checks(options.paranoid_file_checks),
       force_consistency_checks(options.force_consistency_checks),
@@ -113,7 +111,6 @@ ColumnFamilyOptions::ColumnFamilyOptions()
 ColumnFamilyOptions::ColumnFamilyOptions(const Options& options)
     : AdvancedColumnFamilyOptions(options),
       comparator(options.comparator),
-      merge_operator(options.merge_operator),
       compaction_filter(options.compaction_filter),
       compaction_filter_factory(options.compaction_filter_factory),
       write_buffer_size(options.write_buffer_size),
@@ -254,8 +251,6 @@ void DBOptions::Dump() const {
 void ColumnFamilyOptions::Dump() const {
   __SE_LOG(INFO, "                       Options.comparator: %s",
                    comparator->Name());
-  __SE_LOG(INFO, "                   Options.merge_operator: %s",
-                   merge_operator ? merge_operator->Name() : "None");
   __SE_LOG(INFO, "                Options.compaction_filter: %s",
                    compaction_filter ? compaction_filter->Name() : "None");
   __SE_LOG(INFO, "        Options.compaction_filter_factory: %s",
@@ -424,10 +419,6 @@ void ColumnFamilyOptions::Dump() const {
                 memtable_huge_page_size);
   __SE_LOG(INFO, "                   Options.bloom_locality: %d",
                    bloom_locality);
-
-  __SE_LOG(
-      INFO, "            Options.max_successive_merges: %" ROCKSDB_PRIszt,
-      max_successive_merges);
   __SE_LOG(INFO, "        Options.optimize_filters_for_hits: %d",
                    optimize_filters_for_hits);
   __SE_LOG(INFO, "             Options.paranoid_file_checks: %d",

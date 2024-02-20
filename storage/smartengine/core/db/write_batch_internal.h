@@ -109,14 +109,6 @@ class WriteBatchInternal {
                                     const common::SliceParts& begin_key,
                                     const common::SliceParts& end_key);
 
-  static common::Status Merge(WriteBatch* batch, uint32_t column_family_id,
-                              const common::Slice& key,
-                              const common::Slice& value);
-
-  static common::Status Merge(WriteBatch* batch, uint32_t column_family_id,
-                              const common::SliceParts& key,
-                              const common::SliceParts& value);
-
   static common::Status MarkBeginPrepare(WriteBatch* batch);
 
   static common::Status MarkEndPrepare(WriteBatch* batch,

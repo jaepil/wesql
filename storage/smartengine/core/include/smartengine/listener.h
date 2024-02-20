@@ -194,29 +194,6 @@ struct ExternalFileIngestionInfo {
   table::TableProperties table_properties;
 };
 
-// A call-back function to RocksDB which will be called when the compaction
-// iterator is compacting values. It is mean to be returned from
-// EventListner::GetCompactionEventListner() at the beginning of compaction
-// job.
-class CompactionEventListener {
- public:
-  enum CompactionListenerValueType {
-    kValue,
-    kMergeOperand,
-    kDelete,
-    kSingleDelete,
-    kRangeDelete,
-    kInvalid,
-  };
-
-  virtual void OnCompaction(int level, const Slice& key,
-                            CompactionListenerValueType value_type,
-                            const Slice& existing_value,
-                            const common::SequenceNumber& sn, bool is_new) = 0;
-
-  virtual ~CompactionEventListener() = default;
-};
-
 // EventListener class contains a set of call-back functions that will
 // be called when specific RocksDB event happens such as flush.  It can
 // be used as a building block for developing custom features such as
@@ -355,12 +332,6 @@ class EventListener {
   // will be blocked from finishing.
   virtual void OnExternalFileIngested(
       db::DB* /*db*/, const ExternalFileIngestionInfo& /*info*/) {}
-
-  // Factory method to return CompactionEventListener. If multiple listeners
-  // provides CompactionEventListner, only the first one will be used.
-  virtual CompactionEventListener* GetCompactionEventListener() {
-    return nullptr;
-  }
 
   virtual ~EventListener() {}
 };

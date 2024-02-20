@@ -404,8 +404,6 @@ set(SOURCES
         db/log_writer.cc
         db/memtable.cc
         db/memtable_list.cc
-        db/merge_helper.cc
-        db/merge_operator.cc
         db/range_del_aggregator.cc
         db/recovery_point.cc
         db/snapshot_impl.cc
@@ -556,11 +554,6 @@ set(SOURCES
         fpga/fpga_compaction_job.cc
         utilities/checkpoint/checkpoint.cc
         utilities/checkpoint/hotbackup_impl.cc
-        utilities/merge_operators/max.cc
-        utilities/merge_operators/put.cc
-        utilities/merge_operators/string_append/stringappend.cc
-        utilities/merge_operators/string_append/stringappend2.cc
-        utilities/merge_operators/uint64add.cc
         utilities/transactions/optimistic_transaction_db_impl.cc
         utilities/transactions/optimistic_transaction_impl.cc
         utilities/transactions/transaction_base.cc
@@ -678,7 +671,6 @@ set(TESTS
         #db/db_iterator_test.cc
         #db/db_log_iter_test.cc
         db/db_memtable_test.cc
-        #db/db_merge_operator_test.cc
         #db/db_options_test.cc
         #db/db_properties_test.cc
         #db/db_range_del_test.cc
@@ -700,8 +692,6 @@ set(TESTS
         db/log_test.cc
         #db/manual_compaction_test.cc
         #db/memtable_list_test.cc
-        db/merge_helper_test.cc
-        #db/merge_test.cc
         db/options_file_test.cc
         db/perf_context_test.cc
         #db/prefix_test.cc
@@ -786,7 +776,6 @@ set(TESTS
         #utilities/document/json_document_test.cc
         #utilities/geodb/geodb_test.cc
         #utilities/lua/rocks_lua_test.cc
-        #utilities/merge_operators/string_append/stringappend_test.cc
         #utilities/object_registry_test.cc
         #utilities/option_change_migration/option_change_migration_test.cc
         #utilities/persistent_cache/hash_table_test.cc

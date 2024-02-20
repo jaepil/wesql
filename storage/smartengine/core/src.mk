@@ -28,8 +28,6 @@ LIB_SOURCES =                                                   \
   db/log_writer.cc                                              \
   db/memtable.cc                                                \
   db/memtable_list.cc                                           \
-  db/merge_helper.cc                                            \
-  db/merge_operator.cc                                          \
   db/range_del_aggregator.cc                                    \
   db/recovery_point.cc																					\
   db/snapshot_impl.cc                                           \
@@ -166,11 +164,6 @@ LIB_SOURCES =                                                   \
   compact/compaction_stats.cc                                   \
   utilities/checkpoint/checkpoint.cc                            \
   utilities/checkpoint/hotbackup_impl.cc                        \
-  utilities/merge_operators/max.cc                              \
-  utilities/merge_operators/put.cc                              \
-  utilities/merge_operators/string_append/stringappend.cc       \
-  utilities/merge_operators/string_append/stringappend2.cc      \
-  utilities/merge_operators/uint64add.cc                        \
   utilities/transactions/optimistic_transaction_db_impl.cc      \
   utilities/transactions/optimistic_transaction_impl.cc         \
   utilities/transactions/transaction_base.cc                    \
@@ -222,7 +215,6 @@ MAIN_SOURCES =                                                    \
   db/db_iterator_test.cc                                                \
   db/db_log_iter_test.cc                                                \
   db/db_memtable_test.cc                                                \
-  db/db_merge_operator_test.cc                                          \
   db/db_options_test.cc                                                 \
   db/db_range_del_test.cc                                               \
   db/db_sst_test.cc                                                     \
@@ -293,7 +285,6 @@ MAIN_SOURCES =                                                    \
   utilities/checkpoint/checkpoint_test.cc                               \
   utilities/column_aware_encoding_exp.cc                                \
   utilities/column_aware_encoding_test.cc                               \
-  utilities/merge_operators/string_append/stringappend_test.cc          \
   utilities/transactions/optimistic_transaction_test.cc                 \
   utilities/transactions/transaction_test.cc                            \
   utilities/write_batch_with_index/write_batch_with_index_test.cc       \

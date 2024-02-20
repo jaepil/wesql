@@ -35,10 +35,9 @@ class TransactionBaseImpl : public util::Transaction {
 
   void Reinitialize(db::DB* db, const common::WriteOptions& write_options);
 
-  // Called before executing Put, Merge, Delete, and GetForUpdate.  If TryLock
-  // returns non-OK, the Put/Merge/Delete/GetForUpdate will be failed.
-  // untracked will be true if called from PutUntracked, DeleteUntracked, or
-  // MergeUntracked.
+  // Called before executing Put, Delete, and GetForUpdate.  If TryLock
+  // returns non-OK, the Put/Delete/GetForUpdate will be failed.
+  // untracked will be true if called from PutUntracked, DeleteUntracked.
   virtual common::Status TryLock(db::ColumnFamilyHandle* column_family,
                                  const common::Slice& key, bool read_only,
                                  bool exclusive, bool untracked = false,
@@ -120,14 +119,6 @@ class TransactionBaseImpl : public util::Transaction {
     return Put(nullptr, key, value);
   }
 
-  common::Status Merge(db::ColumnFamilyHandle* column_family,
-                       const common::Slice& key,
-                       const common::Slice& value) override;
-  common::Status Merge(const common::Slice& key,
-                       const common::Slice& value) override {
-    return Merge(nullptr, key, value);
-  }
-
   common::Status Delete(db::ColumnFamilyHandle* column_family,
                         const common::Slice& key) override;
   common::Status Delete(const common::Slice& key) override {
@@ -164,14 +155,6 @@ class TransactionBaseImpl : public util::Transaction {
   common::Status PutUntracked(const common::SliceParts& key,
                               const common::SliceParts& value) override {
     return PutUntracked(nullptr, key, value);
-  }
-
-  common::Status MergeUntracked(db::ColumnFamilyHandle* column_family,
-                                const common::Slice& key,
-                                const common::Slice& value) override;
-  common::Status MergeUntracked(const common::Slice& key,
-                                const common::Slice& value) override {
-    return MergeUntracked(nullptr, key, value);
   }
 
   common::Status DeleteUntracked(db::ColumnFamilyHandle* column_family,
@@ -215,8 +198,6 @@ class TransactionBaseImpl : public util::Transaction {
   uint64_t GetNumPuts() const override;
 
   uint64_t GetNumDeletes() const override;
-
-  uint64_t GetNumMerges() const override;
 
   uint64_t GetNumKeys() const override;
 
@@ -288,7 +269,6 @@ class TransactionBaseImpl : public util::Transaction {
   // Count of various operations pending in this transaction
   uint64_t num_puts_ = 0;
   uint64_t num_deletes_ = 0;
-  uint64_t num_merges_ = 0;
 
   struct SavePoint {
     std::shared_ptr<const db::Snapshot> snapshot_;
@@ -296,7 +276,6 @@ class TransactionBaseImpl : public util::Transaction {
     std::shared_ptr<TransactionNotifier> snapshot_notifier_;
     uint64_t num_puts_;
     uint64_t num_deletes_;
-    uint64_t num_merges_;
 
     // Record all keys tracked since the last savepoint
     TransactionKeyMap new_keys_;
@@ -304,13 +283,14 @@ class TransactionBaseImpl : public util::Transaction {
     SavePoint(std::shared_ptr<const db::Snapshot> snapshot,
               bool snapshot_needed,
               std::shared_ptr<TransactionNotifier> snapshot_notifier,
-              uint64_t num_puts, uint64_t num_deletes, uint64_t num_merges)
+              uint64_t num_puts,
+              uint64_t num_deletes)
         : snapshot_(snapshot),
           snapshot_needed_(snapshot_needed),
           snapshot_notifier_(snapshot_notifier),
           num_puts_(num_puts),
-          num_deletes_(num_deletes),
-          num_merges_(num_merges) {}
+          num_deletes_(num_deletes)
+    {}
   };
 
   // Records writes pending in this transaction
@@ -332,9 +312,9 @@ class TransactionBaseImpl : public util::Transaction {
   // Optimistic Transactions will wait till commit time to do conflict checking.
   TransactionKeyMap tracked_keys_;
 
-  // If true, future Put/Merge/Deletes will be indexed in the
+  // If true, future Put/Deletes will be indexed in the
   // WriteBatchWithIndex.
-  // If false, future Put/Merge/Deletes will be inserted directly into the
+  // If false, future Put/Deletes will be inserted directly into the
   // underlying WriteBatch and not indexed in the WriteBatchWithIndex.
   bool indexing_enabled_;
 

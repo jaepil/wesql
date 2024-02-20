@@ -54,8 +54,6 @@
 #include "db/log_writer.h"
 #include "db/memtable.h"
 #include "db/memtable_list.h"
-#include "db/merge_context.h"
-#include "db/merge_helper.h"
 #include "db/range_del_aggregator.h"
 #include "db/table_cache.h"
 #include "db/table_cache.h"
@@ -106,7 +104,6 @@
 #include "smartengine/compaction_filter.h"
 #include "smartengine/db.h"
 #include "smartengine/env.h"
-#include "smartengine/merge_operator.h"
 #include "smartengine/statistics.h"
 #include "smartengine/status.h"
 #include "smartengine/table.h"
@@ -1494,8 +1491,6 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
   TEST_SYNC_POINT("DBImpl::GetImpl:3");
   TEST_SYNC_POINT("DBImpl::GetImpl:4");
 
-  // Prepare to store a list of merge operations if merge occurs.
-  MergeContext merge_context;
   RangeDelAggregator range_del_agg(cfd->internal_comparator(), snapshot);
 
   Status s;
@@ -1509,19 +1504,24 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
                         has_unpersisted_data_.load(std::memory_order_relaxed));
   bool done = false;
   if (!skip_memtable) {
-    if (sv->mem->Get(lkey, pinnable_val->GetSelf(), &s, &merge_context,
-                     &range_del_agg, read_options)) {
+    if (sv->mem->Get(lkey,
+                     pinnable_val->GetSelf(),
+                     &s,
+                     &range_del_agg,
+                     read_options)) {
       done = true;
       pinnable_val->PinSelf();
       QUERY_COUNT(CountPoint::MEMTABLE_HIT);
-    } else if ((s.ok() || s.IsMergeInProgress()) &&
-               sv->imm->Get(lkey, pinnable_val->GetSelf(), &s, &merge_context,
-                            &range_del_agg, read_options)) {
+    } else if (s.ok() && sv->imm->Get(lkey,
+                                      pinnable_val->GetSelf(),
+                                      &s,
+                                      &range_del_agg,
+                                      read_options)) {
       done = true;
       pinnable_val->PinSelf();
       QUERY_COUNT(CountPoint::MEMTABLE_HIT);
     }
-    if (!done && !s.ok() && !s.IsMergeInProgress()) {
+    if (!done && !s.ok()) {
       return s;
     }
   }
@@ -1625,9 +1625,6 @@ std::vector<Status> DBImpl::MultiGet(
   }
   mutex_.Unlock();
 
-  // Contain a list of merge operations if merge occurs.
-  MergeContext merge_context;
-
   // Note: this always resizes the values array
   size_t num_keys = keys.size();
   std::vector<Status> stat_list(num_keys);
@@ -1641,7 +1638,6 @@ std::vector<Status> DBImpl::MultiGet(
   // s is both in/out. When in, s could either be OK or MergeInProgress.
   // merge_operands will contain the sequence of merges in the latter case.
   for (size_t i = 0; i < num_keys; ++i) {
-    merge_context.Clear();
     Status& s = stat_list[i];
     int ret = Status::kOk;
     std::string* value = &(*values)[i];
@@ -1659,12 +1655,10 @@ std::vector<Status> DBImpl::MultiGet(
          has_unpersisted_data_.load(std::memory_order_relaxed));
     bool done = false;
     if (!skip_memtable) {
-      if (super_version->mem->Get(lkey, value, &s, &merge_context,
-                                  &range_del_agg, read_options)) {
+      if (super_version->mem->Get(lkey, value, &s, &range_del_agg, read_options)) {
         done = true;
         // TODO(?): QUERY_COUNT(stats_, MEMTABLE_HIT)?
-      } else if (super_version->imm->Get(lkey, value, &s, &merge_context,
-                                         &range_del_agg, read_options)) {
+      } else if (super_version->imm->Get(lkey, value, &s, &range_del_agg, read_options)) {
         done = true;
         // TODO(?): QUERY_COUNT(stats_, MEMTABLE_HIT)?
       }
@@ -1684,10 +1678,7 @@ std::vector<Status> DBImpl::MultiGet(
           ret = Status::kOk;
         }
       }
-#if 0
-      super_version->current->Get(read_options, lkey, &pinnable_val, &s,
-                                  &merge_context, &range_del_agg);
-#endif
+
       value->assign(pinnable_val.data(), pinnable_val.size());
       // TODO(?): QUERY_COUNT(stats_, MEMTABLE_MISS)?
     }
@@ -3212,7 +3203,6 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   QUERY_TRACE_SCOPE(TracePoint::GET_LATEST_SEQ);
 
   Status s;
-  MergeContext merge_context;
   RangeDelAggregator range_del_agg(sv->mem->GetInternalKeyComparator(),
                                    kMaxSequenceNumber);
 
@@ -3224,10 +3214,9 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   *found_record_for_key = false;
 
   // Check if there is a record for this key in the latest memtable
-  sv->mem->Get(lkey, nullptr, &s, &merge_context, &range_del_agg, seq,
-               read_options);
+  sv->mem->Get(lkey, nullptr, &s, &range_del_agg, seq, read_options);
 
-  if (!(s.ok() || s.IsNotFound() || s.IsMergeInProgress())) {
+  if (!(s.ok() || s.IsNotFound())) {
     // unexpected error reading memtable.
     __SE_LOG(ERROR,
                     "Unexpected status returned from MemTable::Get: %s\n",
@@ -3243,10 +3232,9 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   }
 
   // Check if there is a record for this key in the immutable memtables
-  sv->imm->Get(lkey, nullptr, &s, &merge_context, &range_del_agg, seq,
-               read_options);
+  sv->imm->Get(lkey, nullptr, &s, &range_del_agg, seq, read_options);
 
-  if (!(s.ok() || s.IsNotFound() || s.IsMergeInProgress())) {
+  if (!(s.ok() || s.IsNotFound())) {
     // unexpected error reading memtable.
     __SE_LOG(ERROR,
                     "Unexpected status returned from MemTableList::Get: %s\n",
@@ -3262,10 +3250,9 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   }
 
   // Check if there is a record for this key in the immutable memtables
-  sv->imm->GetFromHistory(lkey, nullptr, &s, &merge_context, &range_del_agg,
-                          seq, read_options);
+  sv->imm->GetFromHistory(lkey, nullptr, &s, &range_del_agg, seq, read_options);
 
-  if (!(s.ok() || s.IsNotFound() || s.IsMergeInProgress())) {
+  if (!(s.ok() || s.IsNotFound())) {
     // unexpected error reading memtable.
     __SE_LOG(ERROR, "Unexpected status returned from MemTableList::GetFromHistory: %s\n", s.ToString().c_str());
 
@@ -3281,21 +3268,6 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   // TODO(agiardullo): possible optimization: consider checking cached
   // SST files if cache_only=true?
   if (!cache_only) {
-    // Check tables
-    /*
-    sv->current->Get(read_options, lkey, nullptr, &s, &merge_context,
-                     &range_del_agg, nullptr value_found,
-                     found_record_for_key, seq);
-
-    if (!(s.ok() || s.IsNotFound() || s.IsMergeInProgress())) {
-      // unexpected error reading SST files
-      __SE_LOG(ERROR,
-                      "Unexpected status returned from Version::Get: %s\n",
-                      s.ToString().c_str());
-
-      return s;
-    }
-    */
     PinnableSlice dummy_value;
     bool dummy_bool = false;
     QUERY_COUNT(CountPoint::SEARCH_LATEST_SEQ_IN_STORAGE);
@@ -3306,7 +3278,7 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
                                                   dummy_bool,
                                                   seq));
 
-    if (!(s.ok() || s.IsNotFound() || s.IsMergeInProgress())) {
+    if (!(s.ok() || s.IsNotFound())) {
       // unexpected error reading SST files
       __SE_LOG(ERROR,
                       "Unexpected status returned from Version::Get: %s\n",

@@ -62,33 +62,41 @@ class MemTableListVersion {
   // If any operation was found for this key, its most recent sequence number
   // will be stored in *seq on success (regardless of whether true/false is
   // returned).  Otherwise, *seq will be set to kMaxSequenceNumber.
-  bool Get(LookupKey& key, std::string* value, common::Status* s,
-           MergeContext* merge_context, RangeDelAggregator* range_del_agg,
-           common::SequenceNumber* seq, const common::ReadOptions& read_opts);
+  bool Get(LookupKey& key,
+           std::string* value,
+           common::Status* s,
+           RangeDelAggregator* range_del_agg,
+           common::SequenceNumber* seq,
+           const common::ReadOptions& read_opts);
 
-  bool Get(LookupKey& key, std::string* value, common::Status* s,
-           MergeContext* merge_context, RangeDelAggregator* range_del_agg,
+  bool Get(LookupKey& key,
+           std::string* value,
+           common::Status* s,
+           RangeDelAggregator* range_del_agg,
            const common::ReadOptions& read_opts) {
     common::SequenceNumber seq;
-    return Get(key, value, s, merge_context, range_del_agg, &seq, read_opts);
+    return Get(key, value, s, range_del_agg, &seq, read_opts);
   }
 
   // Similar to Get(), but searches the Memtable history of memtables that
   // have already been flushed.  Should only be used from in-memory only
   // queries (such as Transaction validation) as the history may contain
   // writes that are also present in the SST files.
-  bool GetFromHistory(LookupKey& key, std::string* value, common::Status* s,
-                      MergeContext* merge_context,
+  bool GetFromHistory(LookupKey& key,
+                      std::string* value,
+                      common::Status* s,
                       RangeDelAggregator* range_del_agg,
                       common::SequenceNumber* seq,
                       const common::ReadOptions& read_opts);
-  bool GetFromHistory(LookupKey& key, std::string* value, common::Status* s,
-                      MergeContext* merge_context,
+
+  bool GetFromHistory(LookupKey& key,
+                      std::string* value,
+                      common::Status* s,
                       RangeDelAggregator* range_del_agg,
-                      const common::ReadOptions& read_opts) {
+                      const common::ReadOptions& read_opts)
+  {
     common::SequenceNumber seq;
-    return GetFromHistory(key, value, s, merge_context, range_del_agg, &seq,
-                          read_opts);
+    return GetFromHistory(key, value, s, range_del_agg, &seq, read_opts);
   }
 
   common::Status AddRangeTombstoneIterators(
@@ -131,9 +139,10 @@ class MemTableListVersion {
   size_t TrimHistoryOlderThan(util::autovector<MemTable*>* to_delete,
                               common::SequenceNumber seqno);
 
-  bool GetFromList(std::list<MemTable*>* list, LookupKey& key,
-                   std::string* value, common::Status* s,
-                   MergeContext* merge_context,
+  bool GetFromList(std::list<MemTable*>* list,
+                   LookupKey& key,
+                   std::string* value,
+                   common::Status* s,
                    RangeDelAggregator* range_del_agg,
                    common::SequenceNumber* seq,
                    const common::ReadOptions& read_opts);
