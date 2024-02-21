@@ -74,7 +74,6 @@
 #include "utilities/transactions/transaction_db_impl.h"
 #include "db/db_impl.h"
 #include "db/column_family.h"
-#include "db/version_edit.h"
 #include "smartengine/options.h"
 #include "table/internal_iterator.h"
 #include "storage/multi_version_extent_meta_layer.h"

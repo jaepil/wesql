@@ -16,7 +16,6 @@
 
 #include "logger/log_module.h"
 #include "storage/storage_meta_struct.h"
-#include "db/version_edit.h"
 #include "memory/modtype_define.h"
 #include "storage_common.h"
 

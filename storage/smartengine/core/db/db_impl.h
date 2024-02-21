@@ -31,7 +31,6 @@
 #include "db/log_writer.h"
 #include "db/pipline_queue_manager.h"
 #include "db/snapshot_impl.h"
-#include "db/version_edit.h"
 #include "db/wal_manager.h"
 #include "db/write_controller.h"
 #include "db/write_thread.h"
@@ -467,13 +466,6 @@ class DBImpl : public DB {
 
   common::Status RunCompaction(ColumnFamilyData* cfd, JobContext* context);
 
-  // Return an internal iterator over the current state of the database.
-  // The keys of this iterator are internal keys (see format.h).
-  // The returned iterator should be deleted when no longer needed.
-  table::InternalIterator* NewInternalIterator(
-      util::Arena* arena, RangeDelAggregator* range_del_agg,
-      ColumnFamilyHandle* column_family = nullptr);
-
 #ifndef NDEBUG
   // Extra methods (for testing) that are not in the public DB interface
   // Implemented in db_impl_debug.cc
@@ -869,6 +861,12 @@ class DBImpl : public DB {
                                      bool is_last_record,
                                      uint64_t last_record_end_pos,
                                      bool &stop_replay);
+
+  table::InternalIterator* NewInternalIterator(const common::ReadOptions&,
+                                               ColumnFamilyData* cfd,
+                                               SuperVersion* super_version,
+                                               util::Arena* arena);
+
 protected:
   util::Env* const env_;
   const std::string dbname_;
@@ -892,12 +890,6 @@ protected:
   // no need do concurrently
   int bg_recycle_scheduled_;
   std::atomic<bool> master_thread_running_;
-
-  table::InternalIterator* NewInternalIterator(
-      const common::ReadOptions&, ColumnFamilyData* cfd,
-      SuperVersion* super_version, util::Arena* arena,
-      RangeDelAggregator* range_del_agg);
-
 
   // The following two functions can only be called when:
   // 1. WriteThread::Writer::EnterUnbatched() is used.

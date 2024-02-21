@@ -15,7 +15,6 @@
 
 #include "db/dbformat.h"
 #include "db/memtable.h"
-#include "db/range_del_aggregator.h"
 #include "monitoring/instrumented_mutex.h"
 #include "util/autovector.h"
 #include "util/filename.h"
@@ -65,17 +64,15 @@ class MemTableListVersion {
   bool Get(LookupKey& key,
            std::string* value,
            common::Status* s,
-           RangeDelAggregator* range_del_agg,
            common::SequenceNumber* seq,
            const common::ReadOptions& read_opts);
 
   bool Get(LookupKey& key,
            std::string* value,
            common::Status* s,
-           RangeDelAggregator* range_del_agg,
            const common::ReadOptions& read_opts) {
     common::SequenceNumber seq;
-    return Get(key, value, s, range_del_agg, &seq, read_opts);
+    return Get(key, value, s, &seq, read_opts);
   }
 
   // Similar to Get(), but searches the Memtable history of memtables that
@@ -85,23 +82,17 @@ class MemTableListVersion {
   bool GetFromHistory(LookupKey& key,
                       std::string* value,
                       common::Status* s,
-                      RangeDelAggregator* range_del_agg,
                       common::SequenceNumber* seq,
                       const common::ReadOptions& read_opts);
 
   bool GetFromHistory(LookupKey& key,
                       std::string* value,
                       common::Status* s,
-                      RangeDelAggregator* range_del_agg,
                       const common::ReadOptions& read_opts)
   {
     common::SequenceNumber seq;
-    return GetFromHistory(key, value, s, range_del_agg, &seq, read_opts);
+    return GetFromHistory(key, value, s, &seq, read_opts);
   }
-
-  common::Status AddRangeTombstoneIterators(
-      const common::ReadOptions& read_opts, util::Arena* arena,
-      RangeDelAggregator* range_del_agg);
 
   void AddIterators(const common::ReadOptions& options,
                     std::vector<table::InternalIterator*>* iterator_list,
@@ -143,7 +134,6 @@ class MemTableListVersion {
                    LookupKey& key,
                    std::string* value,
                    common::Status* s,
-                   RangeDelAggregator* range_del_agg,
                    common::SequenceNumber* seq,
                    const common::ReadOptions& read_opts);
 
@@ -231,14 +221,6 @@ class MemTableList {
   // they can get picked up again on the next round of flush.
   void RollbackMemtableFlush(const util::autovector<MemTable*>& mems,
                              uint64_t file_number);
-
-  // Commit a successful flush in the manifest file
-  common::Status InstallMemtableFlushResults(
-      ColumnFamilyData* cfd, const common::MutableCFOptions& mutable_cf_options,
-      const util::autovector<MemTable*>& m, VersionSet* vset,
-      monitor::InstrumentedMutex* mu, uint64_t file_number,
-      util::autovector<MemTable*>* to_delete, util::Directory* db_directory,
-      util::LogBuffer* log_buffer, db::MiniTables &mtables);
 
   // New memtables are inserted at the front of the list.
   // Takes ownership of the referenced held on *m by the caller of Add().

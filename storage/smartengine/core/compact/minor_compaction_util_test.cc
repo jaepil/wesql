@@ -21,7 +21,6 @@
 #include "db/db_iter.h"
 #include "db/dbformat.h"
 #include "db/log_writer.h"
-#include "db/version_edit.h"
 #include "db/version_set.h"
 #include "db/write_batch_internal.h"
 #include "options/options_helper.h"

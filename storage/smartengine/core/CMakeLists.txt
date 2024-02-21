@@ -404,13 +404,11 @@ set(SOURCES
         db/log_writer.cc
         db/memtable.cc
         db/memtable_list.cc
-        db/range_del_aggregator.cc
         db/recovery_point.cc
         db/snapshot_impl.cc
         db/table_cache.cc
         db/table_properties_collector.cc
         db/transaction_log_impl.cc
-        db/version_edit.cc
         db/version_set.cc
         db/wal_manager.cc
         db/write_batch.cc
@@ -663,7 +661,6 @@ set(TESTS
         #        db/db_compaction_test.cc
         #db/db_dynamic_level_test.cc
         #db/db_flush_test.cc
-        db/db_inplace_update_test.cc
         db/db_recovery_failed_test.cc
         db/db_transaction_pipline_test.cc
         #db/db_io_failure_test.cc
@@ -673,7 +670,6 @@ set(TESTS
         db/db_memtable_test.cc
         #db/db_options_test.cc
         #db/db_properties_test.cc
-        #db/db_range_del_test.cc
         #db/db_sst_test.cc
         #db/db_table_properties_test.cc
         #db/db_tailing_iter_test.cc
@@ -697,9 +693,7 @@ set(TESTS
         #db/prefix_test.cc
         db/recover_no_space_test.cc
         #db/table_properties_collector_test.cc
-        #db/version_edit_test.cc
         db/shrink_job_test.cc
-        db/version_set_test.cc
         db/wal_manager_test.cc
         db/write_batch_test.cc
         #db/write_callback_test.cc

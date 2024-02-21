@@ -18,7 +18,6 @@
 #include <utility>
 #include <vector>
 
-#include "db/version_edit.h"
 #include "options/cf_options.h"
 #include "table/block.h"
 #include "table/filter_block.h"
@@ -130,9 +129,6 @@ class ExtentBasedTable : public TableReader {
                                 memory::SimpleAllocator* arena = nullptr,
                                 bool skip_filters = false,
                                 const uint64_t scan_add_blocks_limit = 0) override;
-
-  InternalIterator* NewRangeTombstoneIterator(
-      const common::ReadOptions& read_options) override;
 
   // @param skip_filters Disables loading/accessing the filter block
   common::Status Get(const common::ReadOptions& readOptions,
@@ -549,10 +545,6 @@ struct ExtentBasedTable::Rep {
   // the LRU cache will never push flush them out, hence they're pinned
   CachableEntry<FilterBlockReader> filter_entry;
   CachableEntry<IndexReader> index_entry;
-  // range deletion meta-block is pinned through reader's lifetime when LRU
-  // cache is enabled.
-  CachableEntry<Block> range_del_entry;
-  BlockHandle range_del_handle;
 
   // If global_seqno is used, all Keys in this file will have the same
   // seqno with value `global_seqno`.

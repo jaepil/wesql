@@ -19,8 +19,6 @@
 #include <vector>
 #include "db/dbformat.h"
 #include "db/recovery_point.h"
-#include "db/range_del_aggregator.h"
-#include "db/version_edit.h"
 #include "memtable/memtable_allocator.h"
 #include "util/misc_utility.h"
 #include "monitoring/instrumented_mutex.h"
@@ -190,8 +188,6 @@ class MemTable {
   table::InternalIterator* NewDumpIterator(const common::ReadOptions& read_options,
                                            const common::SequenceNumber max_seq,
                                            util::Arena &arena) const;
-  table::InternalIterator* NewRangeTombstoneIterator(
-      const common::ReadOptions& read_options);
 
   // Add an entry into memtable that maps key to value at the
   // specified sequence number and with the specified type.
@@ -214,18 +210,16 @@ class MemTable {
   bool Get(LookupKey& key,
            std::string* value,
            common::Status* s,
-           RangeDelAggregator* range_del_agg,
            common::SequenceNumber* seq,
            const common::ReadOptions& read_opts);
 
   bool Get(LookupKey& key,
            std::string* value,
            common::Status* s,
-           RangeDelAggregator* range_del_agg,
            const common::ReadOptions& read_opts)
   {
     common::SequenceNumber seq;
-    return Get(key, value, s, range_del_agg, &seq, read_opts);
+    return Get(key, value, s, &seq, read_opts);
   }
 
   // Attempts to update the new_value inplace, else does normal Add
@@ -416,8 +410,8 @@ class MemTable {
  private:
   enum FlushStateEnum { FLUSH_NOT_REQUESTED, FLUSH_REQUESTED, FLUSH_SCHEDULED };
 
+  //TODO: Zhao Dongsheng, remove after prefix_extractor decapreted
   friend class MemTableIterator;
-  friend class MemTableBackwardIterator;
   friend class MemTableList;
 
   KeyComparator comparator_;
@@ -427,8 +421,6 @@ class MemTable {
   util::ConcurrentArena arena_;
   memtable::MemTableAllocator allocator_;
   unique_ptr<memtable::MemTableRep> table_;
-  unique_ptr<memtable::MemTableRep> range_del_table_;
-  bool is_range_del_table_empty_;
 
   // Total data size of all data inserted
   std::atomic<uint64_t> data_size_;

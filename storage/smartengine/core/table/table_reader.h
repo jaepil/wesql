@@ -51,11 +51,6 @@ class TableReader {
                                         bool skip_filters = false,
                                         const uint64_t scan_add_blocks_limit = 0) = 0;
 
-  virtual InternalIterator* NewRangeTombstoneIterator(
-      const common::ReadOptions& read_options) {
-    return nullptr;
-  }
-
   // Given a key, return an approximate byte offset in the file where
   // the data for that key begins (or would begin if the key were
   // present in the file).  The returned value is in terms of file

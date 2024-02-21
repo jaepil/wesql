@@ -68,21 +68,6 @@ class WriteBatchBase {
                                       const common::SliceParts& key);
   virtual common::Status SingleDelete(const common::SliceParts& key);
 
-  // If the database contains mappings in the range ["begin_key", "end_key"],
-  // erase them. Else do nothing.
-  virtual common::Status DeleteRange(ColumnFamilyHandle* column_family,
-                                     const common::Slice& begin_key,
-                                     const common::Slice& end_key) = 0;
-  virtual common::Status DeleteRange(const common::Slice& begin_key,
-                                     const common::Slice& end_key) = 0;
-
-  // variant that takes common::SliceParts
-  virtual common::Status DeleteRange(ColumnFamilyHandle* column_family,
-                                     const common::SliceParts& begin_key,
-                                     const common::SliceParts& end_key);
-  virtual common::Status DeleteRange(const common::SliceParts& begin_key,
-                                     const common::SliceParts& end_key);
-
   // Append a blob of arbitrary size to the records in this batch. The blob will
   // be stored in the transaction log but not in any other file. In particular,
   // it will not be persisted to the SST files. When iterating over this

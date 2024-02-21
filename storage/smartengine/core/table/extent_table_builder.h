@@ -21,7 +21,6 @@
 #include "smartengine/flush_block_policy.h"
 #include "smartengine/options.h"
 #include "smartengine/status.h"
-#include "db/version_edit.h"
 #include "table/extent_table_reader.h"
 
 namespace smartengine {

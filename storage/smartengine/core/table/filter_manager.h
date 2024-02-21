@@ -20,7 +20,6 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include "db/version_edit.h"
 #include "db/db_impl.h"
 #include "port/port.h"
 #include "smartengine/cache.h"

@@ -119,28 +119,25 @@ int MemTableList::NumFlushed() const {
 bool MemTableListVersion::Get(LookupKey& key,
                               std::string* value,
                               Status* s,
-                              RangeDelAggregator* range_del_agg,
                               SequenceNumber* seq,
                               const ReadOptions& read_opts)
 {
-  return GetFromList(&memlist_, key, value, s, range_del_agg, seq, read_opts);
+  return GetFromList(&memlist_, key, value, s, seq, read_opts);
 }
 
 bool MemTableListVersion::GetFromHistory(LookupKey& key,
                                          std::string* value,
                                          Status* s,
-                                         RangeDelAggregator* range_del_agg,
                                          SequenceNumber* seq,
                                          const ReadOptions& read_opts)
 {
-  return GetFromList(&memlist_history_, key, value, s, range_del_agg, seq, read_opts);
+  return GetFromList(&memlist_history_, key, value, s, seq, read_opts);
 }
 
 bool MemTableListVersion::GetFromList(std::list<MemTable*>* list,
                                       LookupKey& key,
                                       std::string* value,
                                       Status* s,
-                                      RangeDelAggregator* range_del_agg,
                                       SequenceNumber* seq,
                                       const ReadOptions& read_opts)
 {
@@ -149,7 +146,7 @@ bool MemTableListVersion::GetFromList(std::list<MemTable*>* list,
   for (auto& memtable : *list) {
     SequenceNumber current_seq = kMaxSequenceNumber;
 
-    bool done = memtable->Get(key, value, s, range_del_agg, &current_seq, read_opts);
+    bool done = memtable->Get(key, value, s, &current_seq, read_opts);
     if (*seq == kMaxSequenceNumber) {
       // Store the most recent sequence number of any operation on this key.
       // Since we only care about the most recent change, we only need to
@@ -167,21 +164,6 @@ bool MemTableListVersion::GetFromList(std::list<MemTable*>* list,
     }
   }
   return false;
-}
-
-Status MemTableListVersion::AddRangeTombstoneIterators(
-    const ReadOptions& read_opts, Arena* arena,
-    RangeDelAggregator* range_del_agg) {
-  assert(range_del_agg != nullptr);
-  for (auto& m : memlist_) {
-//    std::unique_ptr<InternalIterator, memory::ptr_delete<InternalIterator>> range_del_iter(
-//        m->NewRangeTombstoneIterator(read_opts));
-    Status s = range_del_agg->AddTombstones(m->NewRangeTombstoneIterator(read_opts));
-    if (!s.ok()) {
-      return s;
-    }
-  }
-  return Status::OK();
 }
 
 void MemTableListVersion::AddIterators(
@@ -376,149 +358,6 @@ void MemTableList::RollbackMemtableFlush(const autovector<MemTable*>& mems,
   }
   imm_flush_needed.store(true, std::memory_order_release);
 }
-
-/*
-// Record a successful flush in the manifest file
-Status MemTableList::InstallMemtableFlushResults(
-    ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
-    const autovector<MemTable*>& mems, VersionSet* vset, InstrumentedMutex* mu,
-    uint64_t file_number, autovector<MemTable*>* to_delete,
-    Directory* db_directory, LogBuffer* log_buffer, MiniTables &mtables) {
-  AutoThreadOperationStageUpdater stage_updater(
-      ThreadStatus::STAGE_MEMTABLE_INSTALL_FLUSH_RESULTS);
-  mu->AssertHeld();
-
-  // flush was successful
-  for (size_t i = 0; i < mems.size(); ++i) {
-    // All the edits are associated with the first memtable of this batch.
-    assert(i == 0 || mems[i]->get_change_info() == nullptr);
-
-    mems[i]->flush_completed_ = true;
-    mems[i]->file_number_ = file_number;
-  }
-
-  // if some other thread is already committing, then return
-  Status s;
-  if (commit_in_progress_) {
-    TEST_SYNC_POINT("MemTableList::InstallMemtableFlushResults:InProgress");
-    return s;
-  }
-
-  // Only a single thread can be executing this piece of code
-  commit_in_progress_ = true;
-
-  // Retry until all completed flushes are committed. New flushes can finish
-  // while the current thread is writing manifest where mutex is released.
-  while (s.ok()) {
-    auto& memlist = current_->memlist_;
-    if (memlist.empty() || !memlist.back()->flush_completed_) {
-      break;
-    }
-    // scan all memtables from the earliest, and commit those
-    // (in that order) that have finished flushing. Memetables
-    // are always committed in the order that they were created.
-    uint64_t batch_file_number = 0;
-    size_t batch_count = 0;
-    autovector<VersionEdit*> edit_list;
-    // enumerate from the last (earliest) element to see how many batch finished
-    for (auto it = memlist.rbegin(); it != memlist.rend(); ++it) {
-      MemTable* m = *it;
-      if (!m->flush_completed_) {
-        break;
-      }
-      if (it == memlist.rbegin() || batch_file_number != m->file_number_) {
-        batch_file_number = m->file_number_;
-        __SE_LOG(INFO,
-                         "[%s] Level-0 commit table #%" PRIu64 " started",
-                         cfd->GetName().c_str(), m->file_number_);
-        assert(m->get_change_info() != nullptr);
-        uint64_t next_file_number = 
-        vset->GetColumnFamilySet()->get_extent_space_manager()->get_file_number_generator().load();
-        m->edit_.set_change_info(cfd->GetID(), m->get_change_info().get(), next_file_number);     
-        edit_list.push_back(&m->edit_);
-      }
-      batch_count++;
-    }
-
-    if (batch_count > 0) {
-      // this can release and reacquire the mutex.
-      s = vset->LogAndApply(cfd, mutable_cf_options, edit_list, mu,
-                            db_directory);
-      if (s.ok()) {
-        int ret = Status::kOk;
-        for (VersionEdit *edit : edit_list) {
-          ret = cfd->get_storage_manager()->apply(*edit->get_change_info(), false);
-          if (ret != Status::kOk) {
-            __SE_LOG(WARN,
-                         "[%s] Level-0 commit faild %d", cfd->GetName().c_str(), ret);
-            s = Status(static_cast<Status::Code>(ret));
-            break;
-          }
-          // check compaction delete percent 
-          //TODO:yuanfeng
-          for (auto& extent_meta : edit->get_change_info()->extent_meta_) {
-            if (mutable_cf_options.compaction_delete_percent > 0 &&
-                extent_meta.num_entries_ * mutable_cf_options.compaction_delete_percent <= 100 * extent_meta.num_deletes_) {
-              cfd->set_delete_triggered_compaction(true);
-              cfd->set_pending_priority_l0_layer_sequence(file_number);
-              SE_LOG(INFO, "Level-0 extent delete triggered ",
-                  K(cfd->GetName().c_str()), K(file_number), K(extent_meta));
-            }
-          }
-        }
-      }
-      // we will be changing the version in the next code path,
-      // so we better create a new one, since versions are immutable
-      InstallNewVersion();
-
-      // All the later memtables that have the same filenum
-      // are part of the same batch. They can be committed now.
-      uint64_t mem_id = 1;  // how many memtables have been flushed.
-      if (s.ok()) {         // commit new state
-        while (batch_count-- > 0) {
-          MemTable* m = current_->memlist_.back();
-          __SE_LOG(INFO, "[%s] Level-0 commit table #%" PRIu64
-                                       ": memtable #%" PRIu64 " done",
-                           cfd->GetName().c_str(), m->file_number_, mem_id);
-          assert(m->file_number_ > 0);
-          current_->Remove(m, to_delete);
-          ++mem_id;
-
-          // promt the compaction priority if m is flushed by deletion
-          if (m->delete_triggered_) {
-            __SE_LOG(INFO, "[%s] Level-0 delete triggered #%"
-                PRIu64 ": memtable #%" PRIu64 ", trim all %d memtables",
-                cfd->GetName().c_str(), m->file_number_, mem_id,
-                current_->memlist_history_.size());
-            cfd->set_delete_triggered_compaction(true);
-            cfd->set_pending_priority_l0_layer_sequence(m->file_number_);
-            current_->trim_all_history(to_delete);
-          }
-        }
-      } else {
-        for (auto it = current_->memlist_.rbegin(); batch_count-- > 0; it++) {
-          MemTable* m = *it;
-          // commit failed. setup state so that we can flush again.
-          __SE_LOG(INFO, "Level-0 commit table #%" PRIu64
-                                       ": memtable #%" PRIu64 " failed",
-                           m->file_number_, mem_id);
-          m->flush_completed_ = false;
-          m->flush_in_progress_ = false;
-          m->edit_.Clear();
-          //TODO:yuanfeng
-          //m->get_change_info()->clear();
-          num_flush_not_started_++;
-          m->file_number_ = 0;
-          imm_flush_needed.store(true, std::memory_order_release);
-          ++mem_id;
-        }
-      }
-    }
-  }
-  commit_in_progress_ = false;
-  return s;
-}
-*/
 
 // New memtables are inserted at the front of the list.
 void MemTableList::Add(MemTable* m, autovector<MemTable*>* to_delete) {

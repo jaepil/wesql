@@ -176,7 +176,6 @@ extern const std::string kPropertiesBlock = "rocksdb.properties";
 // Old property block name for backward compatibility
 extern const std::string kPropertiesBlockOldName = "rocksdb.stats";
 extern const std::string kCompressionDictBlock = "rocksdb.compression_dict";
-extern const std::string kRangeDelBlock = "rocksdb.range_del";
 
 // Seek to the properties block.
 // Return true if it successfully seeks to the properties block.
@@ -192,11 +191,6 @@ Status SeekToPropertiesBlock(InternalIterator* meta_iter, bool* is_found) {
 // Return true if it successfully seeks to that block.
 Status SeekToCompressionDictBlock(InternalIterator* meta_iter, bool* is_found) {
   return SeekToMetaBlock(meta_iter, kCompressionDictBlock, is_found);
-}
-
-Status SeekToRangeDelBlock(InternalIterator* meta_iter, bool* is_found,
-                           BlockHandle* block_handle = nullptr) {
-  return SeekToMetaBlock(meta_iter, kRangeDelBlock, is_found, block_handle);
 }
 
 }  // namespace table

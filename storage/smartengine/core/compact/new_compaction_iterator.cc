@@ -106,8 +106,6 @@ void NewCompactionIterator::ResetRecordCounts() {
   iter_stats_.num_record_drop_user = 0;
   iter_stats_.num_record_drop_hidden = 0;
   iter_stats_.num_record_drop_obsolete = 0;
-  iter_stats_.num_record_drop_range_del = 0;
-  iter_stats_.num_range_del_drop_obsolete = 0;
 }
 
 int NewCompactionIterator::seek_to_first() {

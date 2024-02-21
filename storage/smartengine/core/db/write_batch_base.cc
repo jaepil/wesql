@@ -63,22 +63,5 @@ Status WriteBatchBase::SingleDelete(const SliceParts& key) {
   return SingleDelete(key_slice);
 }
 
-Status WriteBatchBase::DeleteRange(ColumnFamilyHandle* column_family,
-                                   const SliceParts& begin_key,
-                                   const SliceParts& end_key) {
-  std::string begin_key_buf, end_key_buf;
-  Slice begin_key_slice(begin_key, &begin_key_buf);
-  Slice end_key_slice(end_key, &end_key_buf);
-  return DeleteRange(column_family, begin_key_slice, end_key_slice);
-}
-
-Status WriteBatchBase::DeleteRange(const SliceParts& begin_key,
-                                   const SliceParts& end_key) {
-  std::string begin_key_buf, end_key_buf;
-  Slice begin_key_slice(begin_key, &begin_key_buf);
-  Slice end_key_slice(end_key, &end_key_buf);
-  return DeleteRange(begin_key_slice, end_key_slice);
-}
-
 }  // namespace db
 }  // namespace smartengine

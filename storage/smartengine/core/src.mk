@@ -28,13 +28,11 @@ LIB_SOURCES =                                                   \
   db/log_writer.cc                                              \
   db/memtable.cc                                                \
   db/memtable_list.cc                                           \
-  db/range_del_aggregator.cc                                    \
   db/recovery_point.cc																					\
   db/snapshot_impl.cc                                           \
   db/table_cache.cc                                             \
   db/table_properties_collector.cc                              \
   db/transaction_log_impl.cc                                    \
-  db/version_edit.cc                                            \
   db/version_set.cc                                             \
   db/wal_manager.cc                                             \
   db/write_batch.cc                                             \
@@ -216,7 +214,6 @@ MAIN_SOURCES =                                                    \
   db/db_log_iter_test.cc                                                \
   db/db_memtable_test.cc                                                \
   db/db_options_test.cc                                                 \
-  db/db_range_del_test.cc                                               \
   db/db_sst_test.cc                                                     \
   db/db_table_properties_test.cc                                        \
   db/db_tailing_iter_test.cc                                            \
@@ -240,8 +237,6 @@ MAIN_SOURCES =                                                    \
 	db/shrink_job_test.cc                                                 \
   db/table_properties_collector_test.cc                                 \
   db/version_builder_test.cc                                            \
-  db/version_edit_test.cc                                               \
-  db/version_set_test.cc                                                \
   db/wal_manager_test.cc                                                \
   db/write_batch_test.cc                                                \
   db/write_callback_test.cc                                             \

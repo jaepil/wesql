@@ -25,16 +25,12 @@ GetContext::GetContext(const Comparator* ucmp,
                        const Slice& user_key,
                        PinnableSlice* pinnable_val,
                        bool* value_found,
-                       RangeDelAggregator* _range_del_agg,
-                       Env* env,
                        SequenceNumber* seq)
     : ucmp_(ucmp),
       state_(init_state),
       user_key_(user_key),
       pinnable_val_(pinnable_val),
       value_found_(value_found),
-      range_del_agg_(_range_del_agg),
-      env_(env),
       seq_(seq)
 {
   if (seq_) {
@@ -75,11 +71,6 @@ bool GetContext::SaveValue(const ParsedInternalKey& parsed_key,
       }
     }
     auto type = parsed_key.type;
-    // Key matches. Process it
-    if (type == kTypeValue &&
-        range_del_agg_ != nullptr && range_del_agg_->ShouldDelete(parsed_key)) {
-      type = kTypeRangeDeletion;
-    }
     se_assert(kNotFound == state_);
     switch (type) {
       case kTypeValue:
@@ -98,9 +89,6 @@ bool GetContext::SaveValue(const ParsedInternalKey& parsed_key,
 
       case kTypeDeletion:
       case kTypeSingleDeletion:
-      case kTypeRangeDeletion:
-        // TODO(noetzli): Verify correctness once merge of single-deletes
-        // is supported
         state_ = kDeleted;
         return false;
       default:

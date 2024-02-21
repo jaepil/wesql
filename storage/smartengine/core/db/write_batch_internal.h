@@ -101,14 +101,6 @@ class WriteBatchInternal {
                                      uint32_t column_family_id,
                                      const common::Slice& key);
 
-  static common::Status DeleteRange(WriteBatch* b, uint32_t column_family_id,
-                                    const common::Slice& begin_key,
-                                    const common::Slice& end_key);
-
-  static common::Status DeleteRange(WriteBatch* b, uint32_t column_family_id,
-                                    const common::SliceParts& begin_key,
-                                    const common::SliceParts& end_key);
-
   static common::Status MarkBeginPrepare(WriteBatch* batch);
 
   static common::Status MarkEndPrepare(WriteBatch* batch,

@@ -691,18 +691,11 @@ DEFINE_bool(optimize_filters_for_hits, false,
 DEFINE_uint64(delete_obsolete_files_period_micros, 0,
               "Ignored. Left here for backward compatibility");
 
-DEFINE_int64(writes_per_range_tombstone, 0,
-             "Number of writes between range "
-             "tombstones");
-
 DEFINE_int64(range_tombstone_width, 100, "Number of keys in tombstone's range");
 
 DEFINE_int64(max_num_range_tombstones, 0,
              "Maximum number of range tombstones "
              "to insert.");
-
-DEFINE_bool(expand_range_tombstones, false,
-            "Expand range tombstone into sequential regular tombstones.");
 
 #ifndef ROCKSDB_LITE
 DEFINE_bool(optimistic_transaction_db, false,
@@ -750,8 +743,6 @@ DEFINE_uint64(fifo_compaction_max_table_files_size_mb, 0,
 
 DEFINE_bool(report_bg_io_stats, false,
             "Measure times spents on I/Os while in compactions. ");
-
-DEFINE_bool(use_blob_db, false, "Whether to use BlobDB. ");
 
 static enum CompressionType StringToCompressionType(const char* ctype) {
   assert(ctype);
@@ -2411,7 +2402,6 @@ class Benchmark {
   int prefix_size_;
   int64_t keys_per_prefix_;
   int64_t entries_per_batch_;
-  int64_t writes_per_range_tombstone_;
   int64_t range_tombstone_width_;
   int64_t max_num_range_tombstones_;
   WriteOptions write_options_;
@@ -2872,7 +2862,6 @@ class Benchmark {
       value_size_ = FLAGS_value_size;
       key_size_ = FLAGS_key_size;
       entries_per_batch_ = FLAGS_batch_size;
-      writes_per_range_tombstone_ = FLAGS_writes_per_range_tombstone;
       range_tombstone_width_ = FLAGS_range_tombstone_width;
       max_num_range_tombstones_ = FLAGS_max_num_range_tombstones;
       write_options_ = WriteOptions();
@@ -3958,19 +3947,6 @@ class Benchmark {
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
-    std::unique_ptr<const char[]> begin_key_guard;
-    Slice begin_key = AllocateKey(&begin_key_guard);
-    std::unique_ptr<const char[]> end_key_guard;
-    Slice end_key = AllocateKey(&end_key_guard);
-    std::vector<std::unique_ptr<const char[]>> expanded_key_guards;
-    std::vector<Slice> expanded_keys;
-    if (FLAGS_expand_range_tombstones) {
-      expanded_key_guards.resize(range_tombstone_width_);
-      for (auto& expanded_key_guard : expanded_key_guards) {
-        expanded_keys.emplace_back(AllocateKey(&expanded_key_guard));
-      }
-    }
-
     int64_t stage = 0;
     int64_t num_written = 0;
 
@@ -4007,10 +3983,7 @@ class Benchmark {
 
         int64_t rand_num = key_gens[id]->Next();
         GenerateKeyFromInt(rand_num, FLAGS_num, &key);
-        if (FLAGS_use_blob_db) {
-          s = db_with_cfh->db->Put(write_options_, key,
-                                   gen.Generate(value_size_));
-        } else if (FLAGS_num_column_families <= 1) {
+        if (FLAGS_num_column_families <= 1) {
           batch->Put(key, gen.Generate(value_size_));
         } else {
           // We use same rand_num as seed for key and column family so that we
@@ -4021,58 +3994,20 @@ class Benchmark {
         }
         bytes += value_size_ + key_size_;
         ++num_written;
-        if (writes_per_range_tombstone_ > 0 &&
-            num_written / writes_per_range_tombstone_ <
-                max_num_range_tombstones_ &&
-            num_written % writes_per_range_tombstone_ == 0) {
-          int64_t begin_num = key_gens[id]->Next();
-          if (FLAGS_expand_range_tombstones) {
-            for (int64_t offset = 0; offset < range_tombstone_width_;
-                 ++offset) {
-              GenerateKeyFromInt(begin_num + offset, FLAGS_num,
-                                 &expanded_keys[offset]);
-              if (FLAGS_use_blob_db) {
-                s = db_with_cfh->db->Delete(write_options_,
-                                            expanded_keys[offset]);
-              } else if (FLAGS_num_column_families <= 1) {
-                batch->Delete(expanded_keys[offset]);
-              } else {
-                batch->Delete(db_with_cfh->GetCfh(rand_num),
-                              expanded_keys[offset]);
-              }
-            }
-          } else {
-            GenerateKeyFromInt(begin_num, FLAGS_num, &begin_key);
-            GenerateKeyFromInt(begin_num + range_tombstone_width_, FLAGS_num,
-                               &end_key);
-            if (FLAGS_use_blob_db) {
-              s = db_with_cfh->db->DeleteRange(
-                  write_options_, db_with_cfh->db->DefaultColumnFamily(),
-                  begin_key, end_key);
-            } else if (FLAGS_num_column_families <= 1) {
-              batch->DeleteRange(begin_key, end_key);
-            } else {
-              batch->DeleteRange(db_with_cfh->GetCfh(rand_num), begin_key,
-                                 end_key);
-            }
-          }
-        }
       }
-      if (!FLAGS_use_blob_db) {
-        // s = db_with_cfh->db->Write(write_options_, &batch);
-        BenchMarkAsyncCallback* call_back = new BenchMarkAsyncCallback(batch);
-        AsyncCallback* cb_param = nullptr;
-        if (FLAGS_async_mode) {
-          write_options_.async_commit = true;
-          cb_param = call_back;
-        }
-        s = db_with_cfh->db->WriteAsync(write_options_, batch, cb_param);
-        if (!FLAGS_async_mode) {
-          call_back->run_call_back();
-          delete call_back;
-        }
-        // delete allocate_option;
+      // s = db_with_cfh->db->Write(write_options_, &batch);
+      BenchMarkAsyncCallback* call_back = new BenchMarkAsyncCallback(batch);
+      AsyncCallback* cb_param = nullptr;
+      if (FLAGS_async_mode) {
+        write_options_.async_commit = true;
+        cb_param = call_back;
       }
+      s = db_with_cfh->db->WriteAsync(write_options_, batch, cb_param);
+      if (!FLAGS_async_mode) {
+        call_back->run_call_back();
+        delete call_back;
+      }
+      // delete allocate_option;
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db,
                                 entries_per_batch_, kWrite);
       if (!s.ok()) {

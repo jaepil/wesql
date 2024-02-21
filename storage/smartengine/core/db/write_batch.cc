@@ -72,7 +72,7 @@ enum ContentFlags : uint32_t {
   HAS_END_PREPARE = 1 << 6,
   HAS_COMMIT = 1 << 7,
   HAS_ROLLBACK = 1 << 8,
-  HAS_DELETE_RANGE = 1 << 9,
+  HAS_DELETE_RANGE = 1 << 9, //deprecated
 };
 
 struct BatchContentClassifier : public WriteBatch::Handler {
@@ -91,12 +91,6 @@ struct BatchContentClassifier : public WriteBatch::Handler {
 
   common::Status SingleDeleteCF(uint32_t, const common::Slice&) override {
     content_flags |= ContentFlags::HAS_SINGLE_DELETE;
-    return common::Status::OK();
-  }
-
-  common::Status DeleteRangeCF(uint32_t, const common::Slice&,
-                               const common::Slice&) override {
-    content_flags |= ContentFlags::HAS_DELETE_RANGE;
     return common::Status::OK();
   }
 
@@ -239,10 +233,6 @@ bool WriteBatch::HasSingleDelete() const {
   return (ComputeContentFlags() & ContentFlags::HAS_SINGLE_DELETE) != 0;
 }
 
-bool WriteBatch::HasDeleteRange() const {
-  return (ComputeContentFlags() & ContentFlags::HAS_DELETE_RANGE) != 0;
-}
-
 bool ReadKeyFromWriteBatchEntry(common::Slice* input, common::Slice* key,
                                 bool cf_record) {
   assert(input != nullptr && key != nullptr);
@@ -314,19 +304,6 @@ common::Status ReadRecordFromWriteBatch(common::Slice* input, char* tag,
     case kTypeSingleDeletion:
       if (!GetLengthPrefixedSlice(input, key)) {
         return common::Status::Corruption("bad WriteBatch Delete");
-      }
-      break;
-    case kTypeColumnFamilyRangeDeletion:
-      if (!GetVarint32(input, column_family)) {
-        return common::Status::Corruption("bad WriteBatch DeleteRange");
-      }
-      [[fallthrough]];
-    // intentional fallthrough
-    case kTypeRangeDeletion:
-      // for range delete, "key" is begin_key, "value" is end_key
-      if (!GetLengthPrefixedSlice(input, key) ||
-          !GetLengthPrefixedSlice(input, value)) {
-        return common::Status::Corruption("bad WriteBatch DeleteRange");
       }
       break;
     case kTypeLogData:
@@ -422,13 +399,6 @@ common::Status WriteBatch::Iterate(Handler* handler, bool is_parallel_recovering
         assert(content_flags_.load(std::memory_order_relaxed) &
                (ContentFlags::DEFERRED | ContentFlags::HAS_SINGLE_DELETE));
         s = handler->SingleDeleteCF(column_family, key);
-        found++;
-        break;
-      case kTypeColumnFamilyRangeDeletion:
-      case kTypeRangeDeletion:
-        assert(content_flags_.load(std::memory_order_relaxed) &
-               (ContentFlags::DEFERRED | ContentFlags::HAS_DELETE_RANGE));
-        s = handler->DeleteRangeCF(column_family, key, value);
         found++;
         break;
       case kTypeLogData:
@@ -740,59 +710,6 @@ common::Status WriteBatch::SingleDelete(ColumnFamilyHandle* column_family,
                                         const common::SliceParts& key) {
   return WriteBatchInternal::SingleDelete(
       this, GetColumnFamilyID(column_family), key);
-}
-
-common::Status WriteBatchInternal::DeleteRange(WriteBatch* b,
-                                               uint32_t column_family_id,
-                                               const common::Slice& begin_key,
-                                               const common::Slice& end_key) {
-  LocalSavePoint save(b);
-  WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);
-  if (column_family_id == 0) {
-    b->rep_.push_back(static_cast<char>(kTypeRangeDeletion));
-  } else {
-    b->rep_.push_back(static_cast<char>(kTypeColumnFamilyRangeDeletion));
-    PutVarint32(&b->rep_, column_family_id);
-  }
-  PutLengthPrefixedSlice(&b->rep_, begin_key);
-  PutLengthPrefixedSlice(&b->rep_, end_key);
-  b->content_flags_.store(b->content_flags_.load(std::memory_order_relaxed) |
-                              ContentFlags::HAS_DELETE_RANGE,
-                          std::memory_order_relaxed);
-  return save.commit();
-}
-
-common::Status WriteBatch::DeleteRange(ColumnFamilyHandle* column_family,
-                                       const common::Slice& begin_key,
-                                       const common::Slice& end_key) {
-  return WriteBatchInternal::DeleteRange(this, GetColumnFamilyID(column_family),
-                                         begin_key, end_key);
-}
-
-common::Status WriteBatchInternal::DeleteRange(
-    WriteBatch* b, uint32_t column_family_id,
-    const common::SliceParts& begin_key, const common::SliceParts& end_key) {
-  LocalSavePoint save(b);
-  WriteBatchInternal::SetCount(b, WriteBatchInternal::Count(b) + 1);
-  if (column_family_id == 0) {
-    b->rep_.push_back(static_cast<char>(kTypeRangeDeletion));
-  } else {
-    b->rep_.push_back(static_cast<char>(kTypeColumnFamilyRangeDeletion));
-    PutVarint32(&b->rep_, column_family_id);
-  }
-  PutLengthPrefixedSliceParts(&b->rep_, begin_key);
-  PutLengthPrefixedSliceParts(&b->rep_, end_key);
-  b->content_flags_.store(b->content_flags_.load(std::memory_order_relaxed) |
-                              ContentFlags::HAS_DELETE_RANGE,
-                          std::memory_order_relaxed);
-  return save.commit();
-}
-
-common::Status WriteBatch::DeleteRange(ColumnFamilyHandle* column_family,
-                                       const common::SliceParts& begin_key,
-                                       const common::SliceParts& end_key) {
-  return WriteBatchInternal::DeleteRange(this, GetColumnFamilyID(column_family),
-                                         begin_key, end_key);
 }
 
 common::Status WriteBatch::PutLogData(const common::Slice& blob) {
@@ -1152,41 +1069,6 @@ class MemTableInserter : public WriteBatch::Handler {
     return DeleteImpl(column_family_id, key, common::Slice(),
                       kTypeSingleDeletion);
   }
-
-  virtual common::Status DeleteRangeCF(uint32_t column_family_id,
-                                       const common::Slice& begin_key,
-                                       const common::Slice& end_key) override {
-    if (recovering_log_number_ != 0 && !uncommit_transaction_list_.empty()) {
-      return common::Status::OK();
-    }
-    if (rebuilding_trx_ != nullptr) {
-      WriteBatchInternal::DeleteRange(rebuilding_trx_, column_family_id,
-                                      begin_key, end_key);
-      return common::Status::OK();
-    }
-
-    common::Status seek_status;
-    if (!SeekToColumnFamily(column_family_id, &seek_status)) {
-      ++sequence_;
-      return seek_status;
-    }
-    if (db_ != nullptr) {
-      auto cf_handle = cf_mems_->GetColumnFamilyHandle();
-      if (cf_handle == nullptr) {
-        cf_handle = db_->DefaultColumnFamily();
-      }
-      auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(cf_handle)->cfd();
-      if (!cfd->is_delete_range_supported()) {
-        return common::Status::NotSupported(
-            std::string("DeleteRange not supported for table type ") +
-            cfd->ioptions()->table_factory->Name() + " in CF " +
-            cfd->GetName());
-      }
-    }
-
-    return DeleteImpl(column_family_id, begin_key, end_key, kTypeRangeDeletion);
-  }
-
 
   void CheckMemtableFull() {
     if (flush_scheduler_ != nullptr) {

@@ -1134,12 +1134,6 @@ struct ReadOptions {
   // Default: 0
   size_t readahead_size;
 
-  // If true, keys deleted using the DeleteRange() API will be visible to
-  // readers until they are naturally deleted during compaction. This improves
-  // read performance in DBs with many range deletions.
-  // Default: false
-  bool ignore_range_deletions;
-
   // A threshold for the number of keys that can be skipped before failing an
   // iterator seek as incomplete. The default value of 0 should be used to
   // never fail a request as incomplete, even on skipping too many keys.

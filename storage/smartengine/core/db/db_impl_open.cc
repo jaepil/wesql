@@ -24,6 +24,7 @@
 #include "table/extent_table_factory.h"
 #include "table/filter_manager.h"
 #include "memory/mod_info.h"
+#include "util/file_reader_writer.h"
 #include "util/sst_file_manager_impl.h"
 #include "util/sync_point.h"
 #include "smartengine/wal_filter.h"

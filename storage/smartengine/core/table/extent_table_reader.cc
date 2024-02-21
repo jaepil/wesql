@@ -336,7 +336,6 @@ ExtentBasedTable::Rep::Rep(const common::ImmutableCFOptions& _ioptions,
       filter_type(FilterType::kNoFilter),
       whole_key_filtering(_table_opt.whole_key_filtering),
       prefix_filtering(true),
-      range_del_handle(BlockHandle::NullBlockHandle()),
       global_seqno(db::kDisableGlobalSequenceNumber),
       internal_alloc_(false) {
   if (nullptr == alloc) {
@@ -512,24 +511,6 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
       rep->compression_dict_block = std::move(compression_dict_block);
     }
   }
-
-  // Read the range del meta block
-  bool found_range_del_block;
-  s = SeekToRangeDelBlock(meta_iter, &found_range_del_block, &rep->range_del_handle);
-  if (!s.ok()) {
-    __SE_LOG(WARN, "Error when seeking to range delete tombstones block from file: %s", s.ToString().c_str());
-  } else {
-    if (found_range_del_block && !rep->range_del_handle.IsNull()) {
-      ReadOptions read_options;
-      s = MaybeLoadDataBlockToCache(rep, read_options, rep->range_del_handle,
-                                    Slice() /* compression_dict */,
-                                    &rep->range_del_entry);
-      if (!s.ok()) {
-        __SE_LOG(WARN, "Encountered error while reading data from range del block %s", s.ToString().c_str());
-      }
-    }
-  }
-
 
   // pre-fetching of blocks is turned on
   // Will use block cache for index/filter blocks access
@@ -1469,36 +1450,6 @@ InternalIterator* ExtentBasedTable::NewIterator(const ReadOptions& read_options,
       arena);
 }
 
-InternalIterator* ExtentBasedTable::NewRangeTombstoneIterator(
-    const ReadOptions& read_options) {
-  if (rep_->range_del_handle.IsNull()) {
-    // The block didn't exist, nullptr indicates no range tombstones.
-    return nullptr;
-  }
-  if (rep_->range_del_entry.cache_handle != nullptr) {
-    // We have a handle to an uncompressed block cache entry that's held for
-    // this table's lifetime. Increment its refcount before returning an
-    // iterator based on it since the returned iterator may outlive this table
-    // reader.
-    assert(rep_->range_del_entry.value != nullptr);
-    Cache* block_cache = rep_->table_options.block_cache.get();
-    assert(block_cache != nullptr);
-    if (block_cache->Ref(rep_->range_del_entry.cache_handle)) {
-      auto iter = rep_->range_del_entry.value->NewIterator(
-          &rep_->internal_comparator, nullptr /* iter */,
-          true /* total_order_seek */, rep_->ioptions.statistics);
-      iter->RegisterCleanup(&ReleaseCachedEntry, block_cache,
-                            rep_->range_del_entry.cache_handle);
-      return iter;
-    }
-  }
-  std::string str;
-  rep_->range_del_handle.EncodeTo(&str);
-  // The meta-block exists but isn't in uncompressed block cache (maybe because
-  // it is disabled), so go through the full lookup process.
-  return NewDataBlockIterator(rep_, read_options, Slice(str));
-}
-
 bool ExtentBasedTable::FullFilterKeyMayMatch(const ReadOptions& read_options,
                                              FilterBlockReader* filter,
                                              const Slice& internal_key,
@@ -1923,10 +1874,6 @@ Status ExtentBasedTable::DumpTable(WritableFile* out_file) {
         out_file->Append("  Filter block handle: ");
         out_file->Append(meta_iter->value().ToString(true).c_str());
         out_file->Append("\n");
-      } else if (meta_iter->key() == kRangeDelBlock) {
-        out_file->Append("  Range deletion block handle: ");
-        out_file->Append(meta_iter->value().ToString(true).c_str());
-        out_file->Append("\n");
       }
     }
     out_file->Append("\n");
@@ -2003,22 +1950,6 @@ Status ExtentBasedTable::DumpTable(WritableFile* out_file) {
     out_file->Append("\n\n");
   }
 
-  // Output range deletions block
-  auto* range_del_iter = NewRangeTombstoneIterator(ReadOptions());
-  if (range_del_iter != nullptr) {
-    range_del_iter->SeekToFirst();
-    if (range_del_iter->Valid()) {
-      out_file->Append(
-          "Range deletions:\n"
-          "--------------------------------------\n"
-          "  ");
-      for (; range_del_iter->Valid(); range_del_iter->Next()) {
-        DumpKeyValue(range_del_iter->key(), range_del_iter->value(), out_file);
-      }
-      out_file->Append("\n");
-    }
-    delete range_del_iter;
-  }
   // Output Data blocks
   s = DumpDataBlocks(out_file);
 
@@ -2078,7 +2009,6 @@ Status ExtentBasedTable::check_range(const Slice &start, const Slice &end, bool 
 void ExtentBasedTable::Close() {
   rep_->filter_entry.Release(rep_->table_options.block_cache.get());
   rep_->index_entry.Release(rep_->table_options.block_cache.get());
-  rep_->range_del_entry.Release(rep_->table_options.block_cache.get());
   // cleanup index and filter blocks to avoid accessing dangling pointer
   if (!rep_->table_options.no_block_cache) {
     char cache_key[kMaxCacheKeyPrefixSize + kMaxVarint64Length];

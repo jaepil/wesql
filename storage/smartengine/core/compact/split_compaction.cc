@@ -18,7 +18,6 @@
 #include "db/builder.h"
 #include "db/table_cache.h"
 #include "db/table_properties_collector.h"
-#include "db/version_edit.h"
 #include "options/db_options.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"

@@ -21,7 +21,6 @@
 #include "table/table_builder.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
-#include "db/version_edit.h"
 #include "db/version_set.h"
 #include "storage/extent_space_manager.h"
 

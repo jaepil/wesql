@@ -180,10 +180,6 @@ LDBCommand* LDBCommand::SelectCommand(const ParsedParams& parsed_params) {
   } else if (parsed_params.cmd == DeleteCommand::Name()) {
     return new DeleteCommand(parsed_params.cmd_params, parsed_params.option_map,
                              parsed_params.flags);
-  } else if (parsed_params.cmd == DeleteRangeCommand::Name()) {
-    return new DeleteRangeCommand(parsed_params.cmd_params,
-                                  parsed_params.option_map,
-                                  parsed_params.flags);
   } else if (parsed_params.cmd == ApproxSizeCommand::Name()) {
     return new ApproxSizeCommand(parsed_params.cmd_params,
                                  parsed_params.option_map, parsed_params.flags);
@@ -225,10 +221,6 @@ LDBCommand* LDBCommand::SelectCommand(const ParsedParams& parsed_params) {
                                          parsed_params.flags);
   } else if (parsed_params.cmd == DBFileDumperCommand::Name()) {
     return new DBFileDumperCommand(parsed_params.cmd_params,
-                                   parsed_params.option_map,
-                                   parsed_params.flags);
-  } else if (parsed_params.cmd == InternalDumpCommand::Name()) {
-    return new InternalDumpCommand(parsed_params.cmd_params,
                                    parsed_params.option_map,
                                    parsed_params.flags);
   } else if (parsed_params.cmd == CheckPointCommand::Name()) {
@@ -1688,170 +1680,6 @@ void CreateColumnFamilyCommand::DoCommand() {
   */
 }
 
-// ----------------------------------------------------------------------------
-
-const std::string InternalDumpCommand::ARG_COUNT_ONLY = "count_only";
-const std::string InternalDumpCommand::ARG_COUNT_DELIM = "count_delim";
-const std::string InternalDumpCommand::ARG_STATS = "stats";
-const std::string InternalDumpCommand::ARG_INPUT_KEY_HEX = "input_key_hex";
-
-InternalDumpCommand::InternalDumpCommand(
-    const std::vector<std::string>& params,
-    const std::map<std::string, std::string>& options,
-    const std::vector<std::string>& flags)
-    : LDBCommand(options,
-                 flags,
-                 BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX, ARG_FROM,
-                                     ARG_TO, ARG_MAX_KEYS, ARG_COUNT_ONLY,
-                                     ARG_COUNT_DELIM, ARG_STATS, ARG_INPUT_KEY_HEX})),
-      has_from_(false),
-      has_to_(false),
-      max_keys_(-1),
-      delim_("."),
-      count_only_(false),
-      count_delim_(false),
-      print_stats_(false),
-      is_input_key_hex_(false) {
-  has_from_ = ParseStringOption(options, ARG_FROM, &from_);
-  has_to_ = ParseStringOption(options, ARG_TO, &to_);
-
-  ParseIntOption(options, ARG_MAX_KEYS, max_keys_, exec_state_);
-  std::map<std::string, std::string>::const_iterator itr =
-      options.find(ARG_COUNT_DELIM);
-  if (itr != options.end()) {
-    delim_ = itr->second;
-    count_delim_ = true;
-    // fprintf(stdout,"delim = %c\n",delim_[0]);
-  } else {
-    count_delim_ = IsFlagPresent(flags, ARG_COUNT_DELIM);
-    delim_ = ".";
-  }
-
-  print_stats_ = IsFlagPresent(flags, ARG_STATS);
-  count_only_ = IsFlagPresent(flags, ARG_COUNT_ONLY);
-  is_input_key_hex_ = IsFlagPresent(flags, ARG_INPUT_KEY_HEX);
-
-  if (is_input_key_hex_) {
-    if (has_from_) {
-      from_ = HexToString(from_);
-    }
-    if (has_to_) {
-      to_ = HexToString(to_);
-    }
-  }
-}
-
-void InternalDumpCommand::Help(std::string& ret) {
-  ret.append("  ");
-  ret.append(InternalDumpCommand::Name());
-  ret.append(HelpRangeCmdArgs());
-  ret.append(" [--" + ARG_INPUT_KEY_HEX + "]");
-  ret.append(" [--" + ARG_MAX_KEYS + "=<N>]");
-  ret.append(" [--" + ARG_COUNT_ONLY + "]");
-  ret.append(" [--" + ARG_COUNT_DELIM + "=<char>]");
-  ret.append(" [--" + ARG_STATS + "]");
-  ret.append("\n");
-}
-
-void InternalDumpCommand::DoCommand() {
-  if (!db_) {
-    assert(GetExecuteState().IsFailed());
-    return;
-  }
-
-  if (print_stats_) {
-    std::string stats;
-    if (db_->GetProperty(GetCfHandle(), "smartengine.stats", &stats)) {
-      fprintf(stdout, "%s\n", stats.c_str());
-    }
-  }
-
-  // Cast as DBImpl to get internal iterator
-  DBImpl* idb = dynamic_cast<DBImpl*>(db_);
-  if (!idb) {
-    exec_state_ = LDBCommandExecuteResult::Failed("DB is not DBImpl");
-    return;
-  }
-  std::string rtype1, rtype2, row, val;
-  rtype2 = "";
-  uint64_t c = 0;
-  uint64_t s1 = 0, s2 = 0;
-  // Setup internal key iterator
-  Arena arena;
-  auto icmp = InternalKeyComparator(options_.comparator);
-  RangeDelAggregator range_del_agg(icmp, {} /* snapshots */);
-  ScopedArenaIterator iter(idb->NewInternalIterator(&arena, &range_del_agg));
-  Status st = iter->status();
-  if (!st.ok()) {
-    exec_state_ =
-        LDBCommandExecuteResult::Failed("Iterator error:" + st.ToString());
-  }
-
-  if (has_from_) {
-    InternalKey ikey;
-    ikey.SetMaxPossibleForUserKey(from_);
-    iter->Seek(ikey.Encode());
-  } else {
-    iter->SeekToFirst();
-  }
-
-  long long count = 0;
-  for (; iter->Valid(); iter->Next()) {
-    ParsedInternalKey ikey;
-    if (!ParseInternalKey(iter->key(), &ikey)) {
-      fprintf(stderr, "Internal Key [%s] parse error!\n",
-              iter->key().ToString(true /* in hex*/).data());
-      // TODO: add error counter
-      continue;
-    }
-
-    // If end marker was specified, we stop before it
-    if (has_to_ && options_.comparator->Compare(ikey.user_key, to_) >= 0) {
-      break;
-    }
-
-    ++count;
-    int k;
-    if (count_delim_) {
-      rtype1 = "";
-      s1 = 0;
-      row = iter->key().ToString();
-      val = iter->value().ToString();
-      for (k = 0; row[k] != '\x01' && row[k] != '\0'; k++) s1++;
-      for (k = 0; val[k] != '\x01' && val[k] != '\0'; k++) s1++;
-      for (int j = 0; row[j] != delim_[0] && row[j] != '\0' && row[j] != '\x01';
-           j++)
-        rtype1 += row[j];
-      if (rtype2.compare("") && rtype2.compare(rtype1) != 0) {
-        fprintf(stdout, "%s => count:%lld\tsize:%lld\n", rtype2.c_str(),
-                (long long)c, (long long)s2);
-        c = 1;
-        s2 = s1;
-        rtype2 = rtype1;
-      } else {
-        c++;
-        s2 += s1;
-        rtype2 = rtype1;
-      }
-    }
-
-    if (!count_only_ && !count_delim_) {
-      std::string key = ikey.DebugString(is_key_hex_);
-      std::string value = iter->value().ToString(is_value_hex_);
-      std::cout << key << " => " << value << "\n";
-    }
-
-    // Terminate if maximum number of keys have been dumped
-    if (max_keys_ > 0 && count >= max_keys_) break;
-  }
-  if (count_delim_) {
-    fprintf(stdout, "%s => count:%lld\tsize:%lld\n", rtype2.c_str(),
-            (long long)c, (long long)s2);
-  } else
-    fprintf(stdout, "Internal keys in range: %lld\n", (long long)count);
-}
-
-
 const std::string ReduceDBLevelsCommand::ARG_NEW_LEVELS = "new_levels";
 const std::string ReduceDBLevelsCommand::ARG_PRINT_OLD_LEVELS =
     "print_old_levels";
@@ -2158,14 +1986,6 @@ class InMemoryHandler : public WriteBatch::Handler {
   virtual Status SingleDeleteCF(uint32_t cf, const Slice& key) override {
     row_ << "SINGLE_DELETE(" << cf << ") : ";
     row_ << LDBCommand::StringToHex(key.ToString()) << " ";
-    return Status::OK();
-  }
-
-  virtual Status DeleteRangeCF(uint32_t cf, const Slice& begin_key,
-                               const Slice& end_key) override {
-    row_ << "DELETE_RANGE(" << cf << ") : ";
-    row_ << LDBCommand::StringToHex(begin_key.ToString()) << " ";
-    row_ << LDBCommand::StringToHex(end_key.ToString()) << " ";
     return Status::OK();
   }
 
@@ -2506,46 +2326,6 @@ void DeleteCommand::DoCommand() {
     return;
   }
   Status st = db_->Delete(WriteOptions(), GetCfHandle(), key_);
-  if (st.ok()) {
-    fprintf(stdout, "OK\n");
-  } else {
-    exec_state_ = LDBCommandExecuteResult::Failed(st.ToString());
-  }
-}
-
-DeleteRangeCommand::DeleteRangeCommand(
-    const std::vector<std::string>& params,
-    const std::map<std::string, std::string>& options,
-    const std::vector<std::string>& flags)
-    : LDBCommand(options,
-                 flags,
-                 BuildCmdLineOptions({ARG_HEX, ARG_KEY_HEX, ARG_VALUE_HEX})) {
-  if (params.size() != 2) {
-    exec_state_ = LDBCommandExecuteResult::Failed(
-        "begin and end keys must be specified for the delete command");
-  } else {
-    begin_key_ = params.at(0);
-    end_key_ = params.at(1);
-    if (is_key_hex_) {
-      begin_key_ = HexToString(begin_key_);
-      end_key_ = HexToString(end_key_);
-    }
-  }
-}
-
-void DeleteRangeCommand::Help(std::string& ret) {
-  ret.append("  ");
-  ret.append(DeleteRangeCommand::Name() + " <begin key> <end key>");
-  ret.append("\n");
-}
-
-void DeleteRangeCommand::DoCommand() {
-  if (!db_) {
-    assert(GetExecuteState().IsFailed());
-    return;
-  }
-  Status st =
-      db_->DeleteRange(WriteOptions(), GetCfHandle(), begin_key_, end_key_);
   if (st.ok()) {
     fprintf(stdout, "OK\n");
   } else {

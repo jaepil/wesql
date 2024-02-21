@@ -786,6 +786,8 @@ class DBTestBase : public testing::Test {
   std::string Get(int cf, const std::string& k,
                   const Snapshot* snapshot = nullptr);
 
+  table::InternalIterator *NewInternalIterator(util::Arena *arena, ColumnFamilyHandle *column_family);
+
   uint64_t GetNumSnapshots();
 
   uint64_t GetTimeOldestSnapshots();
@@ -793,8 +795,6 @@ class DBTestBase : public testing::Test {
   // Return a string that contains all key,value pairs in order,
   // formatted like "(k1->v1)(k2->v2)".
   std::string Contents(int cf = 0);
-
-  std::string AllEntriesFor(const common::Slice& user_key, int cf = 0);
 
 #ifndef ROCKSDB_LITE
   int NumSortedRuns(int cf = 0);
@@ -893,9 +893,6 @@ class DBTestBase : public testing::Test {
                                                     common::Slice delta,
                                                     std::string* newValue);
 
-  // Utility method to test InplaceUpdate
-  void validateNumberOfEntries(int numValues, int cf = 0);
-
   void CopyFile(const std::string& source, const std::string& destination,
                 uint64_t size = 0);
 
@@ -904,9 +901,6 @@ class DBTestBase : public testing::Test {
 
   std::vector<std::uint64_t> ListTableFiles(util::Env* env,
                                             const std::string& path);
-
-  void VerifyDBInternal(
-      std::vector<std::pair<std::string, std::string>> true_data);
 
 #ifndef ROCKSDB_LITE
   uint64_t GetNumberOfSstFilesForColumnFamily(DB* db,

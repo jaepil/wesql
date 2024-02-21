@@ -23,7 +23,6 @@
 #include "compact/compaction.h"
 #include "compact/compaction_iteration_stats.h"
 #include "db/pinned_iterators_manager.h"
-#include "db/range_del_aggregator.h"
 #include "smartengine/compaction_filter.h"
 
 namespace smartengine {

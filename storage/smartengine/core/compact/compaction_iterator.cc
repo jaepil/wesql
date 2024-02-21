@@ -49,7 +49,6 @@ CompactionIterator::CompactionIterator(
       earliest_write_conflict_snapshot_(earliest_write_conflict_snapshot),
       env_(env),
       expect_valid_internal_key_(expect_valid_internal_key),
-//      range_del_agg_(range_del_agg),
       compaction_(std::move(compaction)),
       compaction_filter_(compaction_filter),
       shutting_down_(shutting_down),
@@ -98,8 +97,6 @@ void CompactionIterator::ResetRecordCounts() {
   iter_stats_.num_record_drop_user = 0;
   iter_stats_.num_record_drop_hidden = 0;
   iter_stats_.num_record_drop_obsolete = 0;
-  iter_stats_.num_record_drop_range_del = 0;
-  iter_stats_.num_range_del_drop_obsolete = 0;
 }
 
 void CompactionIterator::SeekToFirst() {
@@ -450,16 +447,7 @@ void CompactionIterator::NextFromInput() {
     } else {
       // 1. new user key -OR-
       // 2. different snapshot stripe
-      bool should_delete = false;
-//          range_del_agg_->ShouldDelete(
-//          key_, RangeDelAggregator::RangePositioningMode::kForwardTraversal);
-      if (should_delete) {
-        ++iter_stats_.num_record_drop_hidden;
-        ++iter_stats_.num_record_drop_range_del;
-        input_->Next();
-      } else {
-        valid_ = true;
-      }
+      valid_ = true;
     }
 
     if (need_skip) {

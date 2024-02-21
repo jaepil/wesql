@@ -215,7 +215,7 @@ const ValueType kValueTypeForSeekForPrev = kTypeDeletion;
 
 uint64_t PackSequenceAndType(uint64_t seq, ValueType t) {
   assert(seq <= kMaxSequenceNumber);
-  assert(IsExtendedValueType(t));
+  assert(IsValueType(t));
   return (seq << 8) | t;
 }
 
@@ -224,7 +224,7 @@ void UnPackSequenceAndType(uint64_t packed, uint64_t* seq, ValueType* t) {
   *t = static_cast<ValueType>(packed & 0xff);
 
   assert(*seq <= kMaxSequenceNumber);
-  assert(IsExtendedValueType(*t));
+  assert(IsValueType(*t));
 }
 
 void AppendInternalKey(std::string* result, const ParsedInternalKey& key) {
@@ -386,5 +386,13 @@ LookupKey::LookupKey(const Slice& _user_key, SequenceNumber s) {
   end_ = dst;
   this->bloom_hash_set_ = false;
 }
+
+DEFINE_TO_STRING(FileMetaData, KV(smallest), KV(largest), KV(smallest_seqno),
+                 KV(largest_seqno), KV(fd.extent_id.offset),
+                 KV(fd.extent_id.file_number), KV(fd.file_size),
+                 KV(compensated_file_size), KV(num_entries), KV(num_deletions),
+                 KV(raw_key_size), KV(raw_value_size), KV(fd.extent_id.offset),
+                 KV(fd.extent_id.file_number));
+
 }
 }  // namespace smartengine

@@ -7,7 +7,6 @@
 
 #pragma once
 #include <string>
-#include "db/range_del_aggregator.h"
 #include "table/block.h"
 #include "smartengine/env.h"
 #include "smartengine/types.h"
@@ -34,8 +33,6 @@ class GetContext {
              const common::Slice& user_key,
              common::PinnableSlice* value,
              bool* value_found,
-             db::RangeDelAggregator* range_del_agg,
-             util::Env* env,
              common::SequenceNumber* seq);
 
   void MarkKeyMayExist();
@@ -53,8 +50,6 @@ class GetContext {
 
   GetState State() const { return state_; }
 
-  db::RangeDelAggregator* range_del_agg() { return range_del_agg_; }
-
   // Do we need to fetch the common::SequenceNumber for this key?
   bool NeedToReadSequence() const { return (seq_ != nullptr); }
 
@@ -66,8 +61,6 @@ class GetContext {
   common::Slice user_key_;
   common::PinnableSlice* pinnable_val_;
   bool* value_found_;  // Is value set correctly? Used by KeyMayExist
-  db::RangeDelAggregator* range_del_agg_;
-  util::Env* env_;
   // If a key is found, seq_ will be set to the common::SequenceNumber of most
   // recent
   // write to the key or kMaxSequenceNumber if unknown

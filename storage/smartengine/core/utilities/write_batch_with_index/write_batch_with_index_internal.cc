@@ -60,10 +60,6 @@ Status ReadableWriteBatch::GetEntryFromDataOffset(size_t data_offset,
     case kTypeSingleDeletion:
       *type = kSingleDeleteRecord;
       break;
-    case kTypeColumnFamilyRangeDeletion:
-    case kTypeRangeDeletion:
-      *type = kDeleteRangeRecord;
-      break;
     case kTypeLogData:
       *type = kLogDataRecord;
       break;

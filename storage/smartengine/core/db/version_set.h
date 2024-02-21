@@ -33,9 +33,7 @@
 #include "db/column_family.h"
 #include "db/dbformat.h"
 #include "db/log_reader.h"
-#include "db/range_del_aggregator.h"
 #include "db/table_cache.h"
-#include "db/version_edit.h"
 #include "db/write_controller.h"
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
@@ -73,33 +71,6 @@ class MemTable;
 class VersionSet;
 class ColumnFamilySet;
 class TableCache;
-
-// Return the smallest index i such that file_level.files[i]->largest >= key.
-// Return file_level.num_files if there is no such file.
-// REQUIRES: "file_level.files" contains a sorted list of
-// non-overlapping files.
-extern int FindFile(const InternalKeyComparator& icmp,
-                    const LevelFilesBrief& file_level,
-                    const common::Slice& key);
-
-// Returns true iff some file in "files" overlaps the user key range
-// [*smallest,*largest].
-// smallest==nullptr represents a key smaller than all keys in the DB.
-// largest==nullptr represents a key largest than all keys in the DB.
-// REQUIRES: If disjoint_sorted_files, file_level.files[]
-// contains disjoint ranges in sorted order.
-extern bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
-                                  bool disjoint_sorted_files,
-                                  const LevelFilesBrief& file_level,
-                                  const common::Slice* smallest_user_key,
-                                  const common::Slice* largest_user_key);
-
-// Generate LevelFilesBrief from vector<FdWithKeyRange*>
-// Would copy smallest_key and largest_key data to sequential memory
-// arena: util::Arena used to allocate the memory
-extern void DoGenerateLevelFilesBrief(LevelFilesBrief* file_level,
-                                      const std::vector<FileMetaData*>& files,
-                                      util::Arena* arena);
 
 struct AllSubTable {
 public:
@@ -346,16 +317,6 @@ class VersionSet {
   friend class Version;
   friend class DBImpl;
   friend class storage::StorageManagerTest;
-
-  // ApproximateSize helper
-  /*
-  uint64_t ApproximateSizeLevel0(Version* v, const LevelFilesBrief& files_brief,
-                                 const common::Slice& start,
-                                 const common::Slice& end);
-
-  uint64_t ApproximateSize(Version* v, const FdWithKeyRange& f,
-                           const common::Slice& key);
-  */
 
   // Save current contents to *log
   common::Status WriteSnapshot(log::Writer* log);

@@ -19,7 +19,6 @@
 #include "db/builder.h"
 #include "db/table_cache.h"
 #include "db/table_properties_collector.h"
-#include "db/version_edit.h"
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
 #include "options/db_options.h"

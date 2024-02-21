@@ -145,7 +145,6 @@ void SSTableScanIteratorTest::init_scan_iter(SSTableScanIterator *&scan_iter)
   param.for_compaction_ = false;
   param.skip_filters_ = false;
   param.layer_position_ = LayerPosition(level_, 0);
-  param.range_del_agg_ = nullptr;
   param.subtable_id_ = 1;
   param.internal_stats_ = nullptr;
   param.extent_layer_ = extent_layer;

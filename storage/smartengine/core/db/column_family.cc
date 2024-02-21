@@ -977,15 +977,11 @@ int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_o
   } else {
     Slice ikey = key.internal_key();
     Slice user_key = key.user_key();
-    RangeDelAggregator range_del_agg(this->internal_comparator(),
-                                     kMaxSequenceNumber);
     GetContext get_context(internal_comparator_.user_comparator(),
                            GetContext::kNotFound,
                            user_key,
                            &value,
                            &may_key_exist,
-                           &range_del_agg,
-                           ioptions_.env,
                            seq);
     Arena arena;
     std::function<int(const ExtentMeta *extent_meta, int32_t level, bool &found)>

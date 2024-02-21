@@ -18,7 +18,6 @@
 #include "multi_version_extent_meta_layer.h"
 #include "db/internal_stats.h"
 #include "db/table_cache.h"
-#include "db/version_edit.h"
 #include "monitoring/query_perf_context.h"
 #include "table/merging_iterator.h"
 #include "table/internal_iterator.h"
@@ -182,7 +181,6 @@ int StorageManager::add_iterators(db::TableCache *table_cache,
                                   db::InternalStats *internal_stats,
                                   const common::ReadOptions &read_options,
                                   table::MergeIteratorBuilder *merge_iter_builder,
-                                  db::RangeDelAggregator *range_del_agg,
                                   const db::Snapshot *current_meta)
 {
   int ret = Status::kOk;
@@ -192,9 +190,9 @@ int StorageManager::add_iterators(db::TableCache *table_cache,
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "StorageManager should been inited first", K(ret));
-  } else if (UNLIKELY(nullptr == table_cache || nullptr == merge_iter_builder || nullptr == range_del_agg || nullptr == current_meta)) {
+  } else if (UNLIKELY(nullptr == table_cache || nullptr == merge_iter_builder || nullptr == current_meta)) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(table_cache), KP(merge_iter_builder), KP(range_del_agg), KP(current_meta));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(table_cache), KP(merge_iter_builder), KP(current_meta));
   } else {
     for (int64_t level = 0; Status::kOk == ret && level < storage::MAX_TIER_COUNT; ++level) {
       if(kOnlyL2 == read_options.read_level_ && level != 2){
@@ -218,7 +216,6 @@ int StorageManager::add_iterators(db::TableCache *table_cache,
                                                    internal_stats,
                                                    read_options,
                                                    merge_iter_builder,
-                                                   range_del_agg,
                                                    extent_layer))) {
             SE_LOG(WARN, "fail to add iterator for layer", K(ret), K(level), K(i));
           }
@@ -1128,7 +1125,6 @@ int StorageManager::add_iterator_for_layer(const LayerPosition &layer_position,
                                            db::InternalStats *internal_stats,
                                            const common::ReadOptions &read_options,
                                            table::MergeIteratorBuilder *merge_iter_builder,
-                                           db::RangeDelAggregator *range_del_agg,
                                            ExtentLayer *extent_layer)
 {
   int ret = Status::kOk;
@@ -1143,11 +1139,10 @@ int StorageManager::add_iterator_for_layer(const LayerPosition &layer_position,
   } else if (UNLIKELY(nullptr == table_cache
              || !layer_position.is_valid()
              || nullptr == merge_iter_builder
-             || nullptr == range_del_agg
              || nullptr == extent_layer)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(table_cache),
-        K(layer_position), KP(merge_iter_builder), KP(range_del_agg), KP(extent_layer));
+        K(layer_position), KP(merge_iter_builder), KP(extent_layer));
   } else if (UNLIKELY(nullptr == (arena = merge_iter_builder->GetArena()))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, arena must not nullptr", K(ret), KP(arena));
@@ -1164,7 +1159,6 @@ int StorageManager::add_iterator_for_layer(const LayerPosition &layer_position,
     param.for_compaction_ = false;
     param.skip_filters_ = is_filter_skipped(layer_position.level_);
     param.layer_position_ = layer_position;
-    param.range_del_agg_ = range_del_agg;
     param.subtable_id_ = column_family_id_;
     //param.internal_stats_ = subtable_->internal_stats();
     param.internal_stats_ = internal_stats;
@@ -1264,9 +1258,11 @@ int64_t StorageManager::one_layer_approximate_size(
     } else if (0 == include_extent_count) {
       /**first extent should calculate start_off*/
       db::FileDescriptor fd(extent_meta->extent_id_.id(), column_family_id_, MAX_EXTENT_SIZE);
-      table_iter.reset(cfd->table_cache()->NewIterator(
-          read_options, env_options_, cfd->internal_comparator(), fd, nullptr,
-          &table_reader));
+      table_iter.reset(cfd->table_cache()->NewIterator(read_options,
+                                                       env_options_,
+                                                       cfd->internal_comparator(),
+                                                       fd,
+                                                       &table_reader));
       if (IS_NULL(table_reader)) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, TableReader should not nullptr",
@@ -1292,9 +1288,11 @@ int64_t StorageManager::one_layer_approximate_size(
           end_off = table_reader->ApproximateOffsetOf(end);
         } else {
           db::FileDescriptor fd(extent_meta->extent_id_.id(), column_family_id_, MAX_EXTENT_SIZE);
-          table_iter.reset(cfd->table_cache()->NewIterator(
-              read_options, env_options_, cfd->internal_comparator(), fd,
-              nullptr, &table_reader));
+          table_iter.reset(cfd->table_cache()->NewIterator(read_options,
+                                                           env_options_,
+                                                           cfd->internal_comparator(),
+                                                           fd,
+                                                           &table_reader));
           if (IS_NULL(table_reader)) {
             ret = Status::kErrorUnexpected;
             SE_LOG(WARN,
@@ -1341,9 +1339,11 @@ int64_t StorageManager::one_layer_approximate_size(
       end_off = MAX_EXTENT_SIZE;
       db::FileDescriptor fd(last_extent_id.id(), column_family_id_,
                             MAX_EXTENT_SIZE);
-      table_iter.reset(cfd->table_cache()->NewIterator(
-          read_options, env_options_, cfd->internal_comparator(), fd, nullptr,
-          &table_reader));
+      table_iter.reset(cfd->table_cache()->NewIterator(read_options,
+                                                       env_options_,
+                                                       cfd->internal_comparator(),
+                                                       fd,
+                                                       &table_reader));
       end_off = table_reader->ApproximateOffsetOf(end);
       assert(last_extent_cost_size >= (end_off - start_off));
       cost_size += (end_off - start_off) - last_extent_cost_size;

@@ -749,6 +749,28 @@ std::string DBTestBase::Get(int cf, const std::string& k,
   return result;
 }
 
+InternalIterator *DBTestBase::NewInternalIterator(Arena *arena, ColumnFamilyHandle *column_family)
+{
+  ReadOptions ro;
+  ColumnFamilyData *cfd = nullptr;
+  ColumnFamilyHandleImpl *cfh = nullptr;
+  if (nullptr == column_family) {
+    cfh = reinterpret_cast<ColumnFamilyHandleImpl *>(dbfull()->DefaultColumnFamily());
+    cfd = cfh->cfd();
+  } else {
+    cfh = reinterpret_cast<ColumnFamilyHandleImpl *>(column_family);
+    cfd = cfh->cfd();
+  }
+
+  QUERY_TRACE_BEGIN(monitor::TracePoint::DB_ITER_REF_SV);
+  dbfull()->TEST_LockMutex();
+  SuperVersion* super_version = cfd->GetSuperVersion()->Ref();
+  dbfull()->TEST_UnlockMutex();
+  QUERY_TRACE_END();
+  
+  return dbfull()->NewInternalIterator(ro, cfd, super_version, arena);
+}
+
 uint64_t DBTestBase::GetNumSnapshots() {
   uint64_t int_num;
   EXPECT_TRUE(dbfull()->GetIntProperty("smartengine.num-snapshots", &int_num));
@@ -787,63 +809,6 @@ std::string DBTestBase::Contents(int cf) {
   EXPECT_EQ(matched, forward.size());
 
   delete iter;
-  return result;
-}
-
-std::string DBTestBase::AllEntriesFor(const Slice& user_key, int cf) {
-  util::Arena arena;
-  auto options = CurrentOptions();
-  InternalKeyComparator icmp(options.comparator);
-  RangeDelAggregator range_del_agg(icmp, {} /* snapshots */);
-  ScopedArenaIterator iter;
-  if (cf == 0) {
-    iter.set(dbfull()->NewInternalIterator(&arena, &range_del_agg));
-  } else {
-    iter.set(
-        dbfull()->NewInternalIterator(&arena, &range_del_agg, get_column_family_handle(cf)));
-  }
-  InternalKey target(user_key, kMaxSequenceNumber, kTypeValue);
-  iter->Seek(target.Encode());
-  std::string result;
-  if (!iter->status().ok()) {
-    result = iter->status().ToString();
-  } else {
-    result = "[ ";
-    bool first = true;
-    while (iter->Valid()) {
-      ParsedInternalKey ikey(Slice(), 0, kTypeValue);
-      if (!ParseInternalKey(iter->key(), &ikey)) {
-        result += "CORRUPTED";
-      } else {
-        if (!last_options_.comparator->Equal(ikey.user_key, user_key)) {
-          break;
-        }
-        if (!first) {
-          result += ", ";
-        }
-        first = false;
-        switch (ikey.type) {
-          case kTypeValue:
-            result += iter->value().ToString();
-            break;
-          case kTypeDeletion:
-            result += "DEL";
-            break;
-          case kTypeSingleDeletion:
-            result += "SDEL";
-            break;
-          default:
-            assert(false);
-            break;
-        }
-      }
-      iter->Next();
-    }
-    if (!first) {
-      result += " ";
-    }
-    result += "]";
-  }
   return result;
 }
 
@@ -1195,34 +1160,6 @@ UpdateStatus DBTestBase::updateInPlaceNoAction(char* prevValue,
   return UpdateStatus::UPDATE_FAILED;
 }
 
-// Utility method to test InplaceUpdate
-void DBTestBase::validateNumberOfEntries(int numValues, int cf) {
-  util::Arena arena;
-  ScopedArenaIterator iter;
-  auto options = CurrentOptions();
-  InternalKeyComparator icmp(options.comparator);
-  RangeDelAggregator range_del_agg(icmp, {} /* snapshots */);
-  if (cf != 0) {
-    iter.set(
-        dbfull()->NewInternalIterator(&arena, &range_del_agg, get_column_family_handle(cf)));
-  } else {
-    iter.set(dbfull()->NewInternalIterator(&arena, &range_del_agg));
-  }
-  iter->SeekToFirst();
-  ASSERT_EQ(iter->status().ok(), true);
-  int seq = numValues;
-  while (iter->Valid()) {
-    ParsedInternalKey ikey;
-    ikey.sequence = -1;
-    ASSERT_EQ(ParseInternalKey(iter->key(), &ikey), true);
-
-    // checks sequence number for updates
-    ASSERT_EQ(ikey.sequence, (unsigned)seq--);
-    iter->Next();
-  }
-  ASSERT_EQ(0, seq);
-}
-
 void DBTestBase::CopyFile(const std::string& source,
                           const std::string& destination, uint64_t size) {
   const util::EnvOptions soptions;
@@ -1291,27 +1228,7 @@ std::vector<std::uint64_t> DBTestBase::ListTableFiles(Env* env,
   return file_numbers;
 }
 
-void DBTestBase::VerifyDBInternal(
-    std::vector<std::pair<std::string, std::string>> true_data) {
-  util::Arena arena;
-  InternalKeyComparator icmp(last_options_.comparator);
-  RangeDelAggregator range_del_agg(icmp, {});
-  auto iter = dbfull()->NewInternalIterator(&arena, &range_del_agg);
-  iter->SeekToFirst();
-  for (auto p : true_data) {
-    ASSERT_TRUE(iter->Valid());
-    ParsedInternalKey ikey;
-    ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
-    ASSERT_EQ(p.first, ikey.user_key);
-    ASSERT_EQ(p.second, iter->value());
-    iter->Next();
-  };
-  ASSERT_FALSE(iter->Valid());
-  iter->~InternalIterator();
-}
-
 #ifndef ROCKSDB_LITE
-
 uint64_t DBTestBase::GetNumberOfSstFilesForColumnFamily(
     DB* db, std::string column_family_name) {
   std::vector<LiveFileMetaData> metadata;

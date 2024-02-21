@@ -36,12 +36,10 @@ class DBTestTransactionPipline : public DBTestBase {
     ScopedArenaIterator iter;
     auto options = CurrentOptions();
     InternalKeyComparator icmp(options.comparator);
-    RangeDelAggregator range_del_agg(icmp, {} /* snapshots */);
     if (cf != 0) { 
-      iter.set( dbfull()->NewInternalIterator(&arena, &range_del_agg, 
-                                              get_column_family_handle(cf)));
+      iter.set(NewInternalIterator(&arena, get_column_family_handle(cf)));
     } else {
-      iter.set(dbfull()->NewInternalIterator(&arena, &range_del_agg));
+      iter.set(NewInternalIterator(&arena, nullptr));
     }
     iter->SeekToFirst();
     while (iter->Valid()) {

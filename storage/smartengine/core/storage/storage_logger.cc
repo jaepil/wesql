@@ -16,6 +16,7 @@
 
 #include "smartengine/status.h"
 #include "logger/log_module.h"
+#include "util/file_reader_writer.h"
 #include "util/string_util.h"
 #include "db/log_reader.h"
 #include "db/version_set.h"

@@ -27,6 +27,10 @@
 
 namespace smartengine {
 
+namespace storage {
+class ChangeInfo;
+}
+
 namespace util {
 class Comparator;
 }
@@ -47,7 +51,7 @@ class InternalKey;
 enum ValueType : unsigned char {
   kTypeDeletion = 0x0,
   kTypeValue = 0x1,
-  kTypeMerge = 0x2,
+  kTypeMerge = 0x2, //deprecated
   kTypeLogData = 0x3,               // WAL only.
   kTypeColumnFamilyDeletion = 0x4,  // WAL only.
   kTypeColumnFamilyValue = 0x5,     // WAL only.
@@ -59,8 +63,8 @@ enum ValueType : unsigned char {
   kTypeCommitXID = 0xB,                   // WAL only.
   kTypeRollbackXID = 0xC,                 // WAL only.
   kTypeNoop = 0xD,                        // WAL only.
-  kTypeColumnFamilyRangeDeletion = 0xE,   // WAL only.
-  kTypeRangeDeletion = 0xF,               // meta block
+  kTypeColumnFamilyRangeDeletion = 0xE,   // WAL only. deprecated
+  kTypeRangeDeletion = 0xF,               // meta block. deprecated
   kTypeValueLarge = 0x10,                 // out-of-band large value
   kMaxValue = 0x7F                        // Not used for storing records.
 };
@@ -73,12 +77,6 @@ extern const ValueType kValueTypeForSeekForPrev;
 // (i.e. a type used in memtable skiplist and sst file datablock).
 inline bool IsValueType(ValueType t) {
   return t <= kTypeMerge || t == kTypeSingleDeletion || t == kTypeValueLarge;
-}
-
-// Checks whether a type is from user operation
-// kTypeRangeDeletion is in meta block so this API is separated from above
-inline bool IsExtendedValueType(ValueType t) {
-  return IsValueType(t) || t == kTypeRangeDeletion;
 }
 
 inline bool IsValueOrLargeType(ValueType t) {
@@ -342,7 +340,7 @@ inline bool ParseInternalKey(const common::Slice& internal_key,
   result->type = static_cast<ValueType>(c);
   assert(result->type <= ValueType::kMaxValue);
   result->user_key = common::Slice(internal_key.data(), n - 8);
-  return IsExtendedValueType(result->type);
+  return IsValueType(result->type);
 }
 
 // Update the sequence number in the internal key.
@@ -685,40 +683,111 @@ extern common::Status ReadRecordFromWriteBatch(common::Slice* input, char* tag,
                                                common::Slice* xid,
                                                common::SequenceNumber* prepare_seq = nullptr);
 
-// When user call DeleteRange() to delete a range of keys,
-// we will store a serialized RangeTombstone in MemTable and SST.
-// the struct here is a easy-understood form
-// start/end_key_ is the start/end user key of the range to be deleted
-struct RangeTombstone {
-  common::Slice start_key_;
-  common::Slice end_key_;
-  common::SequenceNumber seq_;
-  RangeTombstone() = default;
-  RangeTombstone(common::Slice sk, common::Slice ek, common::SequenceNumber sn)
-      : start_key_(sk), end_key_(ek), seq_(sn) {}
+//TODO: Zhao Dongsheng. Temporatily move FileDescriptor, FileMetaData, and MiniTables to
+//here, they will be placed in more approriate file in the future.
+//
+// A copyable structure contains information needed to read data from an SST
+// file. It can contains a pointer to a table reader opened for the file, or
+// file number and size, which can be used to create a new table reader for it.
+// The behavior is undefined when a copied of the structure is used when the
+// file is not in any live version any more.
+struct FileDescriptor {
+  // Table reader in table_reader_handle
+  table::TableReader* table_reader;
+  storage::ExtentId extent_id;
+  uint64_t file_size;  // File size in bytes
 
-  RangeTombstone(ParsedInternalKey parsed_key, common::Slice value) {
-    start_key_ = parsed_key.user_key;
-    seq_ = parsed_key.sequence;
-    end_key_ = value;
+  FileDescriptor() : FileDescriptor(0, 0, 0) {}
+
+  FileDescriptor(uint64_t eid, uint32_t path_id, uint64_t _file_size)
+      : table_reader(nullptr), extent_id(eid), file_size(_file_size) {}
+
+  FileDescriptor(const FileDescriptor &file_desc)
+      : table_reader(file_desc.table_reader),
+        extent_id(file_desc.extent_id),
+        file_size(file_desc.file_size)
+  {}
+  
+  FileDescriptor& operator=(const FileDescriptor& fd) {
+    this->table_reader = fd.table_reader;
+    this->extent_id = fd.extent_id;
+    this->file_size = fd.file_size;
+    return *this;
   }
 
-  // be careful to use Serialize(), allocates new memory
-  std::pair<InternalKey, common::Slice> Serialize() const {
-    auto key = InternalKey(start_key_, seq_, kTypeRangeDeletion);
-    common::Slice value = end_key_;
-    return std::make_pair(std::move(key), std::move(value));
-  }
-
-  // be careful to use SerializeKey(), allocates new memory
-  InternalKey SerializeKey() const {
-    return InternalKey(start_key_, seq_, kTypeRangeDeletion);
-  }
-
-  // be careful to use SerializeEndKey(), allocates new memory
-  InternalKey SerializeEndKey() const {
-    return InternalKey(end_key_, seq_, kTypeRangeDeletion);
-  }
+  uint64_t GetNumber() const { return extent_id.id(); }
+  uint32_t GetPathId() const { return 0; }
+  uint64_t GetFileSize() const { return file_size; }
 };
+
+struct FileMetaData {
+  int refs;
+  FileDescriptor fd;
+  db::InternalKey smallest;  // Smallest internal key served by table
+  db::InternalKey largest;   // Largest internal key served by table
+  bool being_compacted;  // Is this file undergoing compaction?
+  common::SequenceNumber smallest_seqno;  // The smallest seqno in this file
+  common::SequenceNumber largest_seqno;   // The largest seqno in this file
+
+  // Needs to be disposed when refs becomes 0.
+  cache::Cache::Handle* table_reader_handle;
+
+  // Stats for compensating deletion entries during compaction
+
+  // File size compensated by deletion entry.
+  // This is updated in Version::UpdateAccumulatedStats() first time when the
+  // file is created or loaded.  After it is updated (!= 0), it is immutable.
+  uint64_t compensated_file_size;
+  // These values can mutate, but they can only be read or written from
+  // single-threaded LogAndApply thread
+  uint64_t num_entries;       // the number of entries.
+  uint64_t num_deletions;     // the number of deletion entries.
+  uint64_t raw_key_size;      // total uncompressed key size.
+  uint64_t raw_value_size;    // total uncompressed value size.
+  bool init_stats_from_file;  // true if the data-entry stats of this file
+                              // has initialized from file.
+
+  bool marked_for_compaction;  // True if client asked us nicely to compact this
+                               // file.
+
+  FileMetaData()
+      : refs(0),
+        being_compacted(false),
+        smallest_seqno(db::kMaxSequenceNumber),
+        largest_seqno(0),
+        table_reader_handle(nullptr),
+        compensated_file_size(0),
+        num_entries(0),
+        num_deletions(0),
+        raw_key_size(0),
+        raw_value_size(0),
+        init_stats_from_file(false),
+        marked_for_compaction(false) {}
+
+  // REQUIRED: Keys must be given to the function in sorted order (it expects
+  // the last key to be the largest).
+  void UpdateBoundaries(const common::Slice& key,
+                        common::SequenceNumber seqno) {
+    if (smallest.size() == 0) {
+      smallest.DecodeFrom(key);
+    }
+    largest.DecodeFrom(key);
+    smallest_seqno = std::min(smallest_seqno, seqno);
+    largest_seqno = std::max(largest_seqno, seqno);
+  }
+
+  DECLARE_TO_STRING();
+};
+
+struct MiniTables {
+  storage::ExtentSpaceManager* space_manager = nullptr;
+  util::Env::IOPriority io_priority;
+  std::vector<FileMetaData> metas;
+  std::vector<table::TableProperties> props;
+  storage::ChangeInfo *change_info_ = nullptr;
+  int level = 0;
+  int64_t table_space_id_ = -1;
+};
+
 }
 }  // namespace smartengine

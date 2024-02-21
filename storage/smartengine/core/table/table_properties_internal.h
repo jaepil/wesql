@@ -28,9 +28,5 @@ common::Status SeekToPropertiesBlock(InternalIterator* meta_iter,
 common::Status SeekToCompressionDictBlock(InternalIterator* meta_iter,
                                           bool* is_found);
 
-// TODO(andrewkr) should not put all meta block in table_properties.h/cc
-common::Status SeekToRangeDelBlock(InternalIterator* meta_iter, bool* is_found,
-                                   BlockHandle* block_handle);
-
 }  // namespace table
 }  // namespace smartengine

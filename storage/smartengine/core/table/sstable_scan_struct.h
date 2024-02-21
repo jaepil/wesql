@@ -21,10 +21,6 @@
 
 namespace smartengine
 {
-namespace db
-{
-class RangeDelAggregator;
-}
 namespace cache
 {
 class Cache;
@@ -86,7 +82,6 @@ struct ScanParam
                                KVP(env_options_),
                                KVP(icomparator_),
                                KVP(file_read_hist_),
-                               KVP(range_del_agg_),
                                KVP(internal_stats_),
                                KVP(extent_layer_),
                                KVP(arena_),
@@ -101,7 +96,6 @@ struct ScanParam
   const util::EnvOptions *env_options_;
   const db::InternalKeyComparator *icomparator_;
   monitor::HistogramImpl *file_read_hist_;
-  db::RangeDelAggregator *range_del_agg_;
   db::InternalStats *internal_stats_;
   storage::ExtentLayer *extent_layer_;
   util::Arena *arena_;

@@ -301,26 +301,6 @@ class DB {
     return SingleDelete(options, DefaultColumnFamily(), key);
   }
 
-  // Removes the database entries in the range ["begin_key", "end_key"), i.e.,
-  // including "begin_key" and excluding "end_key". Returns OK on success, and
-  // a non-OK status on error. It is not an error if no keys exist in the range
-  // ["begin_key", "end_key").
-  //
-  // This feature is currently an experimental performance optimization for
-  // deleting very large ranges of contiguous keys. Invoking it many times or on
-  // small ranges may severely degrade read performance; in particular, the
-  // resulting performance can be worse than calling Delete() for each key in
-  // the range. Note also the degraded read performance affects keys outside the
-  // deleted ranges, and affects database operations involving scans, like flush
-  // and compaction.
-  //
-  // Consider setting ReadOptions::ignore_range_deletions = true to speed
-  // up reads for key(s) that are known to be unaffected by range deletions.
-  virtual common::Status DeleteRange(const common::WriteOptions& options,
-                                     ColumnFamilyHandle* column_family,
-                                     const common::Slice& begin_key,
-                                     const common::Slice& end_key);
-
   // Apply the specified updates to the database.
   // If `updates` contains no update, WAL will still be synced if
   // options.sync=true.

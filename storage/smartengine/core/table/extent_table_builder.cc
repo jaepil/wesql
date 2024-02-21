@@ -21,7 +21,6 @@
 
 #include "cache/row_cache.h"
 #include "db/dbformat.h"
-#include "db/version_edit.h"
 #include "db/version_set.h"
 
 #include "smartengine/comparator.h"

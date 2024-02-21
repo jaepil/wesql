@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #include "db/table_properties_collector.h"
-#include "db/version_edit.h"
 #include "db/version_set.h"
 #include "options/cf_options.h"
 #include "storage/extent_space_manager.h"
@@ -45,8 +44,6 @@ static std::string GetFromFile(TableReader* table_reader,
                          GetContext::kNotFound,
                          Slice(key),
                          &value,
-                         nullptr,
-                         nullptr,
                          nullptr,
                          nullptr);
   LookupKey lk{key, kMaxSequenceNumber};

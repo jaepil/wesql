@@ -143,11 +143,6 @@ Status ReplayTaskParser::parse_replay_writebatch_from_record(Slice& record,
         s = WriteBatchInternal::SingleDelete(*write_batch, column_family, key);
         found++;
         break;
-      case kTypeColumnFamilyRangeDeletion:
-      case kTypeRangeDeletion:
-        s = WriteBatchInternal::DeleteRange(*write_batch, column_family, key, value);
-        found++;
-        break;
       case kTypeLogData:
         s = (*write_batch)->PutLogData(blob);
         break;

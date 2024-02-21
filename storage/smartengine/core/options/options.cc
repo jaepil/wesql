@@ -633,7 +633,6 @@ ReadOptions::ReadOptions()
       pin_data(false),
       background_purge_on_iterator_cleanup(false),
       readahead_size(0),
-      ignore_range_deletions(false),
       max_skippable_internal_keys(0),
       skip_del_(true),
       read_level_(kAll){}
@@ -649,7 +648,6 @@ ReadOptions::ReadOptions(bool cksum, bool cache)
       pin_data(false),
       background_purge_on_iterator_cleanup(false),
       readahead_size(0),
-      ignore_range_deletions(false),
       max_skippable_internal_keys(0),
       skip_del_(true),
       read_level_(kAll){}

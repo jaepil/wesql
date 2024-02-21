@@ -16,7 +16,6 @@
 #include "smartengine/slice.h"
 #include "smartengine/status.h"
 #include "smartengine/table.h"
-
 #include "options/cf_options.h"
 #include "port/port.h"  // noexcept
 

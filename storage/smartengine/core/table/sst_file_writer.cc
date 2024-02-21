@@ -10,18 +10,17 @@
 #include <vector>
 #include "db/column_family.h"
 #include "db/dbformat.h"
-#include "db/version_edit.h"
 #include "storage/storage_common.h"
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
 #include "smartengine/table.h"
+#include "table/table_builder.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
 
-namespace smartengine {
 namespace table {
 #ifndef ROCKSDB_LITE
 

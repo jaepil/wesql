@@ -92,8 +92,6 @@ class DBIter : public Iterator {
         prefix_same_as_start_(read_options.prefix_same_as_start),
         pin_thru_lifetime_(read_options.pin_data),
         total_order_seek_(read_options.total_order_seek),
-        range_del_agg_(cf_options.internal_comparator, s,
-                       true /* collapse_deletions */),
         space_manager_(space_manager),
         key_sequence_(kMaxSequenceNumber),
         skip_del_(read_options.skip_del_),
@@ -124,9 +122,6 @@ class DBIter : public Iterator {
     assert(iter_ == nullptr);
     iter_ = iter;
     iter_->SetPinnedItersMgr(&pinned_iters_mgr_);
-  }
-  virtual RangeDelAggregator* GetRangeDelAggregator() {
-    return &range_del_agg_;
   }
 
   virtual bool Valid() const override { return valid_; }
@@ -290,7 +285,6 @@ class DBIter : public Iterator {
   // is not deleted, will be true if ReadOptions::pin_data is true
   const bool pin_thru_lifetime_;
   const bool total_order_seek_;
-  RangeDelAggregator range_del_agg_;
   PinnedIteratorsManager pinned_iters_mgr_;
   storage::ExtentSpaceManager* space_manager_;
   SequenceNumber key_sequence_;
@@ -358,7 +352,6 @@ public:
     saved_key_.Clear();
     saved_key_.SetInternalKey(target, sequence_);
     iter_->Seek(saved_key_.GetInternalKey());
-    range_del_agg_.InvalidateTombstoneMapPositions();
 
     key_status_ = kNonExist;
     if (iter_->Valid()) {
@@ -395,7 +388,6 @@ public:
     ResetInternalKeysSkippedCounter();
     ClearSavedValue();
     iter_->SeekToFirst();
-    range_del_agg_.InvalidateTombstoneMapPositions();
 
     key_status_ = kNonExist;
     if (iter_->Valid()) {
@@ -663,7 +655,6 @@ void DBIter::ReverseToForward() {
   direction_ = kForward;
   if (!iter_->Valid()) {
     iter_->SeekToFirst();
-    range_del_agg_.InvalidateTombstoneMapPositions();
   }
 }
 
@@ -766,16 +757,9 @@ bool DBIter::FindValueForCurrentKey() {
     switch (last_key_entry_type) {
       case kTypeValue:
       case kTypeValueLarge:
-        if (range_del_agg_.ShouldDelete(
-                ikey,
-                RangeDelAggregator::RangePositioningMode::kBackwardTraversal)) {
-          last_key_entry_type = kTypeRangeDeletion;
-          QUERY_COUNT(CountPoint::INTERNAL_DEL_SKIPPED);
-        } else {
-          assert(iter_->IsValuePinned());
-          pinned_value_ = iter_->value();
-          pinned_key_type_ = last_key_entry_type;
-        }
+        assert(iter_->IsValuePinned());
+        pinned_value_ = iter_->value();
+        pinned_key_type_ = last_key_entry_type;
         break;
       case kTypeDeletion:
       case kTypeSingleDeletion:
@@ -796,7 +780,6 @@ bool DBIter::FindValueForCurrentKey() {
   switch (last_key_entry_type) {
     case kTypeDeletion:
     case kTypeSingleDeletion:
-    case kTypeRangeDeletion:
       valid_ = false;
       return false;
     case kTypeValue:
@@ -830,9 +813,7 @@ bool DBIter::FindValueForCurrentKeyUsingSeek() {
   ParsedInternalKey ikey;
   FindParseableKey(&ikey, kForward);
 
-  if (ikey.type == kTypeDeletion || ikey.type == kTypeSingleDeletion ||
-      range_del_agg_.ShouldDelete(
-          ikey, RangeDelAggregator::RangePositioningMode::kBackwardTraversal)) {
+  if (ikey.type == kTypeDeletion || ikey.type == kTypeSingleDeletion) {
     valid_ = false;
     return false;
   }
@@ -934,7 +915,6 @@ void DBIter::Seek(const Slice& target) {
   saved_key_.Clear();
   saved_key_.SetInternalKey(target, sequence_);
   iter_->Seek(saved_key_.GetInternalKey());
-  range_del_agg_.InvalidateTombstoneMapPositions();
 
   if (iter_->Valid()) {
     if (prefix_extractor_ && prefix_same_as_start_) {
@@ -965,7 +945,6 @@ void DBIter::SeekForPrev(const Slice& target) {
   saved_key_.SetInternalKey(target, 0 /* sequence_number */,
                             kValueTypeForSeekForPrev);
   iter_->SeekForPrev(saved_key_.GetInternalKey());
-  range_del_agg_.InvalidateTombstoneMapPositions();
 
   if (iter_->Valid()) {
     if (prefix_extractor_ && prefix_same_as_start_) {
@@ -998,7 +977,6 @@ void DBIter::SeekToFirst() {
   ResetInternalKeysSkippedCounter();
   ClearSavedValue();
   iter_->SeekToFirst();
-  range_del_agg_.InvalidateTombstoneMapPositions();
 
   if (iter_->Valid()) {
     saved_key_.SetUserKey(
@@ -1028,14 +1006,12 @@ void DBIter::SeekToLast() {
   ClearSavedValue();
 
   iter_->SeekToLast();
-  range_del_agg_.InvalidateTombstoneMapPositions();
 
   // When the iterate_upper_bound is set to a value,
   // it will seek to the last key before the
   // ReadOptions.iterate_upper_bound
   if (iter_->Valid() && iterate_upper_bound_ != nullptr) {
     SeekForPrev(*iterate_upper_bound_);
-    range_del_agg_.InvalidateTombstoneMapPositions();
     if (!Valid()) {
       return;
     } else if (user_comparator_->Equal(*iterate_upper_bound_, key())) {
@@ -1108,10 +1084,6 @@ ArenaWrappedDBIter::~ArenaWrappedDBIter() {
 }
 
 void ArenaWrappedDBIter::SetDBIter(DBIter* iter) { db_iter_ = iter; }
-
-RangeDelAggregator* ArenaWrappedDBIter::GetRangeDelAggregator() {
-  return db_iter_->GetRangeDelAggregator();
-}
 
 void ArenaWrappedDBIter::SetIterUnderDBIter(InternalIterator* iter) {
   static_cast<DBIter*>(db_iter_)->SetIter(iter);

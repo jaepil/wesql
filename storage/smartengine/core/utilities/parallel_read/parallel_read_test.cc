@@ -549,11 +549,11 @@ void ParallelReadTest::scan_all_data(
 {
   Arena arena;
   MergeIteratorBuilder iter_builder(&internal_comparator_, &arena, false);
-  RangeDelAggregator range_del_agg(InternalKeyComparator(BytewiseComparator()),
-                                   kMaxSequenceNumber, true);
   ReadOptions read_options;
-  storage_manager_->add_iterators(table_cache_, nullptr, read_options,
-                                  &iter_builder, &range_del_agg,
+  storage_manager_->add_iterators(table_cache_,
+                                  nullptr,
+                                  read_options,
+                                  &iter_builder,
                                   storage_manager_->get_current_version());
 
   db::Iterator *iterator = NewDBIterator(

@@ -14,13 +14,18 @@
 #include <vector>
 
 #include "compact/compaction_iteration_stats.h"
+#include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
-#include "db/range_del_aggregator.h"
 #include "smartengine/compaction_filter.h"
 #include "memory/page_arena.h"
 
 namespace smartengine {
+namespace util {
+class Env;
+}
+
 namespace storage {
+class ChangeInfo;
 
 // A wrapper around Compaction. Has a much smaller interface, only what
 // CompactionIterator uses. Tests can override it.
@@ -119,7 +124,6 @@ class CompactionIterator {
   const common::SequenceNumber earliest_write_conflict_snapshot_;
   util::Env* env_;
   bool expect_valid_internal_key_;
-//  db::RangeDelAggregator* range_del_agg_;
   std::unique_ptr<CompactionProxy> compaction_;
   const storage::CompactionFilter* compaction_filter_;
   const std::atomic<bool>* shutting_down_;

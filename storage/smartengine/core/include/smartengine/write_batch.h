@@ -128,25 +128,6 @@ class WriteBatch : public WriteBatchBase {
     return SingleDelete(nullptr, key);
   }
 
-  using WriteBatchBase::DeleteRange;
-  // WriteBatch implementation of DB::DeleteRange().  See db.h.
-  common::Status DeleteRange(db::ColumnFamilyHandle* column_family,
-                             const common::Slice& begin_key,
-                             const common::Slice& end_key) override;
-  common::Status DeleteRange(const common::Slice& begin_key,
-                             const common::Slice& end_key) override {
-    return DeleteRange(nullptr, begin_key, end_key);
-  }
-
-  // variant that takes common::SliceParts
-  common::Status DeleteRange(db::ColumnFamilyHandle* column_family,
-                             const common::SliceParts& begin_key,
-                             const common::SliceParts& end_key) override;
-  common::Status DeleteRange(const common::SliceParts& begin_key,
-                             const common::SliceParts& end_key) override {
-    return DeleteRange(nullptr, begin_key, end_key);
-  }
-
   using WriteBatchBase::PutLogData;
   // Append a blob of arbitrary size to the records in this batch. The blob will
   // be stored in the transaction log but not in any other file. In particular,
@@ -226,12 +207,6 @@ class WriteBatch : public WriteBatchBase {
     }
     virtual void SingleDelete(const common::Slice& /*key*/) {}
 
-    virtual common::Status DeleteRangeCF(uint32_t column_family_id,
-                                         const common::Slice& begin_key,
-                                         const common::Slice& end_key) {
-      return common::Status::InvalidArgument("DeleteRangeCF not implemented");
-    }
-
     // The default implementation of LogData does nothing.
     virtual void LogData(const common::Slice& blob);
 
@@ -286,9 +261,6 @@ class WriteBatch : public WriteBatchBase {
 
   // Returns true if SingleDeleteCF will be called during Iterate
   bool HasSingleDelete() const;
-
-  // Returns true if DeleteRangeCF will be called during Iterate
-  bool HasDeleteRange() const;
 
   // Returns true if MarkBeginPrepare will be called during Iterate
   bool HasBeginPrepare() const;

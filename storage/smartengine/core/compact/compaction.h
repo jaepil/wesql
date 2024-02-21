@@ -17,6 +17,7 @@
 #ifndef SMARTENGINE_STORAGE_COMPACTION_H_
 #define SMARTENGINE_STORAGE_COMPACTION_H_
 
+#include "db/table_properties_collector.h"
 #include "compaction_stats.h"
 #include "task_type.h"
 #include "memory/page_arena.h"

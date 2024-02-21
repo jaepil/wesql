@@ -22,7 +22,6 @@
 #include "db/internal_stats.h"
 #include "db/memtable_list.h"
 #include "db/snapshot_impl.h"
-#include "db/version_edit.h"
 #include "smartengine/memtablerep.h"
 
 namespace smartengine {

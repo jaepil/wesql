@@ -12,7 +12,6 @@
 #include "cache/row_cache.h"
 #include "db/table_cache.h"
 #include "db/dbformat.h"
-#include "db/version_edit.h"
 #include "util/filename.h"
 
 #include "monitoring/query_perf_context.h"
@@ -184,13 +183,19 @@ Status TableCache::FindTable(const EnvOptions& env_options,
   return s;
 }
 
-InternalIterator* TableCache::NewIterator(
-    const ReadOptions& options, const EnvOptions& env_options,
-    const InternalKeyComparator& icomparator, const FileDescriptor& fd,
-    RangeDelAggregator* range_del_agg, TableReader** table_reader_ptr,
-    HistogramImpl* file_read_hist, bool for_compaction, memory::SimpleAllocator* arena,
-    bool skip_filters, int level, InternalStats *internal_stats,
-    const uint64_t scan_add_blocks_limit) {
+InternalIterator* TableCache::NewIterator(const ReadOptions& options,
+                                          const EnvOptions& env_options,
+                                          const InternalKeyComparator& icomparator,
+                                          const FileDescriptor& fd,
+                                          TableReader** table_reader_ptr,
+                                          HistogramImpl* file_read_hist,
+                                          bool for_compaction,
+                                          memory::SimpleAllocator* arena,
+                                          bool skip_filters,
+                                          int level,
+                                          InternalStats *internal_stats,
+                                          const uint64_t scan_add_blocks_limit)
+{
   Status s;
   bool create_new_table_reader = false;
   TableReader* table_reader = nullptr;
@@ -256,16 +261,6 @@ InternalIterator* TableCache::NewIterator(
       *table_reader_ptr = table_reader;
     }
   }
-  if (s.ok() && range_del_agg != nullptr && !options.ignore_range_deletions) {
-    InternalIterator *range_del_iter =
-        table_reader->NewRangeTombstoneIterator(options);
-    if (range_del_iter != nullptr) {
-      s = range_del_iter->status();
-    }
-    if (s.ok()) {
-      s = range_del_agg->AddTombstones(range_del_iter);
-    }
-  }
 
   if (handle != nullptr) {
     ReleaseHandle(handle);
@@ -279,9 +274,13 @@ InternalIterator* TableCache::NewIterator(
 
 Status TableCache::Get(const ReadOptions& options,
                        const InternalKeyComparator& internal_comparator,
-                       const FileDescriptor& fd, const Slice& k,
-                       GetContext* get_context, HistogramImpl* file_read_hist,
-                       bool skip_filters, int level) {
+                       const FileDescriptor& fd,
+                       const Slice& k,
+                       GetContext* get_context,
+                       HistogramImpl* file_read_hist,
+                       bool skip_filters,
+                       int level)
+{
   Status s;
   TableReader* t = fd.table_reader;
   Cache::Handle* handle = nullptr;
@@ -294,17 +293,7 @@ Status TableCache::Get(const ReadOptions& options,
       t = GetTableReaderFromHandle(handle);
     }
   }
-  if (s.ok() && get_context->range_del_agg() != nullptr &&
-      !options.ignore_range_deletions) {
-    InternalIterator *range_del_iter =
-        t->NewRangeTombstoneIterator(options);
-    if (range_del_iter != nullptr) {
-      s = range_del_iter->status();
-    }
-    if (s.ok()) {
-      s = get_context->range_del_agg()->AddTombstones(range_del_iter);
-    }
-  }
+
   if (s.ok()) {
     s = t->Get(options, k, get_context, skip_filters);
     STRESS_CHECK_APPEND(GET_FROM_EXTENT, s.code());

@@ -136,9 +136,6 @@ int BaseFlush::write_level0_table(MiniTables *mtables, uint64_t max_seq) {
     FLUSH_LOG(INFO, "begin to run flush job", K((int)job_context_.task_type_), K(cfd_->GetID()), K(mems_.size()),
         K(total_num_entries), K(total_num_deletes), K(total_memory_usage));
 
-    // memtables and range_del_iters store internal iterators over each data
-    // memtable and its associated range deletion memtable, respectively, at
-    // corresponding indexes.
     TEST_SYNC_POINT_CALLBACK("FlushJob::WriteLevel0Table:output_compression", &output_compression_);
     InternalIterator *merge_iter = NewMergingIterator(
         &cfd_->internal_comparator(), &memtables[0],
@@ -369,7 +366,6 @@ int BaseFlush::fill_table_cache(const MiniTables &mtables) {
                                          optimized_env_options,
                                          cfd_->internal_comparator(),
                                          meta->fd,
-                                         nullptr /* range_del_agg */,
                                          nullptr,
                                          (nullptr == cfd_->internal_stats())
                                           ? nullptr

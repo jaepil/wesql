@@ -42,67 +42,6 @@ struct ExtentLayer;
 struct ExtentLayerVersion;
 class StorageManager;
 
-// Two level iterator of extents
-class ExtentIteratorState : public table::TwoLevelIteratorState {
- public:
-  ExtentIteratorState(db::TableCache *table_cache,
-                      const common::ReadOptions &read_options,
-                      const util::EnvOptions &env_options,
-                      const db::InternalKeyComparator &icomparator,
-                      monitor::HistogramImpl *file_read_hist,
-                      bool for_compaction, bool prefix_enabled,
-                      bool skip_filters, int level,
-                      db::RangeDelAggregator *range_del_agg,
-                      int64_t subtable_id,
-                      const int64_t scan_add_blocks_limit)
-      : table::TwoLevelIteratorState(prefix_enabled),
-        table_cache_(table_cache),
-        read_options_(read_options),
-        env_options_(env_options),
-        icomparator_(icomparator),
-        file_read_hist_(file_read_hist),
-        for_compaction_(for_compaction),
-        skip_filters_(skip_filters),
-        level_(level),
-        range_del_agg_(range_del_agg),
-        subtable_id_(subtable_id),
-        scan_add_blocks_limit_(scan_add_blocks_limit) {}
-
-  table::InternalIterator *NewSecondaryIterator(
-      const common::Slice &meta_handle, uint64_t* add_blocks = nullptr) override {
-    UNUSED(add_blocks);
-    int64_t file_id = 0;
-    ExtentId *eid = (ExtentId *)meta_handle.data();
-    file_id = eid->id();
-
-    // todo internal_stats_
-    // now only one extent id
-    db::FileDescriptor fd(file_id, subtable_id_, MAX_EXTENT_SIZE);
-    return table_cache_->NewIterator(
-        read_options_, env_options_, icomparator_, fd, range_del_agg_,
-        nullptr /* don't need reference to table */, file_read_hist_,
-        for_compaction_, nullptr /* arena */, skip_filters_,
-        level_, nullptr, scan_add_blocks_limit_);
-  }
-
-  bool PrefixMayMatch(const common::Slice &internal_key) override {
-    return true;
-  }
-
- private:
-  db::TableCache *table_cache_;
-  const common::ReadOptions read_options_;
-  const util::EnvOptions &env_options_;
-  const db::InternalKeyComparator &icomparator_;
-  monitor::HistogramImpl *file_read_hist_;
-  bool for_compaction_;
-  bool skip_filters_;
-  int level_;
-  db::RangeDelAggregator *range_del_agg_;
-  int64_t subtable_id_; // IS block cache of subtable
-  int64_t scan_add_blocks_limit_;
-};
-
 struct RecycleArgs
 {
   StorageManager *storage_manager_;
@@ -129,7 +68,6 @@ public:
                     db::InternalStats *internal_stats,
                     const common::ReadOptions &read_options,
                     table::MergeIteratorBuilder *merge_iter_builder,
-                    db::RangeDelAggregator *range_del_agg,
                     const db::Snapshot *current_meta);
   const db::Snapshot *get_current_version() const { return current_meta_; }
   int64_t get_current_total_extent_count() const;
@@ -225,7 +163,6 @@ private:
                              db::InternalStats *internal_stats,
                              const common::ReadOptions &read_options,
                              table::MergeIteratorBuilder *merge_iter_builder,
-                             db::RangeDelAggregator *range_del_agg,
                              ExtentLayer *extent_layer);
   int create_extent_layer_iterator(util::Arena *arena,
                                    const db::Snapshot *snapshot,

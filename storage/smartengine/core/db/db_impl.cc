@@ -54,7 +54,6 @@
 #include "db/log_writer.h"
 #include "db/memtable.h"
 #include "db/memtable_list.h"
-#include "db/range_del_aggregator.h"
 #include "db/table_cache.h"
 #include "db/table_cache.h"
 #include "db/table_properties_collector.h"
@@ -1182,27 +1181,6 @@ SequenceNumber DBImpl::GetLatestSequenceNumber() const {
   return versions_->LastSequence();
 }
 
-InternalIterator* DBImpl::NewInternalIterator(
-    Arena* arena, RangeDelAggregator* range_del_agg,
-    ColumnFamilyHandle* column_family) {
-  ColumnFamilyData* cfd;
-  if (column_family == nullptr) {
-    cfd = default_cf_handle_->cfd();
-  } else {
-    auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-    cfd = cfh->cfd();
-  }
-
-  QUERY_TRACE_BEGIN(TracePoint::DB_ITER_REF_SV);
-  mutex_.Lock();
-  SuperVersion* super_version = cfd->GetSuperVersion()->Ref();
-  mutex_.Unlock();
-  QUERY_TRACE_END();
-  ReadOptions roptions;
-  return NewInternalIterator(roptions, cfd, super_version, arena,
-                             range_del_agg);
-}
-
 void DBImpl::SchedulePurge() {
   mutex_.AssertHeld();
   assert(opened_successfully_);
@@ -1328,13 +1306,13 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
 }
 }  // namespace
 
-InternalIterator* DBImpl::NewInternalIterator(
-    const ReadOptions& read_options, ColumnFamilyData* cfd,
-    SuperVersion* super_version, Arena* arena,
-    RangeDelAggregator* range_del_agg) {
+InternalIterator* DBImpl::NewInternalIterator(const ReadOptions& read_options,
+                                              ColumnFamilyData* cfd,
+                                              SuperVersion* super_version,
+                                              Arena* arena)
+{
   InternalIterator* internal_iter;
   assert(arena != nullptr);
-  assert(range_del_agg != nullptr);
   // Need to create internal iterator from the arena.
   MergeIteratorBuilder merge_iter_builder(
       &cfd->internal_comparator(), arena,
@@ -1347,19 +1325,9 @@ InternalIterator* DBImpl::NewInternalIterator(
     QUERY_TRACE_BEGIN(TracePoint::DB_ITER_ADD_MEM);
     merge_iter_builder.AddIterator(
         super_version->mem->NewIterator(read_options, arena));
-    std::unique_ptr<InternalIterator, ptr_delete<InternalIterator>> range_del_iter;
-    if (!read_options.ignore_range_deletions) {
-//      range_del_iter.reset(
-//          super_version->mem->NewRangeTombstoneIterator(read_options));
-      s = range_del_agg->AddTombstones(super_version->mem->NewRangeTombstoneIterator(read_options));
-    }
     // Collect all needed child iterators for immutable memtables
     if (s.ok()) {
       super_version->imm->AddIterators(read_options, &merge_iter_builder);
-      if (!read_options.ignore_range_deletions) {
-        s = super_version->imm->AddRangeTombstoneIterators(read_options, arena,
-                                                           range_del_agg);
-      }
     }
     QUERY_TRACE_END(); // end for DB_ITER_ADD_MEM
   }
@@ -1371,8 +1339,7 @@ InternalIterator* DBImpl::NewInternalIterator(
                                                 cfd->internal_stats(),
                                                 read_options,
                                                 &merge_iter_builder,
-                                                range_del_agg,
-                                  super_version->current_meta_);
+                                                super_version->current_meta_);
     }
     internal_iter = merge_iter_builder.Finish();
     // todo new
@@ -1491,8 +1458,6 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
   TEST_SYNC_POINT("DBImpl::GetImpl:3");
   TEST_SYNC_POINT("DBImpl::GetImpl:4");
 
-  RangeDelAggregator range_del_agg(cfd->internal_comparator(), snapshot);
-
   Status s;
   int ret = Status::kOk;
   // First look in the memtable, then in the immutable memtable (if any).
@@ -1507,7 +1472,6 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
     if (sv->mem->Get(lkey,
                      pinnable_val->GetSelf(),
                      &s,
-                     &range_del_agg,
                      read_options)) {
       done = true;
       pinnable_val->PinSelf();
@@ -1515,7 +1479,6 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
     } else if (s.ok() && sv->imm->Get(lkey,
                                       pinnable_val->GetSelf(),
                                       &s,
-                                      &range_del_agg,
                                       read_options)) {
       done = true;
       pinnable_val->PinSelf();
@@ -1644,8 +1607,6 @@ std::vector<Status> DBImpl::MultiGet(
 
     LookupKey lkey(keys[i], snapshot);
     auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family[i]);
-    RangeDelAggregator range_del_agg(cfh->cfd()->internal_comparator(),
-                                     snapshot);
     auto mgd_iter = multiget_cf_data.find(cfh->cfd()->GetID());
     assert(mgd_iter != multiget_cf_data.end());
     auto mgd = mgd_iter->second;
@@ -1655,10 +1616,10 @@ std::vector<Status> DBImpl::MultiGet(
          has_unpersisted_data_.load(std::memory_order_relaxed));
     bool done = false;
     if (!skip_memtable) {
-      if (super_version->mem->Get(lkey, value, &s, &range_del_agg, read_options)) {
+      if (super_version->mem->Get(lkey, value, &s, read_options)) {
         done = true;
         // TODO(?): QUERY_COUNT(stats_, MEMTABLE_HIT)?
-      } else if (super_version->imm->Get(lkey, value, &s, &range_del_agg, read_options)) {
+      } else if (super_version->imm->Get(lkey, value, &s, read_options)) {
         done = true;
         // TODO(?): QUERY_COUNT(stats_, MEMTABLE_HIT)?
       }
@@ -2038,8 +1999,7 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
   QUERY_TRACE_END();
 
   InternalIterator* internal_iter =
-      NewInternalIterator(read_options, cfd, sv, db_iter->GetArena(),
-                          db_iter->GetRangeDelAggregator());
+      NewInternalIterator(read_options, cfd, sv, db_iter->GetArena());
   db_iter->SetIterUnderDBIter(internal_iter);
 
   return db_iter;
@@ -3203,8 +3163,6 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   QUERY_TRACE_SCOPE(TracePoint::GET_LATEST_SEQ);
 
   Status s;
-  RangeDelAggregator range_del_agg(sv->mem->GetInternalKeyComparator(),
-                                   kMaxSequenceNumber);
 
   ReadOptions read_options;
   SequenceNumber current_seq = versions_->LastSequence();
@@ -3214,7 +3172,7 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   *found_record_for_key = false;
 
   // Check if there is a record for this key in the latest memtable
-  sv->mem->Get(lkey, nullptr, &s, &range_del_agg, seq, read_options);
+  sv->mem->Get(lkey, nullptr, &s, seq, read_options);
 
   if (!(s.ok() || s.IsNotFound())) {
     // unexpected error reading memtable.
@@ -3232,7 +3190,7 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   }
 
   // Check if there is a record for this key in the immutable memtables
-  sv->imm->Get(lkey, nullptr, &s, &range_del_agg, seq, read_options);
+  sv->imm->Get(lkey, nullptr, &s, seq, read_options);
 
   if (!(s.ok() || s.IsNotFound())) {
     // unexpected error reading memtable.
@@ -3250,7 +3208,7 @@ Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
   }
 
   // Check if there is a record for this key in the immutable memtables
-  sv->imm->GetFromHistory(lkey, nullptr, &s, &range_del_agg, seq, read_options);
+  sv->imm->GetFromHistory(lkey, nullptr, &s, seq, read_options);
 
   if (!(s.ok() || s.IsNotFound())) {
     // unexpected error reading memtable.

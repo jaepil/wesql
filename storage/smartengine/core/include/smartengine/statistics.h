@@ -105,10 +105,7 @@ enum Tickers : uint32_t {
   COMPACTION_KEY_DROP_NEWER_ENTRY,  // key was written with a newer value.
                                     // Also includes keys dropped for range del.
   COMPACTION_KEY_DROP_OBSOLETE,     // The key is obsolete.
-  COMPACTION_KEY_DROP_RANGE_DEL,    // key was covered by a range tombstone.
   COMPACTION_KEY_DROP_USER,  // user compaction function has dropped the key.
-
-  COMPACTION_RANGE_DEL_DROP_OBSOLETE,  // all keys in range were deleted.
 
   // Number of keys written to the database via the Put and Write call's
   NUMBER_KEYS_WRITTEN,
@@ -291,10 +288,7 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {GET_HIT_L2_AND_UP, "smartengine.l2andup.hit"},
     {COMPACTION_KEY_DROP_NEWER_ENTRY, "smartengine.compaction.key.drop.new"},
     {COMPACTION_KEY_DROP_OBSOLETE, "smartengine.compaction.key.drop.obsolete"},
-    {COMPACTION_KEY_DROP_RANGE_DEL, "smartengine.compaction.key.drop.range_del"},
     {COMPACTION_KEY_DROP_USER, "smartengine.compaction.key.drop.user"},
-    {COMPACTION_RANGE_DEL_DROP_OBSOLETE,
-     "smartengine.compaction.range_del.drop.obsolete"},
     {NUMBER_KEYS_WRITTEN, "smartengine.number.keys.written"},
     {NUMBER_KEYS_READ, "smartengine.number.keys.read"},
     {NUMBER_KEYS_UPDATED, "smartengine.number.keys.updated"},

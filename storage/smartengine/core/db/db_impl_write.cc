@@ -16,6 +16,7 @@
 #include "log_writer.h"
 #include "options/options_helper.h"
 #include "util/crc32c.h"
+#include "util/file_reader_writer.h"
 #include "util/sync_point.h"
 
 using namespace smartengine;
@@ -1802,15 +1803,6 @@ Status DB::SingleDelete(const WriteOptions& opt,
                         ColumnFamilyHandle* column_family, const Slice& key) {
   WriteBatch batch;
   batch.SingleDelete(column_family, key);
-  return Write(opt, &batch);
-}
-
-Status DB::DeleteRange(const WriteOptions& opt,
-                       ColumnFamilyHandle* column_family,
-                       const Slice& begin_key, const Slice& end_key) {
-  return Status::NotSupported();
-  WriteBatch batch;
-  batch.DeleteRange(column_family, begin_key, end_key);
   return Write(opt, &batch);
 }
 

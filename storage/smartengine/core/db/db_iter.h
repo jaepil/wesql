@@ -13,7 +13,6 @@
 #include <stdint.h>
 #include <string>
 #include "db/dbformat.h"
-#include "db/range_del_aggregator.h"
 #include "options/cf_options.h"
 #include "util/arena.h"
 #include "util/autovector.h"
@@ -73,7 +72,6 @@ class ArenaWrappedDBIter : public Iterator {
   // Get the arena to be used to allocate memory for DBIter to be wrapped,
   // as well as child iterators in it.
   virtual util::Arena* GetArena() { return &arena_; }
-  virtual RangeDelAggregator* GetRangeDelAggregator();
 
   // Set the DB Iterator to be wrapped
 

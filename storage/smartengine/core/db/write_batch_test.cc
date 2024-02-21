@@ -53,70 +53,50 @@ static std::string PrintContents(WriteBatch* b) {
   int single_delete_count = 0;
   int delete_range_count = 0;
   int merge_count = 0;
-  for (int i = 0; i < 2; ++i) {
-    Arena arena;
-    ScopedArenaIterator arena_iter_guard;
-    std::unique_ptr<InternalIterator, memory::ptr_destruct<InternalIterator>> iter_guard;
-    InternalIterator* iter;
-    if (i == 0) {
-      iter = mem->NewIterator(ReadOptions(), &arena);
-      arena_iter_guard.set(iter);
-    } else {
-      iter = mem->NewRangeTombstoneIterator(ReadOptions());
-      iter_guard.reset(iter);
+  Arena arena;
+  ScopedArenaIterator arena_iter_guard;
+  std::unique_ptr<InternalIterator, memory::ptr_destruct<InternalIterator>> iter_guard;
+  InternalIterator* iter;
+  iter = mem->NewIterator(ReadOptions(), &arena);
+  arena_iter_guard.set(iter);
+  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+    ParsedInternalKey ikey;
+    memset((void*)&ikey, 0, sizeof(ikey));
+    EXPECT_TRUE(ParseInternalKey(iter->key(), &ikey));
+    switch (ikey.type) {
+      case kTypeValue:
+        state.append("Put(");
+        state.append(ikey.user_key.ToString());
+        state.append(", ");
+        state.append(iter->value().ToString());
+        state.append(")");
+        count++;
+        put_count++;
+        break;
+      case kTypeDeletion:
+        state.append("Delete(");
+        state.append(ikey.user_key.ToString());
+        state.append(")");
+        count++;
+        delete_count++;
+        break;
+      case kTypeSingleDeletion:
+        state.append("SingleDelete(");
+        state.append(ikey.user_key.ToString());
+        state.append(")");
+        count++;
+        single_delete_count++;
+        break;
+      default:
+        assert(false);
+        break;
     }
-    if (iter == nullptr) {
-      continue;
-    }
-    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-      ParsedInternalKey ikey;
-      memset((void*)&ikey, 0, sizeof(ikey));
-      EXPECT_TRUE(ParseInternalKey(iter->key(), &ikey));
-      switch (ikey.type) {
-        case kTypeValue:
-          state.append("Put(");
-          state.append(ikey.user_key.ToString());
-          state.append(", ");
-          state.append(iter->value().ToString());
-          state.append(")");
-          count++;
-          put_count++;
-          break;
-        case kTypeDeletion:
-          state.append("Delete(");
-          state.append(ikey.user_key.ToString());
-          state.append(")");
-          count++;
-          delete_count++;
-          break;
-        case kTypeSingleDeletion:
-          state.append("SingleDelete(");
-          state.append(ikey.user_key.ToString());
-          state.append(")");
-          count++;
-          single_delete_count++;
-          break;
-        case kTypeRangeDeletion:
-          state.append("DeleteRange(");
-          state.append(ikey.user_key.ToString());
-          state.append(", ");
-          state.append(iter->value().ToString());
-          state.append(")");
-          count++;
-          delete_range_count++;
-          break;
-        default:
-          assert(false);
-          break;
-      }
-      state.append("@");
-      state.append(NumberToString(ikey.sequence));
-    }
+    state.append("@");
+    state.append(NumberToString(ikey.sequence));
   }
   EXPECT_EQ(b->HasPut(), put_count > 0);
   EXPECT_EQ(b->HasDelete(), delete_count > 0);
   EXPECT_EQ(b->HasSingleDelete(), single_delete_count > 0);
-  EXPECT_EQ(b->HasDeleteRange(), delete_range_count > 0);
   if (!s.ok()) {
     state.append(s.ToString());
   } else if (count != WriteBatchInternal::Count(b)) {
@@ -139,18 +119,16 @@ TEST_F(WriteBatchTest, Multiple) {
   WriteBatch batch;
   batch.Put(Slice("foo"), Slice("bar"));
   batch.Delete(Slice("box"));
-  batch.DeleteRange(Slice("bar"), Slice("foo"));
   batch.Put(Slice("baz"), Slice("boo"));
   WriteBatchInternal::SetSequence(&batch, 100);
   ASSERT_EQ(100U, WriteBatchInternal::Sequence(&batch));
-  ASSERT_EQ(4, WriteBatchInternal::Count(&batch));
+  ASSERT_EQ(3, WriteBatchInternal::Count(&batch));
   ASSERT_EQ(
-      "Put(baz, boo)@103"
+      "Put(baz, boo)@102"
       "Delete(box)@101"
-      "Put(foo, bar)@100"
-      "DeleteRange(bar, foo)@102",
+      "Put(foo, bar)@100",
       PrintContents(&batch));
-  ASSERT_EQ(4, batch.Count());
+  ASSERT_EQ(3, batch.Count());
 }
 
 TEST_F(WriteBatchTest, Corruption) {
@@ -267,18 +245,7 @@ struct TestHandler : public WriteBatch::Handler {
     }
     return Status::OK();
   }
-  virtual Status DeleteRangeCF(uint32_t column_family_id,
-                               const Slice& begin_key,
-                               const Slice& end_key) override {
-    if (column_family_id == 0) {
-      seen += "DeleteRange(" + begin_key.ToString() + ", " +
-              end_key.ToString() + ")";
-    } else {
-      seen += "DeleteRangeCF(" + ToString(column_family_id) + ", " +
-              begin_key.ToString() + ", " + end_key.ToString() + ")";
-    }
-    return Status::OK();
-  }
+
   virtual void LogData(const Slice& blob) override {
     seen += "LogData(" + blob.ToString() + ")";
   }
@@ -584,7 +551,6 @@ TEST_F(WriteBatchTest, ColumnFamiliesBatchTest) {
   batch.Put(&eight, Slice("eightfoo"), Slice("bar8"));
   batch.Delete(&eight, Slice("eightfoo"));
   batch.SingleDelete(&two, Slice("twofoo"));
-  batch.DeleteRange(&two, Slice("3foo"), Slice("4foo"));
   batch.Put(&zero, Slice("foo"), Slice("bar"));
 
   TestHandler handler;
@@ -595,7 +561,6 @@ TEST_F(WriteBatchTest, ColumnFamiliesBatchTest) {
       "PutCF(8, eightfoo, bar8)"
       "DeleteCF(8, eightfoo)"
       "SingleDeleteCF(2, twofoo)"
-      "DeleteRangeCF(2, 3foo, 4foo)"
       "Put(foo, bar)",
       handler.seen);
 }
@@ -609,7 +574,6 @@ TEST_F(WriteBatchTest, ColumnFamiliesBatchWithIndexTest) {
   batch.Put(&eight, Slice("eightfoo"), Slice("bar8"));
   batch.Delete(&eight, Slice("eightfoo"));
   batch.SingleDelete(&two, Slice("twofoo"));
-  batch.DeleteRange(&two, Slice("twofoo"), Slice("threefoo"));
   batch.Put(&zero, Slice("foo"), Slice("bar"));
 
   std::unique_ptr<WBWIIterator> iter;
@@ -648,7 +612,7 @@ TEST_F(WriteBatchTest, ColumnFamiliesBatchWithIndexTest) {
 
   iter->Next();
   ASSERT_OK(iter->status());
-  ASSERT_TRUE(iter->Valid());
+  ASSERT_TRUE(!iter->Valid());
 
   iter.reset(batch.NewIterator());
   iter->Seek("gggg");
@@ -686,7 +650,6 @@ TEST_F(WriteBatchTest, ColumnFamiliesBatchWithIndexTest) {
       "PutCF(8, eightfoo, bar8)"
       "DeleteCF(8, eightfoo)"
       "SingleDeleteCF(2, twofoo)"
-      "DeleteRangeCF(2, twofoo, threefoo)"
       "Put(foo, bar)",
       handler.seen);
 }

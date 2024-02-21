@@ -49,37 +49,6 @@ class DBFileDumperCommand : public tools::LDBCommand {
   virtual void DoCommand() override;
 };
 
-class InternalDumpCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "idump"; }
-
-  InternalDumpCommand(const std::vector<std::string>& params,
-                      const std::map<std::string, std::string>& options,
-                      const std::vector<std::string>& flags);
-
-  static void Help(std::string& ret);
-
-  virtual void DoCommand() override;
-
- private:
-  bool has_from_;
-  std::string from_;
-  bool has_to_;
-  std::string to_;
-  int max_keys_;
-  std::string delim_;
-  bool count_only_;
-  bool count_delim_;
-  bool print_stats_;
-  bool is_input_key_hex_;
-
-  static const std::string ARG_DELIM;
-  static const std::string ARG_COUNT_ONLY;
-  static const std::string ARG_COUNT_DELIM;
-  static const std::string ARG_STATS;
-  static const std::string ARG_INPUT_KEY_HEX;
-};
-
 class DBLoaderCommand : public tools::LDBCommand {
  public:
   static std::string Name() { return "load"; }
@@ -366,23 +335,6 @@ class DeleteCommand : public tools::LDBCommand {
 
  private:
   std::string key_;
-};
-
-class DeleteRangeCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "deleterange"; }
-
-  DeleteRangeCommand(const std::vector<std::string>& params,
-                     const std::map<std::string, std::string>& options,
-                     const std::vector<std::string>& flags);
-
-  virtual void DoCommand() override;
-
-  static void Help(std::string& ret);
-
- private:
-  std::string begin_key_;
-  std::string end_key_;
 };
 
 class PutCommand : public tools::LDBCommand {

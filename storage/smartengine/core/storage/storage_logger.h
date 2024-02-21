@@ -25,6 +25,11 @@
 
 namespace smartengine
 {
+namespace db
+{
+class VersionSet;
+}
+
 namespace storage
 {
 struct StorageLoggerBuffer

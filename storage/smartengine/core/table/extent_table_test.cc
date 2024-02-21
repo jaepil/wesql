@@ -21,7 +21,6 @@
 
 #include "db/dbformat.h"
 #include "db/memtable.h"
-#include "db/version_edit.h"
 #include "db/version_set.h"
 #include "db/write_batch_internal.h"
 #include "db/write_controller.h"

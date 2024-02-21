@@ -23,8 +23,8 @@
 #include "db/db_impl.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
+#include "db/db_test_util.h"
 #include "db/log_writer.h"
-#include "db/version_edit.h"
 #include "db/version_set.h"
 #include "db/write_batch_internal.h"
 #include "memory/page_arena.h"
@@ -534,11 +534,11 @@ class CompactionTest : public testing::Test {
       std::function<bool(int64_t, const Slice &, const Slice &)> func) {
     Arena arena;
     MergeIteratorBuilder iter_builder(&internal_comparator_, &arena, false);
-    RangeDelAggregator range_del_agg(InternalKeyComparator(BytewiseComparator()),
-                                     kMaxSequenceNumber, true);
     ReadOptions read_options;
-    storage_manager_->add_iterators(table_cache_, nullptr,
-                                    read_options, &iter_builder, &range_del_agg,
+    storage_manager_->add_iterators(table_cache_,
+                                    nullptr,
+                                    read_options,
+                                    &iter_builder,
                                     storage_manager_->get_current_version());
 
     db::Iterator *iterator = NewDBIterator(

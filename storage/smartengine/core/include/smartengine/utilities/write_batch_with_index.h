@@ -45,7 +45,6 @@ enum WriteType {
   kPutRecord,
   kDeleteRecord,
   kSingleDeleteRecord,
-  kDeleteRangeRecord,
   kLogDataRecord,
   kXIDRecord,
 };
@@ -136,13 +135,6 @@ class WriteBatchWithIndex : public db::WriteBatchBase {
   common::Status SingleDelete(db::ColumnFamilyHandle* column_family,
                               const common::Slice& key) override;
   common::Status SingleDelete(const common::Slice& key) override;
-
-  using smartengine::db::WriteBatchBase::DeleteRange;
-  common::Status DeleteRange(db::ColumnFamilyHandle* column_family,
-                             const common::Slice& begin_key,
-                             const common::Slice& end_key) override;
-  common::Status DeleteRange(const common::Slice& begin_key,
-                             const common::Slice& end_key) override;
 
   using smartengine::db::WriteBatchBase::PutLogData;
   common::Status PutLogData(const common::Slice& blob) override;

@@ -102,8 +102,7 @@ class WBWIIteratorImpl : public WBWIIterator {
     auto s = write_batch_->GetEntryFromDataOffset(
         iter_entry->offset, &ret.type, &ret.key, &ret.value, &blob, &xid);
     assert(s.ok());
-    assert(ret.type == kPutRecord || ret.type == kDeleteRecord ||
-           ret.type == kSingleDeleteRecord || ret.type == kDeleteRangeRecord);
+    assert(ret.type == kPutRecord || ret.type == kDeleteRecord || ret.type == kSingleDeleteRecord);
     return ret;
   }
 
@@ -418,27 +417,6 @@ Status WriteBatchWithIndex::SingleDelete(const Slice& key) {
   auto s = rep->write_batch.SingleDelete(key);
   if (s.ok()) {
     rep->AddOrUpdateIndex(key);
-  }
-  return s;
-}
-
-Status WriteBatchWithIndex::DeleteRange(ColumnFamilyHandle* column_family,
-                                        const Slice& begin_key,
-                                        const Slice& end_key) {
-  rep->SetLastEntryOffset();
-  auto s = rep->write_batch.DeleteRange(column_family, begin_key, end_key);
-  if (s.ok()) {
-    rep->AddOrUpdateIndex(column_family, begin_key);
-  }
-  return s;
-}
-
-Status WriteBatchWithIndex::DeleteRange(const Slice& begin_key,
-                                        const Slice& end_key) {
-  rep->SetLastEntryOffset();
-  auto s = rep->write_batch.DeleteRange(begin_key, end_key);
-  if (s.ok()) {
-    rep->AddOrUpdateIndex(begin_key);
   }
   return s;
 }
