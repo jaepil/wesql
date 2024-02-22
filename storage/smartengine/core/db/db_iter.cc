@@ -42,19 +42,6 @@ using namespace storage;
 namespace smartengine {
 namespace db {
 
-#if 0
-static void DumpInternalIter(Iterator* iter) {
-  for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-    ParsedInternalKey k;
-    if (!ParseInternalKey(iter->key(), &k)) {
-      fprintf(stderr, "Corrupt '%s'\n", EscapeString(iter->key()).c_str());
-    } else {
-      fprintf(stderr, "@ '%s'\n", k.DebugString().c_str());
-    }
-  }
-}
-#endif
-
 // Memtables and sstables that make the DB representation contain
 // (userkey,seq,type) => uservalue entries.  DBIter
 // combines multiple entries for the same userkey found in the DB
@@ -89,14 +76,11 @@ class DBIter : public Iterator {
         statistics_(cf_options.statistics),
         version_number_(version_number),
         iterate_upper_bound_(read_options.iterate_upper_bound),
-        prefix_same_as_start_(read_options.prefix_same_as_start),
         pin_thru_lifetime_(read_options.pin_data),
-        total_order_seek_(read_options.total_order_seek),
         space_manager_(space_manager),
         key_sequence_(kMaxSequenceNumber),
         skip_del_(read_options.skip_del_),
         is_art_based_memtable_(std::string(cf_options.memtable_factory->Name()) == "ARTFactory") {
-    prefix_extractor_ = cf_options.prefix_extractor;
     max_skip_ = max_sequential_skip_in_iterations;
     max_skippable_internal_keys_ = read_options.max_skippable_internal_keys;
     if (pin_thru_lifetime_) {
@@ -219,8 +203,8 @@ class DBIter : public Iterator {
   bool FindValueForCurrentKeyUsingSeek();
   void FindPrevUserKey();
   void FindNextUserKey();
-  inline void FindNextUserEntry(bool skipping, bool prefix_check);
-  void FindNextUserEntryInternal(bool skipping, bool prefix_check, bool uniq_check, bool &deleted);
+  inline void FindNextUserEntry(bool skipping);
+  void FindNextUserEntryInternal(bool skipping, bool uniq_check, bool &deleted);
   bool ParseKey(ParsedInternalKey* key);
   bool TooManyInternalKeysSkipped(bool increment = true);
 
@@ -252,7 +236,6 @@ class DBIter : public Iterator {
     num_internal_keys_skipped_ = 0;
   }
 
-  const SliceTransform* prefix_extractor_;
   bool arena_mode_;
   Env* const env_;
   const Comparator* const user_comparator_;
@@ -278,13 +261,9 @@ class DBIter : public Iterator {
   uint64_t num_internal_keys_skipped_;
   uint64_t version_number_;
   const Slice* iterate_upper_bound_;
-  IterKey prefix_start_buf_;
-  Slice prefix_start_key_;
-  const bool prefix_same_as_start_;
   // Means that we will pin all data blocks we read as long the Iterator
   // is not deleted, will be true if ReadOptions::pin_data is true
   const bool pin_thru_lifetime_;
-  const bool total_order_seek_;
   PinnedIteratorsManager pinned_iters_mgr_;
   storage::ExtentSpaceManager* space_manager_;
   SequenceNumber key_sequence_;
@@ -334,7 +313,7 @@ public:
     if (iter_->Valid()) {
       bool deleted = false;
       // valid_ will be set by FindNextUserEntryInternal
-      FindNextUserEntryInternal(false, prefix_same_as_start_, true, deleted);
+      FindNextUserEntryInternal(false, true, deleted);
       if (valid_) {
         key_status_ = deleted ? kDeleted : kExist;
       }
@@ -355,23 +334,14 @@ public:
 
     key_status_ = kNonExist;
     if (iter_->Valid()) {
-      if (prefix_extractor_ && prefix_same_as_start_) {
-        prefix_start_key_ = prefix_extractor_->Transform(target);
-      }
       direction_ = kForward;
       ClearSavedValue();
 
       bool deleted = false;
-      FindNextUserEntryInternal(false, prefix_same_as_start_, true, deleted);
+      FindNextUserEntryInternal(false, true, deleted);
       if (valid_) {
-        if (prefix_extractor_ && prefix_same_as_start_) {
-          prefix_start_buf_.SetUserKey(prefix_start_key_);
-          prefix_start_key_ = prefix_start_buf_.GetUserKey();
-        }
 
         key_status_ = deleted ? kDeleted : kExist;
-      } else {
-        prefix_start_key_.clear();
       }
     } else {
       valid_ = false;
@@ -380,9 +350,6 @@ public:
 
   void SeekToFirst() override {
     QUERY_TRACE_SCOPE(TracePoint::DB_ITER_SEEK);
-    if (prefix_extractor_ != nullptr) {
-      max_skip_ = std::numeric_limits<uint64_t>::max();
-    }
     direction_ = kForward;
     ReleaseTempPinnedData();
     ResetInternalKeysSkippedCounter();
@@ -391,14 +358,9 @@ public:
 
     key_status_ = kNonExist;
     if (iter_->Valid()) {
-      bool deleted;
-      FindNextUserEntryInternal(false, false, true, deleted);
+      bool deleted = false;
+      FindNextUserEntryInternal(false, true, deleted);
       if (valid_) {
-        if (prefix_extractor_ && prefix_same_as_start_) {
-          prefix_start_buf_.SetUserKey(
-            prefix_extractor_->Transform(saved_key_.GetUserKey()));
-          prefix_start_key_ = prefix_start_buf_.GetUserKey();
-        }
 
         key_status_ = deleted ? kDeleted : kExist;
       }
@@ -465,8 +427,7 @@ void DBIter::Next() {
     valid_ = false;
     return;
   }
-  FindNextUserEntry(true /* skipping the current user key */,
-                    prefix_same_as_start_);
+  FindNextUserEntry(true /* skipping the current user key */);
 }
 
 // PRE: saved_key_ has the current user key if skipping
@@ -476,19 +437,15 @@ void DBIter::Next() {
 //       a delete marker or a sequence number higher than sequence_
 //       saved_key_ MUST have a proper user_key before calling this function
 //
-// The prefix_check parameter controls whether we check the iterated
-// keys against the prefix of the seeked key. Set to false when
-// performing a seek without a key (e.g. SeekToFirst). Set to
-// prefix_same_as_start_ for other iterations.
-inline void DBIter::FindNextUserEntry(bool skipping, bool prefix_check) {
+inline void DBIter::FindNextUserEntry(bool skipping) {
   bool deleted = false;
-  FindNextUserEntryInternal(skipping, prefix_check, false, deleted);
+  FindNextUserEntryInternal(skipping, false, deleted);
 }
 
 // Actual implementation of DBIter::FindNextUserEntry()
 // uniq_check for online build index, we need check the record  whether has been delete or not
 // deleted return status of record, only used when uniq_check is true.
-void DBIter::FindNextUserEntryInternal(bool skipping, bool prefix_check, bool uniq_check, bool &deleted) {
+void DBIter::FindNextUserEntryInternal(bool skipping, bool uniq_check, bool &deleted) {
   // Loop until we hit an acceptable entry to yield
   assert(iter_->Valid());
   QUERY_TRACE_SCOPE(TracePoint::DB_ITER_NEXT_USER_ENTRY);
@@ -516,20 +473,8 @@ void DBIter::FindNextUserEntryInternal(bool skipping, bool prefix_check, bool un
       continue;
     }
 
-#if 0
-    //print key
-    __XHANDLER_LOG(INFO, "yxian_debug: type: %d, user_key:%s, sequence:%lld", ikey.type, ikey.user_key.ToString(true).c_str(), ikey.sequence);
-    __XHANDLER_LOG(INFO, "yxian_debug: value:%s", iter_->value().ToString(true).c_str());
-#endif
-
     if (iterate_upper_bound_ != nullptr &&
         user_comparator_->Compare(ikey.user_key, *iterate_upper_bound_) >= 0) {
-      break;
-    }
-
-    if (prefix_extractor_ && prefix_check &&
-        prefix_extractor_->Transform(ikey.user_key)
-                .compare(prefix_start_key_) != 0) {
       break;
     }
 
@@ -645,12 +590,6 @@ void DBIter::Prev() {
 }
 
 void DBIter::ReverseToForward() {
-  if (prefix_extractor_ != nullptr && !total_order_seek_) {
-    IterKey last_key;
-    last_key.SetInternalKey(ParsedInternalKey(
-        saved_key_.GetUserKey(), kMaxSequenceNumber, kValueTypeForSeek));
-    iter_->Seek(last_key.GetInternalKey());
-  }
   FindNextUserKey();
   direction_ = kForward;
   if (!iter_->Valid()) {
@@ -659,13 +598,6 @@ void DBIter::ReverseToForward() {
 }
 
 void DBIter::ReverseToBackward() {
-  if (prefix_extractor_ != nullptr && !total_order_seek_) {
-    IterKey last_key;
-    last_key.SetInternalKey(ParsedInternalKey(saved_key_.GetUserKey(), 0,
-                                              kValueTypeForSeekForPrev));
-    iter_->SeekForPrev(last_key.GetInternalKey());
-  }
-
 #ifndef NDEBUG
   if (iter_->Valid()) {
     ParsedInternalKey ikey;
@@ -701,11 +633,6 @@ void DBIter::PrevInternal() {
       FindParseableKey(&ikey, kReverse);
       if (user_comparator_->Equal(ikey.user_key, saved_key_.GetUserKey())) {
         FindPrevUserKey();
-      }
-      if (valid_ && prefix_extractor_ && prefix_same_as_start_ &&
-          prefix_extractor_->Transform(saved_key_.GetUserKey())
-                  .compare(prefix_start_key_) != 0) {
-        valid_ = false;
       }
       return;
     }
@@ -917,23 +844,13 @@ void DBIter::Seek(const Slice& target) {
   iter_->Seek(saved_key_.GetInternalKey());
 
   if (iter_->Valid()) {
-    if (prefix_extractor_ && prefix_same_as_start_) {
-      prefix_start_key_ = prefix_extractor_->Transform(target);
-    }
     direction_ = kForward;
     ClearSavedValue();
-    FindNextUserEntry(false /* not skipping */, prefix_same_as_start_);
-    if (!valid_) {
-      prefix_start_key_.clear();
-    }
+    FindNextUserEntry(false /* not skipping */);
   } else {
     valid_ = false;
   }
 
-  if (valid_ && prefix_extractor_ && prefix_same_as_start_) {
-    prefix_start_buf_.SetUserKey(prefix_start_key_);
-    prefix_start_key_ = prefix_start_buf_.GetUserKey();
-  }
 }
 
 void DBIter::SeekForPrev(const Slice& target) {
@@ -947,31 +864,16 @@ void DBIter::SeekForPrev(const Slice& target) {
   iter_->SeekForPrev(saved_key_.GetInternalKey());
 
   if (iter_->Valid()) {
-    if (prefix_extractor_ && prefix_same_as_start_) {
-      prefix_start_key_ = prefix_extractor_->Transform(target);
-    }
     direction_ = kReverse;
     ClearSavedValue();
     PrevInternal();
-    if (!valid_) {
-      prefix_start_key_.clear();
-    }
   } else {
     valid_ = false;
-  }
-  if (valid_ && prefix_extractor_ && prefix_same_as_start_) {
-    prefix_start_buf_.SetUserKey(prefix_start_key_);
-    prefix_start_key_ = prefix_start_buf_.GetUserKey();
   }
 }
 
 void DBIter::SeekToFirst() {
   QUERY_TRACE_SCOPE(TracePoint::DB_ITER_SEEK);
-  // Don't use iter_::Seek() if we set a prefix extractor
-  // because prefix seek will be used.
-  if (prefix_extractor_ != nullptr) {
-    max_skip_ = std::numeric_limits<uint64_t>::max();
-  }
   direction_ = kForward;
   ReleaseTempPinnedData();
   ResetInternalKeysSkippedCounter();
@@ -982,24 +884,14 @@ void DBIter::SeekToFirst() {
     saved_key_.SetUserKey(
         ExtractUserKey(iter_->key()),
         !iter_->IsKeyPinned() || !pin_thru_lifetime_ /* copy */);
-    FindNextUserEntry(false /* not skipping */, false /* no prefix check */);
+    FindNextUserEntry(false /* not skipping */);
   } else {
     valid_ = false;
-  }
-  if (valid_ && prefix_extractor_ && prefix_same_as_start_) {
-    prefix_start_buf_.SetUserKey(
-        prefix_extractor_->Transform(saved_key_.GetUserKey()));
-    prefix_start_key_ = prefix_start_buf_.GetUserKey();
   }
 }
 
 void DBIter::SeekToLast() {
   QUERY_TRACE_SCOPE(TracePoint::DB_ITER_SEEK);
-  // Don't use iter_::Seek() if we set a prefix extractor
-  // because prefix seek will be used.
-  if (prefix_extractor_ != nullptr) {
-    max_skip_ = std::numeric_limits<uint64_t>::max();
-  }
   direction_ = kReverse;
   ReleaseTempPinnedData();
   ResetInternalKeysSkippedCounter();
@@ -1019,11 +911,6 @@ void DBIter::SeekToLast() {
     }
   } else {
     PrevInternal();
-  }
-  if (valid_ && prefix_extractor_ && prefix_same_as_start_) {
-    prefix_start_buf_.SetUserKey(
-        prefix_extractor_->Transform(saved_key_.GetUserKey()));
-    prefix_start_key_ = prefix_start_buf_.GetUserKey();
   }
 }
 

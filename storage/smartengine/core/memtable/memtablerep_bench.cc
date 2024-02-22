@@ -39,7 +39,6 @@ int main() {
 #include "smartengine/comparator.h"
 #include "smartengine/memtablerep.h"
 #include "smartengine/options.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/write_buffer_manager.h"
 
 using GFLAGS::ParseCommandLineFlags;
@@ -605,29 +604,6 @@ int main(int argc, char** argv) {
     factory.reset(new SkipListFactory);
   } else if (FLAGS_memtablerep == "art") {
     factory.reset(new ARTFactory);
-#ifndef ROCKSDB_LITE
-  } else if (FLAGS_memtablerep == "vector") {
-    factory.reset(new VectorRepFactory);
-  } else if (FLAGS_memtablerep == "hashskiplist") {
-    factory.reset(
-        NewHashSkipListRepFactory(FLAGS_bucket_count, FLAGS_hashskiplist_height,
-                                  FLAGS_hashskiplist_branching_factor));
-    options.prefix_extractor.reset(
-        common::NewFixedPrefixTransform(FLAGS_prefix_length));
-  } else if (FLAGS_memtablerep == "hashlinklist") {
-    factory.reset(NewHashLinkListRepFactory(
-        FLAGS_bucket_count, FLAGS_huge_page_tlb_size,
-        FLAGS_bucket_entries_logging_threshold,
-        FLAGS_if_log_bucket_dist_when_flash, FLAGS_threshold_use_skiplist));
-    options.prefix_extractor.reset(
-        common::NewFixedPrefixTransform(FLAGS_prefix_length));
-  } else if (FLAGS_memtablerep == "cuckoo") {
-    factory.reset(NewHashCuckooRepFactory(
-        FLAGS_write_buffer_size, FLAGS_average_data_size,
-        static_cast<uint32_t>(FLAGS_hash_function_count)));
-    options.prefix_extractor.reset(
-        common::NewFixedPrefixTransform(FLAGS_prefix_length));
-#endif  // ROCKSDB_LITE
   } else {
     fprintf(stdout, "Unknown memtablerep: %s\n", FLAGS_memtablerep.c_str());
     exit(1);
@@ -641,8 +617,7 @@ int main(int argc, char** argv) {
   uint64_t sequence;
   auto createMemtableRep = [&] {
     sequence = 0;
-    return factory->CreateMemTableRep(key_comp, &memtable_allocator,
-                                      options.prefix_extractor.get());
+    return factory->CreateMemTableRep(key_comp, &memtable_allocator);
   };
   std::unique_ptr<MemTableRep> memtablerep;
   util::Random64 rng(FLAGS_seed);

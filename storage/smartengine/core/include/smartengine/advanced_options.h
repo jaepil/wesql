@@ -26,7 +26,6 @@ class TablePropertiesCollectorFactory;
 namespace common {
 
 class Slice;
-class SliceTransform;
 enum CompressionType : unsigned char;
 struct Options;
 
@@ -215,16 +214,6 @@ struct AdvancedColumnFamilyOptions {
                                    Slice delta_value,
                                    std::string* merged_value) = nullptr;
 
-  // if prefix_extractor is set and memtable_prefix_bloom_size_ratio is not 0,
-  // create prefix bloom for memtable with the size of
-  // write_buffer_size * memtable_prefix_bloom_size_ratio.
-  // If it is larger than 0.25, it is santinized to 0.25.
-  //
-  // Default: 0 (disable)
-  //
-  // Dynamically changeable through SetOptions() API
-  double memtable_prefix_bloom_size_ratio = 0.0;
-
   // Page size for huge page for the arena used by the memtable. If <=0, it
   // won't allocate from huge page but from malloc.
   // Users are responsible to reserve huge pages for it to be allocated. For
@@ -236,28 +225,6 @@ struct AdvancedColumnFamilyOptions {
   //
   // Dynamically changeable through SetOptions() API
   size_t memtable_huge_page_size = 0;
-
-  // If non-nullptr, memtable will use the specified function to extract
-  // prefixes for keys, and for each prefix maintain a hint of insert location
-  // to reduce CPU usage for inserting keys with the prefix. Keys out of
-  // domain of the prefix extractor will be insert without using hints.
-  //
-  // Currently only the default skiplist based memtable implements the feature.
-  // All other memtable implementation will ignore the option. It incurs ~250
-  // additional bytes of memory overhead to store a hint for each prefix.
-  // Also concurrent writes (when allow_concurrent_memtable_write is true) will
-  // ignore the option.
-  //
-  // The option is best suited for workloads where keys will likely to insert
-  // to a location close the the last inserted key with the same prefix.
-  // One example could be inserting keys of the form (prefix + timestamp),
-  // and keys of the same prefix always comes in with time order. Another
-  // example would be updating the same key over and over again, in which case
-  // the prefix can be the key itself.
-  //
-  // Default: nullptr (disable)
-  std::shared_ptr<const SliceTransform>
-      memtable_insert_with_hint_prefix_extractor = nullptr;
 
   // Control locality of bloom filter probes to improve cache miss rate.
   // This option only applies to memtable prefix bloom and plaintable

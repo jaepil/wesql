@@ -127,11 +127,6 @@ common::Status SeTransactionImpl::lock_unique_key(db::ColumnFamilyHandle *const 
     // copied from SeTransaction::get_iterator
     if (skip_bloom_filter) {
       read_opts.total_order_seek = true;
-    } else {
-      // With this option, Iterator::Valid() returns false if key
-      // is outside of the prefix bloom filter range set at Seek().
-      // Must not be set to true if not using bloom filter.
-      read_opts.prefix_same_as_start = true;
     }
     read_opts.fill_cache = fill_cache;
     // should not skip deleted record when checking seq validation

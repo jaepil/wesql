@@ -119,8 +119,6 @@ class ExtentBasedTable : public TableReader {
       int level = -1,
       memory::SimpleAllocator *alloc = nullptr);
 
-  bool PrefixMayMatch(const common::Slice& internal_key);
-
   // Returns a new iterator over the table contents.
   // The result of NewIterator() is initially invalid (caller must
   // call one of the Seek methods on the iterator before using it).
@@ -394,10 +392,6 @@ class ExtentBasedTable : public TableReader {
                                       InternalIterator *&iter,
                                       memory::SimpleAllocator *alloc = nullptr);
 
-  // Create the filter from the filter block.
-  FilterBlockReader* ReadFilter(const BlockHandle& filter_handle,
-                                const bool is_a_filter_partition) const;
-
   static void SetupCacheKeyPrefix(Rep* rep, uint64_t file_size);
 
   // Generate a cache key prefix from the file
@@ -431,7 +425,6 @@ class ExtentBasedTable::BlockEntryIteratorState : public TwoLevelIteratorState {
                           const uint64_t scan_add_blocks_limit = 0);
   InternalIterator* NewSecondaryIterator(
       const common::Slice& index_value, uint64_t *add_blocks = nullptr) override;
-  bool PrefixMayMatch(const common::Slice& internal_key) override;
 
  private:
   // Don't own table_
@@ -531,12 +524,6 @@ struct ExtentBasedTable::Rep {
   BlockBasedTableOptions::IndexType index_type;
   bool hash_index_allow_collision;
   bool whole_key_filtering;
-  bool prefix_filtering;
-  // TODO(kailiu) It is very ugly to use internal key in table, since table
-  // module should not be relying on db module. However to make things easier
-  // and compatible with existing code, we introduce a wrapper that allows
-  // block to extract prefix without knowing if a key is internal or not.
-  std::unique_ptr<common::SliceTransform, memory::ptr_destruct<common::SliceTransform>> internal_prefix_transform;
 
   // only used in level 0 files:
   // when pin_l0_filter_and_index_blocks_in_cache is true, we do use the

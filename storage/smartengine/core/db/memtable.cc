@@ -34,7 +34,6 @@
 #include "smartengine/comparator.h"
 #include "smartengine/env.h"
 #include "smartengine/iterator.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/write_buffer_manager.h"
 #include "storage/storage_manager.h"
 
@@ -77,11 +76,6 @@ MemTableOptions::MemTableOptions(const ImmutableCFOptions& ioptions,
       flush_delete_percent_trigger(mutable_cf_options.flush_delete_percent_trigger),
       flush_delete_record_trigger(mutable_cf_options.flush_delete_record_trigger),
       arena_block_size(mutable_cf_options.arena_block_size),
-      memtable_prefix_bloom_bits(
-          static_cast<uint32_t>(
-              static_cast<double>(mutable_cf_options.write_buffer_size) *
-              mutable_cf_options.memtable_prefix_bloom_size_ratio) *
-          8u),
       memtable_huge_page_size(mutable_cf_options.memtable_huge_page_size),
       inplace_update_support(ioptions.inplace_update_support),
       inplace_update_num_locks(mutable_cf_options.inplace_update_num_locks),
@@ -102,8 +96,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
              mutable_cf_options.memtable_huge_page_size,
              memory::ModId::kMemtable),
       allocator_(&arena_, write_buffer_manager),
-      table_(ioptions.memtable_factory->CreateMemTableRep(
-          comparator_, &allocator_, ioptions.prefix_extractor)),
+      table_(ioptions.memtable_factory->CreateMemTableRep(comparator_, &allocator_)),
       data_size_(0),
       num_entries_(0),
       num_deletes_(0),
@@ -124,31 +117,14 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       locks_(moptions_.inplace_update_support
                  ? moptions_.inplace_update_num_locks
                  : 0),
-      prefix_extractor_(ioptions.prefix_extractor),
       flush_state_(FLUSH_NOT_REQUESTED),
       env_(ioptions.env),
-      insert_with_hint_prefix_extractor_(
-          ioptions.memtable_insert_with_hint_prefix_extractor),
       no_flush_(false),
       dump_seq_(0) {
   UpdateFlushState();
   // something went wrong if we need to flush before inserting anything
   assert(!ShouldScheduleFlush());
 
-  if (nullptr == prefix_extractor_) {
-    prefix_extractor_ = NewVolatileNoopTransform();
-    create_local_prefix_extractor_ = true;
-  } else {
-    create_local_prefix_extractor_ = false;
-  }
-
-  if (prefix_extractor_ && moptions_.memtable_prefix_bloom_bits > 0) {
-    // todo use object pool
-    prefix_bloom_.reset(new DynamicBloom(
-        &allocator_, moptions_.memtable_prefix_bloom_bits,
-        ioptions.bloom_locality, 6 /* hard coded 6 probes */, nullptr,
-        moptions_.memtable_huge_page_size));
-  }
 #ifndef NDEBUG
   SE_LOG(DEBUG, " New MemTable ", K(moptions_.flush_delete_percent),
       K(moptions_.flush_delete_record_trigger), K(moptions_.flush_delete_percent_trigger));
@@ -157,14 +133,10 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
 
 MemTable::~MemTable() {
   assert(refs_ == 0);
-  if (this->create_local_prefix_extractor_) {
-    delete prefix_extractor_;
-  }
 }
 size_t MemTable::ApproximateMemoryAllocated() {
   autovector<size_t> usages = {arena_.MemoryAllocatedBytes(),
-                               table_->ApproximateMemoryUsage(),
-                               util::ApproximateMemoryUsage(insert_hints_)};
+                               table_->ApproximateMemoryUsage()};
   size_t total_usage = 0;
   for (size_t usage : usages) {
     // If usage + total_usage >= kMaxSizet, return kMaxSizet.
@@ -180,8 +152,7 @@ size_t MemTable::ApproximateMemoryAllocated() {
 
 size_t MemTable::ApproximateMemoryUsage() {
   autovector<size_t> usages = {arena_.ApproximateMemoryUsage(),
-                               table_->ApproximateMemoryUsage(),
-                               util::ApproximateMemoryUsage(insert_hints_)};
+                               table_->ApproximateMemoryUsage()};
   size_t total_usage = 0;
   for (size_t usage : usages) {
     // If usage + total_usage >= kMaxSizet, return kMaxSizet.
@@ -423,18 +394,11 @@ class MemTableIterator : public InternalIterator {
   MemTableIterator(const MemTable& mem,
                    const ReadOptions& read_options,
                    Arena* arena)
-      : bloom_(nullptr),
-        prefix_extractor_(mem.prefix_extractor_),
-        comparator_(mem.comparator_),
+      : comparator_(mem.comparator_),
         valid_(false),
         arena_mode_(arena != nullptr),
         value_pinned_(!mem.GetMemTableOptions()->inplace_update_support) {
-    if (prefix_extractor_ != nullptr && !read_options.total_order_seek) {
-      bloom_ = mem.prefix_bloom_.get();
-      iter_ = mem.table_->GetDynamicPrefixIterator(arena);
-    } else {
-      iter_ = mem.table_->GetIterator(arena);
-    }
+    iter_ = mem.table_->GetIterator(arena);
     set_source(ROW_SOURCE_MEMTABLE);
   }
 
@@ -466,30 +430,10 @@ class MemTableIterator : public InternalIterator {
         ? comparator_.comparator.Compare(GetLengthPrefixedSlice(iter_->key()), end_ikey_) < 0 : true);
   }
   virtual void Seek(const Slice& k) override {
-    if (bloom_ != nullptr) {
-      if (!bloom_->MayContain(
-              prefix_extractor_->Transform(ExtractUserKey(k)))) {
-        QUERY_COUNT(CountPoint::BLOOM_MEMTABLE_MISS);
-        valid_ = false;
-        return;
-      } else {
-        QUERY_COUNT(CountPoint::BLOOM_MEMTABLE_HIT);
-      }
-    }
     iter_->Seek(k, nullptr);
     valid_ = iter_->Valid();
   }
   virtual void SeekForPrev(const Slice& k) override {
-    if (bloom_ != nullptr) {
-      if (!bloom_->MayContain(
-              prefix_extractor_->Transform(ExtractUserKey(k)))) {
-        QUERY_COUNT(CountPoint::BLOOM_MEMTABLE_MISS);
-        valid_ = false;
-        return;
-      } else {
-        QUERY_COUNT(CountPoint::BLOOM_MEMTABLE_HIT);
-      }
-    }
     iter_->Seek(k, nullptr);
     valid_ = iter_->Valid();
     if (!Valid()) {
@@ -542,8 +486,6 @@ class MemTableIterator : public InternalIterator {
   }
 
  private:
-  DynamicBloom* bloom_;
-  const SliceTransform* const prefix_extractor_;
   const MemTable::KeyComparator comparator_;
   MemTableRep::Iterator* iter_;
   bool valid_;
@@ -626,14 +568,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   memcpy(p, value.data(), val_size);
   assert((unsigned)(p + val_size - buf) == (unsigned)encoded_len);
   if (!allow_concurrent) {
-    // Extract prefix for insert with hint.
-    if (insert_with_hint_prefix_extractor_ != nullptr &&
-        insert_with_hint_prefix_extractor_->InDomain(key_slice)) {
-      Slice prefix = insert_with_hint_prefix_extractor_->Transform(key_slice);
-      table_->InsertWithHint(handle, &insert_hints_[prefix]);
-    } else {
-      table_->Insert(handle);
-    }
+    table_->Insert(handle);
 
     // this is a bit ugly, but is the way to avoid locked instructions
     // when incrementing an atomic
@@ -644,11 +579,6 @@ void MemTable::Add(SequenceNumber s, ValueType type,
     if (type == kTypeDeletion || type == kTypeSingleDeletion) {
       num_deletes_.store(num_deletes_.load(std::memory_order_relaxed) + 1,
                          std::memory_order_relaxed);
-    }
-
-    if (prefix_bloom_) {
-      assert(prefix_extractor_);
-      prefix_bloom_->Add(prefix_extractor_->Transform(key));
     }
 
     // The first sequence number inserted into the memtable
@@ -675,11 +605,6 @@ void MemTable::Add(SequenceNumber s, ValueType type,
     post_process_info->data_size += encoded_len;
     if (type == kTypeDeletion || type == kTypeSingleDeletion) {
       post_process_info->num_deletes++;
-    }
-
-    if (prefix_bloom_) {
-      assert(prefix_extractor_);
-      prefix_bloom_->AddConcurrently(prefix_extractor_->Transform(key));
     }
 
     // atomically update first_seqno_ and earliest_seqno_.
@@ -783,43 +708,20 @@ bool MemTable::Get(LookupKey& key,
   }
   QUERY_TRACE_SCOPE(TracePoint::MEMTABLE_GET);
 
-  Slice user_key = key.user_key();
   bool found_final_value = false;
+  Saver saver;
+  saver.status = s;
+  saver.found_final_value = &found_final_value;
+  saver.key = &key;
+  saver.value = value;
+  saver.seq = kMaxSequenceNumber;
+  saver.mem = this;
+  saver.inplace_update_support = moptions_.inplace_update_support;
+  saver.statistics = moptions_.statistics;
+  saver.env_ = env_;
+  table_->Get(key, &saver, SaveValue);
 
-  bool may_contain = false;
-
-  if (nullptr != prefix_bloom_) {
-    if (!key.is_bloom_hash_set()) {
-      key.set_bloom_hash_value(
-          BloomHash(prefix_extractor_->Transform(user_key)));
-    }
-    assert(BloomHash(prefix_extractor_->Transform(user_key)) ==
-           key.get_bloom_hash_value());
-    may_contain = prefix_bloom_->MayContainHash(key.get_bloom_hash_value());
-  }
-
-  if (prefix_bloom_ && !may_contain) {
-    // iter is null if prefix bloom says the key does not exist
-    QUERY_COUNT(CountPoint::BLOOM_MEMTABLE_MISS);
-    *seq = kMaxSequenceNumber;
-  } else {
-    if (prefix_bloom_) {
-      QUERY_COUNT(CountPoint::BLOOM_MEMTABLE_HIT);
-    }
-    Saver saver;
-    saver.status = s;
-    saver.found_final_value = &found_final_value;
-    saver.key = &key;
-    saver.value = value;
-    saver.seq = kMaxSequenceNumber;
-    saver.mem = this;
-    saver.inplace_update_support = moptions_.inplace_update_support;
-    saver.statistics = moptions_.statistics;
-    saver.env_ = env_;
-    table_->Get(key, &saver, SaveValue);
-
-    *seq = saver.seq;
-  }
+  *seq = saver.seq;
 
   return found_final_value;
 }

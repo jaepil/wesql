@@ -83,8 +83,6 @@ extern ulong se_sort_buffer_size;
 
 extern bool opt_purge_invalid_subtable_bg;
 
-extern char *se_cf_memtable_options;
-
 extern unsigned long se_rate_limiter_bytes_per_sec;
 
 extern int32_t se_shrink_table_space;

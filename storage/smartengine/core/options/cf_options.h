@@ -48,8 +48,6 @@ struct ImmutableCFOptions {
   CompactionOptionsUniversal compaction_options_universal;
   CompactionOptionsFIFO compaction_options_fifo;
 
-  const SliceTransform* prefix_extractor;
-
   const util::Comparator* user_comparator;
   db::InternalKeyComparator internal_comparator;
 
@@ -129,8 +127,6 @@ struct ImmutableCFOptions {
 
   uint32_t max_subcompactions;
 
-  const SliceTransform* memtable_insert_with_hint_prefix_extractor;
-
   std::shared_ptr<table::FilterManager> filter_manager;
 };
 
@@ -143,8 +139,6 @@ struct MutableCFOptions {
         flush_delete_record_trigger(options.flush_delete_record_trigger),
         max_write_buffer_number(options.max_write_buffer_number),
         arena_block_size(options.arena_block_size),
-        memtable_prefix_bloom_size_ratio(
-            options.memtable_prefix_bloom_size_ratio),
         memtable_huge_page_size(options.memtable_huge_page_size),
         inplace_update_num_locks(options.inplace_update_num_locks),
         disable_auto_compactions(options.disable_auto_compactions),
@@ -190,7 +184,6 @@ struct MutableCFOptions {
         flush_delete_record_trigger(700000),
         max_write_buffer_number(0),
         arena_block_size(0),
-        memtable_prefix_bloom_size_ratio(0),
         memtable_huge_page_size(0),
         inplace_update_num_locks(0),
         disable_auto_compactions(false),
@@ -245,7 +238,6 @@ struct MutableCFOptions {
   int flush_delete_record_trigger;
   int max_write_buffer_number;
   size_t arena_block_size;
-  double memtable_prefix_bloom_size_ratio;
   size_t memtable_huge_page_size;
   size_t inplace_update_num_locks;
 

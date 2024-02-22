@@ -176,19 +176,22 @@ void AppendVarint32(IterKey& key, uint64_t v) {
 
 const uint64_t kExtentBasedTableMagicNumber = 0x568619d05ecd006eull;
 
-ExtentBasedTableBuilder::Rep::Rep(const ImmutableCFOptions& ioptions,
+ExtentBasedTableBuilder::Rep::Rep(
+    const ImmutableCFOptions& ioptions,
     const BlockBasedTableOptions& table_options,
     const InternalKeyComparator& icomparator,
     const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
     int_tbl_prop_collector_factories,
     uint32_t column_family_id,
-    const InternalKeySliceTransform* internal_prefix_transform,
-    WritableBuffer* block_buf, WritableBuffer* index_buf)
+    WritableBuffer* block_buf,
+    WritableBuffer* index_buf)
     : data_block(table_options.block_restart_interval,
                  table_options.use_delta_encoding, block_buf),
       index_builder(IndexBuilder::CreateIndexBuilder(
-                    table_options.index_type, &icomparator, internal_prefix_transform,
-                    table_options, index_buf)),
+                    table_options.index_type,
+                    &icomparator,
+                    table_options,
+                    index_buf)),
       flush_block_policy(
           table_options.flush_block_policy_factory->NewFlushBlockPolicy(table_options, data_block))
 {
@@ -223,12 +226,15 @@ int ExtentBasedTableBuilder::init_one_sst() {
     block_buf = &sst_buf_;
   }
   assert(rep_ == nullptr);
-//  rep_ = new Rep(ioptions_, table_options_, internal_comparator_,
-//                 int_tbl_prop_collector_factories_, column_family_id_,
-//                 &internal_prefix_transform_, block_buf, &index_buf_);
-  rep_ = MOD_NEW_OBJECT(ModId::kRep, Rep, ioptions_, table_options_,
-      internal_comparator_, int_tbl_prop_collector_factories_, column_family_id_,
-      &internal_prefix_transform_, block_buf, &index_buf_);
+  rep_ = MOD_NEW_OBJECT(ModId::kRep,
+                        Rep,
+                        ioptions_,
+                        table_options_,
+                        internal_comparator_,
+                        int_tbl_prop_collector_factories_,
+                        column_family_id_,
+                        block_buf,
+                        &index_buf_);
   if (rep_ == nullptr) {
     __SE_LOG(ERROR, "Failed to init SST rep");
     return Status::kNoSpace;
@@ -292,7 +298,6 @@ ExtentBasedTableBuilder::ExtentBasedTableBuilder(
       compression_dict_(compression_dict),
       column_family_name_(column_family_name),
       output_position_(layer_position),
-      internal_prefix_transform_(ioptions_.prefix_extractor),
       num_entries_(0),
       offset_(0),
       // give buffer a little bit more memory in case some compression
@@ -984,9 +989,7 @@ int ExtentBasedTableBuilder::BuildPropertyBlock(PropertyBlockBuilder& builder) {
   /**TODO: Zhao Dongsheng, remove the merge_operator_name?*/
   props.merge_operator_name = "nullptr";
   props.compression_name = CompressionTypeToString(compression_type_);
-  props.prefix_extractor_name = ioptions_.prefix_extractor != nullptr
-                                    ? ioptions_.prefix_extractor->Name()
-                                    : "nullptr";
+  props.prefix_extractor_name = "nullptr";
 
   std::string property_collectors_names = "[";
   property_collectors_names = "[";

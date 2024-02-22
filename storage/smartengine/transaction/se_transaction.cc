@@ -244,11 +244,6 @@ db::Iterator *SeTransaction::get_iterator(
 
   if (skip_bloom_filter) {
     options.total_order_seek = true;
-  } else {
-    // With this option, Iterator::Valid() returns false if key
-    // is outside of the prefix bloom filter range set at Seek().
-    // Must not be set to true if not using bloom filter.
-    options.prefix_same_as_start = true;
   }
   options.fill_cache = fill_cache;
   if (read_current) {

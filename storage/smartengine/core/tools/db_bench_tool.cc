@@ -63,7 +63,6 @@
 #include "smartengine/perf_level.h"
 #include "smartengine/rate_limiter.h"
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/utilities/object_registry.h"
 #include "smartengine/utilities/optimistic_transaction_db.h"
 #include "smartengine/utilities/transaction.h"
@@ -530,9 +529,7 @@ DEFINE_int32(writable_file_max_buffer_size, 1024 * 1024,
 DEFINE_int32(bloom_bits, -1,
              "Bloom filter bits per key. Negative means"
              " use default settings.");
-DEFINE_double(memtable_bloom_size_ratio, 0,
-              "Ratio of memtable size used for bloom filter. 0 means no bloom "
-              "filter.");
+
 DEFINE_bool(memtable_use_huge_page, false,
             "Try to use huge page in memtables.");
 
@@ -989,24 +986,6 @@ DEFINE_int32(key_id_group_size, 32,
              "Size of group in which all the keys share the same key id "
              "but have variable-length suffixes of zeros (used in Stress only).");
 
-static bool ValidatePrefixSize(const char* flagname, int32_t value) {
-  if (value < 0 || value >= 2000000000) {
-    fprintf(stderr, "Invalid value for --%s: %d. 0<= PrefixSize <=2000000000\n",
-            flagname, value);
-    return false;
-  }
-  return true;
-}
-DEFINE_int32(prefix_size, 0,
-             "control the prefix size for HashSkipList and "
-             "plain table");
-DEFINE_int64(keys_per_prefix, 0,
-             "control average number of keys generated "
-             "per prefix, 0 means no special handling of the prefix, "
-             "i.e. use the prefix comes with the generated random number.");
-DEFINE_int32(memtable_insert_with_hint_prefix_size, 0,
-             "If non-zero, enable "
-             "memtable insert with hint with the given prefix size.");
 DEFINE_bool(enable_io_prio, false,
             "Lower the background flush/compaction "
             "threads' IO priority");
@@ -1028,10 +1007,6 @@ DEFINE_bool(medium_kv, false, "Add a few medium KV (50KB 500KB)");
 
 enum RepFactory {
   kSkipList,
-  kPrefixHash,
-  kVectorRep,
-  kHashLinkedList,
-  kCuckoo,
   kART,
 };
 
@@ -1042,14 +1017,6 @@ static enum RepFactory StringToRepFactory(const char* ctype) {
     return kSkipList;
   else if (!strcasecmp(ctype, "art"))
     return kART;
-  else if (!strcasecmp(ctype, "prefix_hash"))
-    return kPrefixHash;
-  else if (!strcasecmp(ctype, "vector"))
-    return kVectorRep;
-  else if (!strcasecmp(ctype, "hash_linkedlist"))
-    return kHashLinkedList;
-  else if (!strcasecmp(ctype, "cuckoo"))
-    return kCuckoo;
 
   fprintf(stdout, "Cannot parse memreptable %s\n", ctype);
   return kSkipList;
@@ -1073,10 +1040,6 @@ DEFINE_bool(use_block_based_filter, false,
             "if use kBlockBasedFilter "
             "instead of kFullFilter for filter block. "
             "This is valid if only we use BlockTable");
-DEFINE_int32(skip_list_lookahead, 0,
-             "Used with skip_list memtablerep; try "
-             "linear search first for this many steps from the previous "
-             "position");
 DEFINE_bool(report_file_operations, false,
             "if report number of file "
             "operations");
@@ -1086,9 +1049,6 @@ static const bool FLAGS_soft_rate_limit_dummy __attribute__((unused)) =
 
 static const bool FLAGS_hard_rate_limit_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_hard_rate_limit, &ValidateRateLimit);
-
-static const bool FLAGS_prefix_size_dummy __attribute__((unused)) =
-    RegisterFlagValidator(&FLAGS_prefix_size, &ValidatePrefixSize);
 
 static const bool FLAGS_key_size_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_key_size, &ValidateKeySize);
@@ -2393,14 +2353,11 @@ class Benchmark {
   std::shared_ptr<Cache> cache_;
   std::shared_ptr<Cache> compressed_cache_;
   std::shared_ptr<const FilterPolicy> filter_policy_;
-  const SliceTransform* prefix_extractor_;
   DBWithColumnFamilies db_;
   std::vector<DBWithColumnFamilies> multi_dbs_;
   int64_t num_;
   int value_size_;
   int key_size_;
-  int prefix_size_;
-  int64_t keys_per_prefix_;
   int64_t entries_per_batch_;
   int64_t range_tombstone_width_;
   int64_t max_num_range_tombstones_;
@@ -2494,8 +2451,6 @@ class Benchmark {
             FLAGS_value_size,
             static_cast<int>(FLAGS_value_size * FLAGS_compression_ratio + 0.5));
     fprintf(stdout, "Entries:    %" PRIu64 "\n", num_);
-    fprintf(stdout, "Prefix:    %d bytes\n", FLAGS_prefix_size);
-    fprintf(stdout, "Keys per prefix:    %" PRIu64 "\n", keys_per_prefix_);
     fprintf(stdout, "RawSize:    %.1f MB (estimated)\n",
             ((static_cast<int64_t>(FLAGS_key_size + FLAGS_value_size) * num_) /
              1048576.0));
@@ -2524,23 +2479,11 @@ class Benchmark {
     fprintf(stdout, "Compression: %s\n", compression.c_str());
 
     switch (FLAGS_rep_factory) {
-      case kPrefixHash:
-        fprintf(stdout, "Memtablerep: prefix_hash\n");
-        break;
       case kSkipList:
         fprintf(stdout, "Memtablerep: skip_list\n");
         break;
       case kART:
         fprintf(stdout, "Memtablerep: art\n");
-        break;
-      case kVectorRep:
-        fprintf(stdout, "Memtablerep: vector\n");
-        break;
-      case kHashLinkedList:
-        fprintf(stdout, "Memtablerep: hash_linkedlist\n");
-        break;
-      case kCuckoo:
-        fprintf(stdout, "Memtablerep: cuckoo\n");
         break;
     }
     fprintf(stdout, "Perf Level: %d\n", FLAGS_perf_level);
@@ -2694,12 +2637,9 @@ class Benchmark {
                            ? NewBloomFilterPolicy(FLAGS_bloom_bits,
                                                   FLAGS_use_block_based_filter)
                            : nullptr),
-        prefix_extractor_(NewFixedPrefixTransform(FLAGS_prefix_size)),
         num_(FLAGS_num),
         value_size_(FLAGS_value_size),
         key_size_(FLAGS_key_size),
-        prefix_size_(FLAGS_prefix_size),
-        keys_per_prefix_(FLAGS_keys_per_prefix),
         entries_per_batch_(1),
         reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
         read_random_exp_range_(0.0),
@@ -2719,11 +2659,6 @@ class Benchmark {
         rand_large_val(1000) {
     if (report_file_operations_) {
       FLAGS_env = new ReportFileOpEnv(Env::Default());
-    }
-
-    if (FLAGS_prefix_size > FLAGS_key_size) {
-      fprintf(stderr, "prefix size is larger than key size");
-      exit(1);
     }
 
     std::vector<std::string> files;
@@ -2757,7 +2692,6 @@ class Benchmark {
 
   ~Benchmark() {
     db_.DeleteDBs();
-    delete prefix_extractor_;
     if (cache_.get() != nullptr) {
       // this will leak, but we're shutting down so nobody cares
       cache_->DisownData();
@@ -2793,24 +2727,6 @@ class Benchmark {
   void GenerateKeyFromInt(uint64_t v, int64_t num_keys, Slice* key) {
     char* start = const_cast<char*>(key->data());
     char* pos = start;
-    if (keys_per_prefix_ > 0) {
-      int64_t num_prefix = num_keys / keys_per_prefix_;
-      int64_t prefix = v % num_prefix;
-      int bytes_to_fill = std::min(prefix_size_, 8);
-      if (port::kLittleEndian) {
-        for (int i = 0; i < bytes_to_fill; ++i) {
-          pos[i] = (prefix >> ((bytes_to_fill - i - 1) << 3)) & 0xFF;
-        }
-      } else {
-        memcpy(pos, static_cast<void*>(&prefix), bytes_to_fill);
-      }
-      if (prefix_size_ > 8) {
-        // fill the rest with 0s
-        memset(pos + 8, '0', prefix_size_ - 8);
-      }
-      pos += prefix_size_;
-    }
-
     int bytes_to_fill = std::min(key_size_ - static_cast<int>(pos - start), 8);
     if (port::kLittleEndian) {
       for (int i = 0; i < bytes_to_fill; ++i) {
@@ -3474,11 +3390,6 @@ class Benchmark {
         FLAGS_fifo_compaction_max_table_files_size_mb * 1024 * 1024);
 #endif  // ROCKSDB_LITE
 
-//    smartengine::fpga::FPGACompactionJob::get_instance().set_data_dir(FLAGS_db);
-    if (FLAGS_prefix_size != 0) {
-      options.prefix_extractor.reset(
-          NewFixedPrefixTransform(FLAGS_prefix_size));
-    }
     if (FLAGS_use_uint64_comparator) {
       options.comparator = test::Uint64Comparator();
       if (FLAGS_key_size != 8) {
@@ -3487,12 +3398,6 @@ class Benchmark {
       }
     }
     options.memtable_huge_page_size = FLAGS_memtable_use_huge_page ? 2048 : 0;
-    options.memtable_prefix_bloom_size_ratio = FLAGS_memtable_bloom_size_ratio;
-    if (FLAGS_memtable_insert_with_hint_prefix_size > 0) {
-      options.memtable_insert_with_hint_prefix_extractor.reset(
-          NewCappedPrefixTransform(
-              FLAGS_memtable_insert_with_hint_prefix_size));
-    }
     options.bloom_locality = FLAGS_bloom_locality;
     options.max_file_opening_threads = FLAGS_file_opening_threads;
     options.new_table_reader_for_compaction_inputs =
@@ -3509,43 +3414,17 @@ class Benchmark {
         FLAGS_level_compaction_dynamic_level_bytes;
     options.max_bytes_for_level_multiplier =
         FLAGS_max_bytes_for_level_multiplier;
-    if ((FLAGS_prefix_size == 0) && (FLAGS_rep_factory == kPrefixHash ||
-                                     FLAGS_rep_factory == kHashLinkedList)) {
-      fprintf(stderr,
-              "prefix_size should be non-zero if PrefixHash or "
-              "HashLinkedList memtablerep is used\n");
-      exit(1);
-    }
     switch (FLAGS_rep_factory) {
       case kSkipList:
-        options.memtable_factory.reset(
-            new SkipListFactory(FLAGS_skip_list_lookahead));
+        options.memtable_factory.reset(new SkipListFactory());
         break;
       case kART:
         options.memtable_factory.reset(
             new ARTFactory());
         break;
-#ifndef ROCKSDB_LITE
-      case kPrefixHash:
-        options.memtable_factory.reset(
-            NewHashSkipListRepFactory(FLAGS_hash_bucket_count));
-        break;
-      case kHashLinkedList:
-        options.memtable_factory.reset(
-            NewHashLinkListRepFactory(FLAGS_hash_bucket_count));
-        break;
-      case kVectorRep:
-        options.memtable_factory.reset(new VectorRepFactory);
-        break;
-      case kCuckoo:
-        options.memtable_factory.reset(NewHashCuckooRepFactory(
-            options.write_buffer_size, FLAGS_key_size + FLAGS_value_size));
-        break;
-#else
       default:
         fprintf(stderr, "Only skip list is supported in lite mode\n");
         exit(1);
-#endif  // ROCKSDB_LITE
     }
     BlockBasedTableOptions block_based_options;
     block_based_options.index_type = BlockBasedTableOptions::kBinarySearch;

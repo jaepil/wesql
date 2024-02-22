@@ -103,8 +103,10 @@ class MergerTest : public testing::Test {
     }
 
     merging_iterator_.reset(
-        NewMergingIterator(BytewiseComparator(), &small_iterators[0],
-                           static_cast<int>(small_iterators.size())));
+        NewMergingIterator(BytewiseComparator(),
+                           &small_iterators[0],
+                           static_cast<int>(small_iterators.size()),
+                           nullptr));
     single_iterator_.reset(new test::VectorIterator(all_keys_));
   }
 

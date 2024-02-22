@@ -42,7 +42,6 @@
 #include "smartengine/db.h"
 #include "smartengine/env.h"
 #include "smartengine/iterator.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/status.h"
 #include "smartengine/table_properties.h"
 #include "smartengine/utilities/ldb_cmd.h"

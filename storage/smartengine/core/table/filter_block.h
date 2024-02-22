@@ -30,7 +30,6 @@
 #include "memory/base_malloc.h"
 #include "smartengine/options.h"
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/table.h"
 
 namespace smartengine {
@@ -107,13 +106,7 @@ class FilterBlockReader {
       const common::Slice& key, uint64_t block_offset = kNotValid,
       const bool no_io = false,
       const common::Slice* const const_ikey_ptr = nullptr) = 0;
-  /**
-   * no_io and const_ikey_ptr here means the same as in KeyMayMatch
-   */
-  virtual bool PrefixMayMatch(
-      const common::Slice& prefix, uint64_t block_offset = kNotValid,
-      const bool no_io = false,
-      const common::Slice* const const_ikey_ptr = nullptr) = 0;
+
   virtual int range_may_contain(const db::KeyRange &range, bool &may_contain) { return common::Status::kNotSupported; }
   virtual size_t ApproximateMemoryUsage() const = 0;
   virtual size_t size() const { return size_; }

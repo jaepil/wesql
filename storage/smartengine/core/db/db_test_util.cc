@@ -276,56 +276,6 @@ Options DBTestBase::CurrentOptions(
   BlockBasedTableOptions table_options;
   bool set_block_based_table_factory = true;
   switch (option_config_) {
-#ifndef ROCKSDB_LITE
-    case kHashSkipList:
-      options.prefix_extractor.reset(NewFixedPrefixTransform(1));
-      options.memtable_factory.reset(NewHashSkipListRepFactory(16));
-      options.allow_concurrent_memtable_write = false;
-      break;
-    case kPlainTableFirstBytePrefix:
-      // options.table_factory.reset(new PlainTableFactory());
-      options.prefix_extractor.reset(NewFixedPrefixTransform(1));
-      options.allow_mmap_reads = true;
-      options.max_sequential_skip_in_iterations = 999999;
-      // set_block_based_table_factory = false;
-      break;
-    case kPlainTableCappedPrefix:
-      // options.table_factory.reset(new PlainTableFactory());
-      options.prefix_extractor.reset(NewCappedPrefixTransform(8));
-      options.allow_mmap_reads = true;
-      options.max_sequential_skip_in_iterations = 999999;
-      // set_block_based_table_factory = false;
-      break;
-    case kPlainTableCappedPrefixNonMmap:
-      // options.table_factory.reset(new PlainTableFactory());
-      options.prefix_extractor.reset(NewCappedPrefixTransform(8));
-      options.allow_mmap_reads = false;
-      options.max_sequential_skip_in_iterations = 999999;
-      // set_block_based_table_factory = false;
-      break;
-    case kPlainTableAllBytesPrefix:
-      // options.table_factory.reset(new PlainTableFactory());
-      options.prefix_extractor.reset(NewNoopTransform());
-      options.allow_mmap_reads = true;
-      options.max_sequential_skip_in_iterations = 999999;
-      // set_block_based_table_factory = false;
-      break;
-    case kVectorRep:
-      options.memtable_factory.reset(new VectorRepFactory(100));
-      options.allow_concurrent_memtable_write = false;
-      break;
-    case kHashLinkList:
-      options.prefix_extractor.reset(NewFixedPrefixTransform(1));
-      options.memtable_factory.reset(
-          NewHashLinkListRepFactory(4, 0, 3, true, 4));
-      options.allow_concurrent_memtable_write = false;
-      break;
-    case kHashCuckoo:
-      options.memtable_factory.reset(
-          NewHashCuckooRepFactory(options.write_buffer_size));
-      options.allow_concurrent_memtable_write = false;
-      break;
-#endif  // ROCKSDB_LITE
     case kFilter:
       table_options.filter_policy.reset(NewBloomFilterPolicy(10, true));
       break;
@@ -387,21 +337,6 @@ Options DBTestBase::CurrentOptions(
     }
     case kFIFOCompaction: {
       options.compaction_style = kCompactionStyleFIFO;
-      break;
-    }
-    case kBlockBasedTableWithPrefixHashIndex: {
-      // table_options.index_type = BlockBasedTableOptions::kHashSearch;
-      // options.prefix_extractor.reset(NewFixedPrefixTransform(1));
-      break;
-    }
-    case kBlockBasedTableWithWholeKeyHashIndex: {
-      // table_options.index_type = BlockBasedTableOptions::kHashSearch;
-      // options.prefix_extractor.reset(NewNoopTransform());
-      break;
-    }
-    case kBlockBasedTableWithPartitionedIndex: {
-      table_options.index_type = BlockBasedTableOptions::kTwoLevelIndexSearch;
-      options.prefix_extractor.reset(NewNoopTransform());
       break;
     }
     case kBlockBasedTableWithIndexRestartInterval: {

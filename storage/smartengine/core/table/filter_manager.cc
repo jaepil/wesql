@@ -235,9 +235,10 @@ int FilterManager::build_filter(const std::string &request_key,
 
   uint64_t num_entries = table_reader->GetTableProperties()->num_entries;
   std::unique_ptr<FilterBlockBuilder> filter_builder;
-  int ret =
-      create_filter_builder(whole_key_filtering_, ioptions_->prefix_extractor,
-                            filter_policy_.get(), num_entries, filter_builder);
+  int ret = create_filter_builder(whole_key_filtering_,
+                                  filter_policy_.get(),
+                                  num_entries,
+                                  filter_builder);
   if (ret != Status::kOk) {
     table_cache_->ReleaseHandle(table_handle);
     release_meta_snapshot(meta_snapshot);
@@ -266,9 +267,12 @@ int FilterManager::build_filter(const std::string &request_key,
   std::unique_ptr<char[], memory::ptr_delete<char>> buf;
   FilterBlockReader *filter_reader;
   Slice filter_slice = filter_builder->Finish(&buf);
-  FAIL_RETURN(create_filter_reader(
-      whole_key_filtering_, ioptions_->prefix_extractor, filter_policy_.get(),
-      buf.release(), filter_slice, ioptions_->statistics, filter_reader));
+  FAIL_RETURN(create_filter_reader(whole_key_filtering_,
+                                   filter_policy_.get(),
+                                   buf.release(),
+                                   filter_slice,
+                                   ioptions_->statistics,
+                                   filter_reader));
   FAIL_RETURN(put_filter_to_cache(cache_.get(), Slice(request_key),
                                   filter_reader, ioptions_->statistics));
   return ret;
@@ -353,10 +357,11 @@ void FilterManager::unref_cfd() {
   db_mutex->Unlock();
 }
 
-int FilterManager::create_filter_builder(
-    bool whole_key_filtering, const SliceTransform *prefix_extractor,
-    const FilterPolicy *filter_policy, const size_t num_entries,
-    std::unique_ptr<FilterBlockBuilder> &filter_builder) {
+int FilterManager::create_filter_builder(bool whole_key_filtering,
+                                         const FilterPolicy *filter_policy,
+                                         const size_t num_entries,
+                                         std::unique_ptr<FilterBlockBuilder> &filter_builder)
+{
   FilterBitsBuilder *filter_bits_builder =
       num_entries == 0 ? filter_policy->GetFilterBitsBuilder()
                        : filter_policy->GetFixedBitsBuilder(num_entries);
@@ -366,13 +371,11 @@ int FilterManager::create_filter_builder(
         filter_policy->Name());
     return Status::kNotSupported;
   }
-  filter_builder.reset(new FullFilterBlockBuilder(
-      prefix_extractor, whole_key_filtering, filter_bits_builder));
+  filter_builder.reset(new FullFilterBlockBuilder(whole_key_filtering, filter_bits_builder));
   return Status::kOk;
 }
 
 int FilterManager::create_filter_reader(bool whole_key_filtering,
-                                        const SliceTransform *prefix_extractor,
                                         const FilterPolicy *filter_policy,
                                         char *data,
                                         const Slice &filter_slice,
@@ -384,9 +387,11 @@ int FilterManager::create_filter_reader(bool whole_key_filtering,
     __SE_LOG(ERROR, "FilterPolicy %s does not support GetFilterBitsReader", filter_policy->Name());
     return Status::kNotSupported;
   }
-  filter_reader = new FullFilterBlockReader(
-      prefix_extractor, whole_key_filtering, data,
-      filter_slice.size(), filter_bits_reader, statistics);
+  filter_reader = new FullFilterBlockReader(whole_key_filtering,
+                                            data,
+                                            filter_slice.size(),
+                                            filter_bits_reader,
+                                            statistics);
   return Status::kOk;
 }
 

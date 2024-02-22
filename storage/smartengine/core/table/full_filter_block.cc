@@ -19,11 +19,9 @@ using namespace monitor;
 namespace smartengine {
 namespace table {
 
-FullFilterBlockBuilder::FullFilterBlockBuilder(
-    const SliceTransform* prefix_extractor, bool whole_key_filtering,
-    FilterBitsBuilder* filter_bits_builder)
-    : prefix_extractor_(prefix_extractor),
-      whole_key_filtering_(whole_key_filtering),
+FullFilterBlockBuilder::FullFilterBlockBuilder(bool whole_key_filtering,
+                                               FilterBitsBuilder* filter_bits_builder)
+    : whole_key_filtering_(whole_key_filtering),
       num_added_(0) {
   assert(filter_bits_builder != nullptr);
   filter_bits_builder_.reset(filter_bits_builder);
@@ -33,21 +31,12 @@ void FullFilterBlockBuilder::Add(const Slice& key) {
   if (whole_key_filtering_) {
     AddKey(key);
   }
-  if (prefix_extractor_ && prefix_extractor_->InDomain(key)) {
-    AddPrefix(key);
-  }
 }
 
 // Add key to filter if needed
 inline void FullFilterBlockBuilder::AddKey(const Slice& key) {
   filter_bits_builder_->AddKey(key);
   num_added_++;
-}
-
-// Add prefix to filter if needed
-inline void FullFilterBlockBuilder::AddPrefix(const Slice& key) {
-  Slice prefix = prefix_extractor_->Transform(key);
-  AddKey(prefix);
 }
 
 Slice FullFilterBlockBuilder::Finish(const BlockHandle& tmp, Status* status) {
@@ -69,39 +58,44 @@ Slice FullFilterBlockBuilder::Finish(
   return Slice();
 }
 
-FullFilterBlockReader::FullFilterBlockReader(
-    const SliceTransform* prefix_extractor, bool _whole_key_filtering,
-    char *data, size_t data_size,
-    FilterBitsReader* filter_bits_reader, Statistics* stats)
+FullFilterBlockReader::FullFilterBlockReader(bool _whole_key_filtering,
+                                             char *data,
+                                             size_t data_size,
+                                             FilterBitsReader* filter_bits_reader,
+                                             Statistics* stats)
     : FilterBlockReader(data_size, stats, _whole_key_filtering),
-      prefix_extractor_(prefix_extractor),
       contents_(data, data_size) {
   assert(filter_bits_reader != nullptr);
   filter_bits_reader_.reset(filter_bits_reader);
   filter_data_.reset(const_cast<char*>(data));
 }
 
-FullFilterBlockReader::FullFilterBlockReader(
-    const SliceTransform* prefix_extractor, bool _whole_key_filtering,
-    const Slice& contents, FilterBitsReader* filter_bits_reader,
-    Statistics* stats)
+FullFilterBlockReader::FullFilterBlockReader(bool _whole_key_filtering,
+                                             const Slice& contents,
+                                             FilterBitsReader* filter_bits_reader,
+                                             Statistics* stats)
     : FilterBlockReader(contents.size(), stats, _whole_key_filtering),
-      prefix_extractor_(prefix_extractor),
-      contents_(contents) {
+      contents_(contents)
+{
   assert(filter_bits_reader != nullptr);
   filter_bits_reader_.reset(filter_bits_reader);
 }
 
-FullFilterBlockReader::FullFilterBlockReader(
-    const SliceTransform* prefix_extractor, bool _whole_key_filtering,
-    BlockContents&& contents, FilterBitsReader* filter_bits_reader,
-    Statistics* stats)
-    : FullFilterBlockReader(prefix_extractor, _whole_key_filtering,
-                            contents.data, filter_bits_reader, stats) {
+//TODO: Zhao Dongsheng, this construct function is confused with upper one
+FullFilterBlockReader::FullFilterBlockReader(bool _whole_key_filtering,
+                                             BlockContents&& contents,
+                                             FilterBitsReader* filter_bits_reader,
+                                             Statistics* stats)
+    : FullFilterBlockReader(_whole_key_filtering,
+                            contents.data,
+                            filter_bits_reader,
+                            stats)
+{
   block_contents_ = std::move(contents);
 }
 
-bool FullFilterBlockReader::KeyMayMatch(const Slice& key, uint64_t block_offset,
+bool FullFilterBlockReader::KeyMayMatch(const Slice& key,
+                                        uint64_t block_offset,
                                         const bool no_io,
                                         const Slice* const const_ikey_ptr) {
   assert(block_offset == kNotValid);
@@ -109,17 +103,6 @@ bool FullFilterBlockReader::KeyMayMatch(const Slice& key, uint64_t block_offset,
     return true;
   }
   return MayMatch(key);
-}
-
-bool FullFilterBlockReader::PrefixMayMatch(const Slice& prefix,
-                                           uint64_t block_offset,
-                                           const bool no_io,
-                                           const Slice* const const_ikey_ptr) {
-  assert(block_offset == kNotValid);
-  if (!prefix_extractor_) {
-    return true;
-  }
-  return MayMatch(prefix);
 }
 
 bool FullFilterBlockReader::MayMatch(const Slice& entry) {

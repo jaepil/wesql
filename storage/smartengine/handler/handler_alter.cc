@@ -65,7 +65,6 @@
 #include "util/se_mutex_wrapper.h"
 #include "util/se_threads.h"
 #include "smartengine/compaction_filter.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/utilities/checkpoint.h"
 #include "smartengine/utilities/convenience.h"
 #include "smartengine/perf_level.h"

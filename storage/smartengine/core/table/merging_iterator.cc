@@ -44,14 +44,15 @@ const size_t kNumIterReserve = 4;
 
 class MergingIterator : public InternalIterator {
  public:
-  MergingIterator(const Comparator* comparator, InternalIterator** children,
-                  int n, bool is_arena_mode, bool prefix_seek_mode)
+  MergingIterator(const Comparator* comparator,
+                  InternalIterator** children,
+                  int n,
+                  bool is_arena_mode)
       : is_arena_mode_(is_arena_mode),
         comparator_(comparator),
         current_(nullptr),
         direction_(kForward),
         minHeap_(comparator_),
-        prefix_seek_mode_(prefix_seek_mode),
         pinned_iters_mgr_(nullptr) {
     children_.resize(n);
     for (int i = 0; i < n; i++) {
@@ -227,23 +228,16 @@ class MergingIterator : public InternalIterator {
       InitMaxHeap();
       for (auto& child : children_) {
         if (&child != current_) {
-          if (!prefix_seek_mode_) {
-            child.Seek(key());
-            if (child.Valid()) {
-              // Child is at first entry >= key().  Step back one to be < key()
-              TEST_SYNC_POINT_CALLBACK("MergeIterator::Prev:BeforePrev",
-                                       &child);
-              child.Prev();
-            } else {
-              // Child has no entries >= key().  Position at last entry.
-              TEST_SYNC_POINT("MergeIterator::Prev:BeforeSeekToLast");
-              child.SeekToLast();
-            }
+          child.Seek(key());
+          if (child.Valid()) {
+            // Child is at first entry >= key().  Step back one to be < key()
+            TEST_SYNC_POINT_CALLBACK("MergeIterator::Prev:BeforePrev",
+                                     &child);
+            child.Prev();
           } else {
-            child.SeekForPrev(key());
-            if (child.Valid() && comparator_->Equal(key(), child.key())) {
-              child.Prev();
-            }
+            // Child has no entries >= key().  Position at last entry.
+            TEST_SYNC_POINT("MergeIterator::Prev:BeforeSeekToLast");
+            child.SeekToLast();
           }
         }
         if (child.Valid()) {
@@ -251,13 +245,11 @@ class MergingIterator : public InternalIterator {
         }
       }
       direction_ = kReverse;
-      if (!prefix_seek_mode_) {
-        // Note that we don't do assert(current_ == CurrentReverse()) here
-        // because it is possible to have some keys larger than the seek-key
-        // inserted between Seek() and SeekToLast(), which makes current_ not
-        // equal to CurrentReverse().
-        current_ = CurrentReverse();
-      }
+      // Note that we don't do assert(current_ == CurrentReverse()) here
+      // because it is possible to have some keys larger than the seek-key
+      // inserted between Seek() and SeekToLast(), which makes current_ not
+      // equal to CurrentReverse().
+      current_ = CurrentReverse();
       // The loop advanced all non-current children to be < key() so current_
       // should still be strictly the smallest key.
       assert(current_ == CurrentReverse());
@@ -340,7 +332,6 @@ class MergingIterator : public InternalIterator {
   enum Direction { kForward, kReverse };
   Direction direction_;
   MergerMinIterHeap minHeap_;
-  bool prefix_seek_mode_;
 
   // Max heap is used for reverse iteration, which is way less common than
   // forward.  Lazily initialize it to save memory.
@@ -373,9 +364,10 @@ void MergingIterator::InitMaxHeap() {
 }
 
 InternalIterator* NewMergingIterator(const Comparator* cmp,
-                                     InternalIterator** list, int n,
-                                     memory::SimpleAllocator* arena,
-                                     bool prefix_seek_mode) {
+                                     InternalIterator** list,
+                                     int n,
+                                     memory::SimpleAllocator* arena)
+{
   assert(n >= 0);
   if (n == 0) {
     return NewEmptyInternalIterator(arena);
@@ -383,34 +375,19 @@ InternalIterator* NewMergingIterator(const Comparator* cmp,
     return list[0];
   } else {
     if (arena == nullptr) {
-//      return new MergingIterator(cmp, list, n, false, prefix_seek_mode);
-      return MOD_NEW_OBJECT(memory::ModId::kDbIter, MergingIterator, cmp, list, n, false, prefix_seek_mode);
+      return MOD_NEW_OBJECT(memory::ModId::kDbIter, MergingIterator, cmp, list, n, false);
     } else {
       auto mem = arena->alloc(sizeof(MergingIterator));
-      return new (mem) MergingIterator(cmp, list, n, true, prefix_seek_mode);
+      return new (mem) MergingIterator(cmp, list, n, true);
     }
   }
 }
 
-InternalIterator* NewMergingIterator(const Comparator* cmp,
-                                     InternalIterator** list, int n,
-                                     memory::SimpleAllocator& arena,
-                                     bool prefix_seek_mode) {
-  assert(n > 0);
-  if (n == 1) {
-    return list[0];
-  } else {
-    auto mem = arena.alloc(sizeof(MergingIterator));
-    return new (mem) MergingIterator(cmp, list, n, true, prefix_seek_mode);
-  }
-}
-
-MergeIteratorBuilder::MergeIteratorBuilder(const Comparator* comparator,
-                                           Arena* a, bool prefix_seek_mode)
+MergeIteratorBuilder::MergeIteratorBuilder(const Comparator* comparator, Arena* a)
     : first_iter(nullptr), use_merging_iter(false), arena(a) {
   auto mem = arena->AllocateAligned(sizeof(MergingIterator));
   merge_iter =
-      new (mem) MergingIterator(comparator, nullptr, 0, true, prefix_seek_mode);
+      new (mem) MergingIterator(comparator, nullptr, 0, true);
 }
 
 void MergeIteratorBuilder::AddIterator(InternalIterator* iter) {

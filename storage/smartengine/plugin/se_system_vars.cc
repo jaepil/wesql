@@ -82,8 +82,6 @@ ulong se_sort_buffer_size = 0;
  
 bool opt_purge_invalid_subtable_bg = true;
 
-char *se_cf_memtable_options = nullptr;
-
 unsigned long se_rate_limiter_bytes_per_sec = 0;
 
 int32_t se_shrink_table_space = -1;
@@ -1380,12 +1378,6 @@ static MYSQL_SYSVAR_UINT(
     nullptr, se_set_stats_dump_period_sec,
     se_db_options.stats_dump_period_sec, 0, INT_MAX, 0);
 
-static MYSQL_SYSVAR_STR(
-    memtable, se_cf_memtable_options,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-    "options for CFOptions::memtable in SE",
-    nullptr, nullptr, "");
-
 static MYSQL_SYSVAR_ULONG(
     rate_limiter_bytes_per_sec,
     se_rate_limiter_bytes_per_sec,
@@ -1644,7 +1636,6 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(purge_invalid_subtable_bg),
     MYSQL_SYSVAR(estimate_cost_depth),
     MYSQL_SYSVAR(stats_dump_period_sec),
-    MYSQL_SYSVAR(memtable),
     MYSQL_SYSVAR(rate_limiter_bytes_per_sec),
     MYSQL_SYSVAR(idle_tasks_schedule_time),
     MYSQL_SYSVAR(shrink_table_space),

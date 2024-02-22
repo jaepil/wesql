@@ -32,8 +32,9 @@ namespace table {
 IndexBuilder* IndexBuilder::CreateIndexBuilder(
     BlockBasedTableOptions::IndexType index_type,
     const InternalKeyComparator* comparator,
-    const InternalKeySliceTransform* int_key_slice_transform,
-    const BlockBasedTableOptions& table_opt, WritableBuffer* buf) {
+    const BlockBasedTableOptions& table_opt,
+    WritableBuffer* buf)
+{
   switch (index_type) {
     case BlockBasedTableOptions::kBinarySearch: {
       return MOD_NEW_OBJECT(memory::ModId::kDefaultMod, ShortenedIndexBuilder,

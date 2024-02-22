@@ -45,7 +45,6 @@ class IndexBuilder {
   static IndexBuilder* CreateIndexBuilder(
       BlockBasedTableOptions::IndexType index_type,
       const db::InternalKeyComparator* comparator,
-      const db::InternalKeySliceTransform* int_key_slice_transform,
       const BlockBasedTableOptions& table_opt,
       util::WritableBuffer* buf = nullptr);
 

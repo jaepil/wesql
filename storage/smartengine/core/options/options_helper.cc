@@ -23,7 +23,6 @@
 #include "smartengine/memtablerep.h"
 #include "smartengine/options.h"
 #include "smartengine/rate_limiter.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/table.h"
 
 using namespace smartengine;
@@ -183,8 +182,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
   cf_opts.flush_delete_record_trigger = mutable_cf_options.flush_delete_record_trigger;
   cf_opts.max_write_buffer_number = mutable_cf_options.max_write_buffer_number;
   cf_opts.arena_block_size = mutable_cf_options.arena_block_size;
-  cf_opts.memtable_prefix_bloom_size_ratio =
-      mutable_cf_options.memtable_prefix_bloom_size_ratio;
   cf_opts.memtable_huge_page_size = mutable_cf_options.memtable_huge_page_size;
   cf_opts.inplace_update_num_locks =
       mutable_cf_options.inplace_update_num_locks;
@@ -343,55 +340,6 @@ bool ParseCompressionOptions(
   return true;
 }
 
-bool ParseSliceTransformHelper(
-    const std::string& kFixedPrefixName, const std::string& kCappedPrefixName,
-    const std::string& value,
-    std::shared_ptr<const SliceTransform>* slice_transform) {
-  auto& pe_value = value;
-  if (pe_value.size() > kFixedPrefixName.size() &&
-      pe_value.compare(0, kFixedPrefixName.size(), kFixedPrefixName) == 0) {
-    int prefix_length = ParseInt(trim(value.substr(kFixedPrefixName.size())));
-    slice_transform->reset(NewFixedPrefixTransform(prefix_length));
-  } else if (pe_value.size() > kCappedPrefixName.size() &&
-             pe_value.compare(0, kCappedPrefixName.size(), kCappedPrefixName) ==
-                 0) {
-    int prefix_length =
-        ParseInt(trim(pe_value.substr(kCappedPrefixName.size())));
-    slice_transform->reset(NewCappedPrefixTransform(prefix_length));
-  } else if (value == kNullptrString) {
-    slice_transform->reset();
-  } else {
-    return false;
-  }
-
-  return true;
-}
-
-bool ParseSliceTransform(
-    const std::string& value,
-    std::shared_ptr<const SliceTransform>* slice_transform) {
-  // While we normally don't convert the string representation of a
-  // pointer-typed option into its instance, here we do so for backward
-  // compatibility as we allow this action in SetOption().
-
-  // TODO(yhchiang): A possible better place for these serialization /
-  // deserialization is inside the class definition of pointer-typed
-  // option itself, but this requires a bigger change of public API.
-  bool result =
-      ParseSliceTransformHelper("fixed:", "capped:", value, slice_transform);
-  if (result) {
-    return result;
-  }
-  result = ParseSliceTransformHelper(
-      "rocksdb.FixedPrefix.", "rocksdb.CappedPrefix.", value, slice_transform);
-  if (result) {
-    return result;
-  }
-  // TODO(yhchiang): we can further support other default
-  //                 SliceTransforms here.
-  return false;
-}
-
 bool ParseOptionHelper(char* opt_address, const OptionType& opt_type,
                        const std::string& value) {
   switch (opt_type) {
@@ -437,10 +385,6 @@ bool ParseOptionHelper(char* opt_address, const OptionType& opt_type,
     case OptionType::kVectorCompressionType:
       return ParseVectorCompressionType(
           value, reinterpret_cast<std::vector<CompressionType>*>(opt_address));
-    case OptionType::kSliceTransform:
-      return ParseSliceTransform(
-          value, reinterpret_cast<std::shared_ptr<const SliceTransform>*>(
-                     opt_address));
     case OptionType::kChecksumType:
       return ParseEnum<ChecksumType>(
           checksum_type_string_map, value,
@@ -494,14 +438,6 @@ bool GetTableFilterPolicy(const std::string& value,
   return true;
 }
 
-bool GetPrefixExtractor(const std::string& value,
-                        std::shared_ptr<const SliceTransform>* slice_transform) {
-  // default empty string
-  if (value.empty())
-    return true;
-  return ParseSliceTransformHelper("fixed:", "capped:", value, slice_transform);
-}
-
 bool GetCompressionType(const std::string& value, CompressionType* out) {
   if (nullptr == out) {
     return false;
@@ -522,19 +458,6 @@ bool GetCompressionOptions(const std::string& value, CompressionOptions* out) {
     return false;
   }
   return ParseCompressionOptions(value, out);
-}
-
-bool GetMemTableFactory(const std::string& value,
-                        std::shared_ptr<MemTableRepFactory>* mem_factory) {
-  // default empty string
-  if (value.empty())
-    return true;
-  std::unique_ptr<MemTableRepFactory> new_mem_factory;
-  if (!GetMemTableRepFactoryFromString(value, &new_mem_factory).ok()) {
-    return false;
-  }
-  mem_factory->reset(new_mem_factory.release());
-  return true;
 }
 
 bool SerializeSingleOptionHelper(const char* opt_address,
@@ -587,14 +510,6 @@ bool SerializeSingleOptionHelper(const char* opt_address,
           *(reinterpret_cast<const std::vector<CompressionType>*>(opt_address)),
           value);
       break;
-    case OptionType::kSliceTransform: {
-      const auto* slice_transform_ptr =
-          reinterpret_cast<const std::shared_ptr<const SliceTransform>*>(
-              opt_address);
-      *value = slice_transform_ptr->get() ? slice_transform_ptr->get()->Name()
-                                          : kNullptrString;
-      break;
-    }
     case OptionType::kTableFactory: {
       const auto* table_factory_ptr =
           reinterpret_cast<const std::shared_ptr<const TableFactory>*>(
@@ -1159,82 +1074,6 @@ Status GetPlainTableOptionsFromString(const PlainTableOptions& table_options,
   return GetPlainTableOptionsFromMap(table_options, opts_map,
                                      new_table_options);
 }
-
-Status GetMemTableRepFactoryFromString(
-    const std::string& opts_str,
-    std::unique_ptr<MemTableRepFactory>* new_mem_factory) {
-  std::vector<std::string> opts_list = StringSplit(opts_str, ':');
-  size_t len = opts_list.size();
-
-  if (opts_list.size() <= 0 || opts_list.size() > 2) {
-    return Status::InvalidArgument("Can't parse memtable_factory option ",
-                                   opts_str);
-  }
-
-  MemTableRepFactory* mem_factory = nullptr;
-
-  if (opts_list[0] == "skip_list") {
-    // Expecting format
-    // skip_list:<lookahead>
-    if (2 == len) {
-      size_t lookahead = ParseSizeT(opts_list[1]);
-      mem_factory = new SkipListFactory(lookahead);
-    } else if (1 == len) {
-      mem_factory = new SkipListFactory();
-    }
-  } else if (opts_list[0] == "art") {
-    // Expecting format
-    // art
-    mem_factory = new ARTFactory();
-  } else if (opts_list[0] == "prefix_hash") {
-    // Expecting format
-    // prfix_hash:<hash_bucket_count>
-    if (2 == len) {
-      size_t hash_bucket_count = ParseSizeT(opts_list[1]);
-      mem_factory = NewHashSkipListRepFactory(hash_bucket_count);
-    } else if (1 == len) {
-      mem_factory = NewHashSkipListRepFactory();
-    }
-  } else if (opts_list[0] == "hash_linkedlist") {
-    // Expecting format
-    // hash_linkedlist:<hash_bucket_count>
-    if (2 == len) {
-      size_t hash_bucket_count = ParseSizeT(opts_list[1]);
-      mem_factory = NewHashLinkListRepFactory(hash_bucket_count);
-    } else if (1 == len) {
-      mem_factory = NewHashLinkListRepFactory();
-    }
-  } else if (opts_list[0] == "vector") {
-    // Expecting format
-    // vector:<count>
-    if (2 == len) {
-      size_t count = ParseSizeT(opts_list[1]);
-      mem_factory = new VectorRepFactory(count);
-    } else if (1 == len) {
-      mem_factory = new VectorRepFactory();
-    }
-  } else if (opts_list[0] == "cuckoo") {
-    // Expecting format
-    // cuckoo:<write_buffer_size>
-    if (2 == len) {
-      size_t write_buffer_size = ParseSizeT(opts_list[1]);
-      mem_factory = NewHashCuckooRepFactory(write_buffer_size);
-    } else if (1 == len) {
-      return Status::InvalidArgument("Can't parse memtable_factory option ",
-                                     opts_str);
-    }
-  } else {
-    return Status::InvalidArgument("Unrecognized memtable_factory option ",
-                                   opts_str);
-  }
-
-  if (mem_factory != nullptr) {
-    new_mem_factory->reset(mem_factory);
-  }
-
-  return Status::OK();
-}
-
 
 Status GetDBOptionsFromMap(
     const DBOptions& base_options,

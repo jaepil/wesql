@@ -278,11 +278,6 @@ public:
 
   const std::string &get_name() const { return m_name; }
 
-  const common::SliceTransform *get_extractor() const
-  {
-    return m_prefix_extractor.get();
-  }
-
   SeKeyDef &operator=(const SeKeyDef &) = delete;
   SeKeyDef(const SeKeyDef &k);
   SeKeyDef(uint indexnr_arg,
@@ -486,9 +481,6 @@ private:
     many elements are in the m_pack_info array.
   */
   uint m_key_parts;
-
-  /* Prefix extractor for the column family of the key definiton */
-  std::shared_ptr<const common::SliceTransform> m_prefix_extractor;
 
   /* Maximum length of the mem-comparable form. */
   uint m_maxlength;

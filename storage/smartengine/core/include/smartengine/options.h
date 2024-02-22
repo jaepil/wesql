@@ -291,21 +291,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // Default: 70
   //
   int64_t level2_usage_percent = 70;
-  // If non-nullptr, use the specified function to determine the
-  // prefixes for keys.  These prefixes will be placed in the filter.
-  // Depending on the workload, this can reduce the number of read-IOP
-  // cost for scans when a prefix is passed via ReadOptions to
-  // db.NewIterator().  For prefix filtering to work properly,
-  // "prefix_extractor" and "comparator" must be such that the following
-  // properties hold:
-  //
-  // 1) key.starts_with(prefix(key))
-  // 2) Compare(prefix(key), key) <= 0.
-  // 3) If Compare(k1, k2) <= 0, then Compare(prefix(k1), prefix(k2)) <= 0
-  // 4) prefix(prefix(key)) == prefix(key)
-  //
-  // Default: nullptr
-  std::shared_ptr<const SliceTransform> prefix_extractor = nullptr;
 
   // Control maximum total data size for a level.
   // max_bytes_for_level_base is the max total for level-1.
@@ -1105,14 +1090,6 @@ struct ReadOptions {
   // block based table. It provides a way to read existing data after
   // changing implementation of prefix extractor.
   bool total_order_seek;
-
-  // Enforce that the iterator only iterates over the same prefix as the seek.
-  // This option is effective only for prefix seeks, i.e. prefix_extractor is
-  // non-null for the column family and total_order_seek is false.  Unlike
-  // iterate_upper_bound, prefix_same_as_start only works within a prefix
-  // but in both directions.
-  // Default: false
-  bool prefix_same_as_start;
 
   // Keep the blocks loaded by the iterator pinned in memory as long as the
   // iterator is not deleted, If used when reading from tables created with

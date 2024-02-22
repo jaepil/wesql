@@ -55,7 +55,6 @@ SeKeyDef::SeKeyDef(uint indexnr_arg,
       m_pack_info(nullptr),
       m_keyno(keyno_arg),
       m_key_parts(0),
-      m_prefix_extractor(nullptr),
       m_maxlength(0) // means 'not intialized'
 {
   mysql_mutex_init(0, &m_mutex, MY_MUTEX_INIT_FAST);
@@ -74,7 +73,6 @@ SeKeyDef::SeKeyDef(const SeKeyDef &k)
       m_pack_info(k.m_pack_info),
       m_keyno(k.m_keyno),
       m_key_parts(k.m_key_parts),
-      m_prefix_extractor(k.m_prefix_extractor),
       m_maxlength(k.m_maxlength)
 {
   mysql_mutex_init(0, &m_mutex, MY_MUTEX_INIT_FAST);
@@ -275,10 +273,6 @@ void SeKeyDef::setup(const TABLE *const tbl, const SeTableDef *const tbl_def)
 
     /* Initialize the memory needed by the stats structure */
     m_stats.m_distinct_keys_per_prefix.resize(get_key_parts());
-
-    /* Cache prefix extractor for bloom filter usage later */
-    common::Options opt = get_se_db()->GetOptions(get_cf());
-    m_prefix_extractor = opt.prefix_extractor;
 
     /*
       This should be the last member variable set before releasing the mutex

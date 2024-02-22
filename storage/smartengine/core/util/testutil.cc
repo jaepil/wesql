@@ -204,20 +204,6 @@ void RandomCompressionTypeVector(const size_t count,
   }
 }
 
-const SliceTransform* RandomSliceTransform(Random* rnd, int pre_defined) {
-  int random_num = pre_defined >= 0 ? pre_defined : rnd->Uniform(4);
-  switch (random_num) {
-    case 0:
-      return NewFixedPrefixTransform(rnd->Uniform(20) + 1);
-    case 1:
-      return NewCappedPrefixTransform(rnd->Uniform(20) + 1);
-    case 2:
-      return NewNoopTransform();
-    default:
-      return nullptr;
-  }
-}
-
 BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
   BlockBasedTableOptions opt;
   opt.cache_index_and_filter_blocks = rnd->Uniform(2);
@@ -316,8 +302,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
   // double options
   cf_opt->hard_rate_limit = static_cast<double>(rnd->Uniform(10000)) / 13;
   cf_opt->soft_rate_limit = static_cast<double>(rnd->Uniform(10000)) / 13;
-  cf_opt->memtable_prefix_bloom_size_ratio =
-      static_cast<double>(rnd->Uniform(10000)) / 20000.0;
 
   // int options
   cf_opt->level0_file_num_compaction_trigger = rnd->Uniform(100);
@@ -361,8 +345,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
   // unsigned int options
   cf_opt->rate_limit_delay_max_milliseconds = rnd->Uniform(10000);
 
-  // pointer typed options
-  cf_opt->prefix_extractor.reset(RandomSliceTransform(rnd));
   if (cf_opt->compaction_filter) {
     delete cf_opt->compaction_filter;
   }

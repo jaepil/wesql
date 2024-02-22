@@ -133,10 +133,6 @@ TwoLevelIterator::TwoLevelIterator(TwoLevelIteratorState* state,
       add_blocks_(0) {}
 
 void TwoLevelIterator::Seek(const Slice& target) {
-  if (state_->check_prefix_may_match && !state_->PrefixMayMatch(target)) {
-    SetSecondLevelIterator(nullptr);
-    return;
-  }
   first_level_iter_.Seek(target);
 
   InitDataBlock();
@@ -147,10 +143,6 @@ void TwoLevelIterator::Seek(const Slice& target) {
 }
 
 void TwoLevelIterator::SeekForPrev(const Slice& target) {
-  if (state_->check_prefix_may_match && !state_->PrefixMayMatch(target)) {
-    SetSecondLevelIterator(nullptr);
-    return;
-  }
   first_level_iter_.Seek(target);
   InitDataBlock();
   if (second_level_iter_.iter() != nullptr) {

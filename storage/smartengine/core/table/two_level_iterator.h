@@ -24,16 +24,11 @@ class Arena;
 namespace table {
 
 struct TwoLevelIteratorState {
-  explicit TwoLevelIteratorState(bool _check_prefix_may_match)
-      : check_prefix_may_match(_check_prefix_may_match) {}
+  explicit TwoLevelIteratorState() {}
 
   virtual ~TwoLevelIteratorState() {}
   virtual InternalIterator* NewSecondaryIterator(
       const common::Slice& handle, uint64_t *add_blocks = nullptr) = 0;
-  virtual bool PrefixMayMatch(const common::Slice& internal_key) = 0;
-
-  // If call PrefixMayMatch()
-  bool check_prefix_may_match;
 };
 
 // Return a new two level iterator.  A two-level iterator contains an
@@ -50,10 +45,11 @@ struct TwoLevelIteratorState {
 //        all the states but those allocated in arena.
 // need_free_iter_and_state: free `state` and `first_level_iter` if
 //                           true. Otherwise, just call destructor.
-extern InternalIterator* NewTwoLevelIterator(
-    TwoLevelIteratorState* state, InternalIterator* first_level_iter,
-    monitor::TracePoint point, memory::SimpleAllocator* arena = nullptr,
-    bool need_free_iter_and_state = true);
+extern InternalIterator* NewTwoLevelIterator(TwoLevelIteratorState* state,
+                                             InternalIterator* first_level_iter,
+                                             monitor::TracePoint point,
+                                             memory::SimpleAllocator* arena = nullptr,
+                                             bool need_free_iter_and_state = true);
 
 }  // namespace table
 }  // namespace smartengine

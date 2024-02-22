@@ -35,14 +35,9 @@ class InternalIterator;
 //
 // REQUIRES: n >= 0
 extern InternalIterator* NewMergingIterator(const util::Comparator* comparator,
-                                            InternalIterator** children, int n,
-                                            memory::SimpleAllocator* arena = nullptr,
-                                            bool prefix_seek_mode = false);
-extern InternalIterator* NewMergingIterator(const util::Comparator* comparator,
-                                            InternalIterator** children, int n,
-                                            memory::SimpleAllocator& arena,
-                                            bool prefix_seek_mode = false);
-
+                                            InternalIterator** children,
+                                            int n,
+                                            memory::SimpleAllocator* arena);
 class MergingIterator;
 
 // A builder class to build a merging iterator by adding iterators one by one.
@@ -50,9 +45,7 @@ class MergeIteratorBuilder {
  public:
   // comparator: the comparator used in merging comparator
   // arena: where the merging iterator needs to be allocated from.
-  explicit MergeIteratorBuilder(const util::Comparator* comparator,
-                                util::Arena* arena,
-                                bool prefix_seek_mode = false);
+  explicit MergeIteratorBuilder(const util::Comparator* comparator, util::Arena* arena);
   ~MergeIteratorBuilder() {}
 
   // Add iter to the merging iterator.

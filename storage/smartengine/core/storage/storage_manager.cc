@@ -242,7 +242,7 @@ table::InternalIterator *StorageManager::get_single_level_iterator(const common:
   ExtentLayer *extent_layer = nullptr;
   table::InternalIterator *layer_iterator = nullptr;
   table::InternalIterator *level_iterater = nullptr;
-  table::MergeIteratorBuilder merge_iter_builder(internalkey_comparator_, arena, false);
+  table::MergeIteratorBuilder merge_iter_builder(internalkey_comparator_, arena);
 
   if (!is_inited_) {
     ret = Status::kNotInit;
@@ -1131,7 +1131,6 @@ int StorageManager::add_iterator_for_layer(const LayerPosition &layer_position,
   util::Arena *arena = nullptr;
   ExtentLayerIterator *layer_iterator = nullptr;
   table::SSTableScanIterator *scan_iter = nullptr;
-  bool prefix_enabled = nullptr != immutable_cfoptions_.prefix_extractor;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;

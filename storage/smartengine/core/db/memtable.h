@@ -56,7 +56,6 @@ struct MemTableOptions {
   int flush_delete_percent_trigger;
   int flush_delete_record_trigger;
   size_t arena_block_size;
-  uint32_t memtable_prefix_bloom_bits;
   size_t memtable_huge_page_size;
   bool inplace_update_support;
   size_t inplace_update_num_locks;
@@ -460,19 +459,9 @@ class MemTable {
   // rw locks for inplace updates
   std::vector<port::RWMutex> locks_;
 
-  bool create_local_prefix_extractor_;
-  const common::SliceTransform* prefix_extractor_;
-  std::unique_ptr<util::DynamicBloom> prefix_bloom_;
-
   std::atomic<FlushStateEnum> flush_state_;
 
   util::Env* env_;
-
-  // Extract sequential insert prefixes.
-  const common::SliceTransform* insert_with_hint_prefix_extractor_;
-
-  // Insert hints for each prefix.
-  std::unordered_map<common::Slice, void*, util::SliceHasher> insert_hints_;
 
   // Returns a heuristic flush decision
   bool ShouldFlushNow();

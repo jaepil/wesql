@@ -136,8 +136,8 @@ class ARTRep : public MemTableRep {
 };
 
 MemTableRep* ARTFactory::CreateMemTableRep(const MemTableRep::KeyComparator& compare, 
-                                            memtable::MemTableAllocator* allocator,
-                                            const common::SliceTransform*) {
+                                            memtable::MemTableAllocator* allocator)
+{
   ARTRep *rep = new memtable::ARTRep(compare, allocator);
   rep->init();
   return rep;

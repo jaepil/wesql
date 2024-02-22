@@ -30,7 +30,6 @@
 #include "db/table_properties_collector.h"
 #include "db/version_set.h"
 #include "db/write_controller.h"
-#include "memtable/hash_skiplist_rep.h"
 #include "monitoring/thread_status_util.h"
 #include "options/options_helper.h"
 #include "storage/extent_space_manager.h"
@@ -205,21 +204,6 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
   }
   if (result.max_write_buffer_number_to_maintain < 0) {
     result.max_write_buffer_number_to_maintain = 0;
-  }
-  // bloom filter size shouldn't exceed 1/4 of memtable size.
-  if (result.memtable_prefix_bloom_size_ratio > 0.25) {
-    result.memtable_prefix_bloom_size_ratio = 0.25;
-  } else if (result.memtable_prefix_bloom_size_ratio < 0) {
-    result.memtable_prefix_bloom_size_ratio = 0;
-  }
-
-  if (!result.prefix_extractor) {
-    assert(result.memtable_factory);
-    Slice name = result.memtable_factory->Name();
-    if (name.compare("HashSkipListRepFactory") == 0 ||
-        name.compare("HashLinkListRepFactory") == 0) {
-      result.memtable_factory = std::make_shared<SkipListFactory>();
-    }
   }
 
   if (result.compaction_style == kCompactionStyleFIFO) {

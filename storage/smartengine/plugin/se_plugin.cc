@@ -268,13 +268,6 @@ static int se_init_func(void *const p)
     sql_print_error("SE: Failed to parse input compress_opts");
     DBUG_RETURN(1);
   }
-  if (nullptr != se_cf_memtable_options &&
-      !smartengine::common::GetMemTableFactory(
-          std::string(se_cf_memtable_options),
-          &se_default_cf_options.memtable_factory)) {
-    sql_print_error("SE: Failed to parse input memtable options");
-    DBUG_RETURN(1);
-  }
 
   if (!se_cf_options_map.init(se_tbl_options,
                               properties_collector_factory,

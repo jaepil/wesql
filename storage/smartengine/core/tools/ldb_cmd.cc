@@ -73,7 +73,6 @@ const std::string LDBCommand::ARG_FROM = "from";
 const std::string LDBCommand::ARG_TO = "to";
 const std::string LDBCommand::ARG_MAX_KEYS = "max_keys";
 const std::string LDBCommand::ARG_BLOOM_BITS = "bloom_bits";
-const std::string LDBCommand::ARG_FIX_PREFIX_LEN = "fix_prefix_len";
 const std::string LDBCommand::ARG_COMPRESSION_TYPE = "compression_type";
 const std::string LDBCommand::ARG_COMPRESSION_MAX_DICT_BYTES =
     "compression_max_dict_bytes";
@@ -373,7 +372,6 @@ std::vector<std::string> LDBCommand::BuildCmdLineOptions(
                                   ARG_COMPRESSION_MAX_DICT_BYTES,
                                   ARG_WRITE_BUFFER_SIZE,
                                   ARG_FILE_SIZE,
-                                  ARG_FIX_PREFIX_LEN,
                                   ARG_CF_NAME};
   ret.insert(ret.end(), options.begin(), options.end());
   return ret;
@@ -531,18 +529,6 @@ Options LDBCommand::PrepareOptionsForOpenDB() {
 
   if (opt.db_paths.size() == 0) {
     opt.db_paths.emplace_back(db_path_, std::numeric_limits<uint64_t>::max());
-  }
-
-  int fix_prefix_len;
-  if (ParseIntOption(option_map_, ARG_FIX_PREFIX_LEN, fix_prefix_len,
-                     exec_state_)) {
-    if (fix_prefix_len > 0) {
-      opt.prefix_extractor.reset(
-          NewFixedPrefixTransform(static_cast<size_t>(fix_prefix_len)));
-    } else {
-      exec_state_ =
-          LDBCommandExecuteResult::Failed(ARG_FIX_PREFIX_LEN + " must be > 0.");
-    }
   }
 
   return opt;

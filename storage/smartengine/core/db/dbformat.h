@@ -20,7 +20,6 @@
 #include "smartengine/db.h"
 #include "smartengine/filter_policy.h"
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/table.h"
 #include "smartengine/types.h"
 #include "storage/io_extent.h"
@@ -33,10 +32,6 @@ class ChangeInfo;
 
 namespace util {
 class Comparator;
-}
-
-namespace common {
-class SliceTransform;
 }
 
 namespace db {
@@ -630,38 +625,6 @@ class IterKey {
   // No copying allowed
   IterKey(const IterKey&) = delete;
   void operator=(const IterKey&) = delete;
-};
-
-class InternalKeySliceTransform : public common::SliceTransform {
- public:
-  explicit InternalKeySliceTransform(const common::SliceTransform* transform)
-      : transform_(transform) {}
-
-  virtual const char* Name() const override { return transform_->Name(); }
-
-  virtual common::Slice Transform(const common::Slice& src) const override {
-    auto user_key = ExtractUserKey(src);
-    return transform_->Transform(user_key);
-  }
-
-  virtual bool InDomain(const common::Slice& src) const override {
-    auto user_key = ExtractUserKey(src);
-    return transform_->InDomain(user_key);
-  }
-
-  virtual bool InRange(const common::Slice& dst) const override {
-    auto user_key = ExtractUserKey(dst);
-    return transform_->InRange(user_key);
-  }
-
-  const common::SliceTransform* user_prefix_extractor() const {
-    return transform_;
-  }
-
- private:
-  // Like comparator, InternalKeySliceTransform will not take care of the
-  // deletion of transform_
-  const common::SliceTransform* const transform_;
 };
 
 // Read the key of a record from a write batch.

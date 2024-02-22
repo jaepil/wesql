@@ -38,7 +38,6 @@
 #include "smartengine/convenience.h"
 #include "smartengine/filter_policy.h"
 #include "smartengine/memtablerep.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/utilities/transaction_db.h"
 #include "./core/db/db_impl.h"
 #include "./core/db/debug_info.h"
@@ -476,8 +475,6 @@ static int se_i_s_cfoptions_fill_table(
       {"INPLACE_UPDATE_SUPPORT", opts.inplace_update_support ? "ON" : "OFF"},
       {"INPLACE_UPDATE_NUM_LOCKS",
         opts.inplace_update_num_locks ? "ON" : "OFF"},
-      {"MEMTABLE_PREFIX_BLOOM_BITS_RATIO",
-        std::to_string(opts.memtable_prefix_bloom_size_ratio)},
       {"MEMTABLE_PREFIX_BLOOM_HUGE_PAGE_TLB_SIZE",
         std::to_string(opts.memtable_huge_page_size)},
       {"BLOOM_LOCALITY", std::to_string(opts.bloom_locality)},

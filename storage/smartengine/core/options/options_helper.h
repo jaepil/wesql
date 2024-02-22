@@ -73,7 +73,6 @@ enum class OptionType {
   kDouble,
   kCompactionStyle,
   kCompactionPri,
-  kSliceTransform,
   kCompressionType,
   kVectorCompressionType,
   kTableFactory,
@@ -134,10 +133,6 @@ Status GetDBOptionsFromMapInternal(
 // and construct a FilterPolicy object
 bool GetTableFilterPolicy(const std::string& value,
                           std::shared_ptr<const table::FilterPolicy>* policy);
-// A helper function to parse options for prefix_extractor from string
-// and construct a SliceTransform object
-bool GetPrefixExtractor(const std::string& value,
-                        std::shared_ptr<const SliceTransform>* slice_transform);
 // A helper function to parse ColumnFamilyOptions::CompressionType from string
 bool GetCompressionType(const std::string& value, CompressionType* out);
 // A helper function to parse ColumnFamilyOptions::vector<CompressionType> from string
@@ -145,11 +140,6 @@ bool GetVectorCompressionType(const std::string& value,
                               std::vector<CompressionType>* out);
 // A helper function to parse CompressionOptions from string
 bool GetCompressionOptions(const std::string& value, CompressionOptions* out);
-// A helper function to parse options for MemTableFactory from string
-// and construct a MemTableFactory object
-bool GetMemTableFactory(const std::string& value,
-                        std::shared_ptr<memtable::MemTableRepFactory>* mem_factory);
-
 static std::unordered_map<std::string, OptionTypeInfo> db_options_type_info = {
     /*
      // not yet supported
@@ -613,16 +603,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
     {"bloom_locality",
      {offset_of(&ColumnFamilyOptions::bloom_locality), OptionType::kUInt32T,
       OptionVerificationType::kNormal, false, 0}},
-    {"memtable_prefix_bloom_bits",
-     {0, OptionType::kUInt32T, OptionVerificationType::kDeprecated, true, 0}},
-    {"memtable_prefix_bloom_size_ratio",
-     {offset_of(&ColumnFamilyOptions::memtable_prefix_bloom_size_ratio),
-      OptionType::kDouble, OptionVerificationType::kNormal, true,
-      offsetof(struct MutableCFOptions, memtable_prefix_bloom_size_ratio)}},
-    {"memtable_prefix_bloom_probes",
-     {0, OptionType::kUInt32T, OptionVerificationType::kDeprecated, true, 0}},
-    {"min_partial_merge_operands",
-     {0, OptionType::kUInt32T, OptionVerificationType::kDeprecated, true, 0}},
     {"max_bytes_for_level_base",
      {offset_of(&ColumnFamilyOptions::max_bytes_for_level_base),
       OptionType::kUInt64T, OptionVerificationType::kNormal, true,
@@ -661,15 +641,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
     {"comparator",
      {offset_of(&ColumnFamilyOptions::comparator), OptionType::kComparator,
       OptionVerificationType::kByName, false, 0}},
-    {"prefix_extractor",
-     {offset_of(&ColumnFamilyOptions::prefix_extractor),
-      OptionType::kSliceTransform, OptionVerificationType::kByNameAllowNull,
-      false, 0}},
-    {"memtable_insert_with_hint_prefix_extractor",
-     {offset_of(
-          &ColumnFamilyOptions::memtable_insert_with_hint_prefix_extractor),
-      OptionType::kSliceTransform, OptionVerificationType::kByNameAllowNull,
-      false, 0}},
     {"memtable_factory",
      {offset_of(&ColumnFamilyOptions::memtable_factory),
       OptionType::kMemTableRepFactory, OptionVerificationType::kByName, false,

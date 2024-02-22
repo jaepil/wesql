@@ -36,7 +36,6 @@ class Status;
 namespace db {
 class InternalKeyComparator;
 class IntTblPropCollectorFactory;
-class InternalKeySliceTransform;
 struct MiniTables;
 enum ValueType;
 struct BlockStats;
@@ -214,7 +213,6 @@ class ExtentBasedTableBuilder : public TableBuilder {
   const std::string* compression_dict_;
   const std::string& column_family_name_;
   storage::LayerPosition output_position_;
-  db::InternalKeySliceTransform internal_prefix_transform_;
 
   int num_entries_;  // entries in the previous mini tables of this table
   int offset_;       // similar as num_entries_, but offset
@@ -263,8 +261,8 @@ struct ExtentBasedTableBuilder::Rep {
       const db::InternalKeyComparator& icomparator,
       const std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>>* int_tbl_prop_collector_factories,
       uint32_t column_family_id,
-      const db::InternalKeySliceTransform* internal_prefix_transform,
-      util::WritableBuffer* block_buf, util::WritableBuffer* index_buf);
+      util::WritableBuffer* block_buf,
+      util::WritableBuffer* index_buf);
 };
 
 }  // namespace table

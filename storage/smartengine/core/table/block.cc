@@ -19,7 +19,6 @@
 
 #include "port/port.h"
 #include "port/stack_trace.h"
-#include "table/block_prefix_index.h"
 #include "table/format.h"
 #include "util/coding.h"
 #include "smartengine/comparator.h"
@@ -149,11 +148,7 @@ void BlockIter::seek_end_key()
   } else {
     uint32_t index = 0;
     bool ok = false;
-    if (prefix_index_) {
-      ok = PrefixSeek(end_ikey_, &index);
-    } else {
-      ok = BinarySeek(end_ikey_, restart_index_, num_restarts_ - 1, &index);
-    }
+    ok = BinarySeek(end_ikey_, restart_index_, num_restarts_ - 1, &index);
 
     if (!ok) {
       return;
@@ -190,11 +185,7 @@ void BlockIter::Seek(const Slice& target) {
   }
   uint32_t index = 0;
   bool ok = false;
-  if (prefix_index_) {
-    ok = PrefixSeek(target, &index);
-  } else {
-    ok = BinarySeek(target, 0, num_restarts_ - 1, &index);
-  }
+  ok = BinarySeek(target, 0, num_restarts_ - 1, &index);
 
   if (!ok) {
     return;
@@ -490,19 +481,6 @@ bool BlockIter::BinaryBlockIndexSeek(const Slice& target, uint32_t* block_ids,
   }
 }
 
-bool BlockIter::PrefixSeek(const Slice& target, uint32_t* index) {
-  assert(prefix_index_);
-  uint32_t* block_ids = nullptr;
-  uint32_t num_blocks = prefix_index_->GetBlocks(target, &block_ids);
-
-  if (num_blocks == 0) {
-    current_ = restarts_;
-    return false;
-  } else {
-    return BinaryBlockIndexSeek(target, block_ids, 0, num_blocks - 1, index);
-  }
-}
-
 uint32_t Block::NumRestarts() const {
   assert(size_ >= 2 * sizeof(uint32_t));
   return DecodeFixed32(data_ + size_ - sizeof(uint32_t));
@@ -532,8 +510,10 @@ Block::Block(BlockContents&& contents, SequenceNumber _global_seqno,
   }
 }
 
-InternalIterator* Block::NewIterator(const Comparator* cmp, BlockIter* iter,
-                                     bool total_order_seek, Statistics* stats,
+InternalIterator* Block::NewIterator(const Comparator* cmp,
+                                     BlockIter* iter,
+                                     bool total_order_seek,
+                                     Statistics* stats,
                                      const bool is_index_block,
                                      memory::SimpleAllocator *alloc) {
   if (size_ < 2 * sizeof(uint32_t)) {
@@ -553,39 +533,33 @@ InternalIterator* Block::NewIterator(const Comparator* cmp, BlockIter* iter,
       return NewEmptyInternalIterator();
     }
   } else {
-    BlockPrefixIndex* prefix_index_ptr =
-        total_order_seek ? nullptr : prefix_index_.get();
-
     if (iter != nullptr) {
-      iter->Initialize(cmp, data_, restart_offset_, num_restarts,
-                       prefix_index_ptr, global_seqno_, read_amp_bitmap_.get(),
+      iter->Initialize(cmp,
+                       data_,
+                       restart_offset_,
+                       num_restarts,
+                       global_seqno_,
+                       read_amp_bitmap_.get(),
                        is_index_block);
     } else {
-//      iter = new BlockIter(cmp, data_, restart_offset_, num_restarts,
-//                           prefix_index_ptr, global_seqno_,
-//                           read_amp_bitmap_.get(),
-//                           is_index_block);
-      iter = COMMON_NEW(memory::ModId::kDefaultMod, BlockIter, alloc,
-          cmp, data_, restart_offset_, num_restarts,
-          prefix_index_ptr, global_seqno_,
-          read_amp_bitmap_.get(),
-          is_index_block);
+      iter = COMMON_NEW(memory::ModId::kDefaultMod,
+                        BlockIter,
+                        alloc,
+                        cmp,
+                        data_,
+                        restart_offset_,
+                        num_restarts,
+                        global_seqno_,
+                        read_amp_bitmap_.get(),
+                        is_index_block);
     }
   }
 
   return iter;
 }
 
-// todo check nobody use?
-void Block::SetBlockPrefixIndex(BlockPrefixIndex* prefix_index) {
-  prefix_index_.reset(prefix_index);
-}
-
 size_t Block::ApproximateMemoryUsage() const {
   size_t usage = usable_size();
-  if (prefix_index_) {
-    usage += prefix_index_->ApproximateMemoryUsage();
-  }
   return usage;
 }
 

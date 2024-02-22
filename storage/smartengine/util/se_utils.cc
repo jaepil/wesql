@@ -577,44 +577,10 @@ bool can_use_bloom_filter(THD *thd, const SeKeyDef &kd,
 {
   bool can_use = false;
 
-  const common::SliceTransform *prefix_extractor = kd.get_extractor();
-  if (prefix_extractor) {
-    /*
-      This is an optimized use case for CappedPrefixTransform.
-      If eq_cond length >= prefix extractor length and if
-      all keys are used for equal lookup, it is
-      always possible to use bloom filter.
-
-      Prefix bloom filter can't be used on descending scan with
-      prefix lookup (i.e. WHERE id1=1 ORDER BY id2 DESC), because of
-      se's limitation. On ascending (or not sorting) scan,
-      keys longer than the capped prefix length will be truncated down
-      to the capped length and the resulting key is added to the bloom filter.
-
-      Keys shorter than the capped prefix length will be added to
-      the bloom filter. When keys are looked up, key conditionals
-      longer than the capped length can be used; key conditionals
-      shorter require all parts of the key to be available
-      for the short key match.
-    */
-    if (use_all_keys && prefix_extractor->InRange(eq_cond))
-      can_use = true;
-    else if (!is_ascending)
-      can_use = false;
-    else if (prefix_extractor->SameResultWhenAppended(eq_cond))
-      can_use = true;
-    else
-      can_use = false;
-  } else {
-    /*
-      if prefix extractor is not defined, all key parts have to be
-      used by eq_cond.
-    */
-    if (use_all_keys)
-      can_use = true;
-    else
-      can_use = false;
-  }
+  if (use_all_keys)
+    can_use = true;
+  else
+    can_use = false;
 
   return can_use;
 }

@@ -55,7 +55,6 @@ int main() {
 #include "smartengine/cache.h"
 #include "smartengine/env.h"
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/statistics.h"
 #include "smartengine/write_batch.h"
 
@@ -2058,7 +2057,6 @@ class StressTest {
     options_.max_background_flushes = FLAGS_max_background_flushes;
     options_.compaction_style =
         static_cast<CompactionStyle>(FLAGS_compaction_style);
-    options_.prefix_extractor.reset(NewFixedPrefixTransform(FLAGS_prefix_size));
     options_.max_open_files = FLAGS_open_files;
     options_.statistics = dbstats;
     options_.env = FLAGS_env;
@@ -2103,19 +2101,10 @@ class StressTest {
       case kSkipList:
         // no need to do anything
         break;
-#ifndef ROCKSDB_LITE
-      case kHashSkipList:
-        options_.memtable_factory.reset(NewHashSkipListRepFactory(10000));
-        break;
-      case kVectorRep:
-        options_.memtable_factory.reset(new VectorRepFactory());
-        break;
-#else
       default:
         fprintf(stderr,
                 "RocksdbLite only supports skip list mem table. Skip "
                 "--rep_factory\n");
-#endif  // ROCKSDB_LITE
     }
 
     // set universal style compaction configurations, if applicable

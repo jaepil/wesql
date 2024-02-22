@@ -24,7 +24,6 @@
 
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
-#include "table/block_prefix_index.h"
 #include "table/internal_iterator.h"
 #include "memory/base_malloc.h"
 #include "smartengine/iterator.h"
@@ -43,7 +42,6 @@ namespace table {
 
 struct BlockContents;
 class BlockIter;
-class BlockPrefixIndex;
 
 // BlockReadAmpBitmap is a bitmap that map the smartengine::table::Block data bytes to
 // a bitmap with ratio bytes_per_bit. Whenever we access a range of bytes in
@@ -190,7 +188,6 @@ class Block {
                                 monitor::Statistics* stats = nullptr,
                                 const bool is_index_block = false,
                                 memory::SimpleAllocator *alloc = nullptr);
-  void SetBlockPrefixIndex(BlockPrefixIndex* prefix_index);
 
   // Report an approximation of how much memory has been used.
   size_t ApproximateMemoryUsage() const;
@@ -202,7 +199,6 @@ class Block {
   const char* data_;         // contents_.data.data()
   size_t size_;              // contents_.data.size()
   uint32_t restart_offset_;  // Offset in data_ of restart array
-  std::unique_ptr<BlockPrefixIndex, memory::ptr_destruct_delete<BlockPrefixIndex>> prefix_index_;
   std::unique_ptr<BlockReadAmpBitmap, memory::ptr_destruct_delete<BlockReadAmpBitmap>> read_amp_bitmap_;
   // All keys in the block will have seqno = global_seqno_, regardless of
   // the encoded value (kDisableGlobalSequenceNumber means disabled)
@@ -223,7 +219,6 @@ class BlockIter : public InternalIterator {
         current_(0),
         restart_index_(0),
         status_(common::Status::OK()),
-        prefix_index_(nullptr),
         key_pinned_(false),
         global_seqno_(db::kDisableGlobalSequenceNumber),
         read_amp_bitmap_(nullptr),
@@ -232,13 +227,22 @@ class BlockIter : public InternalIterator {
         is_index_block_(false),
         prev_entries_idx_(-1) {}
 
-  BlockIter(const util::Comparator* comparator, const char* data,
-            uint32_t restarts, uint32_t num_restarts,
-            BlockPrefixIndex* prefix_index, common::SequenceNumber global_seqno,
-            BlockReadAmpBitmap* read_amp_bitmap, const bool is_index_block)
-      : BlockIter() {
-    Initialize(comparator, data, restarts, num_restarts, prefix_index,
-               global_seqno, read_amp_bitmap, is_index_block);
+  BlockIter(const util::Comparator* comparator,
+            const char* data,
+            uint32_t restarts,
+            uint32_t num_restarts,
+            common::SequenceNumber global_seqno,
+            BlockReadAmpBitmap* read_amp_bitmap,
+            const bool is_index_block)
+      : BlockIter()
+  {
+    Initialize(comparator,
+               data,
+               restarts,
+               num_restarts,
+               global_seqno,
+               read_amp_bitmap,
+               is_index_block);
   }
 
   void reset() {
@@ -249,7 +253,6 @@ class BlockIter : public InternalIterator {
     current_ = 0;
     restart_index_ = 0;
     status_ = 0;
-    prefix_index_ = nullptr;
     global_seqno_ = db::kDisableGlobalSequenceNumber;
     read_amp_bitmap_ = nullptr;
     last_bitmap_offset_ = 0;
@@ -259,12 +262,14 @@ class BlockIter : public InternalIterator {
     InternalIterator::reset();
   }
 
-  void Initialize(const util::Comparator* comparator, const char* data,
-                  uint32_t restarts, uint32_t num_restarts,
-                  BlockPrefixIndex* prefix_index,
+  void Initialize(const util::Comparator* comparator,
+                  const char* data,
+                  uint32_t restarts,
+                  uint32_t num_restarts,
                   common::SequenceNumber global_seqno,
                   BlockReadAmpBitmap* read_amp_bitmap,
-                  const bool is_index_block) {
+                  const bool is_index_block)
+  {
     assert(data_ == nullptr);  // Ensure it is called only once
     assert(num_restarts > 0);  // Ensure the param is valid
 
@@ -274,7 +279,6 @@ class BlockIter : public InternalIterator {
     num_restarts_ = num_restarts;
     current_ = restarts_;
     restart_index_ = num_restarts_;
-    prefix_index_ = prefix_index;
     global_seqno_ = global_seqno;
     read_amp_bitmap_ = read_amp_bitmap;
     last_bitmap_offset_ = current_ + 1;
@@ -355,7 +359,6 @@ private:
   db::IterKey key_;
   common::Slice value_;
   common::Status status_;
-  BlockPrefixIndex* prefix_index_;
   bool key_pinned_;
   common::SequenceNumber global_seqno_;
 

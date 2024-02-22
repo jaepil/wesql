@@ -52,7 +52,6 @@ class LDBCommand {
   static const std::string ARG_TO;
   static const std::string ARG_MAX_KEYS;
   static const std::string ARG_BLOOM_BITS;
-  static const std::string ARG_FIX_PREFIX_LEN;
   static const std::string ARG_COMPRESSION_TYPE;
   static const std::string ARG_COMPRESSION_MAX_DICT_BYTES;
   static const std::string ARG_BLOCK_SIZE;

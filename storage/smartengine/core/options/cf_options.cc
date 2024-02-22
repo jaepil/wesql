@@ -39,7 +39,6 @@ ImmutableCFOptions::ImmutableCFOptions(const ImmutableDBOptions& db_options,
       compaction_pri(cf_options.compaction_pri),
       compaction_options_universal(cf_options.compaction_options_universal),
       compaction_options_fifo(cf_options.compaction_options_fifo),
-      prefix_extractor(cf_options.prefix_extractor.get()),
       user_comparator(cf_options.comparator),
       internal_comparator(InternalKeyComparator(cf_options.comparator)),
       compaction_filter(cf_options.compaction_filter),
@@ -81,8 +80,6 @@ ImmutableCFOptions::ImmutableCFOptions(const ImmutableDBOptions& db_options,
       listeners(db_options.listeners),
       row_cache(db_options.row_cache),
       max_subcompactions(db_options.max_subcompactions),
-      memtable_insert_with_hint_prefix_extractor(
-          cf_options.memtable_insert_with_hint_prefix_extractor.get()),
       filter_manager(new table::FilterManager()) {}
 
 // Multiple two operands. If they overflow, return op1.
@@ -135,8 +132,6 @@ void MutableCFOptions::Dump() const {
   __SE_LOG(INFO,
                  "                         arena_block_size: %" ROCKSDB_PRIszt,
                  arena_block_size);
-  __SE_LOG(INFO, "              memtable_prefix_bloom_ratio: %f",
-                 memtable_prefix_bloom_size_ratio);
   __SE_LOG(INFO,
                  "                  memtable_huge_page_size: %" ROCKSDB_PRIszt,
                  memtable_huge_page_size);

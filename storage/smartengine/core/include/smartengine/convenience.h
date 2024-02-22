@@ -277,11 +277,6 @@ Status GetPlainTableOptionsFromString(
     const table::PlainTableOptions& table_options, const std::string& opts_str,
     table::PlainTableOptions* new_table_options);
 
-Status GetMemTableRepFactoryFromString(
-    const std::string& opts_str,
-    std::unique_ptr<memtable::MemTableRepFactory>* new_mem_factory);
-
-
 Status StringToMap(const std::string& opts_str,
                    std::unordered_map<std::string, std::string>* opts_map);
 

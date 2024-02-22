@@ -31,7 +31,6 @@
 #include "smartengine/env.h"
 #include "smartengine/memtablerep.h"
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/sst_file_manager.h"
 #include "smartengine/table.h"
 #include "smartengine/table_properties.h"
@@ -58,11 +57,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       inplace_update_support(options.inplace_update_support),
       inplace_update_num_locks(options.inplace_update_num_locks),
       inplace_callback(options.inplace_callback),
-      memtable_prefix_bloom_size_ratio(
-          options.memtable_prefix_bloom_size_ratio),
       memtable_huge_page_size(options.memtable_huge_page_size),
-      memtable_insert_with_hint_prefix_extractor(
-          options.memtable_insert_with_hint_prefix_extractor),
       bloom_locality(options.bloom_locality),
       arena_block_size(options.arena_block_size),
       compression_per_level(options.compression_per_level),
@@ -129,7 +124,6 @@ ColumnFamilyOptions::ColumnFamilyOptions(const Options& options)
       level1_extents_major_compaction_trigger(
           options.level1_extents_major_compaction_trigger),
       level2_usage_percent(options.level2_usage_percent),
-      prefix_extractor(options.prefix_extractor),
       max_bytes_for_level_base(options.max_bytes_for_level_base),
       disable_auto_compactions(options.disable_auto_compactions),
       table_factory(options.table_factory) {}
@@ -289,13 +283,6 @@ void ColumnFamilyOptions::Dump() const {
       bottommost_compression == kDisableCompressionOption
           ? "Disabled"
           : CompressionTypeToString(bottommost_compression).c_str());
-  __SE_LOG(INFO, "                 Options.prefix_extractor: %s",
-      prefix_extractor == nullptr ? "nullptr" : prefix_extractor->Name());
-  __SE_LOG(INFO,
-                "Options.memtable_insert_with_hint_prefix_extractor: %s",
-                   memtable_insert_with_hint_prefix_extractor == nullptr
-                       ? "nullptr"
-                       : memtable_insert_with_hint_prefix_extractor->Name());
   __SE_LOG(INFO, "                       Options.num_levels: %d",
                    num_levels);
   __SE_LOG(INFO, " Options.min_write_buffer_number_to_merge: %d",
@@ -410,9 +397,6 @@ void ColumnFamilyOptions::Dump() const {
   __SE_LOG(
       INFO, "         Options.inplace_update_num_locks: %" ROCKSDB_PRIszt,
       inplace_update_num_locks);
-  // TODO: easier config for bloom (maybe based on avg key/value size)
-  __SE_LOG(INFO, " Options.memtable_prefix_bloom_size_ratio: %f",
-                   memtable_prefix_bloom_size_ratio);
 
   __SE_LOG(INFO,
                 "          Options.memtable_huge_page_size: %" ROCKSDB_PRIszt,
@@ -629,7 +613,6 @@ ReadOptions::ReadOptions()
       iterate_upper_bound(nullptr),
       read_tier(kReadAllTier),
       total_order_seek(false),
-      prefix_same_as_start(false),
       pin_data(false),
       background_purge_on_iterator_cleanup(false),
       readahead_size(0),
@@ -644,7 +627,6 @@ ReadOptions::ReadOptions(bool cksum, bool cache)
       iterate_upper_bound(nullptr),
       read_tier(kReadAllTier),
       total_order_seek(false),
-      prefix_same_as_start(false),
       pin_data(false),
       background_purge_on_iterator_cleanup(false),
       readahead_size(0),

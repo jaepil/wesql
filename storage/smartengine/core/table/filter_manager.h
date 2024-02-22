@@ -134,17 +134,18 @@ private:
   int ref_cfd();
   void unref_cfd();
 
-  int create_filter_builder(
-      bool whole_key_filtering, const common::SliceTransform *prefix_extractor,
-      const table::FilterPolicy *filter_policy, const size_t num_entries,
-      std::unique_ptr<table::FilterBlockBuilder> &filter_builder);
+  int create_filter_builder(bool whole_key_filtering,
+                            const table::FilterPolicy *filter_policy,
+                            const size_t num_entries,
+                            std::unique_ptr<table::FilterBlockBuilder> &filter_builder);
+
   int create_filter_reader(bool whole_key_filtering,
-                           const common::SliceTransform *prefix_extractor,
                            const table::FilterPolicy *filter_policy,
                            char *data,
                            const common::Slice &filter_slice,
                            monitor::Statistics *statistics,
                            table::FilterBlockReader *&filter_reader);
+
   int put_filter_to_cache(cache::Cache *cache, const common::Slice &key,
                           table::FilterBlockReader *filter_contents,
                           monitor::Statistics *statistics);

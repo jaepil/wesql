@@ -18,7 +18,6 @@
 #include "util/hash.h"
 #include "smartengine/options.h"
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 
 namespace smartengine {
 namespace table {
@@ -39,9 +38,8 @@ class FilterBitsReader;
 //
 class FullFilterBlockBuilder : public FilterBlockBuilder {
  public:
-  explicit FullFilterBlockBuilder(
-      const common::SliceTransform* prefix_extractor, bool whole_key_filtering,
-      FilterBitsBuilder* filter_bits_builder);
+  explicit FullFilterBlockBuilder(bool whole_key_filtering,
+                                  FilterBitsBuilder* filter_bits_builder);
   // bits_builder is created in filter_policy, it should be passed in here
   // directly. and be deleted here
   ~FullFilterBlockBuilder() {}
@@ -59,16 +57,10 @@ class FullFilterBlockBuilder : public FilterBlockBuilder {
   std::unique_ptr<FilterBitsBuilder> filter_bits_builder_;
 
  private:
-  // important: all of these might point to invalid addresses
-  // at the time of destruction of this filter block. destructor
-  // should NOT dereference them.
-  const common::SliceTransform* prefix_extractor_;
   bool whole_key_filtering_;
 
   uint32_t num_added_;
   std::unique_ptr<char[], memory::ptr_delete<char>> filter_data_;
-
-  void AddPrefix(const common::Slice& key);
 
   // No copying allowed
   FullFilterBlockBuilder(const FullFilterBlockBuilder&);
@@ -81,19 +73,16 @@ class FullFilterBlockReader : public FilterBlockReader {
  public:
   // REQUIRES: "contents" and filter_bits_reader must stay live
   // while *this is live.
-  explicit FullFilterBlockReader(const common::SliceTransform* prefix_extractor,
-                                 bool _whole_key_filtering,
+  explicit FullFilterBlockReader(bool _whole_key_filtering,
                                  char *data,
                                  size_t data_size,
                                  FilterBitsReader* filter_bits_reader,
                                  monitor::Statistics* stats);
-  explicit FullFilterBlockReader(const common::SliceTransform* prefix_extractor,
-                                 bool whole_key_filtering,
+  explicit FullFilterBlockReader(bool whole_key_filtering,
                                  const common::Slice& contents,
                                  FilterBitsReader* filter_bits_reader,
                                  monitor::Statistics* statistics);
-  explicit FullFilterBlockReader(const common::SliceTransform* prefix_extractor,
-                                 bool whole_key_filtering,
+  explicit FullFilterBlockReader(bool whole_key_filtering,
                                  BlockContents&& contents,
                                  FilterBitsReader* filter_bits_reader,
                                  monitor::Statistics* statistics);
@@ -107,15 +96,10 @@ class FullFilterBlockReader : public FilterBlockReader {
       const common::Slice& key, uint64_t block_offset = kNotValid,
       const bool no_io = false,
       const common::Slice* const const_ikey_ptr = nullptr) override;
-  virtual bool PrefixMayMatch(
-      const common::Slice& prefix, uint64_t block_offset = kNotValid,
-      const bool no_io = false,
-      const common::Slice* const const_ikey_ptr = nullptr) override;
   virtual size_t ApproximateMemoryUsage() const override;
   void BindData();
 
  private:
-  const common::SliceTransform* prefix_extractor_;
   common::Slice contents_;
   std::unique_ptr<FilterBitsReader> filter_bits_reader_;
   BlockContents block_contents_;

@@ -56,7 +56,6 @@
 #include "sql/sql_base.h"
 #include "smartengine/compaction_filter.h"
 #include "smartengine/rate_limiter.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/utilities/checkpoint.h"
 #include "smartengine/utilities/convenience.h"
 #include "smartengine/async_callback.h"

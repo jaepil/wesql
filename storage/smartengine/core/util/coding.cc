@@ -13,7 +13,6 @@
 
 #include <algorithm>
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 
 namespace smartengine {
 namespace util {

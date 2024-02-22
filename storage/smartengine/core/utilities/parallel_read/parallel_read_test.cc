@@ -548,7 +548,7 @@ void ParallelReadTest::scan_all_data(
     std::function<bool(int64_t, const Slice &, const Slice &)> func)
 {
   Arena arena;
-  MergeIteratorBuilder iter_builder(&internal_comparator_, &arena, false);
+  MergeIteratorBuilder iter_builder(&internal_comparator_, &arena);
   ReadOptions read_options;
   storage_manager_->add_iterators(table_cache_,
                                   nullptr,

@@ -18,7 +18,6 @@
 #include "smartengine/filter_policy.h"
 #include "smartengine/options.h"
 #include "smartengine/slice.h"
-#include "smartengine/slice_transform.h"
 #include "smartengine/status.h"
 #include "smartengine/table.h"
 

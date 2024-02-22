@@ -706,9 +706,6 @@ void RandomCompressionTypeVector(const size_t count,
 
 storage::CompactionFilterFactory* RandomCompactionFilterFactory(Random* rnd);
 
-const common::SliceTransform* RandomSliceTransform(Random* rnd,
-                                                   int pre_defined = -1);
-
 std::string RandomName(Random* rnd, const size_t len);
 
 common::Status DestroyDir(Env* env, const std::string& dir);

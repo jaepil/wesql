@@ -49,15 +49,11 @@ LIB_SOURCES =                                                   \
 	memory/chunk_allocator.cc                                     \
 	memory/alloc_mgr.cc                                           \
 	memory/mod_info.cc                                            \
-  memtable/hash_cuckoo_rep.cc                                   \
-  memtable/hash_linklist_rep.cc                                 \
-  memtable/hash_skiplist_rep.cc                                 \
   memtable/memtable_allocator.cc                                \
   memtable/skiplistrep.cc                                       \
   memtable/art.cc                                               \
   memtable/art_node.cc                                          \
   memtable/artrep.cc                                            \
-  memtable/vectorrep.cc                                         \
   monitoring/histogram.cc                                       \
   monitoring/histogram_windowing.cc                             \
   monitoring/instrumented_mutex.cc                              \
@@ -97,7 +93,6 @@ LIB_SOURCES =                                                   \
   table/extent_table_factory.cc                                 \
   table/extent_table_reader.cc                                  \
   table/block_builder.cc                                        \
-  table/block_prefix_index.cc                                   \
   table/bloom_block.cc                                          \
   table/flush_block_policy.cc                                   \
   table/format.cc                                               \
@@ -212,7 +207,6 @@ MAIN_SOURCES =                                                    \
   db/db_iter_test.cc                                                    \
   db/db_iterator_test.cc                                                \
   db/db_log_iter_test.cc                                                \
-  db/db_memtable_test.cc                                                \
   db/db_options_test.cc                                                 \
   db/db_sst_test.cc                                                     \
   db/db_table_properties_test.cc                                        \

@@ -62,8 +62,6 @@
 #include "db/write_batch_internal.h"
 #include "db/write_callback.h"
 #include "logger/log_module.h"
-#include "memtable/hash_linklist_rep.h"
-#include "memtable/hash_skiplist_rep.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/query_perf_context.h"
 #include "monitoring/thread_status_updater.h"
@@ -1314,10 +1312,7 @@ InternalIterator* DBImpl::NewInternalIterator(const ReadOptions& read_options,
   InternalIterator* internal_iter;
   assert(arena != nullptr);
   // Need to create internal iterator from the arena.
-  MergeIteratorBuilder merge_iter_builder(
-      &cfd->internal_comparator(), arena,
-      !read_options.total_order_seek &&
-          cfd->ioptions()->prefix_extractor != nullptr);
+  MergeIteratorBuilder merge_iter_builder(&cfd->internal_comparator(), arena);
 
   Status s;
   if(kOnlyL2 != read_options.read_level_ ){

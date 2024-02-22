@@ -30,7 +30,6 @@
 #include "smartengine/table_properties.h"
 
 #include "table/block.h"
-#include "table/block_prefix_index.h"
 #include "table/extent_table_factory.h"
 #include "table/filter_block.h"
 #include "table/filter_manager.h"
@@ -335,7 +334,6 @@ ExtentBasedTable::Rep::Rep(const common::ImmutableCFOptions& _ioptions,
       internal_comparator(_internal_comparator),
       filter_type(FilterType::kNoFilter),
       whole_key_filtering(_table_opt.whole_key_filtering),
-      prefix_filtering(true),
       global_seqno(db::kDisableGlobalSequenceNumber),
       internal_alloc_(false) {
   if (nullptr == alloc) {
@@ -417,13 +415,7 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   rep->footer = footer;
   rep->index_type = table_options.index_type;
   rep->hash_index_allow_collision = table_options.hash_index_allow_collision;
-  // We need to wrap data with internal_prefix_transform to make sure it can
-  // handle prefix correctly.
-//  rep->internal_prefix_transform.reset(
-//      new InternalKeySliceTransform(rep->ioptions.prefix_extractor));
-  rep->internal_prefix_transform.reset(ALLOC_OBJECT(InternalKeySliceTransform, *rep->alloc_.get(), rep->ioptions.prefix_extractor));
   SetupCacheKeyPrefix(rep, file_size);
-//  unique_ptr<ExtentBasedTable> new_table(new ExtentBasedTable(rep));
   ExtentBasedTable *new_table = COMMON_NEW(ModId::kRep, ExtentBasedTable, alloc, rep);
 
   // Read meta index
@@ -841,57 +833,6 @@ Status ExtentBasedTable::PutDataBlockToCache(
   return s;
 }
 
-FilterBlockReader* ExtentBasedTable::ReadFilter(
-    const BlockHandle& filter_handle, const bool is_a_filter_partition) const {
-  auto& rep = rep_;
-  // TODO: We might want to unify with ReadBlockFromFile() if we start
-  // requiring checksum verification in Table::Open.
-  if (rep->filter_type == Rep::FilterType::kNoFilter) {
-    return nullptr;
-  }
-  BlockContents block;
-  if (!ReadBlockContents(rep->file.get(),
-                         rep->footer,
-                         ReadOptions(),
-                         filter_handle,
-                         &block,
-                         rep->ioptions,
-                         false /* decompress */,
-                         Slice() /*compression dict*/,
-                         nullptr /*aio_handle*/)
-           .ok()) {
-    // Error reading the block
-    return nullptr;
-  }
-
-  assert(rep->filter_policy);
-
-  auto filter_type = rep->filter_type;
-  if (rep->filter_type == Rep::FilterType::kPartitionedFilter &&
-      is_a_filter_partition) {
-    filter_type = Rep::FilterType::kFullFilter;
-  }
-
-  switch (filter_type) {
-
-    case Rep::FilterType::kFullFilter: {
-      auto filter_bits_reader =
-          rep->filter_policy->GetFilterBitsReader(block.data);
-      assert(filter_bits_reader != nullptr);
-      return MOD_NEW_OBJECT(ModId::kCache, FullFilterBlockReader,
-          rep->prefix_filtering ? rep->ioptions.prefix_extractor : nullptr,
-          rep->whole_key_filtering, std::move(block), filter_bits_reader,
-          rep->ioptions.statistics);
-    }
-
-    default:
-      // filter_type is either kNoFilter (exited the function at the first if),
-      // or it must be covered in this switch block
-      assert(false);
-      return nullptr;
-  }
-}
-
 ExtentBasedTable::CachableEntry<FilterBlockReader> ExtentBasedTable::GetFilter(
     bool no_io) const {
   const BlockHandle& filter_blk_handle = rep_->filter_handle;
@@ -1296,7 +1237,7 @@ Status ExtentBasedTable::MaybeLoadDataBlockToCache(
 ExtentBasedTable::BlockEntryIteratorState::BlockEntryIteratorState(
     ExtentBasedTable* table, const ReadOptions& read_options, bool skip_filters,
     bool is_index, Cleanable* block_cache_cleaner, const uint64_t scan_add_blocks_limit)
-    : TwoLevelIteratorState(table->rep_->ioptions.prefix_extractor != nullptr),
+    : TwoLevelIteratorState(),
       table_(table),
       read_options_(read_options),
       skip_filters_(skip_filters),
@@ -1330,114 +1271,6 @@ ExtentBasedTable::BlockEntryIteratorState::NewSecondaryIterator(
   return iter;
 }
 
-bool ExtentBasedTable::BlockEntryIteratorState::PrefixMayMatch(
-    const Slice& internal_key) {
-  if (read_options_.total_order_seek || skip_filters_) {
-    return true;
-  }
-  return table_->PrefixMayMatch(internal_key);
-}
-
-// This will be broken if the user specifies an unusual implementation
-// of Options.comparator, or if the user specifies an unusual
-// definition of prefixes in BlockBasedTableOptions.filter_policy.
-// In particular, we require the following three properties:
-//
-// 1) key.starts_with(prefix(key))
-// 2) Compare(prefix(key), key) <= 0.
-// 3) If Compare(key1, key2) <= 0, then Compare(prefix(key1), prefix(key2)) <= 0
-//
-// Otherwise, this method guarantees no I/O will be incurred.
-//
-// REQUIRES: this method shouldn't be called while the DB lock is held.
-bool ExtentBasedTable::PrefixMayMatch(const Slice& internal_key) {
-  if (!rep_->filter_policy) {
-    return true;
-  }
-
-  assert(rep_->ioptions.prefix_extractor != nullptr);
-  auto user_key = ExtractUserKey(internal_key);
-  if (!rep_->ioptions.prefix_extractor->InDomain(user_key) ||
-      rep_->table_properties->prefix_extractor_name.compare(
-          rep_->ioptions.prefix_extractor->Name()) != 0) {
-    return true;
-  }
-  auto prefix = rep_->ioptions.prefix_extractor->Transform(user_key);
-
-  bool may_match = true;
-  Status s;
-
-  // First, try check with full filter
-  auto filter_entry = GetFilter();
-  FilterBlockReader* filter = filter_entry.value;
-  if (filter != nullptr) {
-    if (!filter->IsBlockBased()) {
-      const Slice* const const_ikey_ptr = &internal_key;
-      may_match =
-          filter->PrefixMayMatch(prefix, kNotValid, false, const_ikey_ptr);
-    } else {
-      InternalKey internal_key_prefix(prefix, kMaxSequenceNumber, kTypeValue);
-      auto internal_prefix = internal_key_prefix.Encode();
-
-      // To prevent any io operation in this method, we set `read_tier` to make
-      // sure we always read index or filter only when they have already been
-      // loaded to memory.
-      ReadOptions no_io_read_options;
-      no_io_read_options.read_tier = kBlockCacheTier;
-
-      // Then, try find it within each block
-      unique_ptr<InternalIterator, ptr_destruct_delete<InternalIterator>> iiter(NewIndexIterator(no_io_read_options));
-      iiter->Seek(internal_prefix);
-
-      if (!iiter->Valid()) {
-        // we're past end of file
-        // if it's incomplete, it means that we avoided I/O
-        // and we're not really sure that we're past the end
-        // of the file
-        may_match = iiter->status().IsIncomplete();
-      } else if (ExtractUserKey(iiter->key())
-                     .starts_with(ExtractUserKey(internal_prefix))) {
-        // we need to check for this subtle case because our only
-        // guarantee is that "the key is a string >= last key in that data
-        // block" according to the doc/table_format.txt spec.
-        //
-        // Suppose iiter->key() starts with the desired prefix; it is not
-        // necessarily the case that the corresponding data block will
-        // contain the prefix, since iiter->key() need not be in the
-        // block.  However, the next data block may contain the prefix, so
-        // we return true to play it safe.
-        may_match = true;
-      } else if (filter->IsBlockBased()) {
-        // iiter->key() does NOT start with the desired prefix.  Because
-        // Seek() finds the first key that is >= the seek target, this
-        // means that iiter->key() > prefix.  Thus, any data blocks coming
-        // after the data block corresponding to iiter->key() cannot
-        // possibly contain the key.  Thus, the corresponding data block
-        // is the only on could potentially contain the prefix.
-        Slice handle_value = iiter->value();
-        BlockHandle handle;
-        s = handle.DecodeFrom(&handle_value);
-        assert(s.ok());
-        may_match = filter->PrefixMayMatch(prefix, handle.offset());
-      }
-    }
-  }
-
-  QUERY_COUNT(CountPoint::BLOOM_FILTER_PREFIX_CHECKED);
-  if (!may_match) {
-    QUERY_COUNT(CountPoint::BLOOM_FILTER_PREFIX_USEFUL);
-  }
-
-  // if rep_->filter_entry is not set, we should call Release(); otherwise
-  // don't call, in this case we have a local copy in rep_->filter_entry,
-  // it's pinned to the cache and will be released in the destructor
-  if (!rep_->filter_entry.IsSet()) {
-    filter_entry.Release(rep_->table_options.block_cache.get());
-  }
-
-  return may_match;
-}
-
 InternalIterator* ExtentBasedTable::NewIterator(const ReadOptions& read_options,
                                                 SimpleAllocator* arena,
                                                 bool skip_filters,
@@ -1462,14 +1295,7 @@ bool ExtentBasedTable::FullFilterKeyMayMatch(const ReadOptions& read_options,
   if (filter->whole_key_filtering()) {
     return filter->KeyMayMatch(user_key, kNotValid, no_io, const_ikey_ptr);
   }
-  if (!read_options.total_order_seek && rep_->ioptions.prefix_extractor &&
-      rep_->ioptions.prefix_extractor->InDomain(user_key) &&
-      !filter->PrefixMayMatch(
-          rep_->ioptions.prefix_extractor->Transform(user_key), kNotValid,
-          false, const_ikey_ptr)) {
-    return false;
-  }
-  return true;
+  se_assert(false);
 }
 
 int ExtentBasedTable::check_block_if_in_cache(const BlockHandle &block_handle, bool &in_cache)
@@ -1719,11 +1545,6 @@ Status ExtentBasedTable::CreateIndexReader(IndexReader** index_reader,
   auto file = rep_->file.get();
   auto comparator = &rep_->internal_comparator;
   const Footer& footer = rep_->footer;
-  if (index_type_on_file == BlockBasedTableOptions::kHashSearch &&
-      rep_->ioptions.prefix_extractor == nullptr) {
-      __SE_LOG(WARN, "BlockBasedTableOptions::kHashSearch requires options.prefix_extractor to be set.Fall back to binary search index.");
-    index_type_on_file = BlockBasedTableOptions::kBinarySearch;
-  }
 
   switch (index_type_on_file) {
     case BlockBasedTableOptions::kBinarySearch: {

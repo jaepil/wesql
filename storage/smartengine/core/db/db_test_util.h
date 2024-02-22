@@ -29,7 +29,6 @@
 #include "db/db_impl.h"
 #include "db/dbformat.h"
 #include "env/mock_env.h"
-#include "memtable/hash_linklist_rep.h"
 #include "table/mock_table.h"
 #include "table/scoped_arena_iterator.h"
 #include "util/compression.h"
@@ -183,34 +182,6 @@ class SpecialMemTableRep : public memtable::MemTableRep {
   unique_ptr<memtable::MemTableRep> memtable_;
   int num_entries_flush_;
   int num_entries_;
-};
-
-// The factory for the hacky skip list mem table that triggers flush after
-// number of entries exceeds a threshold.
-class SpecialSkipListFactory : public memtable::MemTableRepFactory {
- public:
-  // After number of inserts exceeds `num_entries_flush` in a mem table, trigger
-  // flush.
-  explicit SpecialSkipListFactory(int num_entries_flush)
-      : num_entries_flush_(num_entries_flush) {}
-
-  virtual memtable::MemTableRep* CreateMemTableRep(
-      const memtable::MemTableRep::KeyComparator& compare,
-      memtable::MemTableAllocator* allocator,
-      const common::SliceTransform* transform) override {
-    return new SpecialMemTableRep(
-        allocator, factory_.CreateMemTableRep(compare, allocator, transform),
-        num_entries_flush_);
-  }
-  virtual const char* Name() const override { return "SkipListFactory"; }
-
-  bool IsInsertConcurrentlySupported() const override {
-    return factory_.IsInsertConcurrentlySupported();
-  }
-
- private:
-  memtable::SkipListFactory factory_;
-  int num_entries_flush_;
 };
 
 // Special Env used to delay background operations

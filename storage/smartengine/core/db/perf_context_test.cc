@@ -20,10 +20,8 @@
 #include "util/testharness.h"
 #include "smartengine/db.h"
 #include "smartengine/memtablerep.h"
-#include "smartengine/slice_transform.h"
 
 bool FLAGS_random_key = false;
-bool FLAGS_use_set_based_memetable = false;
 int FLAGS_total_keys = 100;
 int FLAGS_write_buffer_size = 1000000000;
 int FLAGS_max_write_buffer_number = 8;
@@ -68,13 +66,6 @@ DB* OpenDb() {
   options.max_write_buffer_number = FLAGS_max_write_buffer_number;
   options.min_write_buffer_number_to_merge =
       FLAGS_min_write_buffer_number_to_merge;
-
-  if (FLAGS_use_set_based_memetable) {
-#ifndef ROCKSDB_LITE
-    options.prefix_extractor.reset(NewFixedPrefixTransform(0));
-    options.memtable_factory.reset(NewHashSkipListRepFactory());
-#endif  // ROCKSDB_LITE
-  }
 
   Status s;
   s = DB::Open(options, kDbName, &db);
@@ -651,11 +642,6 @@ int main(int argc, char** argv) {
     if (sscanf(argv[i], "--random_key=%d%c", &n, &junk) == 1 &&
         (n == 0 || n == 1)) {
       FLAGS_random_key = n;
-    }
-
-    if (sscanf(argv[i], "--use_set_based_memetable=%d%c", &n, &junk) == 1 &&
-        (n == 0 || n == 1)) {
-      FLAGS_use_set_based_memetable = n;
     }
 
     if (sscanf(argv[i], "--verbose=%d%c", &n, &junk) == 1 &&
