@@ -59,13 +59,6 @@ struct ImmutableCFOptions {
 
   int max_write_buffer_number_to_maintain;
 
-  bool inplace_update_support;
-
-  UpdateStatus (*inplace_callback)(char* existing_value,
-                                   uint32_t* existing_value_size,
-                                   common::Slice delta_value,
-                                   std::string* merged_value);
-
   monitor::Statistics* statistics;
 
   util::RateLimiter* rate_limiter;
@@ -140,7 +133,6 @@ struct MutableCFOptions {
         max_write_buffer_number(options.max_write_buffer_number),
         arena_block_size(options.arena_block_size),
         memtable_huge_page_size(options.memtable_huge_page_size),
-        inplace_update_num_locks(options.inplace_update_num_locks),
         disable_auto_compactions(options.disable_auto_compactions),
         soft_pending_compaction_bytes_limit(
             options.soft_pending_compaction_bytes_limit),
@@ -185,7 +177,6 @@ struct MutableCFOptions {
         max_write_buffer_number(0),
         arena_block_size(0),
         memtable_huge_page_size(0),
-        inplace_update_num_locks(0),
         disable_auto_compactions(false),
         soft_pending_compaction_bytes_limit(0),
         hard_pending_compaction_bytes_limit(0),
@@ -239,7 +230,6 @@ struct MutableCFOptions {
   int max_write_buffer_number;
   size_t arena_block_size;
   size_t memtable_huge_page_size;
-  size_t inplace_update_num_locks;
 
   // Compaction related options
   bool disable_auto_compactions;

@@ -292,7 +292,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
   // boolean options
   cf_opt->report_bg_io_stats = rnd->Uniform(2);
   cf_opt->disable_auto_compactions = rnd->Uniform(2);
-  cf_opt->inplace_update_support = rnd->Uniform(2);
   cf_opt->level_compaction_dynamic_level_bytes = rnd->Uniform(2);
   cf_opt->optimize_filters_for_hits = rnd->Uniform(2);
   cf_opt->paranoid_file_checks = rnd->Uniform(2);
@@ -327,7 +326,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
 
   // size_t options
   cf_opt->arena_block_size = rnd->Uniform(10000);
-  cf_opt->inplace_update_num_locks = rnd->Uniform(10000);
   cf_opt->memtable_huge_page_size = rnd->Uniform(10000);
   cf_opt->write_buffer_size = rnd->Uniform(10000);
 

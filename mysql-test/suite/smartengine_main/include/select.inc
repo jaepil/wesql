@@ -1564,6 +1564,8 @@ explain select companynr,companyname from t4 left join t2 using (companynr) wher
 delete from t2 where fld1=999999;
 
 analyze table t2;
+# wait statistics update to stats table
+sleep 10;
 #
 # Test left join optimization
 --replace_column 10 # 11 #

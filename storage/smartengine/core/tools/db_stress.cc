@@ -238,10 +238,6 @@ DEFINE_int32(clear_column_family_one_in, 1000000,
 
 DEFINE_int32(set_options_one_in, 0,
              "With a chance of 1/N, change some random options");
-
-DEFINE_int32(set_in_place_one_in, 0,
-             "With a chance of 1/N, toggle in place support option");
-
 DEFINE_int64(cache_size, 2LL * KB * KB * KB,
              "Number of bytes to use as a cache of uncompressed data.");
 
@@ -439,8 +435,6 @@ static const bool FLAGS_ops_per_thread_dummy __attribute__((unused)) =
 DEFINE_uint64(log2_keys_per_lock, 2, "Log2 of number of keys per lock");
 static const bool FLAGS_log2_keys_per_lock_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_log2_keys_per_lock, &ValidateUint32Range);
-
-DEFINE_bool(in_place_update, false, "On true, does inplace update in memtable");
 
 enum RepFactory { kSkipList, kHashSkipList, kVectorRep };
 
@@ -1052,7 +1046,6 @@ class StressTest {
         {"memtable_prefix_bloom_bits", {"0", "8", "10"}},
         {"memtable_prefix_bloom_probes", {"4", "5", "6"}},
         {"memtable_huge_page_size", {"0", ToString(2 * 1024 * 1024)}},
-        {"inplace_update_num_locks", {"100", "200", "300"}},
         // TODO(ljin): enable test for this option
         // {"disable_auto_compactions", {"100", "200", "300"}},
         {"soft_rate_limit", {"0", "0.5", "0.9"}},
@@ -1584,11 +1577,6 @@ class StressTest {
         SetOptions(thread);
       }
 
-      if (FLAGS_set_in_place_one_in > 0 &&
-          thread->rand.OneIn(FLAGS_set_in_place_one_in)) {
-        options_.inplace_update_support ^= options_.inplace_update_support;
-      }
-
       if (!FLAGS_test_batches_snapshots &&
           FLAGS_clear_column_family_one_in != 0 && FLAGS_column_families > 1) {
         if (thread->rand.OneIn(FLAGS_clear_column_family_one_in)) {
@@ -2004,7 +1992,6 @@ class StressTest {
     fprintf(stdout, "Num times DB reopens      : %d\n", FLAGS_reopen);
     fprintf(stdout, "Batches/snapshots         : %d\n",
             FLAGS_test_batches_snapshots);
-    fprintf(stdout, "Do update in place        : %d\n", FLAGS_in_place_update);
     fprintf(stdout, "Num keys per lock         : %d\n",
             1 << FLAGS_log2_keys_per_lock);
     std::string compression = CompressionTypeToString(FLAGS_compression_type_e);
@@ -2080,7 +2067,6 @@ class StressTest {
     options_.compression = FLAGS_compression_type_e;
     options_.create_if_missing = true;
     options_.max_manifest_file_size = 10 * 1024;
-    options_.inplace_update_support = FLAGS_in_place_update;
     options_.max_subcompactions = static_cast<uint32_t>(FLAGS_subcompactions);
     options_.allow_concurrent_memtable_write =
         FLAGS_allow_concurrent_memtable_write;

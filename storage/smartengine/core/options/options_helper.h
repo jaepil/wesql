@@ -459,10 +459,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
     TablePropertiesCollectorFactories table_properties_collector_factories;
     typedef std::vector<std::shared_ptr<TablePropertiesCollectorFactory>>
         TablePropertiesCollectorFactories;
-    UpdateStatus (*inplace_callback)(char* existing_value,
-                                     uint34_t* existing_value_size,
-                                     common::Slice delta_value,
-                                     std::string* merged_value);
      */
     {"report_bg_io_stats",
      {offset_of(&ColumnFamilyOptions::report_bg_io_stats), OptionType::kBoolean,
@@ -476,9 +472,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
       offsetof(struct MutableCFOptions, disable_auto_compactions)}},
     {"filter_deletes",
      {0, OptionType::kBoolean, OptionVerificationType::kDeprecated, true, 0}},
-    {"inplace_update_support",
-     {offset_of(&ColumnFamilyOptions::inplace_update_support),
-      OptionType::kBoolean, OptionVerificationType::kNormal, false, 0}},
     {"level_compaction_dynamic_level_bytes",
      {offset_of(&ColumnFamilyOptions::level_compaction_dynamic_level_bytes),
       OptionType::kBoolean, OptionVerificationType::kNormal, false, 0}},
@@ -570,10 +563,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
      {offset_of(&ColumnFamilyOptions::arena_block_size), OptionType::kSizeT,
       OptionVerificationType::kNormal, true,
       offsetof(struct MutableCFOptions, arena_block_size)}},
-    {"inplace_update_num_locks",
-     {offset_of(&ColumnFamilyOptions::inplace_update_num_locks),
-      OptionType::kSizeT, OptionVerificationType::kNormal, true,
-      offsetof(struct MutableCFOptions, inplace_update_num_locks)}},
     {"memtable_huge_page_size",
      {offset_of(&ColumnFamilyOptions::memtable_huge_page_size),
       OptionType::kSizeT, OptionVerificationType::kNormal, true,

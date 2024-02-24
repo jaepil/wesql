@@ -839,31 +839,6 @@ class DBTestBase : public testing::Test {
 
   void VerifyIterLast(std::string expected_key, int cf = 0);
 
-  // Used to test InplaceUpdate
-
-  // If previous value is nullptr or delta is > than previous value,
-  //   sets newValue with delta
-  // If previous value is not empty,
-  //   updates previous value with 'b' string of previous value size - 1.
-  static common::UpdateStatus updateInPlaceSmallerSize(char* prevValue,
-                                                       uint32_t* prevSize,
-                                                       common::Slice delta,
-                                                       std::string* newValue);
-
-  static common::UpdateStatus updateInPlaceSmallerVarintSize(
-      char* prevValue, uint32_t* prevSize, common::Slice delta,
-      std::string* newValue);
-
-  static common::UpdateStatus updateInPlaceLargerSize(char* prevValue,
-                                                      uint32_t* prevSize,
-                                                      common::Slice delta,
-                                                      std::string* newValue);
-
-  static common::UpdateStatus updateInPlaceNoAction(char* prevValue,
-                                                    uint32_t* prevSize,
-                                                    common::Slice delta,
-                                                    std::string* newValue);
-
   void CopyFile(const std::string& source, const std::string& destination,
                 uint64_t size = 0);
 

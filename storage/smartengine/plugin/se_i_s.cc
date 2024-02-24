@@ -472,9 +472,6 @@ static int se_i_s_cfoptions_fill_table(
       {"MEMTABLE_FACTORY", opts.memtable_factory == nullptr
                                 ? "NULL"
                                 : opts.memtable_factory->Name()},
-      {"INPLACE_UPDATE_SUPPORT", opts.inplace_update_support ? "ON" : "OFF"},
-      {"INPLACE_UPDATE_NUM_LOCKS",
-        opts.inplace_update_num_locks ? "ON" : "OFF"},
       {"MEMTABLE_PREFIX_BLOOM_HUGE_PAGE_TLB_SIZE",
         std::to_string(opts.memtable_huge_page_size)},
       {"BLOOM_LOCALITY", std::to_string(opts.bloom_locality)},

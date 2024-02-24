@@ -1045,56 +1045,6 @@ void DBTestBase::VerifyIterLast(std::string expected_key, int cf) {
   delete iter;
 }
 
-// Used to test InplaceUpdate
-
-// If previous value is nullptr or delta is > than previous value,
-//   sets newValue with delta
-// If previous value is not empty,
-//   updates previous value with 'b' string of previous value size - 1.
-UpdateStatus DBTestBase::updateInPlaceSmallerSize(char* prevValue,
-                                                  uint32_t* prevSize,
-                                                  Slice delta,
-                                                  std::string* newValue) {
-  if (prevValue == nullptr) {
-    *newValue = std::string(delta.size(), 'c');
-    return UpdateStatus::UPDATED;
-  } else {
-    *prevSize = *prevSize - 1;
-    std::string str_b = std::string(*prevSize, 'b');
-    memcpy(prevValue, str_b.c_str(), str_b.size());
-    return UpdateStatus::UPDATED_INPLACE;
-  }
-}
-
-UpdateStatus DBTestBase::updateInPlaceSmallerVarintSize(char* prevValue,
-                                                        uint32_t* prevSize,
-                                                        Slice delta,
-                                                        std::string* newValue) {
-  if (prevValue == nullptr) {
-    *newValue = std::string(delta.size(), 'c');
-    return UpdateStatus::UPDATED;
-  } else {
-    *prevSize = 1;
-    std::string str_b = std::string(*prevSize, 'b');
-    memcpy(prevValue, str_b.c_str(), str_b.size());
-    return UpdateStatus::UPDATED_INPLACE;
-  }
-}
-
-UpdateStatus DBTestBase::updateInPlaceLargerSize(char* prevValue,
-                                                 uint32_t* prevSize,
-                                                 Slice delta,
-                                                 std::string* newValue) {
-  *newValue = std::string(delta.size(), 'c');
-  return UpdateStatus::UPDATED;
-}
-
-UpdateStatus DBTestBase::updateInPlaceNoAction(char* prevValue,
-                                               uint32_t* prevSize, Slice delta,
-                                               std::string* newValue) {
-  return UpdateStatus::UPDATE_FAILED;
-}
-
 void DBTestBase::CopyFile(const std::string& source,
                           const std::string& destination, uint64_t size) {
   const util::EnvOptions soptions;

@@ -54,9 +54,6 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
           options.min_write_buffer_number_to_merge),
       max_write_buffer_number_to_maintain(
           options.max_write_buffer_number_to_maintain),
-      inplace_update_support(options.inplace_update_support),
-      inplace_update_num_locks(options.inplace_update_num_locks),
-      inplace_callback(options.inplace_callback),
       memtable_huge_page_size(options.memtable_huge_page_size),
       bloom_locality(options.bloom_locality),
       arena_block_size(options.arena_block_size),
@@ -392,12 +389,6 @@ void ColumnFamilyOptions::Dump() const {
   }
   __SE_LOG(INFO, "      Options.table_properties_collectors: %s",
                    collector_names.c_str());
-  __SE_LOG(INFO, "           Options.inplace_update_support: %d",
-                   inplace_update_support);
-  __SE_LOG(
-      INFO, "         Options.inplace_update_num_locks: %" ROCKSDB_PRIszt,
-      inplace_update_num_locks);
-
   __SE_LOG(INFO,
                 "          Options.memtable_huge_page_size: %" ROCKSDB_PRIszt,
                 memtable_huge_page_size);

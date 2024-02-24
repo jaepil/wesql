@@ -77,9 +77,6 @@ MemTableOptions::MemTableOptions(const ImmutableCFOptions& ioptions,
       flush_delete_record_trigger(mutable_cf_options.flush_delete_record_trigger),
       arena_block_size(mutable_cf_options.arena_block_size),
       memtable_huge_page_size(mutable_cf_options.memtable_huge_page_size),
-      inplace_update_support(ioptions.inplace_update_support),
-      inplace_update_num_locks(mutable_cf_options.inplace_update_num_locks),
-      inplace_callback(ioptions.inplace_callback),
       statistics(ioptions.statistics)
 {}
 
@@ -114,9 +111,6 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       recovery_point_(),
       min_prep_log_referenced_(0),
       temp_min_prep_log_(UINT64_MAX),
-      locks_(moptions_.inplace_update_support
-                 ? moptions_.inplace_update_num_locks
-                 : 0),
       flush_state_(FLUSH_NOT_REQUESTED),
       env_(ioptions.env),
       no_flush_(false),
@@ -396,8 +390,8 @@ class MemTableIterator : public InternalIterator {
                    Arena* arena)
       : comparator_(mem.comparator_),
         valid_(false),
-        arena_mode_(arena != nullptr),
-        value_pinned_(!mem.GetMemTableOptions()->inplace_update_support) {
+        arena_mode_(arena != nullptr)
+  {
     iter_ = mem.table_->GetIterator(arena);
     set_source(ROW_SOURCE_MEMTABLE);
   }
@@ -480,17 +474,13 @@ class MemTableIterator : public InternalIterator {
     return true;
   }
 
-  virtual bool IsValuePinned() const override {
-    // memtable value is always pinned, except if we allow inplace update.
-    return value_pinned_;
-  }
+  virtual bool IsValuePinned() const override { return true; }
 
  private:
   const MemTable::KeyComparator comparator_;
   MemTableRep::Iterator* iter_;
   bool valid_;
   bool arena_mode_;
-  bool value_pinned_;
 
   // No copying allowed
   MemTableIterator(const MemTableIterator&);
@@ -512,11 +502,6 @@ InternalIterator* MemTable::NewDumpIterator(const ReadOptions& read_options,
                                             Arena &arena) const {
   InternalIterator *mem_iter = NewIterator(read_options, &arena);
   return PLACEMENT_NEW(DumpMemIterator, arena, max_seq, mem_iter);
-}
-
-port::RWMutex* MemTable::GetLock(const Slice& key) {
-  static murmur_hash hash;
-  return &locks_[hash(key) % locks_.size()];
 }
 
 MemTable::MemTableStats MemTable::ApproximateStats(const Slice& start_ikey,
@@ -636,7 +621,6 @@ struct Saver {
   SequenceNumber seq;
   MemTable* mem;
   Statistics* statistics;
-  bool inplace_update_support;
   Env* env_;
 };
 }  // namespace
@@ -665,16 +649,10 @@ static bool SaveValue(void* arg, const char* entry) {
 
     switch (type) {
       case kTypeValue: {
-        if (s->inplace_update_support) {
-          s->mem->GetLock(s->key->user_key())->ReadLock();
-        }
         Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
         *(s->status) = Status::OK();
         if (nullptr != s->value) {
           s->value->assign(v.data(), v.size());
-        }
-        if (s->inplace_update_support) {
-          s->mem->GetLock(s->key->user_key())->ReadUnlock();
         }
         *(s->found_final_value) = true;
         return false;
@@ -716,7 +694,6 @@ bool MemTable::Get(LookupKey& key,
   saver.value = value;
   saver.seq = kMaxSequenceNumber;
   saver.mem = this;
-  saver.inplace_update_support = moptions_.inplace_update_support;
   saver.statistics = moptions_.statistics;
   saver.env_ = env_;
   table_->Get(key, &saver, SaveValue);
@@ -724,136 +701,6 @@ bool MemTable::Get(LookupKey& key,
   *seq = saver.seq;
 
   return found_final_value;
-}
-
-void MemTable::Update(SequenceNumber seq, const Slice& key,
-                      const Slice& value) {
-  LookupKey lkey(key, seq);
-  Slice mem_key = lkey.memtable_key();
-
-  std::unique_ptr<MemTableRep::Iterator> iter(
-      table_->GetDynamicPrefixIterator());
-  iter->Seek(lkey.internal_key(), mem_key.data());
-
-  if (iter->Valid()) {
-    // entry format is:
-    //    key_length  varint32
-    //    userkey  char[klength-8]
-    //    tag      uint64
-    //    vlength  varint32
-    //    value    char[vlength]
-    // Check that it belongs to same user key.  We do not check the
-    // sequence number since the Seek() call above should have skipped
-    // all entries with overly large sequence numbers.
-    const char* entry = iter->key();
-    uint32_t key_length = 0;
-    const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
-    if (comparator_.comparator.user_comparator()->Equal(
-            Slice(key_ptr, key_length - 8), lkey.user_key())) {
-      // Correct user key
-      const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
-      ValueType type;
-      SequenceNumber unused;
-      UnPackSequenceAndType(tag, &unused, &type);
-      if (type == kTypeValue) {
-        Slice prev_value = GetLengthPrefixedSlice(key_ptr + key_length);
-        uint32_t prev_size = static_cast<uint32_t>(prev_value.size());
-        uint32_t new_size = static_cast<uint32_t>(value.size());
-
-        // Update value, if new value size  <= previous value size
-        if (new_size <= prev_size) {
-          char* p =
-              EncodeVarint32(const_cast<char*>(key_ptr) + key_length, new_size);
-          WriteLock wl(GetLock(lkey.user_key()));
-          memcpy(p, value.data(), value.size());
-          assert((unsigned)((p + value.size()) - entry) ==
-                 (unsigned)(VarintLength(key_length) + key_length +
-                            VarintLength(value.size()) + value.size()));
-          return;
-        }
-      }
-    }
-  }
-
-  // key doesn't exist
-  Add(seq, kTypeValue, key, value);
-}
-
-bool MemTable::UpdateCallback(SequenceNumber seq, const Slice& key,
-                              const Slice& delta) {
-  LookupKey lkey(key, seq);
-  Slice memkey = lkey.memtable_key();
-
-  std::unique_ptr<MemTableRep::Iterator> iter(
-      table_->GetDynamicPrefixIterator());
-  iter->Seek(lkey.internal_key(), memkey.data());
-
-  if (iter->Valid()) {
-    // entry format is:
-    //    key_length  varint32
-    //    userkey  char[klength-8]
-    //    tag      uint64
-    //    vlength  varint32
-    //    value    char[vlength]
-    // Check that it belongs to same user key.  We do not check the
-    // sequence number since the Seek() call above should have skipped
-    // all entries with overly large sequence numbers.
-    const char* entry = iter->key();
-    uint32_t key_length = 0;
-    const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
-    if (comparator_.comparator.user_comparator()->Equal(
-            Slice(key_ptr, key_length - 8), lkey.user_key())) {
-      // Correct user key
-      const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
-      ValueType type;
-      uint64_t unused;
-      UnPackSequenceAndType(tag, &unused, &type);
-      switch (type) {
-        case kTypeValue: {
-          Slice prev_value = GetLengthPrefixedSlice(key_ptr + key_length);
-          uint32_t prev_size = static_cast<uint32_t>(prev_value.size());
-
-          char* prev_buffer = const_cast<char*>(prev_value.data());
-          uint32_t new_prev_size = prev_size;
-
-          std::string str_value;
-          WriteLock wl(GetLock(lkey.user_key()));
-          auto status = moptions_.inplace_callback(prev_buffer, &new_prev_size,
-                                                   delta, &str_value);
-          if (status == UpdateStatus::UPDATED_INPLACE) {
-            // Value already updated by callback.
-            assert(new_prev_size <= prev_size);
-            if (new_prev_size < prev_size) {
-              // overwrite the new prev_size
-              char* p = EncodeVarint32(const_cast<char*>(key_ptr) + key_length,
-                                       new_prev_size);
-              if (VarintLength(new_prev_size) < VarintLength(prev_size)) {
-                // shift the value buffer as well.
-                memcpy(p, prev_buffer, new_prev_size);
-              }
-            }
-            QUERY_COUNT(CountPoint::NUMBER_KEYS_UPDATE);
-            UpdateFlushState();
-            return true;
-          } else if (status == UpdateStatus::UPDATED) {
-            Add(seq, kTypeValue, key, Slice(str_value));
-            QUERY_COUNT(CountPoint::NUMBER_KEYS_WRITTEN);
-            UpdateFlushState();
-            return true;
-          } else if (status == UpdateStatus::UPDATE_FAILED) {
-            // No action required. Return.
-            UpdateFlushState();
-            return true;
-          }
-        }
-        default:
-          break;
-      }
-    }
-  }
-  // If the latest value is not kTypeValue
-  // or key doesn't exist
-  return false;
 }
 
 // We do not check flush_delete_record_trigger here, since this memtable has

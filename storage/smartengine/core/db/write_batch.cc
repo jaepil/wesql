@@ -969,52 +969,8 @@ class MemTableInserter : public WriteBatch::Handler {
 
     MemTable* mem = cf_mems_->GetMemTable();
     auto* moptions = mem->GetMemTableOptions();
-    if (!moptions->inplace_update_support) {
-      mem->Add(sequence_, kTypeValue, key, value, concurrent_memtable_writes_,
-               get_post_process_info(mem));
-    } else if (moptions->inplace_callback == nullptr) {
-      assert(!concurrent_memtable_writes_);
-      mem->Update(sequence_, key, value);
-      QUERY_COUNT(CountPoint::NUMBER_KEYS_UPDATE);
-    } else {
-      assert(!concurrent_memtable_writes_);
-      if (mem->UpdateCallback(sequence_, key, value)) {
-      } else {
-        // key not found in memtable. Do sst get, update, add
-        SnapshotImpl read_from_snapshot;
-        read_from_snapshot.number_ = sequence_;
-        ReadOptions ropts;
-        ropts.snapshot = &read_from_snapshot;
-
-        std::string prev_value;
-        std::string merged_value;
-
-        auto cf_handle = cf_mems_->GetColumnFamilyHandle();
-        common::Status s = common::Status::NotSupported();
-        if (db_ != nullptr && recovering_log_number_ == 0) {
-          if (cf_handle == nullptr) {
-            cf_handle = db_->DefaultColumnFamily();
-          }
-          s = db_->Get(ropts, cf_handle, key, &prev_value);
-        }
-
-        char* prev_buffer = const_cast<char*>(prev_value.c_str());
-        uint32_t prev_size = static_cast<uint32_t>(prev_value.size());
-        auto status = moptions->inplace_callback(s.ok() ? prev_buffer : nullptr,
-                                                 s.ok() ? &prev_size : nullptr,
-                                                 value, &merged_value);
-        if (status == UpdateStatus::UPDATED_INPLACE) {
-          // prev_value is updated in-place with final value.
-          mem->Add(sequence_, kTypeValue, key,
-                   common::Slice(prev_buffer, prev_size));
-          QUERY_COUNT(CountPoint::NUMBER_KEYS_WRITTEN);
-        } else if (status == UpdateStatus::UPDATED) {
-          // merged_value contains the final value.
-          mem->Add(sequence_, kTypeValue, key, common::Slice(merged_value));
-          QUERY_COUNT(CountPoint::NUMBER_KEYS_WRITTEN);
-        }
-      }
-    }
+    mem->Add(sequence_, kTypeValue, key, value, concurrent_memtable_writes_,
+             get_post_process_info(mem));
     // Since all Puts are logged in trasaction logs (if enabled), always bump
     // sequence number. Even if the update eventually fails and does not result
     // in memtable add/update.

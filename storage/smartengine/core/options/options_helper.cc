@@ -183,8 +183,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
   cf_opts.max_write_buffer_number = mutable_cf_options.max_write_buffer_number;
   cf_opts.arena_block_size = mutable_cf_options.arena_block_size;
   cf_opts.memtable_huge_page_size = mutable_cf_options.memtable_huge_page_size;
-  cf_opts.inplace_update_num_locks =
-      mutable_cf_options.inplace_update_num_locks;
 
   // Compaction related options
   cf_opts.disable_auto_compactions =

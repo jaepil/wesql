@@ -139,11 +139,6 @@ Status CheckCompressionSupported(const ColumnFamilyOptions& cf_options) {
 }
 
 Status CheckConcurrentWritesSupported(const ColumnFamilyOptions& cf_options) {
-  if (cf_options.inplace_update_support) {
-    return Status::InvalidArgument(
-        "In-place memtable updates (inplace_update_support) is not compatible "
-        "with concurrent writes (allow_concurrent_memtable_write)");
-  }
   if (!cf_options.memtable_factory->IsInsertConcurrentlySupported()) {
     return Status::InvalidArgument(
         "Memtable doesn't concurrent writes (allow_concurrent_memtable_write)");

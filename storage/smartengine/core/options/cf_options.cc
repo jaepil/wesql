@@ -47,8 +47,6 @@ ImmutableCFOptions::ImmutableCFOptions(const ImmutableDBOptions& db_options,
           cf_options.min_write_buffer_number_to_merge),
       max_write_buffer_number_to_maintain(
           cf_options.max_write_buffer_number_to_maintain),
-      inplace_update_support(cf_options.inplace_update_support),
-      inplace_callback(cf_options.inplace_callback),
       statistics(db_options.statistics.get()),
       rate_limiter(db_options.rate_limiter.get()),
       env(db_options.env),
@@ -135,9 +133,6 @@ void MutableCFOptions::Dump() const {
   __SE_LOG(INFO,
                  "                  memtable_huge_page_size: %" ROCKSDB_PRIszt,
                  memtable_huge_page_size);
-  __SE_LOG(INFO,
-                 "                 inplace_update_num_locks: %" ROCKSDB_PRIszt,
-                 inplace_update_num_locks);
   __SE_LOG(INFO, "                 disable_auto_compactions: %d",
                  disable_auto_compactions);
   __SE_LOG(INFO, "      soft_pending_compaction_bytes_limit: %" PRIu64,
