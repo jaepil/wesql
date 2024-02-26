@@ -35,7 +35,6 @@
 #include "util/filename.h"
 #include "util/mutexlock.h"
 #include "smartengine/cache.h"
-#include "smartengine/compaction_filter.h"
 #include "smartengine/convenience.h"
 #include "smartengine/db.h"
 #include "smartengine/env.h"
@@ -551,33 +550,6 @@ class SpecialEnv : public util::EnvWrapper {
   std::atomic<bool> is_wal_sync_thread_safe_{true};
 };
 
-#ifndef ROCKSDB_LITE
-class OnFileDeletionListener : public common::EventListener {
- public:
-  OnFileDeletionListener() : matched_count_(0), expected_file_name_("") {}
-
-  void SetExpectedFileName(const std::string file_name) {
-    expected_file_name_ = file_name;
-  }
-
-  void VerifyMatchedCount(size_t expected_value) {
-    ASSERT_EQ(matched_count_, expected_value);
-  }
-
-  void OnTableFileDeleted(const common::TableFileDeletionInfo& info) override {
-    if (expected_file_name_ != "") {
-      ASSERT_EQ(expected_file_name_, info.file_path);
-      expected_file_name_ = "";
-      matched_count_++;
-    }
-  }
-
- private:
-  size_t matched_count_;
-  std::string expected_file_name_;
-};
-#endif
-
 class DBTestBase : public testing::Test {
  protected:
   // Sequence of option configurations to try
@@ -668,9 +640,6 @@ class DBTestBase : public testing::Test {
   // Switch to a fresh database with the next option configuration to
   // test.  Return false if there are no more configurations to test.
   bool ChangeOptions(int skip_mask = kNoSkip);
-
-  // Switch between different compaction styles.
-  bool ChangeCompactOptions();
 
   // Switch between different WAL-realted options.
   bool ChangeWalOptions();
@@ -783,36 +752,10 @@ class DBTestBase : public testing::Test {
 
   double CompressionRatioAtLevel(int level, int cf = 0);
 
-  int TotalTableFiles(int cf = 0, int levels = -1);
-
-  // Return spread of files per level
-  std::string FilesPerLevel(int cf = 0);
-
   size_t CountFiles();
 
   uint64_t Size(const common::Slice& start, const common::Slice& limit,
                 int cf = 0);
-
-  void Compact(int cf, const common::Slice& start, const common::Slice& limit,
-               uint32_t target_path_id);
-
-  void Compact(int cf, const common::Slice& start, const common::Slice& limit);
-
-  void Compact(const common::Slice& start, const common::Slice& limit);
-
-  // Do n memtable compactions, each of which produces an sstable
-  // covering the range [small,large].
-  void MakeTables(int n, const std::string& small, const std::string& large,
-                  int cf = 0);
-
-  // Prevent pushing of new sstables into deeper levels by adding
-  // tables that cover a specified range to all levels.
-  void FillLevels(const std::string& smallest, const std::string& largest,
-                  int cf);
-
-  void MoveFilesToLevel(int level, int cf = 0);
-
-  void DumpFileCounts(const char* label);
 
   std::string DumpSSTableList();
 

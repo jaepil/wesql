@@ -51,19 +51,6 @@ uint64_t DBImpl::TEST_Current_Manifest_FileNo() {
   return versions_->manifest_file_number();
 }
 
-Status DBImpl::TEST_CompactRange(int level, const Slice* begin,
-                                 const Slice* end,
-                                 ColumnFamilyHandle* column_family,
-                                 bool disallow_trivial_move) {
-  Status s = CompactRange(CompactRangeOptions(), column_family, begin, end, TaskType::STREAM_COMPACTION_TASK);
-  if (!s.ok()) {
-    return s;
-  } else {
-    TEST_WaitForCompact();
-    return s;
-  }
-}
-
 Status DBImpl::TEST_FlushMemTable(bool wait, ColumnFamilyHandle* cfh) {
   FlushOptions fo;
   fo.wait = wait;

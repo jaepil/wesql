@@ -492,7 +492,6 @@ set(SOURCES
         #util/auto_roll_logger.cc
         util/bloom.cc
         util/coding.cc
-        util/compaction_job_stats_impl.cc
         util/comparator.cc
         util/concurrent_arena.cc
         util/crc32c.cc
@@ -529,7 +528,6 @@ set(SOURCES
         util/aio_wrapper.cc
         #util/alloc_mgr.cc
         #util/mod_info.cc
-        compact/meta_data.cc
         compact/reuse_block_merge_iterator.cc
         compact/range_iterator.cc
         #        compact/minor_compaction.cc
@@ -542,9 +540,6 @@ set(SOURCES
         compact/task_type.cc
         compact/compaction_iterator.cc
         compact/new_compaction_iterator.cc
-        fpga/multi_way_block_merge.cc
-        fpga/multi_way_block_merge_stats.cc
-        fpga/fpga_compaction_job.cc
         utilities/checkpoint/checkpoint.cc
         utilities/checkpoint/hotbackup_impl.cc
         utilities/transactions/optimistic_transaction_db_impl.cc
@@ -573,12 +568,6 @@ else()
     port/port_posix.cc
     env/env_posix.cc
     env/io_posix.cc)
-endif()
-
-if(WITH_FPAG_COMPACTION)
-  add_definitions(-DFPGA_COMPACTION)
-  set(FPGA_COMPACTION_LIBS fpga_compaction glog)
-  list(APPEND THIRDPARTY_LIBS ${FPGA_COMPACTION_LIBS})
 endif()
 
 # add common target to build objects from files for shared/static library target

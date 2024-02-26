@@ -38,7 +38,6 @@ struct ImmutableDBOptions {
   std::vector<DbPath> db_paths;
   std::string db_log_dir;
   std::string wal_dir;
-  uint32_t max_subcompactions;
   int max_background_flushes;
   size_t max_log_file_size;
   size_t log_file_time_to_roll;
@@ -67,7 +66,6 @@ struct ImmutableDBOptions {
   bool use_adaptive_mutex;
   uint64_t bytes_per_sync;
   uint64_t wal_bytes_per_sync;
-  std::vector<std::shared_ptr<EventListener>> listeners;
   bool enable_thread_tracking;
   bool allow_concurrent_memtable_write;
   bool enable_write_thread_adaptive_yield;
@@ -85,11 +83,6 @@ struct ImmutableDBOptions {
 #endif  // ROCKSDB_LITE
   bool fail_if_options_file_error;
   bool avoid_flush_during_recovery;
-  uint64_t compaction_type;
-  uint64_t compaction_mode;
-  uint64_t cpu_compaction_thread_num;
-  uint64_t fpga_compaction_thread_num;
-  uint64_t fpga_device_id;
   uint64_t table_cache_size;
 };
 

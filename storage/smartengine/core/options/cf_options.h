@@ -23,11 +23,6 @@ namespace table {
 class FilterManager;
 }
 
-namespace storage {
-class CompactionFilter;
-class CompactionFilterFactory;
-}
-
 namespace common {
 
 // ImmutableCFOptions is a data struct used by smartengine internal. It contains a
@@ -41,19 +36,9 @@ struct ImmutableCFOptions {
   ImmutableCFOptions(const ImmutableDBOptions& db_options,
                      const ColumnFamilyOptions& cf_options);
 
-  CompactionStyle compaction_style;
-
-  CompactionPri compaction_pri;
-
-  CompactionOptionsUniversal compaction_options_universal;
-  CompactionOptionsFIFO compaction_options_fifo;
-
   const util::Comparator* user_comparator;
   db::InternalKeyComparator internal_comparator;
 
-  const storage::CompactionFilter* compaction_filter;
-
-  storage::CompactionFilterFactory* compaction_filter_factory;
 
   int min_write_buffer_number_to_merge;
 
@@ -112,13 +97,7 @@ struct ImmutableCFOptions {
 
   bool force_consistency_checks;
 
-  // A vector of EventListeners which call-back functions will be called
-  // when specific event happens.
-  std::vector<std::shared_ptr<EventListener>> listeners;
-
   std::shared_ptr<cache::RowCache> row_cache;
-
-  uint32_t max_subcompactions;
 
   std::shared_ptr<table::FilterManager> filter_manager;
 };
@@ -142,19 +121,14 @@ struct MutableCFOptions {
             options.level0_file_num_compaction_trigger),
         level0_layer_num_compaction_trigger(
             options.level0_layer_num_compaction_trigger),
-        minor_window_size(options.minor_window_size),
         level1_extents_major_compaction_trigger(
             options.level1_extents_major_compaction_trigger),
         level2_usage_percent(options.level2_usage_percent),
-        level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
-        level0_stop_writes_trigger(options.level0_stop_writes_trigger),
         max_compaction_bytes(options.max_compaction_bytes),
         target_file_size_base(options.target_file_size_base),
         target_file_size_multiplier(options.target_file_size_multiplier),
         max_bytes_for_level_base(options.max_bytes_for_level_base),
         max_bytes_for_level_multiplier(options.max_bytes_for_level_multiplier),
-        max_bytes_for_level_multiplier_additional(
-            options.max_bytes_for_level_multiplier_additional),
         max_sequential_skip_in_iterations(
             options.max_sequential_skip_in_iterations),
         paranoid_file_checks(options.paranoid_file_checks),
@@ -165,7 +139,6 @@ struct MutableCFOptions {
         bottommost_level(options.bottommost_level),
         compaction_task_extents_limit(options.compaction_task_extents_limit)
         {
-    RefreshDerivedOptions(options.num_levels, options.compaction_style);
   }
 
   MutableCFOptions()
@@ -182,11 +155,8 @@ struct MutableCFOptions {
         hard_pending_compaction_bytes_limit(0),
         level0_file_num_compaction_trigger(0),
         level0_layer_num_compaction_trigger(0),
-        minor_window_size(0),
         level1_extents_major_compaction_trigger(0),
         level2_usage_percent(0),
-        level0_slowdown_writes_trigger(0),
-        level0_stop_writes_trigger(0),
         max_compaction_bytes(0),
         target_file_size_base(0),
         target_file_size_multiplier(0),
@@ -201,23 +171,6 @@ struct MutableCFOptions {
         scan_add_blocks_limit(0),
         bottommost_level(2),
         compaction_task_extents_limit(512) {}
-
-  // Must be called after any change to MutableCFOptions
-  void RefreshDerivedOptions(int num_levels, CompactionStyle compaction_style);
-
-  void RefreshDerivedOptions(const ImmutableCFOptions& ioptions) {
-    RefreshDerivedOptions(ioptions.num_levels, ioptions.compaction_style);
-  }
-
-  // Get the max file size in a given level.
-  uint64_t MaxFileSizeForLevel(int level) const;
-  int MaxBytesMultiplerAdditional(int level) const {
-    if (level >=
-        static_cast<int>(max_bytes_for_level_multiplier_additional.size())) {
-      return 1;
-    }
-    return max_bytes_for_level_multiplier_additional[level];
-  }
 
   void Dump() const;
 
@@ -237,11 +190,8 @@ struct MutableCFOptions {
   uint64_t hard_pending_compaction_bytes_limit;
   int level0_file_num_compaction_trigger;
   int level0_layer_num_compaction_trigger;
-  int minor_window_size;
   int level1_extents_major_compaction_trigger;
   int64_t level2_usage_percent;
-  int level0_slowdown_writes_trigger;
-  int level0_stop_writes_trigger;
   uint64_t max_compaction_bytes;
   uint64_t target_file_size_base;
   int target_file_size_multiplier;
@@ -256,15 +206,10 @@ struct MutableCFOptions {
   CompressionType compression;
   bool background_disable_merge;
 
-  // Derived options
-  // Per-level target file size.
-  std::vector<uint64_t> max_file_size;
   uint64_t scan_add_blocks_limit;
   int bottommost_level;
   int compaction_task_extents_limit;
 };
-
-uint64_t MultiplyCheckOverflow(uint64_t op1, double op2);
 
 }  // namespace common
 }  // namespace smartengine

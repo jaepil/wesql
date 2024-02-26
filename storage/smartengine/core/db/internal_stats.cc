@@ -485,9 +485,6 @@ const std::unordered_map<std::string, DBPropertyInfo>
         {DB::Properties::kAggregatedTableProperties,
          {false, &InternalStats::HandleAggregatedTableProperties, nullptr,
           nullptr}},
-        {DB::Properties::kAggregatedTablePropertiesAtLevel,
-         {false, &InternalStats::HandleAggregatedTablePropertiesAtLevel,
-          nullptr, nullptr}},
         {DB::Properties::kNumImmutableMemTable,
          {false, nullptr, &InternalStats::HandleNumImmutableMemTable, nullptr}},
         {DB::Properties::kNumImmutableMemTableFlushed,
@@ -797,27 +794,6 @@ bool InternalStats::HandleAggregatedTableProperties(std::string* value,
   */
   return true;
 }
-
-bool InternalStats::HandleAggregatedTablePropertiesAtLevel(std::string* value,
-                                                           Slice suffix,
-                                                           DBImpl* db) {
-  uint64_t level;
-  bool ok = ConsumeDecimalNumber(&suffix, &level) && suffix.empty();
-  if (!ok || static_cast<int>(level) >= number_levels_) {
-    return false;
-  }
-  std::shared_ptr<const TableProperties> tp;
-  /*
-  auto s = cfd_->current()->GetAggregatedTableProperties(
-      &tp, static_cast<int>(level));
-  if (!s.ok()) {
-    return false;
-  }
-  *value = tp->ToString();
-  */
-  return true;
-}
-
 bool InternalStats::HandleNumImmutableMemTable(uint64_t* value, DBImpl* db)
 {
   *value = cfd_->imm()->NumNotFlushed();

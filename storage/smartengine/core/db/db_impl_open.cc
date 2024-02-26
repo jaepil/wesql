@@ -71,13 +71,6 @@ DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src) {
     result.base_background_compactions = result.max_background_compactions;
   }
 
-  if (result.compaction_type > 1) {
-    result.compaction_type = 0;
-  }
-  if (result.cpu_compaction_thread_num < (uint64_t)result.max_background_compactions) {
-    result.cpu_compaction_thread_num = (uint64_t)result.max_background_compactions; 
-  }
-
   result.env->IncBackgroundThreadsIfNeeded(src.max_background_compactions,
                                            Env::Priority::LOW);
   result.env->IncBackgroundThreadsIfNeeded(src.max_background_flushes,
@@ -160,14 +153,6 @@ static Status ValidateOptions(
     }
     if (!s.ok()) {
       return s;
-    }
-    if (db_options.db_paths.size() > 1) {
-      if ((cfd.options.compaction_style != kCompactionStyleUniversal) &&
-          (cfd.options.compaction_style != kCompactionStyleLevel)) {
-        return Status::NotSupported(
-            "More than one DB paths are only supported in "
-            "universal and level compaction styles. ");
-      }
     }
   }
 
@@ -2199,8 +2184,6 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
             table_opts.cache_index_and_filter_blocks_with_high_priority,
             db_options.filter_queue_stripes, db_options.filter_building_threads,
             &(impl->filter_build_quota_));
-      }
-      if (sub_table->ioptions()->compaction_style == kCompactionStyleFIFO) {
       }
       if (!sub_table->mem()->IsSnapshotSupported()) {
         impl->is_snapshot_supported_ = false;

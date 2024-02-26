@@ -100,35 +100,6 @@ DEFINE_TO_STRING(CompactRecordStats,
                  KV(micros),
                  KV(write_amp));
 
-MinorCompactStats::MinorCompactStats() { reset(); }
-
-void MinorCompactStats::reset() {
-  memset(this, 0, sizeof(MinorCompactStats));
-}
-
-MinorCompactStats &MinorCompactStats::add(const MinorCompactStats &stats) {
-  split_minor_tasks += stats.split_minor_tasks;
-  trival_minor_tasks += stats.trival_minor_tasks;
-  total_minor_ways += stats.total_minor_ways;
-  total_minor_blocks += stats.total_minor_blocks;
-  shared_blocks += stats.shared_blocks;
-  cliped_blocks += stats.cliped_blocks;
-  return *this;
-}
-
-DEFINE_SERIALIZATION(MinorCompactStats,
-                     split_minor_tasks, trival_minor_tasks,
-                     total_minor_ways, total_minor_blocks, shared_blocks,
-                     cliped_blocks);
-
-DEFINE_TO_STRING(MinorCompactStats,
-                 KV(split_minor_tasks),
-                 KV(trival_minor_tasks),
-                 KV(total_minor_ways),
-                 KV(total_minor_blocks),
-                 KV(shared_blocks),
-                 KV(cliped_blocks));
-
 CompactPerfStats::CompactPerfStats() { reset(); }
 
 void CompactPerfStats::reset() { memset(this, 0, sizeof(CompactPerfStats)); }

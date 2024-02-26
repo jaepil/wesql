@@ -32,7 +32,6 @@ namespace db {
 
 CompactionTasksPicker::CompactionTasksPicker(
     common::MutableCFOptions &mutable_cf_options,
-    const uint64_t compaction_type,
     const uint32_t cf_id,
     const bool dynamic_trigger_adjust)
     : last_pick_task_(),
@@ -50,7 +49,6 @@ CompactionTasksPicker::CompactionTasksPicker(
       cf_id_(cf_id),
       mcf_options_(mutable_cf_options),
       minor_merge_limit_(0),
-      minor_compaction_type_(compaction_type),
       dynamic_trigger_adjust_(dynamic_trigger_adjust)
 {
   last_check_time_ = Env::Default()->NowMicros();
@@ -117,13 +115,7 @@ TaskType CompactionTasksPicker::pick_one_manual_task(const SnapshotImpl* snapsho
       break;
     }
     case MINOR_COMPACTION_TASK: {
-      if (level0_num <= 0) {
-        COMPACTION_LOG(INFO, "MANUAL:level0 has no extent, no need do minor compaction");
-      } else if (1 != minor_compaction_type_) {
-        COMPACTION_LOG(INFO, "MANUAL:can't do minor compaction", K(minor_compaction_type_));
-      } else {
-        type = MINOR_COMPACTION_TASK;
-      }
+      COMPACTION_LOG(INFO, "MANUAL:minor compaction has derecated");
       break;
     }
     case SPLIT_TASK: {
@@ -157,8 +149,6 @@ TaskType CompactionTasksPicker::pick_one_manual_task(const SnapshotImpl* snapsho
     case STREAM_COMPACTION_TASK: {
       if (level0_num <= 0) {
         COMPACTION_LOG(INFO, "MANUAL:level0 has no extent, no need do stream compaction");
-      } else if (0 != minor_compaction_type_) {
-        COMPACTION_LOG(INFO, "MANUAL:can't do stream compaction", K(minor_compaction_type_));
       } else {
         type = STREAM_COMPACTION_TASK;
       }
@@ -221,12 +211,7 @@ TaskType CompactionTasksPicker::pick_one_manual_task(const SnapshotImpl* snapsho
     }
     case MANUAL_FULL_AMOUNT_TASK: {
       if (level0_num > 0) {
-        if (1 == minor_compaction_type_) {
-          type = TaskType::MINOR_COMPACTION_TASK;    // L0 -> L1
-          COMPACTION_LOG(INFO, "MANUAL:full amount,will do minor compaction");
-        } else {
-          type = TaskType::STREAM_COMPACTION_TASK;    // L0 -> L1
-        }
+        type = TaskType::STREAM_COMPACTION_TASK;    // L0 -> L1
       } else if (level1_num > 0 && 2 ==  mcf_options_.bottommost_level) {
         type = MAJOR_COMPACTION_TASK;
         COMPACTION_LOG(INFO, "MANUAL:full amount,will do major compaction");
@@ -267,7 +252,7 @@ void CompactionTasksPicker::calc_normal_tasks(const int64_t level0_layer_val,
 
   if (level0_num_trigger > 0 && level0_num_val >= level0_layer_trigger) {
     TaskInfo minor_task;
-    minor_task.task_type_ = 1 == minor_compaction_type_ ? MINOR_COMPACTION_TASK : STREAM_COMPACTION_TASK;
+    minor_task.task_type_ = STREAM_COMPACTION_TASK;
     minor_task.priority_value_ = level0_num_val * 1.0 / level0_num_trigger + std::max(min_val, level0_num_val - L0MaxNum);
     minor_task.extents_size_ = level0_size + level1_num_val;
     task_list.push_back(minor_task);
@@ -414,7 +399,7 @@ int CompactionTasksPicker::pick_one_task_idle(TaskInfo &pick_task) {
   pick_task.reset();
   if (l0_num_val_ > 0) {
     TaskInfo minor_task;
-    minor_task.task_type_ = 1 == minor_compaction_type_ ? MINOR_COMPACTION_TASK : STREAM_COMPACTION_TASK;
+    minor_task.task_type_ = STREAM_COMPACTION_TASK;
     minor_task.priority_value_ = 1;
     minor_task.extents_size_ = l0_num_val_ + l1_num_val_;
     pick_task = minor_task;

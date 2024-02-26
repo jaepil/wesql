@@ -24,9 +24,6 @@
 #include "smartengine/advanced_options.h"
 #include "smartengine/comparator.h"
 #include "smartengine/env.h"
-#include "smartengine/listener.h"
-#include "smartengine/universal_compaction.h"
-#include "smartengine/version.h"
 #include "smartengine/write_buffer_manager.h"
 
 #ifdef max
@@ -43,11 +40,6 @@ namespace db {
 class InternalKeyComparator;
 class Snapshot;
 class WalFilter;
-}
-
-namespace storage {
-class CompactionFilter;
-class CompactionFilterFactory;
 }
 
 namespace table {
@@ -110,37 +102,12 @@ enum CompressionType : unsigned char {
 struct Options;
 
 struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
-  // The function recovers options to a previous version. Only 4.6 or later
-  // versions are supported.
-  ColumnFamilyOptions* OldDefaults(int rocksdb_major_version = 4,
-                                   int rocksdb_minor_version = 6);
 
   // Some functions that make it easier to optimize RocksDB
   // Use this if your DB is very small (like under 1GB) and you don't want to
   // spend lots of memory for memtables.
   ColumnFamilyOptions* OptimizeForSmallDb();
 
-
-  // Default values for some parameters in ColumnFamilyOptions are not
-  // optimized for heavy workloads and big datasets, which means you might
-  // observe write stalls under some conditions. As a starting point for tuning
-  // RocksDB options, use the following two functions:
-  // * OptimizeLevelStyleCompaction -- optimizes level style compaction
-  // * OptimizeUniversalStyleCompaction -- optimizes universal style compaction
-  // Universal style compaction is focused on reducing Write Amplification
-  // Factor for big data sets, but increases Space Amplification. You can learn
-  // more about the different styles here:
-  // https://github.com/facebook/rocksdb/wiki/Rocksdb-Architecture-Guide
-  // Make sure to also call IncreaseParallelism(), which will provide the
-  // biggest performance gains.
-  // Note: we might use more memory than memtable_memory_budget during high
-  // write rate period
-  //
-  // OptimizeUniversalStyleCompaction is not supported in ROCKSDB_LITE
-  ColumnFamilyOptions* OptimizeLevelStyleCompaction(
-      uint64_t memtable_memory_budget = 512 * 1024 * 1024);
-  ColumnFamilyOptions* OptimizeUniversalStyleCompaction(
-      uint64_t memtable_memory_budget = 512 * 1024 * 1024);
 
   // -------------------
   // Parameters that affect behavior
@@ -152,34 +119,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // here has the same name and orders keys *exactly* the same as the
   // comparator provided to previous open calls on the same DB.
   const util::Comparator* comparator = util::BytewiseComparator();
-
-  // A single CompactionFilter instance to call into during compaction.
-  // Allows an application to modify/delete a key-value during background
-  // compaction.
-  //
-  // If the client requires a new compaction filter to be used for different
-  // compaction runs, it can specify compaction_filter_factory instead of this
-  // option.  The client should specify only one of the two.
-  // compaction_filter takes precedence over compaction_filter_factory if
-  // client specifies both.
-  //
-  // If multithreaded compaction is being used, the supplied CompactionFilter
-  // instance may be used from different threads concurrently and so should be
-  // thread-safe.
-  //
-  // Default: nullptr
-  const storage::CompactionFilter* compaction_filter = nullptr;
-
-  // This is a factory that provides compaction filter objects which allow
-  // an application to modify/delete a key-value during background compaction.
-  //
-  // A new filter will be created on each compaction run.  If multithreaded
-  // compaction is being used, each created CompactionFilter will only be used
-  // from a single thread and so does not need to be thread-safe.
-  //
-  // Default: nullptr
-  std::shared_ptr<storage::CompactionFilterFactory> compaction_filter_factory =
-      nullptr;
 
   // -------------------
   // Parameters that affect performance
@@ -274,12 +213,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   //
   int level0_layer_num_compaction_trigger = 16;
 
-  // Number of MinorTasks in slide window for MinorCompaction.
-  //
-  // Default: 64
-  //
-  int minor_window_size = 64;
-
   // Number of L1 extents to trigger major comapction.
   //
   // Default: 1000
@@ -369,10 +302,6 @@ struct DbPath {
 };
 
 struct DBOptions {
-  // The function recovers options to the option as in version 4.6.
-  DBOptions* OldDefaults(int rocksdb_major_version = 4,
-                         int rocksdb_minor_version = 6);
-
   // Some functions that make it easier to optimize RocksDB
 
   // Use this if your DB is very small (like under 1GB) and you don't want to
@@ -553,12 +482,6 @@ struct DBOptions {
   // Env::SetBackgroundThreads
   // Default: 1
   int max_background_compactions = 1;
-
-  // This value represents the maximum number of threads that will
-  // concurrently perform a compaction job by breaking it into multiple,
-  // smaller ones that are run simultaneously.
-  // Default: 1 (i.e. no subcompactions)
-  uint32_t max_subcompactions = 1;
 
   // Maximum number of concurrent background memtable flush jobs, submitted to
   // the HIGH priority thread pool.
@@ -806,10 +729,6 @@ struct DBOptions {
   // Default: 0, turned off
   uint64_t wal_bytes_per_sync = 0;
 
-  // A vector of EventListeners which call-back functions will be called
-  // when specific RocksDB event happens.
-  std::vector<std::shared_ptr<EventListener>> listeners;
-
   // If true, then the status of the threads involved in this DB will
   // be tracked and available via GetThreadList() API.
   //
@@ -951,24 +870,6 @@ struct DBOptions {
 
   bool use_direct_write_for_wal = true;
 
-  // 0 means StreamCompaction for L0->L1;
-  // 1 means MinorCompaction for L0->L1, which could support FPGA.
-  //
-  // DEFAULT: 0
-  //
-  uint64_t compaction_type = 0;
-
-  //0 for cpu mode, 1 for fpga mode ,2 for check. >3 invalid
-  uint64_t compaction_mode = 0;
- 
-  //cpu compaction thread 
-  uint64_t cpu_compaction_thread_num = 8;
-
-  //fpga compaction shedule thread
-  uint64_t fpga_compaction_thread_num = 8;
-
-  uint64_t fpga_device_id = 0;
-
   bool query_trace_enable_count = true;
   bool query_trace_print_stats = false;
   uint64_t mutex_backtrace_threshold_ns = 100000000; // 100ms
@@ -992,25 +893,9 @@ struct Options : public DBOptions, public ColumnFamilyOptions {
           const ColumnFamilyOptions& column_family_options)
       : DBOptions(db_options), ColumnFamilyOptions(column_family_options) {}
 
-  // The function recovers options to the option as in version 4.6.
-  Options* OldDefaults(int rocksdb_major_version = 4,
-                       int rocksdb_minor_version = 6);
-
   void Dump() const;
 
   void DumpCFOptions() const;
-
-  // Some functions that make it easier to optimize RocksDB
-
-  // Set appropriate parameters for bulk loading.
-  // The reason that this is a function that returns "this" instead of a
-  // constructor is to enable chaining of multiple similar calls in the future.
-  //
-
-  // All data will be in level 0 without any automatic compaction.
-  // It's recommended to manually call CompactRange(NULL, NULL) before reading
-  // from the database, because otherwise the read can be very slow.
-  Options* PrepareForBulkLoad();
 
   // Use this if your DB is very small (like under 1GB) and you don't want to
   // spend lots of memory for memtables.
@@ -1178,67 +1063,6 @@ struct FlushOptions {
   bool wait;
 
   FlushOptions() : wait(true) {}
-};
-
-// CompactionOptions are used in CompactFiles() call.
-struct CompactionOptions {
-  // Compaction output compression type
-  // Default: snappy
-  CompressionType compression;
-  // Compaction will create files of size `output_file_size_limit`.
-  // Default: MAX, which means that compaction will create a single file
-  uint64_t output_file_size_limit;
-
-  CompactionOptions()
-      : compression(kSnappyCompression),
-        output_file_size_limit(std::numeric_limits<uint64_t>::max()) {}
-};
-
-// For level based compaction, we can configure if we want to skip/force
-// bottommost level compaction.
-enum class BottommostLevelCompaction {
-  // Skip bottommost level compaction
-  kSkip,
-  // Only compact bottommost level if there is a compaction filter
-  // This is the default option
-  kIfHaveCompactionFilter,
-  // Always compact bottommost level
-  kForce,
-};
-
-// CompactRangeOptions is used by CompactRange() call.
-struct CompactRangeOptions {
-  // If true, no other compaction will run at the same time as this
-  // manual compaction
-  bool exclusive_manual_compaction = false;
-  // If true, compacted files will be moved to the minimum level capable
-  // of holding the data or given level (specified non-negative target_level).
-  bool change_level = false;
-  // If change_level is true and target_level have non-negative value, compacted
-  // files will be moved to target_level.
-  int target_level = -1;
-  // Compaction outputs will be placed in options.db_paths[target_path_id].
-  // Behavior is undefined if target_path_id is out of range.
-  uint32_t target_path_id = 0;
-  // By default level based compaction will only compact the bottommost level
-  // if there is a compaction filter
-  BottommostLevelCompaction bottommost_level_compaction =
-      BottommostLevelCompaction::kIfHaveCompactionFilter;
-};
-
-// IngestExternalFileOptions is used by IngestExternalFile()
-struct IngestExternalFileOptions {
-  // Can be set to true to move the files instead of copying them.
-  bool move_files = false;
-  // If set to false, an ingested file keys could appear in existing snapshots
-  // that where created before the file was ingested.
-  bool snapshot_consistency = true;
-  // If set to false, IngestExternalFile() will fail if the file key range
-  // overlaps with existing keys or tombstones in the DB.
-  bool allow_global_seqno = true;
-  // If set to false and the file key range overlaps with the memtable key range
-  // (memtable flush required), IngestExternalFile will fail.
-  bool allow_blocking_flush = true;
 };
 
 }  // namespace common

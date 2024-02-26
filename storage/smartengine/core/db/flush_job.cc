@@ -257,12 +257,7 @@ void BaseFlush::cancel() {
 int BaseFlush::stop_record_flush_stats(const int64_t bytes_written,
                                        const uint64_t start_micros) {
   int ret = 0;
-  // Note that here we treat flush as level 0 compaction in internal stats
-  InternalStats::CompactionStats stats(1);
   auto end_micros = db_options_.env->NowMicros();
-  stats.micros = end_micros - start_micros;
-  stats.bytes_written = bytes_written;
-  cfd_->internal_stats()->AddCompactionStats(job_context_.output_level_ /* level */, stats);
   cfd_->internal_stats()->AddCFStats(InternalStats::BYTES_FLUSHED,
                                      bytes_written);
   cfd_->internal_stats()->AddCFStats(InternalStats::BYTES_WRITE,

@@ -113,8 +113,6 @@ SET(SE_SOURCES
   dict/se_properties_collector.h
   index/se_index_merge.cc 
   index/se_index_merge.h
-  index/se_event_listener.cc 
-  index/se_event_listener.h
   index/se_parallel_ddl_ctx.cc
   index/se_parallel_ddl_ctx.h
   plugin/se_i_s.cc 
@@ -195,13 +193,6 @@ SET(smartengine_static_libs ${smartengine_static_libs} ${ZLIB_LIBRARY} "-lrt" "-
 if (WITH_TBB)
   include_directories(${CMAKE_SOURCE_DIR}/storage/smartengine/core/third-party/tbb/include)
   SET(smartengine_static_libs ${smartengine_static_libs} ${TBB_LIBRARIES})
-endif()
-
-
-if(WITH_FPAG_COMPACTION)
-  add_definitions(-DFPGA_COMPACTION)
-  set(FPGA_COMPACTION_LIBS fpga_compaction glog)
-  list(APPEND ${smartengine_static_libs} ${FPGA_COMPACTION_LIBS})
 endif()
 
 MYSQL_ADD_PLUGIN(smartengine ${SE_SOURCES} STORAGE_ENGINE DEFAULT STATIC_ONLY

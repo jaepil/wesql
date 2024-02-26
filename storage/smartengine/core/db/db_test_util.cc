@@ -170,41 +170,6 @@ bool DBTestBase::ChangeOptions(int skip_mask) {
   }
 }
 
-// Switch between different compaction styles.
-bool DBTestBase::ChangeCompactOptions() {
-  if (option_config_ == kDefault) {
-    option_config_ = kUniversalCompaction;
-    Destroy(last_options_);
-    auto options = CurrentOptions();
-    options.create_if_missing = true;
-    TryReopen(options);
-    return true;
-  } else if (option_config_ == kUniversalCompaction) {
-    option_config_ = kUniversalCompactionMultiLevel;
-    Destroy(last_options_);
-    auto options = CurrentOptions();
-    options.create_if_missing = true;
-    TryReopen(options);
-    return true;
-  } else if (option_config_ == kUniversalCompactionMultiLevel) {
-    option_config_ = kLevelSubcompactions;
-    Destroy(last_options_);
-    auto options = CurrentOptions();
-    assert(options.max_subcompactions > 1);
-    TryReopen(options);
-    return true;
-  } else if (option_config_ == kLevelSubcompactions) {
-    option_config_ = kUniversalSubcompactions;
-    Destroy(last_options_);
-    auto options = CurrentOptions();
-    assert(options.max_subcompactions > 1);
-    TryReopen(options);
-    return true;
-  } else {
-    return false;
-  }
-}
-
 // Switch between different WAL settings
 bool DBTestBase::ChangeWalOptions() {
   if (option_config_ == kDefault) {
@@ -263,7 +228,6 @@ Options DBTestBase::CurrentOptions(
   options.max_open_files = 5000;
   options.base_background_compactions = -1;
   options.wal_recovery_mode = WALRecoveryMode::kTolerateCorruptedTailRecords;
-  options.compaction_pri = CompactionPri::kByCompensatedSize;
 
   return CurrentOptions(options, options_override);
 }
@@ -295,9 +259,6 @@ Options DBTestBase::CurrentOptions(
     case kUncompressed:
       options.compression = kNoCompression;
       break;
-    case kNumLevel_3:
-      options.num_levels = 3;
-      break;
     case kDBLogDir:
       options.db_log_dir = alternative_db_log_dir_;
       break;
@@ -316,14 +277,6 @@ Options DBTestBase::CurrentOptions(
       options.report_bg_io_stats = true;
       // TODO(3.13) -- test more options
       break;
-    case kUniversalCompaction:
-      options.compaction_style = kCompactionStyleUniversal;
-      options.num_levels = 1;
-      break;
-    case kUniversalCompactionMultiLevel:
-      options.compaction_style = kCompactionStyleUniversal;
-      options.num_levels = 8;
-      break;
     case kCompressedBlockCache:
       options.allow_mmap_writes = true;
       table_options.block_cache_compressed = NewLRUCache(8 * 1024 * 1024);
@@ -333,10 +286,6 @@ Options DBTestBase::CurrentOptions(
       break;
     case kxxHashChecksum: {
       // table_options.checksum = kxxHash;
-      break;
-    }
-    case kFIFOCompaction: {
-      options.compaction_style = kCompactionStyleFIFO;
       break;
     }
     case kBlockBasedTableWithIndexRestartInterval: {
@@ -354,16 +303,6 @@ Options DBTestBase::CurrentOptions(
     }
     case kRecycleLogFiles: {
       options.recycle_log_file_num = 2;
-      break;
-    }
-    case kLevelSubcompactions: {
-      options.max_subcompactions = 4;
-      break;
-    }
-    case kUniversalSubcompactions: {
-      options.compaction_style = kCompactionStyleUniversal;
-      options.num_levels = 8;
-      options.max_subcompactions = 4;
       break;
     }
     case kConcurrentSkipList: {
@@ -604,12 +543,9 @@ Status DBTestBase::Flush(int cf, bool wait) {
 
 Status DBTestBase::CompactRange(int cf, uint32_t compact_type) {
   if (0 == cf) {
-    return db_->CompactRange(CompactRangeOptions(), nullptr, nullptr,
-                             compact_type);
+    return db_->CompactRange(compact_type);
   } else {
-    return db_->CompactRange(CompactRangeOptions(),
-                             get_column_family_handle(cf), nullptr, nullptr,
-                             compact_type);
+    return db_->CompactRange(get_column_family_handle(cf), compact_type);
   }
 }
 
@@ -837,36 +773,6 @@ double DBTestBase::CompressionRatioAtLevel(int level, int cf) {
   return std::stod(property);
 }
 
-int DBTestBase::TotalTableFiles(int cf, int levels) {
-  if (levels == -1) {
-    levels = (cf == 0) ? db_->NumberLevels() : db_->NumberLevels(get_column_family_handle(1));
-  }
-  int result = 0;
-  for (int level = 0; level < levels; level++) {
-    result += NumTableFilesAtLevel(level, cf);
-  }
-  return result;
-}
-
-// Return spread of files per level
-std::string DBTestBase::FilesPerLevel(int cf) {
-  int num_levels =
-      (cf == 0) ? db_->NumberLevels() : db_->NumberLevels(get_column_family_handle(1));
-  std::string result;
-  size_t last_non_zero_offset = 0;
-  for (int level = 0; level < num_levels; level++) {
-    int f = NumTableFilesAtLevel(level, cf);
-    char buf[100];
-    snprintf(buf, sizeof(buf), "%s%d", (level ? "," : ""), f);
-    result += buf;
-    if (f > 0) {
-      last_non_zero_offset = result.size();
-    }
-  }
-  result.resize(last_non_zero_offset);
-  return result;
-}
-
 size_t DBTestBase::CountFiles() {
   std::vector<std::string> files;
   env_->GetChildren(dbname_, &files);
@@ -888,63 +794,6 @@ uint64_t DBTestBase::Size(const Slice& start, const Slice& limit, int cf) {
     db_->GetApproximateSizes(get_column_family_handle(1), &r, 1, &size);
   }
   return size;
-}
-
-void DBTestBase::Compact(int cf, const Slice& start, const Slice& limit,
-                         uint32_t target_path_id) {
-  CompactRangeOptions compact_options;
-  compact_options.target_path_id = target_path_id;
-  ASSERT_OK(db_->CompactRange(compact_options, get_column_family_handle(cf), &start, &limit));
-}
-
-void DBTestBase::Compact(int cf, const Slice& start, const Slice& limit) {
-  ASSERT_OK(
-      db_->CompactRange(CompactRangeOptions(), get_column_family_handle(cf), &start, &limit));
-}
-
-void DBTestBase::Compact(const Slice& start, const Slice& limit) {
-  ASSERT_OK(db_->CompactRange(CompactRangeOptions(), &start, &limit));
-}
-
-// Do n memtable compactions, each of which produces an sstable
-// covering the range [small,large].
-void DBTestBase::MakeTables(int n, const std::string& small,
-                            const std::string& large, int cf) {
-  for (int i = 0; i < n; i++) {
-    ASSERT_OK(Put(cf, small, "begin"));
-    ASSERT_OK(Put(cf, large, "end"));
-    ASSERT_OK(Flush(cf));
-    MoveFilesToLevel(n - i - 1, cf);
-  }
-}
-
-// Prevent pushing of new sstables into deeper levels by adding
-// tables that cover a specified range to all levels.
-void DBTestBase::FillLevels(const std::string& smallest,
-                            const std::string& largest, int cf) {
-  MakeTables(db_->NumberLevels(get_column_family_handle(cf)), smallest, largest, cf);
-}
-
-void DBTestBase::MoveFilesToLevel(int level, int cf) {
-  for (int l = 0; l < level; ++l) {
-    if (cf > 0) {
-      dbfull()->TEST_CompactRange(l, nullptr, nullptr, get_column_family_handle(cf));
-    } else {
-      dbfull()->TEST_CompactRange(l, nullptr, nullptr);
-    }
-  }
-}
-
-void DBTestBase::DumpFileCounts(const char* label) {
-  fprintf(stderr, "---\n%s:\n", label);
-  fprintf(stderr, "maxoverlap: %" PRIu64 "\n",
-          dbfull()->TEST_MaxNextLevelOverlappingBytes());
-  for (int level = 0; level < db_->NumberLevels(); level++) {
-    int num = NumTableFilesAtLevel(level);
-    if (num > 0) {
-      fprintf(stderr, "  level %3d : %d files\n", level, num);
-    }
-  }
 }
 
 std::string DBTestBase::DumpSSTableList() {

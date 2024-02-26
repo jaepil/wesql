@@ -111,10 +111,6 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   int file_size = db_write_buffer_size * 1024;
   opt.target_file_size_base = file_size;
 
-  opt.minor_window_size = 4;
-
-  opt.compaction_type = 1; // should be 1 here
-
   std::string db_path_ = test::TmpDir() + "/parallel_read_test";
   if (opt.db_paths.size() == 0) {
     opt.db_paths.emplace_back(db_path_, std::numeric_limits<uint64_t>::max());
@@ -430,8 +426,9 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
   extent_builder_.reset(NewTableBuilder(
       context_->icf_options_, internal_comparator_, &props_,
       cf_desc_.column_family_id_, cf_desc_.column_family_name_, &mini_tables_,
-      GetCompressionType(context_->icf_options_, context_->mutable_cf_options_,
-                         level /*level*/) /* compression type */,
+      get_compression_type(context_->icf_options_,
+                           context_->mutable_cf_options_,
+                           level),
       context_->icf_options_.compression_opts, output_layer_position,
       &compression_dict_, true));
 }
@@ -744,7 +741,6 @@ void ParallelReadTest::build_compact_context(CompactionContext *comp) {
   comp->table_space_id_ = 0;
   // Default is minor task
   comp->task_type_ = db::TaskType::MINOR_COMPACTION_TASK;
-  comp->minor_compaction_type_ = 2; // new stream compaction
 }
 
 void ParallelReadTest::run_intra_l0_compact() {

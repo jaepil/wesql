@@ -410,18 +410,6 @@ enum Histograms : uint32_t {
   PIPLINE_MEM_QUEUE_LENGTH,
   PIPLINE_COMMIT_QUEUE_LENGTH,
   DEMO_WATCH_TIME_NANOS,
-//COMPACTION statisic
-  COMPACTION_FPGA_WAIT_PROCESS_TIME,
-  COMPACTION_FPGA_PROCESS_TIME,
-  COMPACTION_FPGA_WAIT_DONE_TIME,
-  COMPACTION_FPGA_DONE_TIME,
-  COMPACTION_MINOR_WAIT_PROCESS_TIME,
-  COMPACTION_MINOR_PROCESS_TIME,
-  COMPACTION_MINOR_WAIT_DONE_TIME,
-  COMPACTION_MINOR_DONE_TIME,
-  COMPACTION_MINOR_WAY_NUM,
-  COMPACTION_MINOR_BLOCKS_NUM,
-  COMPACTION_MINOR_BLOCKS_BYTES,
   HISTOGRAM_ENUM_MAX,  // TODO(ldemailly): enforce HistogramsNameMap match
 };
 
@@ -471,17 +459,6 @@ const std::vector<std::pair<Histograms, std::string>> HistogramsNameMap = {
     {PIPLINE_MEM_QUEUE_LENGTH, "smartengine.pipline.mem.queue.length"},
     {PIPLINE_COMMIT_QUEUE_LENGTH, "smartengine.pipline.commit.queue.length"},
     {DEMO_WATCH_TIME_NANOS, "smartengine.demo.time.nanos"},
-    {COMPACTION_FPGA_WAIT_PROCESS_TIME, "smartengine.compaction.fpga.wait.process.time"}, 
-    {COMPACTION_FPGA_PROCESS_TIME, "smartengine.compaction.fpga.process.time"},
-    {COMPACTION_FPGA_WAIT_DONE_TIME, "smartengine.compaction.fpga.wait.done.time"},
-    {COMPACTION_FPGA_DONE_TIME, "smartengine.compaction.fpga.done.time"},
-    {COMPACTION_MINOR_WAIT_PROCESS_TIME,"smartengine.compaction.minor.wait.process.time"}, 
-    {COMPACTION_MINOR_PROCESS_TIME, "smartengine.compaction.minor.process.time"},
-    {COMPACTION_MINOR_WAIT_DONE_TIME,"smartengine.compaction.minor.wait.done.time"},
-    {COMPACTION_MINOR_DONE_TIME, "smartengine.compaction.minor.done.time"},
-    {COMPACTION_MINOR_WAY_NUM, "smartengine.compaction.minor.way.num"},
-    {COMPACTION_MINOR_BLOCKS_NUM, "smartengine.compaction.minor.blocks.num"},
-    {COMPACTION_MINOR_BLOCKS_BYTES, "smartengine.compaction.minor.blocks.bytes"},
 };
 
 struct HistogramData {

@@ -77,10 +77,6 @@ void LDBCommandRunner::PrintHelp(const LDBOptions& ldb_options,
   ret.append("\n\n");
   ret.append("Admin Commands:\n");
   WALDumperCommand::Help(ret);
-  CompactorCommand::Help(ret);
-  ReduceDBLevelsCommand::Help(ret);
-  ChangeCompactionStyleCommand::Help(ret);
-  DBLoaderCommand::Help(ret);
   ManifestDumpCommand::Help(ret);
   CheckpointDumpCommand::Help(ret);
   ListColumnFamiliesCommand::Help(ret);

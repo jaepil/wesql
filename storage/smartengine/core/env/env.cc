@@ -129,7 +129,7 @@ Status ReadFileToString(Env* env, const std::string& fname, std::string* data) {
 EnvWrapper::~EnvWrapper() {}
 
 namespace {  // anonymous namespace
-
+//TODO: Zhao Dongsheng, this function is used by EnvOptions() only, can optimize.
 void AssignEnvOptions(EnvOptions* env_options, const DBOptions& options) {
   env_options->use_mmap_reads = options.allow_mmap_reads;
   env_options->use_mmap_writes = options.allow_mmap_writes;

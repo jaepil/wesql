@@ -400,18 +400,6 @@ static void se_set_level0_layer_num_compaction_trigger(
           "level0_layer_num_compaction_trigger",
           std::to_string(value)}});
   se_default_cf_options.level0_layer_num_compaction_trigger = value;
-  // bug #21280399, avoid warning message in error log about:
-  // level0_stop_writes_trigger >= level0_slowdown_writes_trigger >= level0_file_num_compaction_trigger
-  if (se_default_cf_options.level0_slowdown_writes_trigger <
-      se_default_cf_options.level0_file_num_compaction_trigger) {
-    se_default_cf_options.level0_slowdown_writes_trigger =
-        se_default_cf_options.level0_file_num_compaction_trigger;
-  }
-  if (se_default_cf_options.level0_stop_writes_trigger <
-      se_default_cf_options.level0_slowdown_writes_trigger) {
-    se_default_cf_options.level0_stop_writes_trigger =
-      se_default_cf_options.level0_slowdown_writes_trigger;
-  }
   SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
 }
 
@@ -470,13 +458,13 @@ static int se_compact_column_family(THD *const thd,
   if (0 == cf_id) {
     if (nullptr != se_db) {
       __XHANDLER_LOG(INFO, "SE: Manual compaction of all sub tables: %u", cf_id);
-      se_db->CompactRange(smartengine::common::CompactRangeOptions(), nullptr, nullptr, compact_type);
+      se_db->CompactRange(compact_type);
     }
   } else {
     auto cfh = cf_manager.get_cf(cf_id);
     if (cfh != nullptr  && se_db != nullptr) {
       __XHANDLER_LOG(INFO, "SE: Manual compaction of sub table: %u\n", cf_id);
-      se_db->CompactRange(smartengine::common::CompactRangeOptions(), cfh, nullptr, nullptr, compact_type);
+      se_db->CompactRange(cfh, compact_type);
     }
   }
   return HA_EXIT_SUCCESS;
@@ -1282,22 +1270,6 @@ static MYSQL_SYSVAR_LONGLONG(
     se_compact_column_family_stub,
     0, 0, INT_MAX, 0);
 
-static MYSQL_SYSVAR_ULONG(
-    compaction_type,
-    se_db_options.compaction_type,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-    "DBOptions::compaction_type for SE",
-    nullptr, nullptr,
-    se_db_options.compaction_type, 0, 1, 0);
-
-static MYSQL_SYSVAR_ULONG(
-    compaction_mode,
-    se_db_options.compaction_mode,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-    "DBOptions::compaction_mode for SE",
-    nullptr, nullptr,
-    se_db_options.compaction_mode, 0, 2, 0);
-
 static MYSQL_SYSVAR_INT(
     bottommost_level,
     se_default_cf_options.bottommost_level,
@@ -1305,22 +1277,6 @@ static MYSQL_SYSVAR_INT(
     "CFOptions::bottommost_level for SE",
     nullptr, se_set_bottommost_level,
     se_default_cf_options.bottommost_level, 0L, 2, 0);
-
-static MYSQL_SYSVAR_ULONG(
-    cpu_compaction_thread_num,
-    se_db_options.cpu_compaction_thread_num,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-    "DBOptions::cpu_compaction_thread_num for SE",
-    nullptr, nullptr,
-    se_db_options.cpu_compaction_thread_num, 1, 128, 1);
-
-static MYSQL_SYSVAR_ULONG(
-    fpga_compaction_thread_num,
-    se_db_options.fpga_compaction_thread_num,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-    "DBOptions::fpga_compaction_thread_num for SE",
-    nullptr, nullptr,
-    se_db_options.fpga_compaction_thread_num, 1, 128, 1);
 
 static MYSQL_SYSVAR_UINT(
     disable_online_ddl,
@@ -1624,11 +1580,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(level2_usage_percent),
     MYSQL_SYSVAR(compaction_task_extents_limit),
     MYSQL_SYSVAR(compact_cf),
-    MYSQL_SYSVAR(compaction_type),
-    MYSQL_SYSVAR(compaction_mode),
     MYSQL_SYSVAR(bottommost_level),
-    MYSQL_SYSVAR(cpu_compaction_thread_num),
-    MYSQL_SYSVAR(fpga_compaction_thread_num),
     MYSQL_SYSVAR(disable_online_ddl),
     MYSQL_SYSVAR(disable_instant_ddl),
     MYSQL_SYSVAR(disable_parallel_ddl),

@@ -21,6 +21,7 @@
 #ifndef OS_WIN
 #include <unistd.h>
 #endif
+#include <iostream>
 #include <fcntl.h>
 #include <gflags/gflags.h>
 #include <inttypes.h>
@@ -68,7 +69,6 @@
 #include "smartengine/utilities/transaction.h"
 #include "smartengine/utilities/transaction_db.h"
 #include "smartengine/write_batch.h"
-#include "fpga/fpga_compaction_job.h"
 
 #ifdef OS_WIN
 #include <io.h>  // open/close
@@ -216,8 +216,6 @@ DEFINE_int64(merge_keys, -1,
 DEFINE_int32(num_column_families, 1, "Number of Column Families to use.");
 
 DEFINE_int32(info_log_level, 1, "log level.");
-DEFINE_uint64(compaction_type, 0, "compaction_type");
-DEFINE_uint64(compaction_mode, 0, "compaction_mode");
 DEFINE_uint64(max_log_file_size, 0,
               "The maximal size of the info log file. If the log file"
               "is larger than `max_log_file_size`, a new info log file will"
@@ -277,15 +275,6 @@ DEFINE_uint64(update_delete_count, 1000,
               "update and delete ops in stress test");
 
 static bool ValidateKeySize(const char* flagname, int32_t value) {
-  return true;
-}
-
-static bool ValidateUint32Range(const char* flagname, uint64_t value) {
-  if (value > std::numeric_limits<uint32_t>::max()) {
-    fprintf(stderr, "Invalid value for --%s: %lu, overflow\n", flagname,
-            (unsigned long)value);
-    return false;
-  }
   return true;
 }
 
@@ -372,12 +361,6 @@ DEFINE_int32(base_background_compactions, Options().base_background_compactions,
              "The base number of concurrent background compactions"
              " to occur in parallel.");
 
-DEFINE_uint64(subcompactions, 1,
-              "Maximum number of subcompactions to divide L0-L1 compactions "
-              "into.");
-static const bool FLAGS_subcompactions_dummy __attribute__((unused)) =
-    RegisterFlagValidator(&FLAGS_subcompactions, &ValidateUint32Range);
-
 DEFINE_int32(max_background_flushes, Options().max_background_flushes,
              "The maximum number of concurrent background flushes"
              " that can occur in parallel.");
@@ -408,50 +391,11 @@ DEFINE_int32(
     Options().concurrent_writable_file_buffer_switch_limit,
     "The maximum switch buffer limit for concurrent_direct_file_writer");
 
-DEFINE_int32(cpu_compaction_thread_num, Options().cpu_compaction_thread_num,
-    "cpu compaction thread num");
-
-DEFINE_int32(fpga_compaction_thread_num, Options().fpga_compaction_thread_num,
-    "fpga compaction thread num");
-
-DEFINE_int32(fpga_device_id, Options().fpga_device_id,
-    "fpga device id");
-
 DEFINE_int32(arena_block_size, Options().arena_block_size,
     "arena_block_size");
 
 
 DEFINE_bool(use_direct_write_for_wal, true, "wether use direct write for wal");
-
-static CompactionStyle FLAGS_compaction_style_e;
-DEFINE_int32(compaction_style, (int32_t)Options().compaction_style,
-             "style of compaction: level-based, universal and fifo");
-
-static CompactionPri FLAGS_compaction_pri_e;
-DEFINE_int32(compaction_pri, (int32_t)Options().compaction_pri,
-             "priority of files to compaction: by size or by data age");
-
-DEFINE_int32(universal_size_ratio, 0,
-             "Percentage flexibility while comparing file size"
-             " (for universal compaction only).");
-
-DEFINE_int32(universal_min_merge_width, 0,
-             "The minimum number of files in a"
-             " single compaction run (for universal compaction only).");
-
-DEFINE_int32(universal_max_merge_width, 0,
-             "The max number of files to compact"
-             " in universal style compaction");
-
-DEFINE_int32(universal_max_size_amplification_percent, 0,
-             "The max size amplification for universal style compaction");
-
-DEFINE_int32(universal_compression_size_percent, -1,
-             "The percentage of the database to compress for universal "
-             "compaction. -1 means compress everything.");
-
-DEFINE_bool(universal_allow_trivial_move, false,
-            "Allow trivial move in universal compaction.");
 
 DEFINE_int64(cache_size, 8 << 20,  // 8MB
              "Number of bytes to use as a cache of uncompressed data");
@@ -594,8 +538,6 @@ DEFINE_bool(disable_wal, false, "If true, do not write WAL for write.");
 
 DEFINE_string(wal_dir, "", "If not empty, use the given dir for WAL");
 
-DEFINE_int32(num_levels, 7, "The total number of levels");
-
 DEFINE_int64(target_file_size_base, Options().target_file_size_base,
              "Target file size at level-1");
 
@@ -610,19 +552,6 @@ DEFINE_bool(level_compaction_dynamic_level_bytes, false,
 
 DEFINE_double(max_bytes_for_level_multiplier, 10,
               "A multiplier to compute max bytes for level-N (N >= 2)");
-
-static std::vector<int> FLAGS_max_bytes_for_level_multiplier_additional_v;
-DEFINE_string(max_bytes_for_level_multiplier_additional, "",
-              "A vector that specifies additional fanout per level");
-
-DEFINE_int32(level0_stop_writes_trigger, Options().level0_stop_writes_trigger,
-             "Number of files in level-0"
-             " that will trigger put stop.");
-
-DEFINE_int32(level0_slowdown_writes_trigger,
-             Options().level0_slowdown_writes_trigger,
-             "Number of files in level-0"
-             " that will slow down writes.");
 
 DEFINE_int32(level0_file_num_compaction_trigger,
              Options().level0_file_num_compaction_trigger,
@@ -648,10 +577,6 @@ DEFINE_int32(level0_layer_num_compaction_trigger,
              Options().level0_layer_num_compaction_trigger,
              "Number of layers in level-0"
              " when compactions start");
-
-DEFINE_int32(minor_window_size,
-             Options().minor_window_size,
-             "Number of window size for MinorCompaction");
 
 static bool ValidateInt32Percent(const char* flagname, int32_t value) {
   if (value <= 0 || value >= 100) {
@@ -1655,18 +1580,6 @@ class Stats {
                                     &stats))
                   fprintf(stderr, "%s\n", stats.c_str());
                 if (FLAGS_show_table_properties) {
-                  for (int level = 0; level < FLAGS_num_levels; ++level) {
-                    if (db->GetProperty(
-                            db_with_cfh->cfh[i],
-                            "smartengine.aggregated-table-properties-at-level" +
-                                ToString(level),
-                            &stats)) {
-                      if (stats.find("# entries=0") == std::string::npos) {
-                        fprintf(stderr, "Level[%d]: %s\n", level,
-                                stats.c_str());
-                      }
-                    }
-                  }
                 }
               }
             } else if (db) {
@@ -1674,16 +1587,6 @@ class Stats {
                 fprintf(stderr, "%s\n", stats.c_str());
               }
               if (FLAGS_show_table_properties) {
-                for (int level = 0; level < FLAGS_num_levels; ++level) {
-                  if (db->GetProperty(
-                          "smartengine.aggregated-table-properties-at-level" +
-                              ToString(level),
-                          &stats)) {
-                    if (stats.find("# entries=0") == std::string::npos) {
-                      fprintf(stderr, "Level[%d]: %s\n", level, stats.c_str());
-                    }
-                  }
-                }
               }
             }
           }
@@ -2535,8 +2438,6 @@ class Benchmark {
 #endif
 
   void PrintEnvironment() {
-    fprintf(stderr, "SE:    version %d.%d\n", kMajorVersion,
-            kMinorVersion);
 
 #if defined(__linux)
     time_t now = time(nullptr);
@@ -2590,20 +2491,6 @@ class Benchmark {
     return timestamp_emulator->Get() - timestamp > FLAGS_time_range;
   }
 
-  class ExpiredTimeFilter : public CompactionFilter {
-   public:
-    explicit ExpiredTimeFilter(
-        const std::shared_ptr<TimestampEmulator>& timestamp_emulator)
-        : timestamp_emulator_(timestamp_emulator) {}
-    bool Filter(int level, const Slice& key, const Slice& existing_value,
-                std::string* new_value, bool* value_changed) const override {
-      return KeyExpired(timestamp_emulator_.get(), key);
-    }
-    const char* Name() const override { return "ExpiredTimeFilter"; }
-
-   private:
-    std::shared_ptr<TimestampEmulator> timestamp_emulator_;
-  };
 
   std::shared_ptr<Cache> NewCache(int64_t capacity, size_t mod_id) {
     if (capacity <= 0) {
@@ -2764,7 +2651,7 @@ class Benchmark {
     PrintHeader();
     std::stringstream benchmark_stream(FLAGS_benchmarks);
     std::string name;
-    std::unique_ptr<ExpiredTimeFilter> filter;
+    //std::unique_ptr<ExpiredTimeFilter> filter;
     while (std::getline(benchmark_stream, name, ',')) {
       time_t now = time(nullptr);
       char buf[52];
@@ -2932,8 +2819,6 @@ class Benchmark {
         method = &Benchmark::RandomWithVerify;
       } else if (name == "fillseekseq") {
         method = &Benchmark::WriteSeqSeekSeq;
-      } else if (name == "compact") {
-        method = &Benchmark::Compact;
       } else if (name == "crc32c") {
         method = &Benchmark::Crc32c;
       } else if (name == "xxhash") {
@@ -2982,9 +2867,6 @@ class Benchmark {
       } else if (name == "timeseries") {
         timestamp_emulator_.reset(new TimestampEmulator());
         if (FLAGS_expire_style == "compaction_filter") {
-          filter.reset(new ExpiredTimeFilter(timestamp_emulator_));
-          fprintf(stdout, "Compaction filter is used to remove expired data");
-          open_options_.compaction_filter = filter.get();
         }
         fresh_db = true;
         method = &Benchmark::TimeSeries;
@@ -3376,19 +3258,12 @@ class Benchmark {
         FLAGS_max_write_buffer_number_to_maintain;
     options.base_background_compactions = FLAGS_base_background_compactions;
     options.max_background_compactions = FLAGS_max_background_compactions;
-    options.max_subcompactions = static_cast<uint32_t>(FLAGS_subcompactions);
     options.max_background_flushes = FLAGS_max_background_flushes;
-    options.compaction_style = FLAGS_compaction_style_e;
-    options.compaction_pri = FLAGS_compaction_pri_e;
     options.allow_mmap_reads = FLAGS_mmap_read;
     options.allow_mmap_writes = FLAGS_mmap_write;
     options.use_direct_reads = FLAGS_use_direct_reads;
     options.use_direct_io_for_flush_and_compaction =
         FLAGS_use_direct_io_for_flush_and_compaction;
-#ifndef ROCKSDB_LITE
-    options.compaction_options_fifo = CompactionOptionsFIFO(
-        FLAGS_fifo_compaction_max_table_files_size_mb * 1024 * 1024);
-#endif  // ROCKSDB_LITE
 
     if (FLAGS_use_uint64_comparator) {
       options.comparator = test::Uint64Comparator();
@@ -3406,7 +3281,6 @@ class Benchmark {
     options.random_access_max_buffer_size = FLAGS_random_access_max_buffer_size;
     options.writable_file_max_buffer_size = FLAGS_writable_file_max_buffer_size;
     options.use_fsync = FLAGS_use_fsync;
-    options.num_levels = FLAGS_num_levels;
     options.target_file_size_base = FLAGS_target_file_size_base;
     options.target_file_size_multiplier = FLAGS_target_file_size_multiplier;
     options.max_bytes_for_level_base = FLAGS_max_bytes_for_level_base;
@@ -3451,28 +3325,13 @@ class Benchmark {
     assert(FLAGS_use_extent_based_table);
     block_based_options.format_version = 3;
     options.table_factory.reset(table::NewExtentBasedTableFactory(block_based_options));
-    if (FLAGS_max_bytes_for_level_multiplier_additional_v.size() > 0) {
-      if (FLAGS_max_bytes_for_level_multiplier_additional_v.size() !=
-          (unsigned int)FLAGS_num_levels) {
-        fprintf(stderr, "Insufficient number of fanouts specified %d\n",
-                (int)FLAGS_max_bytes_for_level_multiplier_additional_v.size());
-        exit(1);
-      }
-      options.max_bytes_for_level_multiplier_additional =
-          FLAGS_max_bytes_for_level_multiplier_additional_v;
-    }
-    options.level0_stop_writes_trigger = FLAGS_level0_stop_writes_trigger;
     options.level0_file_num_compaction_trigger =
         FLAGS_level0_file_num_compaction_trigger;
     options.level0_layer_num_compaction_trigger =
         FLAGS_level0_layer_num_compaction_trigger;
-    options.minor_window_size =
-        FLAGS_minor_window_size;
     options.level1_extents_major_compaction_trigger =
         FLAGS_level1_extents_major_compaction_trigger;
     options.level2_usage_percent = FLAGS_level2_usage_percent;
-    options.level0_slowdown_writes_trigger =
-        FLAGS_level0_slowdown_writes_trigger;
     options.compression = FLAGS_compression_type_e;
     options.compression_opts.level = FLAGS_compression_level;
     options.compression_opts.max_dict_bytes = FLAGS_compression_max_dict_bytes;
@@ -3481,13 +3340,8 @@ class Benchmark {
     options.max_total_wal_size = FLAGS_max_total_wal_size;
     options.scan_add_blocks_limit = FLAGS_scan_add_blocks_limit;
     if (FLAGS_min_level_to_compress >= 0) {
-      assert(FLAGS_min_level_to_compress <= FLAGS_num_levels);
-      options.compression_per_level.resize(FLAGS_num_levels);
       for (int i = 0; i < FLAGS_min_level_to_compress; i++) {
         options.compression_per_level[i] = kNoCompression;
-      }
-      for (int i = FLAGS_min_level_to_compress; i < FLAGS_num_levels; i++) {
-        options.compression_per_level[i] = FLAGS_compression_type_e;
       }
     }
     options.soft_rate_limit = FLAGS_soft_rate_limit;
@@ -3519,29 +3373,6 @@ class Benchmark {
 
     options.report_bg_io_stats = FLAGS_report_bg_io_stats;
 
-    // set universal style compaction configurations, if applicable
-    if (FLAGS_universal_size_ratio != 0) {
-      options.compaction_options_universal.size_ratio =
-          FLAGS_universal_size_ratio;
-    }
-    if (FLAGS_universal_min_merge_width != 0) {
-      options.compaction_options_universal.min_merge_width =
-          FLAGS_universal_min_merge_width;
-    }
-    if (FLAGS_universal_max_merge_width != 0) {
-      options.compaction_options_universal.max_merge_width =
-          FLAGS_universal_max_merge_width;
-    }
-    if (FLAGS_universal_max_size_amplification_percent != 0) {
-      options.compaction_options_universal.max_size_amplification_percent =
-          FLAGS_universal_max_size_amplification_percent;
-    }
-    if (FLAGS_universal_compression_size_percent != -1) {
-      options.compaction_options_universal.compression_size_percent =
-          FLAGS_universal_compression_size_percent;
-    }
-    options.compaction_options_universal.allow_trivial_move =
-        FLAGS_universal_allow_trivial_move;
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;
     }
@@ -3569,20 +3400,7 @@ class Benchmark {
           FLAGS_max_log_buffer_switch_limit;
 
     options.use_direct_write_for_wal = FLAGS_use_direct_write_for_wal;
-    options.cpu_compaction_thread_num = FLAGS_cpu_compaction_thread_num;
-    options.fpga_compaction_thread_num = FLAGS_fpga_compaction_thread_num;
-    options.fpga_device_id = FLAGS_fpga_device_id;
     options.arena_block_size = FLAGS_arena_block_size;
-
-    if (FLAGS_compaction_type < 2)
-      options.compaction_type = FLAGS_compaction_type;
-    else 
-      fprintf(stderr, "Error: invalid compaction_type is (0,1)\n");
-
-    if (FLAGS_compaction_mode < 3)
-      options.compaction_mode = FLAGS_compaction_mode;
-    else 
-      fprintf(stderr,"Error: valid compaction_mode is (0,1,2)\n");
 
   }
 
@@ -3715,12 +3533,12 @@ class Benchmark {
   enum WriteMode { RANDOM, SEQUENTIAL, UNIQUE_RANDOM };
 
   void WriteSeqDeterministic(ThreadState* thread) {
-    DoDeterministicCompact(thread, open_options_.compaction_style, SEQUENTIAL);
+    //DoDeterministicCompact(thread, open_options_.compaction_style, SEQUENTIAL);
   }
 
   void WriteUniqueRandomDeterministic(ThreadState* thread) {
-    DoDeterministicCompact(thread, open_options_.compaction_style,
-                           UNIQUE_RANDOM);
+    //DoDeterministicCompact(thread, open_options_.compaction_style,
+    //                       UNIQUE_RANDOM);
   }
 
   void WriteSeq(ThreadState* thread) { DoWrite(thread, SEQUENTIAL); }
@@ -3902,310 +3720,310 @@ class Benchmark {
     }
   }
 
-  Status DoDeterministicCompact(ThreadState* thread,
-                                CompactionStyle compaction_style,
-                                WriteMode write_mode) {
-#ifndef ROCKSDB_LITE
-    ColumnFamilyMetaData meta;
-    std::vector<DB*> db_list;
-    if (db_.db != nullptr) {
-      db_list.push_back(db_.db);
-    } else {
-      for (auto& db : multi_dbs_) {
-        db_list.push_back(db.db);
-      }
-    }
-    std::vector<Options> options_list;
-    for (auto db : db_list) {
-      options_list.push_back(db->GetOptions());
-      if (compaction_style != kCompactionStyleFIFO) {
-        db->SetOptions({{"disable_auto_compactions", "1"},
-                        {"level0_slowdown_writes_trigger", "400000000"},
-                        {"level0_stop_writes_trigger", "400000000"}});
-      } else {
-        db->SetOptions({{"disable_auto_compactions", "1"}});
-      }
-    }
-
-    assert(!db_list.empty());
-    auto num_db = db_list.size();
-    size_t num_levels = static_cast<size_t>(open_options_.num_levels);
-    size_t output_level = open_options_.num_levels - 1;
-    std::vector<std::vector<std::vector<SstFileMetaData>>> sorted_runs(num_db);
-    std::vector<size_t> num_files_at_level0(num_db, 0);
-    if (compaction_style == kCompactionStyleLevel) {
-      if (num_levels == 0) {
-        return Status::InvalidArgument("num_levels should be larger than 1");
-      }
-      bool should_stop = false;
-      while (!should_stop) {
-        if (sorted_runs[0].empty()) {
-          DoWrite(thread, write_mode);
-        } else {
-          DoWrite(thread, UNIQUE_RANDOM);
-        }
-        for (size_t i = 0; i < num_db; i++) {
-          auto db = db_list[i];
-          db->Flush(FlushOptions());
-          db->GetColumnFamilyMetaData(&meta);
-          if (num_files_at_level0[i] == meta.levels[0].files.size() ||
-              writes_ == 0) {
-            should_stop = true;
-            continue;
-          }
-          sorted_runs[i].emplace_back(
-              meta.levels[0].files.begin(),
-              meta.levels[0].files.end() - num_files_at_level0[i]);
-          num_files_at_level0[i] = meta.levels[0].files.size();
-          if (sorted_runs[i].back().size() == 1) {
-            should_stop = true;
-            continue;
-          }
-          if (sorted_runs[i].size() == output_level) {
-            auto& L1 = sorted_runs[i].back();
-            L1.erase(L1.begin(), L1.begin() + L1.size() / 3);
-            should_stop = true;
-            continue;
-          }
-        }
-        writes_ /=
-            static_cast<int64_t>(open_options_.max_bytes_for_level_multiplier);
-      }
-      for (size_t i = 0; i < num_db; i++) {
-        if (sorted_runs[i].size() < num_levels - 1) {
-          fprintf(stderr, "n is too small to fill %" ROCKSDB_PRIszt " levels\n",
-                  num_levels);
-          exit(1);
-        }
-      }
-      for (size_t i = 0; i < num_db; i++) {
-        auto db = db_list[i];
-        auto compactionOptions = CompactionOptions();
-        auto options = db->GetOptions();
-        MutableCFOptions mutable_cf_options(options);
-        for (size_t j = 0; j < sorted_runs[i].size(); j++) {
-          compactionOptions.output_file_size_limit =
-              mutable_cf_options.MaxFileSizeForLevel(
-                  static_cast<int>(output_level));
-          std::cout << sorted_runs[i][j].size() << std::endl;
-          db->CompactFiles(compactionOptions, {sorted_runs[i][j].back().name,
-                                               sorted_runs[i][j].front().name},
-                           static_cast<int>(output_level - j) /*level*/);
-        }
-      }
-    } else if (compaction_style == kCompactionStyleUniversal) {
-      auto ratio = open_options_.compaction_options_universal.size_ratio;
-      bool should_stop = false;
-      while (!should_stop) {
-        if (sorted_runs[0].empty()) {
-          DoWrite(thread, write_mode);
-        } else {
-          DoWrite(thread, UNIQUE_RANDOM);
-        }
-        for (size_t i = 0; i < num_db; i++) {
-          auto db = db_list[i];
-          db->Flush(FlushOptions());
-          db->GetColumnFamilyMetaData(&meta);
-          if (num_files_at_level0[i] == meta.levels[0].files.size() ||
-              writes_ == 0) {
-            should_stop = true;
-            continue;
-          }
-          sorted_runs[i].emplace_back(
-              meta.levels[0].files.begin(),
-              meta.levels[0].files.end() - num_files_at_level0[i]);
-          num_files_at_level0[i] = meta.levels[0].files.size();
-          if (sorted_runs[i].back().size() == 1) {
-            should_stop = true;
-            continue;
-          }
-          num_files_at_level0[i] = meta.levels[0].files.size();
-        }
-        writes_ = static_cast<int64_t>(writes_ * static_cast<double>(100) /
-                                       (ratio + 200));
-      }
-      for (size_t i = 0; i < num_db; i++) {
-        if (sorted_runs[i].size() < num_levels) {
-          fprintf(stderr, "n is too small to fill %" ROCKSDB_PRIszt " levels\n",
-                  num_levels);
-          exit(1);
-        }
-      }
-      for (size_t i = 0; i < num_db; i++) {
-        auto db = db_list[i];
-        auto compactionOptions = CompactionOptions();
-        auto options = db->GetOptions();
-        MutableCFOptions mutable_cf_options(options);
-        for (size_t j = 0; j < sorted_runs[i].size(); j++) {
-          compactionOptions.output_file_size_limit =
-              mutable_cf_options.MaxFileSizeForLevel(
-                  static_cast<int>(output_level));
-          db->CompactFiles(
-              compactionOptions,
-              {sorted_runs[i][j].back().name, sorted_runs[i][j].front().name},
-              (output_level > j ? static_cast<int>(output_level - j)
-                                : 0) /*level*/);
-        }
-      }
-    } else if (compaction_style == kCompactionStyleFIFO) {
-      if (num_levels != 1) {
-        return Status::InvalidArgument(
-            "num_levels should be 1 for FIFO compaction");
-      }
-      if (FLAGS_num_multi_db != 0) {
-        return Status::InvalidArgument("Doesn't support multiDB");
-      }
-      auto db = db_list[0];
-      std::vector<std::string> file_names;
-      while (true) {
-        if (sorted_runs[0].empty()) {
-          DoWrite(thread, write_mode);
-        } else {
-          DoWrite(thread, UNIQUE_RANDOM);
-        }
-        db->Flush(FlushOptions());
-        db->GetColumnFamilyMetaData(&meta);
-        auto total_size = meta.levels[0].size;
-        if (total_size >=
-            db->GetOptions().compaction_options_fifo.max_table_files_size) {
-          for (auto file_meta : meta.levels[0].files) {
-            file_names.emplace_back(file_meta.name);
-          }
-          break;
-        }
-      }
-      // TODO(shuzhang1989): Investigate why CompactFiles not working
-      // auto compactionOptions = CompactionOptions();
-      // db->CompactFiles(compactionOptions, file_names, 0);
-      auto compactionOptions = CompactRangeOptions();
-      db->CompactRange(compactionOptions, nullptr, nullptr);
-    } else {
-      fprintf(stdout,
-              "%-12s : skipped (-compaction_stype=kCompactionStyleNone)\n",
-              "filldeterministic");
-      return Status::InvalidArgument("None compaction is not supported");
-    }
-
-// Verify seqno and key range
-// Note: the seqno get changed at the max level by implementation
-// optimization, so skip the check of the max level.
-#ifndef NDEBUG
-    for (size_t k = 0; k < num_db; k++) {
-      auto db = db_list[k];
-      db->GetColumnFamilyMetaData(&meta);
-      // verify the number of sorted runs
-      if (compaction_style == kCompactionStyleLevel) {
-        assert(num_levels - 1 == sorted_runs[k].size());
-      } else if (compaction_style == kCompactionStyleUniversal) {
-        assert(meta.levels[0].files.size() + num_levels - 1 ==
-               sorted_runs[k].size());
-      } else if (compaction_style == kCompactionStyleFIFO) {
-        // TODO(gzh): FIFO compaction
-        db->GetColumnFamilyMetaData(&meta);
-        auto total_size = meta.levels[0].size;
-        assert(total_size <=
-               db->GetOptions().compaction_options_fifo.max_table_files_size);
-        break;
-      }
-
-      // verify smallest/largest seqno and key range of each sorted run
-      auto max_level = num_levels - 1;
-      int level;
-      for (size_t i = 0; i < sorted_runs[k].size(); i++) {
-        level = static_cast<int>(max_level - i);
-        SequenceNumber sorted_run_smallest_seqno = kMaxSequenceNumber;
-        SequenceNumber sorted_run_largest_seqno = 0;
-        std::string sorted_run_smallest_key, sorted_run_largest_key;
-        bool first_key = true;
-        for (auto fileMeta : sorted_runs[k][i]) {
-          sorted_run_smallest_seqno =
-              std::min(sorted_run_smallest_seqno, fileMeta.smallest_seqno);
-          sorted_run_largest_seqno =
-              std::max(sorted_run_largest_seqno, fileMeta.largest_seqno);
-          if (first_key ||
-              db->DefaultColumnFamily()->GetComparator()->Compare(
-                  fileMeta.smallestkey, sorted_run_smallest_key) < 0) {
-            sorted_run_smallest_key = fileMeta.smallestkey;
-          }
-          if (first_key ||
-              db->DefaultColumnFamily()->GetComparator()->Compare(
-                  fileMeta.largestkey, sorted_run_largest_key) > 0) {
-            sorted_run_largest_key = fileMeta.largestkey;
-          }
-          first_key = false;
-        }
-        if (compaction_style == kCompactionStyleLevel ||
-            (compaction_style == kCompactionStyleUniversal && level > 0)) {
-          SequenceNumber level_smallest_seqno = kMaxSequenceNumber;
-          SequenceNumber level_largest_seqno = 0;
-          for (auto fileMeta : meta.levels[level].files) {
-            level_smallest_seqno =
-                std::min(level_smallest_seqno, fileMeta.smallest_seqno);
-            level_largest_seqno =
-                std::max(level_largest_seqno, fileMeta.largest_seqno);
-          }
-          assert(sorted_run_smallest_key ==
-                 meta.levels[level].files.front().smallestkey);
-          assert(sorted_run_largest_key ==
-                 meta.levels[level].files.back().largestkey);
-          if (level != static_cast<int>(max_level)) {
-            // compaction at max_level would change sequence number
-            assert(sorted_run_smallest_seqno == level_smallest_seqno);
-            assert(sorted_run_largest_seqno == level_largest_seqno);
-          }
-        } else if (compaction_style == kCompactionStyleUniversal) {
-          // level <= 0 means sorted runs on level 0
-          auto level0_file =
-              meta.levels[0].files[sorted_runs[k].size() - 1 - i];
-          assert(sorted_run_smallest_key == level0_file.smallestkey);
-          assert(sorted_run_largest_key == level0_file.largestkey);
-          if (level != static_cast<int>(max_level)) {
-            assert(sorted_run_smallest_seqno == level0_file.smallest_seqno);
-            assert(sorted_run_largest_seqno == level0_file.largest_seqno);
-          }
-        }
-      }
-    }
-#endif
-    // print the size of each sorted_run
-    for (size_t k = 0; k < num_db; k++) {
-      auto db = db_list[k];
-      fprintf(stdout, "---------------------- DB %" ROCKSDB_PRIszt
-                      " LSM ---------------------\n",
-              k);
-      db->GetColumnFamilyMetaData(&meta);
-      for (auto& levelMeta : meta.levels) {
-        if (levelMeta.files.empty()) {
-          continue;
-        }
-        if (levelMeta.level == 0) {
-          for (auto& fileMeta : levelMeta.files) {
-            fprintf(stdout, "Level[%d]: %s(size: %" PRIu64 " bytes)\n",
-                    levelMeta.level, fileMeta.name.c_str(), fileMeta.size);
-          }
-        } else {
-          fprintf(stdout, "Level[%d]: %s - %s(total size: %" PRIi64 " bytes)\n",
-                  levelMeta.level, levelMeta.files.front().name.c_str(),
-                  levelMeta.files.back().name.c_str(), levelMeta.size);
-        }
-      }
-    }
-    for (size_t i = 0; i < num_db; i++) {
-      db_list[i]->SetOptions(
-          {{"disable_auto_compactions",
-            std::to_string(options_list[i].disable_auto_compactions)},
-           {"level0_slowdown_writes_trigger",
-            std::to_string(options_list[i].level0_slowdown_writes_trigger)},
-           {"level0_stop_writes_trigger",
-            std::to_string(options_list[i].level0_stop_writes_trigger)}});
-    }
-    return Status::OK();
-#else
-    fprintf(stderr, "SE Lite doesn't support filldeterministic\n");
-    return Status::NotSupported(
-        "SE Lite doesn't support filldeterministic");
-#endif  // ROCKSDB_LITE
-  }
+//  Status DoDeterministicCompact(ThreadState* thread,
+//                                CompactionStyle compaction_style,
+//                                WriteMode write_mode) {
+//#ifndef ROCKSDB_LITE
+//    ColumnFamilyMetaData meta;
+//    std::vector<DB*> db_list;
+//    if (db_.db != nullptr) {
+//      db_list.push_back(db_.db);
+//    } else {
+//      for (auto& db : multi_dbs_) {
+//        db_list.push_back(db.db);
+//      }
+//    }
+//    std::vector<Options> options_list;
+//    for (auto db : db_list) {
+//      options_list.push_back(db->GetOptions());
+//      if (compaction_style != kCompactionStyleFIFO) {
+//        db->SetOptions({{"disable_auto_compactions", "1"},
+//                        {"level0_slowdown_writes_trigger", "400000000"},
+//                        {"level0_stop_writes_trigger", "400000000"}});
+//      } else {
+//        db->SetOptions({{"disable_auto_compactions", "1"}});
+//      }
+//    }
+//
+//    assert(!db_list.empty());
+//    auto num_db = db_list.size();
+//    size_t num_levels = static_cast<size_t>(open_options_.num_levels);
+//    size_t output_level = open_options_.num_levels - 1;
+//    std::vector<std::vector<std::vector<SstFileMetaData>>> sorted_runs(num_db);
+//    std::vector<size_t> num_files_at_level0(num_db, 0);
+//    if (compaction_style == kCompactionStyleLevel) {
+//      if (num_levels == 0) {
+//        return Status::InvalidArgument("num_levels should be larger than 1");
+//      }
+//      bool should_stop = false;
+//      while (!should_stop) {
+//        if (sorted_runs[0].empty()) {
+//          DoWrite(thread, write_mode);
+//        } else {
+//          DoWrite(thread, UNIQUE_RANDOM);
+//        }
+//        for (size_t i = 0; i < num_db; i++) {
+//          auto db = db_list[i];
+//          db->Flush(FlushOptions());
+//          db->GetColumnFamilyMetaData(&meta);
+//          if (num_files_at_level0[i] == meta.levels[0].files.size() ||
+//              writes_ == 0) {
+//            should_stop = true;
+//            continue;
+//          }
+//          sorted_runs[i].emplace_back(
+//              meta.levels[0].files.begin(),
+//              meta.levels[0].files.end() - num_files_at_level0[i]);
+//          num_files_at_level0[i] = meta.levels[0].files.size();
+//          if (sorted_runs[i].back().size() == 1) {
+//            should_stop = true;
+//            continue;
+//          }
+//          if (sorted_runs[i].size() == output_level) {
+//            auto& L1 = sorted_runs[i].back();
+//            L1.erase(L1.begin(), L1.begin() + L1.size() / 3);
+//            should_stop = true;
+//            continue;
+//          }
+//        }
+//        writes_ /=
+//            static_cast<int64_t>(open_options_.max_bytes_for_level_multiplier);
+//      }
+//      for (size_t i = 0; i < num_db; i++) {
+//        if (sorted_runs[i].size() < num_levels - 1) {
+//          fprintf(stderr, "n is too small to fill %" ROCKSDB_PRIszt " levels\n",
+//                  num_levels);
+//          exit(1);
+//        }
+//      }
+//      for (size_t i = 0; i < num_db; i++) {
+//        auto db = db_list[i];
+//        auto compactionOptions = CompactionOptions();
+//        auto options = db->GetOptions();
+//        MutableCFOptions mutable_cf_options(options);
+//        for (size_t j = 0; j < sorted_runs[i].size(); j++) {
+//          compactionOptions.output_file_size_limit =
+//              mutable_cf_options.MaxFileSizeForLevel(
+//                  static_cast<int>(output_level));
+//          std::cout << sorted_runs[i][j].size() << std::endl;
+//          db->CompactFiles(compactionOptions, {sorted_runs[i][j].back().name,
+//                                               sorted_runs[i][j].front().name},
+//                           static_cast<int>(output_level - j) /*level*/);
+//        }
+//      }
+//    } else if (compaction_style == kCompactionStyleUniversal) {
+//      auto ratio = open_options_.compaction_options_universal.size_ratio;
+//      bool should_stop = false;
+//      while (!should_stop) {
+//        if (sorted_runs[0].empty()) {
+//          DoWrite(thread, write_mode);
+//        } else {
+//          DoWrite(thread, UNIQUE_RANDOM);
+//        }
+//        for (size_t i = 0; i < num_db; i++) {
+//          auto db = db_list[i];
+//          db->Flush(FlushOptions());
+//          db->GetColumnFamilyMetaData(&meta);
+//          if (num_files_at_level0[i] == meta.levels[0].files.size() ||
+//              writes_ == 0) {
+//            should_stop = true;
+//            continue;
+//          }
+//          sorted_runs[i].emplace_back(
+//              meta.levels[0].files.begin(),
+//              meta.levels[0].files.end() - num_files_at_level0[i]);
+//          num_files_at_level0[i] = meta.levels[0].files.size();
+//          if (sorted_runs[i].back().size() == 1) {
+//            should_stop = true;
+//            continue;
+//          }
+//          num_files_at_level0[i] = meta.levels[0].files.size();
+//        }
+//        writes_ = static_cast<int64_t>(writes_ * static_cast<double>(100) /
+//                                       (ratio + 200));
+//      }
+//      for (size_t i = 0; i < num_db; i++) {
+//        if (sorted_runs[i].size() < num_levels) {
+//          fprintf(stderr, "n is too small to fill %" ROCKSDB_PRIszt " levels\n",
+//                  num_levels);
+//          exit(1);
+//        }
+//      }
+//      for (size_t i = 0; i < num_db; i++) {
+//        auto db = db_list[i];
+//        auto compactionOptions = CompactionOptions();
+//        auto options = db->GetOptions();
+//        MutableCFOptions mutable_cf_options(options);
+//        for (size_t j = 0; j < sorted_runs[i].size(); j++) {
+//          compactionOptions.output_file_size_limit =
+//              mutable_cf_options.MaxFileSizeForLevel(
+//                  static_cast<int>(output_level));
+//          db->CompactFiles(
+//              compactionOptions,
+//              {sorted_runs[i][j].back().name, sorted_runs[i][j].front().name},
+//              (output_level > j ? static_cast<int>(output_level - j)
+//                                : 0) /*level*/);
+//        }
+//      }
+//    } else if (compaction_style == kCompactionStyleFIFO) {
+//      if (num_levels != 1) {
+//        return Status::InvalidArgument(
+//            "num_levels should be 1 for FIFO compaction");
+//      }
+//      if (FLAGS_num_multi_db != 0) {
+//        return Status::InvalidArgument("Doesn't support multiDB");
+//      }
+//      auto db = db_list[0];
+//      std::vector<std::string> file_names;
+//      while (true) {
+//        if (sorted_runs[0].empty()) {
+//          DoWrite(thread, write_mode);
+//        } else {
+//          DoWrite(thread, UNIQUE_RANDOM);
+//        }
+//        db->Flush(FlushOptions());
+//        db->GetColumnFamilyMetaData(&meta);
+//        auto total_size = meta.levels[0].size;
+//        if (total_size >=
+//            db->GetOptions().compaction_options_fifo.max_table_files_size) {
+//          for (auto file_meta : meta.levels[0].files) {
+//            file_names.emplace_back(file_meta.name);
+//          }
+//          break;
+//        }
+//      }
+//      // TODO(shuzhang1989): Investigate why CompactFiles not working
+//      // auto compactionOptions = CompactionOptions();
+//      // db->CompactFiles(compactionOptions, file_names, 0);
+//      auto compactionOptions = CompactRangeOptions();
+//      db->CompactRange(compactionOptions, nullptr, nullptr);
+//    } else {
+//      fprintf(stdout,
+//              "%-12s : skipped (-compaction_stype=kCompactionStyleNone)\n",
+//              "filldeterministic");
+//      return Status::InvalidArgument("None compaction is not supported");
+//    }
+//
+//// Verify seqno and key range
+//// Note: the seqno get changed at the max level by implementation
+//// optimization, so skip the check of the max level.
+//#ifndef NDEBUG
+//    for (size_t k = 0; k < num_db; k++) {
+//      auto db = db_list[k];
+//      db->GetColumnFamilyMetaData(&meta);
+//      // verify the number of sorted runs
+//      if (compaction_style == kCompactionStyleLevel) {
+//        assert(num_levels - 1 == sorted_runs[k].size());
+//      } else if (compaction_style == kCompactionStyleUniversal) {
+//        assert(meta.levels[0].files.size() + num_levels - 1 ==
+//               sorted_runs[k].size());
+//      } else if (compaction_style == kCompactionStyleFIFO) {
+//        // TODO(gzh): FIFO compaction
+//        db->GetColumnFamilyMetaData(&meta);
+//        auto total_size = meta.levels[0].size;
+//        assert(total_size <=
+//               db->GetOptions().compaction_options_fifo.max_table_files_size);
+//        break;
+//      }
+//
+//      // verify smallest/largest seqno and key range of each sorted run
+//      auto max_level = num_levels - 1;
+//      int level;
+//      for (size_t i = 0; i < sorted_runs[k].size(); i++) {
+//        level = static_cast<int>(max_level - i);
+//        SequenceNumber sorted_run_smallest_seqno = kMaxSequenceNumber;
+//        SequenceNumber sorted_run_largest_seqno = 0;
+//        std::string sorted_run_smallest_key, sorted_run_largest_key;
+//        bool first_key = true;
+//        for (auto fileMeta : sorted_runs[k][i]) {
+//          sorted_run_smallest_seqno =
+//              std::min(sorted_run_smallest_seqno, fileMeta.smallest_seqno);
+//          sorted_run_largest_seqno =
+//              std::max(sorted_run_largest_seqno, fileMeta.largest_seqno);
+//          if (first_key ||
+//              db->DefaultColumnFamily()->GetComparator()->Compare(
+//                  fileMeta.smallestkey, sorted_run_smallest_key) < 0) {
+//            sorted_run_smallest_key = fileMeta.smallestkey;
+//          }
+//          if (first_key ||
+//              db->DefaultColumnFamily()->GetComparator()->Compare(
+//                  fileMeta.largestkey, sorted_run_largest_key) > 0) {
+//            sorted_run_largest_key = fileMeta.largestkey;
+//          }
+//          first_key = false;
+//        }
+//        if (compaction_style == kCompactionStyleLevel ||
+//            (compaction_style == kCompactionStyleUniversal && level > 0)) {
+//          SequenceNumber level_smallest_seqno = kMaxSequenceNumber;
+//          SequenceNumber level_largest_seqno = 0;
+//          for (auto fileMeta : meta.levels[level].files) {
+//            level_smallest_seqno =
+//                std::min(level_smallest_seqno, fileMeta.smallest_seqno);
+//            level_largest_seqno =
+//                std::max(level_largest_seqno, fileMeta.largest_seqno);
+//          }
+//          assert(sorted_run_smallest_key ==
+//                 meta.levels[level].files.front().smallestkey);
+//          assert(sorted_run_largest_key ==
+//                 meta.levels[level].files.back().largestkey);
+//          if (level != static_cast<int>(max_level)) {
+//            // compaction at max_level would change sequence number
+//            assert(sorted_run_smallest_seqno == level_smallest_seqno);
+//            assert(sorted_run_largest_seqno == level_largest_seqno);
+//          }
+//        } else if (compaction_style == kCompactionStyleUniversal) {
+//          // level <= 0 means sorted runs on level 0
+//          auto level0_file =
+//              meta.levels[0].files[sorted_runs[k].size() - 1 - i];
+//          assert(sorted_run_smallest_key == level0_file.smallestkey);
+//          assert(sorted_run_largest_key == level0_file.largestkey);
+//          if (level != static_cast<int>(max_level)) {
+//            assert(sorted_run_smallest_seqno == level0_file.smallest_seqno);
+//            assert(sorted_run_largest_seqno == level0_file.largest_seqno);
+//          }
+//        }
+//      }
+//    }
+//#endif
+//    // print the size of each sorted_run
+//    for (size_t k = 0; k < num_db; k++) {
+//      auto db = db_list[k];
+//      fprintf(stdout, "---------------------- DB %" ROCKSDB_PRIszt
+//                      " LSM ---------------------\n",
+//              k);
+//      db->GetColumnFamilyMetaData(&meta);
+//      for (auto& levelMeta : meta.levels) {
+//        if (levelMeta.files.empty()) {
+//          continue;
+//        }
+//        if (levelMeta.level == 0) {
+//          for (auto& fileMeta : levelMeta.files) {
+//            fprintf(stdout, "Level[%d]: %s(size: %" PRIu64 " bytes)\n",
+//                    levelMeta.level, fileMeta.name.c_str(), fileMeta.size);
+//          }
+//        } else {
+//          fprintf(stdout, "Level[%d]: %s - %s(total size: %" PRIi64 " bytes)\n",
+//                  levelMeta.level, levelMeta.files.front().name.c_str(),
+//                  levelMeta.files.back().name.c_str(), levelMeta.size);
+//        }
+//      }
+//    }
+//    for (size_t i = 0; i < num_db; i++) {
+//      db_list[i]->SetOptions(
+//          {{"disable_auto_compactions",
+//            std::to_string(options_list[i].disable_auto_compactions)},
+//           {"level0_slowdown_writes_trigger",
+//            std::to_string(options_list[i].level0_slowdown_writes_trigger)},
+//           {"level0_stop_writes_trigger",
+//            std::to_string(options_list[i].level0_stop_writes_trigger)}});
+//    }
+//    return Status::OK();
+//#else
+//    fprintf(stderr, "SE Lite doesn't support filldeterministic\n");
+//    return Status::NotSupported(
+//        "SE Lite doesn't support filldeterministic");
+//#endif  // ROCKSDB_LITE
+//  }
 
   void ReadSequential(ThreadState* thread) {
     if (db_.db != nullptr) {
@@ -5350,11 +5168,6 @@ class Benchmark {
       thread->stats.Stop();
       thread->stats.Report("timeseries write");
     }
-  }
-
-  void Compact(ThreadState* thread) {
-    DB* db = SelectDB(thread);
-    db->CompactRange(CompactRangeOptions(), nullptr, nullptr);
   }
 
   void ResetStats() {
@@ -6658,11 +6471,9 @@ class Benchmark {
     int32_t task_type = rand->Uniform(18);
     uint32_t subtable_id = rand->Uniform(FLAGS_num_column_families) + 1;
     if (0 == subtable_id) {
-      db->CompactRange(
-          smartengine::common::CompactRangeOptions(), nullptr, nullptr, task_type);
+      db->CompactRange(task_type);
     } else {
-      db->CompactRange(
-          smartengine::common::CompactRangeOptions(), cfh, nullptr, nullptr, task_type);
+      db->CompactRange(cfh, task_type);
     }
   }
 
@@ -7135,7 +6946,6 @@ int db_bench_tool(int argc, char** argv) {
     initialized = true;
   }
   ParseCommandLineFlags(&argc, &argv, true);
-  FLAGS_compaction_style_e = (CompactionStyle)FLAGS_compaction_style;
 #ifndef ROCKSDB_LITE
   if (FLAGS_statistics && !FLAGS_statistics_string.empty()) {
     fprintf(stderr,
@@ -7156,18 +6966,6 @@ int db_bench_tool(int argc, char** argv) {
 #endif  // ROCKSDB_LITE
   if (FLAGS_statistics) {
     dbstats = CreateDBStatistics();
-  }
-  FLAGS_compaction_pri_e = (CompactionPri)FLAGS_compaction_pri;
-
-  std::vector<std::string> fanout =
-      StringSplit(FLAGS_max_bytes_for_level_multiplier_additional, ',');
-  for (size_t j = 0; j < fanout.size(); j++) {
-    FLAGS_max_bytes_for_level_multiplier_additional_v.push_back(
-#ifndef CYGWIN
-        std::stoi(fanout[j]));
-#else
-        stoi(fanout[j]));
-#endif
   }
 
   FLAGS_compression_type_e =
@@ -7230,15 +7028,6 @@ int db_bench_tool(int argc, char** argv) {
     // at which the timer is checked for FLAGS_stats_interval_seconds
     FLAGS_stats_interval = 1000;
   }
-
-  if (FLAGS_compaction_type == 0) {
-    fprintf (stderr, "Use StreamCompaction\n");
-  } else if (FLAGS_compaction_type == 1) {
-    fprintf (stderr, "Use MinorCompaction for FPGA\n");
-  } else {
-    fprintf (stderr, "invalid compaction_type, only 0 and 1 is support\n");
-  }
-
 
   Benchmark benchmark;
   benchmark.Run();

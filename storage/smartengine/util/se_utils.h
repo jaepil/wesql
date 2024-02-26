@@ -195,8 +195,6 @@ typedef char my_bool; /* Small bool */
 #define SE_TBL_STATS_SAMPLE_PCT_MIN 1
 #define SE_TBL_STATS_SAMPLE_PCT_MAX 100
 
-#define DEFAULT_SUBCOMPACTIONS 1
-
 /*
   Generic constant.
 */

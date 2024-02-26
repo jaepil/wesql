@@ -22,6 +22,7 @@
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
 #include "options/db_options.h"
+#include "options/options_helper.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "table/extent_table_factory.h"
@@ -30,7 +31,6 @@
 #include "table/table_builder.h"
 #include "util/arena.h"
 #include "util/file_reader_writer.h"
-//#include "utilities/field_extractor/field_extractor.h"
 #include "util/string_util.h"
 #include "util/to_string.h"
 #include "util/stop_watch.h"
@@ -55,40 +55,15 @@ using namespace logger;
 
 namespace smartengine {
 namespace storage {
-
-common::CompressionType GetCompressionType(
-    const common::ImmutableCFOptions &ioptions,
-    const common::MutableCFOptions &mutable_cf_options, int level,
-    const bool enable_compression) {
-  if (!enable_compression) {
-    // disable compression
-    return kNoCompression;
-  }
-
-  // TODO bottommost_compression deprecated
-
-  // If the user has specified a different compression level for each level,
-  // then pick the compression for that level.
-  if (!ioptions.compression_per_level.empty()) {
-    assert(level >= 0 && level <= 2);
-    const int n = static_cast<int>(ioptions.compression_per_level.size()) - 1;
-    return ioptions.compression_per_level[std::max(0, std::min(level, n))];
-  } else {
-    return mutable_cf_options.compression;
-  }
-}
-
 GeneralCompaction::GeneralCompaction(const CompactionContext &context,
                                      const ColumnFamilyDesc &cf,
                                      ArenaAllocator &arena)
     : context_(context),
       cf_desc_(cf),
       write_extent_opened_(false),
-//      row_arena_(DEFAULT_ROW_LENGTH, ModId::kCompaction),
       input_extents_{0,0,0},
       l2_largest_key_(nullptr),
       delete_percent_(0),
-//      arena_(arena),
       arena_(CharArena::DEFAULT_PAGE_SIZE, ModId::kCompaction),
       stl_alloc_(WrapAllocator(arena_)),
       reader_reps_(stl_alloc_) {
@@ -176,8 +151,9 @@ int GeneralCompaction::open_extent() {
       cf_desc_.column_family_id_,
       cf_desc_.column_family_name_,
       &mini_tables_,
-      GetCompressionType(*context_.cf_options_, *context_.mutable_cf_options_,
-                         context_.output_level_) /* compression type */,
+      get_compression_type(*context_.cf_options_,
+                           *context_.mutable_cf_options_,
+                           context_.output_level_),
       context_.cf_options_->compression_opts,
       output_layer_position,
       &compression_dict_,

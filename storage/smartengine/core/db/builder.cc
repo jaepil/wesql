@@ -121,8 +121,6 @@ int BuildTable(
                                  arena,
                                  nullptr,
                                  nullptr,
-                                 nullptr,
-                                 nullptr,
                                  cancel_type,
                                  nullptr,
                                  mutable_cf_options.background_disable_merge);

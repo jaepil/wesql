@@ -34,7 +34,6 @@
 #include "./core/db/version_set.h"
 #include "./core/compact/task_type.h"
 #include "./core/storage/extent_space_manager.h"
-#include "smartengine/compaction_filter.h"
 #include "smartengine/convenience.h"
 #include "smartengine/filter_policy.h"
 #include "smartengine/memtablerep.h"
@@ -440,7 +439,6 @@ static int se_i_s_cfoptions_fill_table(
         std::to_string(opts.level0_file_num_compaction_trigger)},
       {"LEVEL0_LAYER_NUM_COMPACTION_TRIGGER",
         std::to_string(opts.level0_layer_num_compaction_trigger)},
-      {"MINOR_WINDOW_SIZE", std::to_string(opts.minor_window_size)},
       {"LEVEL1_EXTENTS_MAJOR_COMPACTION_TRIGGER",
         std::to_string(opts.level1_extents_major_compaction_trigger)},
       {"LEVEL0_SLOWDOWN_WRITES_TRIGGER",
@@ -1525,7 +1523,7 @@ static int se_i_s_index_file_map_fill_table(
   for (const auto &cf_handle : cf_manager.get_all_cf()) {
     cf_ptr.reset(cf_handle);
     /* Grab the the properties of all the tables in the column family */
-    smartengine::common::TablePropertiesCollection table_props_collection;
+    db::TablePropertiesCollection table_props_collection;
     const smartengine::common::Status s =
         se_db->GetPropertiesOfAllTables(cf_handle, &table_props_collection);
     if (!s.ok()) {

@@ -76,20 +76,6 @@ void CompactionJob::destroy() {
   current_task_type_ = TaskType::INVALID_TYPE_TASK;
 }
 
-void CompactionJob::set_compaction_type(int compaction_type) {
-//  ThreadStatusUtil::set_compaction_type(static_cast<char>(compaction_type));
-}
-
-void CompactionJob::set_compaction_input_extent(
-    const int64_t *input_extent) {
-//  ThreadStatusUtil::SetThreadOperationProperty(
-//      ThreadStatus::COMPACTION_INPUT_EXTENT_LEVEL0, input_extent[0]);
-//  ThreadStatusUtil::SetThreadOperationProperty(
-//      ThreadStatus::COMPACTION_INPUT_EXTENT_LEVEL1, input_extent[1]);
-//  ThreadStatusUtil::SetThreadOperationProperty(
-//      ThreadStatus::COMPACTION_INPUT_EXTENT_LEVEL2, input_extent[2]);
-}
-
 void CompactionJob::destroy_compaction(Compaction *compaction) {
   if (nullptr != compaction) {
     PLACEMENT_DELETE(Compaction, arena_, compaction);
@@ -164,10 +150,6 @@ int CompactionJob::prepare_minor_task(const int64_t merge_limit) {
       }
       assert(all_way_size <= way_size);
     } else {
-      // MinorCompaction will limit 4 ways
-      if (context_.minor_compaction_type_ == 1) {
-        all_way_size = ReuseBlockMergeIterator::MINOR_MAX_CHILD_NUM;
-      }
       if (FAILED(build_plus_l1_compaction_iterators(arena_, compact_way, way_size,
               wide_range, iterators,all_way_size))) {
         // plus level 1 's iterator;
@@ -552,10 +534,6 @@ int CompactionJob::prepare() {
       }
       assert(all_way_size <= way_size);
     } else {
-      // Note: MinorCompaction will limit 4 ways
-      if (context_.minor_compaction_type_ == 1) {
-        all_way_size = ReuseBlockMergeIterator::MINOR_MAX_CHILD_NUM;
-      }
       if (FAILED(build_plus_l1_compaction_iterators(arena_,
                                                     compact_way,
                                                     way_size,
@@ -880,9 +858,7 @@ int CompactionJob::build_plus_l1_compaction_iterators(ArenaAllocator &arena,
   table::InternalIterator *level1_meta_iterator = nullptr;
   MetaDataIterator *level1_range_iter = nullptr;
   int64_t end_key_size = 0;
-  //TODO:yuanfeng type
-  // Note: Minor only allow 4 ways
-  int64_t max_compaction_way_size = (1 == context_.minor_compaction_type_ ? ReuseBlockMergeIterator::MINOR_MAX_CHILD_NUM : ReuseBlockMergeIterator::MAX_CHILD_NUM);
+  int64_t max_compaction_way_size = ReuseBlockMergeIterator::MAX_CHILD_NUM;
   int64_t l0_way_size = std::min(max_compaction_way_size - 1, way_size);
 
   if (nullptr == compact_way || way_size < 0) {
@@ -1238,14 +1214,7 @@ int CompactionJob::build_multiple_compaction(ArenaAllocator &arena,
       merge_extent += extents.size();
     }
     if (nullptr == compaction) {
-      // Only when L0->L1 and minor_compaction_type_ is Minor, we use MinorCompaction
-      if (TaskType::MINOR_COMPACTION_TASK == context_.task_type_ &&
-        context_.minor_compaction_type_ == 1) {
-        // todo fpga
-//        compaction = ALLOC_OBJECT(MinorCompaction, arena, context_, cf_desc_);
-      } else {
-        compaction = ALLOC_OBJECT(GeneralCompaction, arena, context_, cf_desc_, arena_);
-      }
+      compaction = ALLOC_OBJECT(GeneralCompaction, arena, context_, cf_desc_, arena_);
     }
     if (nullptr != compaction) {
       FAIL_RETURN(compaction->add_merge_batch(extents, 0, extents.size()));

@@ -22,7 +22,6 @@
 #include "util/concurrent_direct_file_writer.h"
 #include "util/mutexlock.h"
 #include "util/random.h"
-#include "smartengine/compaction_filter.h"
 #include "smartengine/env.h"
 #include "smartengine/iterator.h"
 #include "smartengine/options.h"
@@ -438,37 +437,6 @@ class SleepingBackgroundTask {
   bool sleeping_;
 };
 
-// Filters merge operands and values that are equal to `num`.
-class FilterNumber : public storage::CompactionFilter {
- public:
-  explicit FilterNumber(uint64_t num) : num_(num) {}
-
-  std::string last_merge_operand_key() { return last_merge_operand_key_; }
-
-  bool Filter(int level, const common::Slice& key, const common::Slice& value,
-              std::string* new_value, bool* value_changed) const override {
-    if (value.size() == sizeof(uint64_t)) {
-      return num_ == DecodeFixed64(value.data());
-    }
-    return true;
-  }
-
-  bool FilterMergeOperand(int level, const common::Slice& key,
-                          const common::Slice& value) const override {
-    last_merge_operand_key_ = key.ToString();
-    if (value.size() == sizeof(uint64_t)) {
-      return num_ == DecodeFixed64(value.data());
-    }
-    return true;
-  }
-
-  const char* Name() const override { return "FilterBadMergeOperand"; }
-
- private:
-  mutable std::string last_merge_operand_key_;
-  uint64_t num_;
-};
-
 inline std::string EncodeInt(uint64_t x) {
   std::string result;
   PutFixed64(&result, x);
@@ -652,59 +620,7 @@ void RandomInitDBOptions(common::DBOptions* db_opt, util::Random* rnd);
 void RandomInitCFOptions(common::ColumnFamilyOptions* cf_opt,
                          util::Random* rnd);
 
-// A dummy compaction filter which can change its name
-class ChanglingCompactionFilter : public storage::CompactionFilter {
- public:
-  explicit ChanglingCompactionFilter(const std::string& name)
-      : name_(name + "storage::CompactionFilter") {}
-  ~ChanglingCompactionFilter() {}
-
-  void SetName(const std::string& name) { name_ = name; }
-
-  bool Filter(int level, const common::Slice& key,
-              const common::Slice& existing_value, std::string* new_value,
-              bool* value_changed) const override {
-    return false;
-  }
-
-  const char* Name() const override { return name_.c_str(); }
-
- private:
-  std::string name_;
-};
-
-// Returns a dummy compaction filter with a random name.
-storage::CompactionFilter* RandomCompactionFilter(Random* rnd);
-
-// A dummy compaction filter factory which can change its name
-class ChanglingCompactionFilterFactory
-    : public storage::CompactionFilterFactory {
- public:
-  explicit ChanglingCompactionFilterFactory(const std::string& name)
-      : name_(name + "CompactionFilterFactory") {}
-  ~ChanglingCompactionFilterFactory() {}
-
-  void SetName(const std::string& name) { name_ = name; }
-
-  std::unique_ptr<storage::CompactionFilter> CreateCompactionFilter(
-      const storage::CompactionFilter::Context& context) override {
-    return std::unique_ptr<storage::CompactionFilter>();
-  }
-
-  // Returns a name that identifies this compaction filter factory.
-  const char* Name() const override { return name_.c_str(); }
-
- protected:
-  std::string name_;
-};
-
 common::CompressionType RandomCompressionType(Random* rnd);
-
-void RandomCompressionTypeVector(const size_t count,
-                                 std::vector<common::CompressionType>* types,
-                                 util::Random* rnd);
-
-storage::CompactionFilterFactory* RandomCompactionFilterFactory(Random* rnd);
 
 std::string RandomName(Random* rnd, const size_t len);
 

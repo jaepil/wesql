@@ -12,6 +12,7 @@
 
 #include "util/transaction_test_util.h"
 
+#include <climits>
 #include <inttypes.h>
 #include <string>
 

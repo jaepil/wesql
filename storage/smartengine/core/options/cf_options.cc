@@ -35,14 +35,8 @@ ImmutableCFOptions::ImmutableCFOptions(const Options& options)
 
 ImmutableCFOptions::ImmutableCFOptions(const ImmutableDBOptions& db_options,
                                        const ColumnFamilyOptions& cf_options)
-    : compaction_style(cf_options.compaction_style),
-      compaction_pri(cf_options.compaction_pri),
-      compaction_options_universal(cf_options.compaction_options_universal),
-      compaction_options_fifo(cf_options.compaction_options_fifo),
-      user_comparator(cf_options.comparator),
+    : user_comparator(cf_options.comparator),
       internal_comparator(InternalKeyComparator(cf_options.comparator)),
-      compaction_filter(cf_options.compaction_filter),
-      compaction_filter_factory(cf_options.compaction_filter_factory.get()),
       min_write_buffer_number_to_merge(
           cf_options.min_write_buffer_number_to_merge),
       max_write_buffer_number_to_maintain(
@@ -72,45 +66,10 @@ ImmutableCFOptions::ImmutableCFOptions(const ImmutableDBOptions& db_options,
       new_table_reader_for_compaction_inputs(
           db_options.new_table_reader_for_compaction_inputs),
       compaction_readahead_size(db_options.compaction_readahead_size),
-      num_levels(cf_options.num_levels),
       optimize_filters_for_hits(cf_options.optimize_filters_for_hits),
       force_consistency_checks(cf_options.force_consistency_checks),
-      listeners(db_options.listeners),
       row_cache(db_options.row_cache),
-      max_subcompactions(db_options.max_subcompactions),
       filter_manager(new table::FilterManager()) {}
-
-// Multiple two operands. If they overflow, return op1.
-uint64_t MultiplyCheckOverflow(uint64_t op1, double op2) {
-  if (op1 == 0 || op2 <= 0) {
-    return 0;
-  }
-  if (port::kMaxUint64 / op1 < op2) {
-    return op1;
-  }
-  return static_cast<uint64_t>(op1 * op2);
-}
-
-void MutableCFOptions::RefreshDerivedOptions(int num_levels,
-                                             CompactionStyle compaction_style) {
-  max_file_size.resize(num_levels);
-  for (int i = 0; i < num_levels; ++i) {
-    if (i == 0 && compaction_style == kCompactionStyleUniversal) {
-      max_file_size[i] = ULLONG_MAX;
-    } else if (i > 1) {
-      max_file_size[i] = MultiplyCheckOverflow(max_file_size[i - 1],
-                                               target_file_size_multiplier);
-    } else {
-      max_file_size[i] = target_file_size_base;
-    }
-  }
-}
-
-uint64_t MutableCFOptions::MaxFileSizeForLevel(int level) const {
-  assert(level >= 0);
-  assert(level < (int)max_file_size.size());
-  return max_file_size[level];
-}
 
 void MutableCFOptions::Dump() const {
   // Memtable related options
@@ -143,16 +102,10 @@ void MutableCFOptions::Dump() const {
                  level0_file_num_compaction_trigger);
   __SE_LOG(INFO, "      level0_layer_num_compaction_trigger: %d",
                  level0_layer_num_compaction_trigger);
-  __SE_LOG(INFO, "                        minor_window_size: %d",
-                 minor_window_size);
   __SE_LOG(INFO, "  level1_extents_major_compaction_trigger: %d",
                  level1_extents_major_compaction_trigger);
   __SE_LOG(INFO, "                     level2_usage_percent: %ld",
                  level2_usage_percent);
-  __SE_LOG(INFO, "           level0_slowdown_writes_trigger: %d",
-                 level0_slowdown_writes_trigger);
-  __SE_LOG(INFO, "               level0_stop_writes_trigger: %d",
-                 level0_stop_writes_trigger);
   __SE_LOG(INFO, "                     max_compaction_bytes: %" PRIu64,
                  max_compaction_bytes);
   __SE_LOG(INFO, "                    target_file_size_base: %" PRIu64,

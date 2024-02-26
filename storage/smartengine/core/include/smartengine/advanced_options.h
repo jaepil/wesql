@@ -15,7 +15,6 @@
 #include <memory>
 
 #include "smartengine/memtablerep.h"
-#include "smartengine/universal_compaction.h"
 
 namespace smartengine {
 
@@ -28,51 +27,6 @@ namespace common {
 class Slice;
 enum CompressionType : unsigned char;
 struct Options;
-
-enum CompactionStyle : char {
-  // level based compaction style
-  kCompactionStyleLevel = 0x0,
-  // Universal compaction style
-  // Not supported in ROCKSDB_LITE.
-  kCompactionStyleUniversal = 0x1,
-  // FIFO compaction style
-  // Not supported in ROCKSDB_LITE
-  kCompactionStyleFIFO = 0x2,
-  // Disable background compaction. Compaction jobs are submitted
-  // via CompactFiles().
-  // Not supported in ROCKSDB_LITE
-  kCompactionStyleNone = 0x3,
-};
-
-// In Level-based comapction, it Determines which file from a level to be
-// picked to merge to the next level. We suggest people try
-// kMinOverlappingRatio first when you tune your database.
-enum CompactionPri : char {
-  // Slightly Priotize larger files by size compensated by #deletes
-  kByCompensatedSize = 0x0,
-  // First compact files whose data's latest update time is oldest.
-  // Try this if you only update some hot keys in small ranges.
-  kOldestLargestSeqFirst = 0x1,
-  // First compact files whose range hasn't been compacted to the next level
-  // for the longest. If your updates are random across the key space,
-  // write amplification is slightly better with this option.
-  kOldestSmallestSeqFirst = 0x2,
-  // First compact files whose ratio between overlapping size in next level
-  // and its size is the smallest. It in many cases can optimize write
-  // amplification.
-  kMinOverlappingRatio = 0x3,
-};
-
-struct CompactionOptionsFIFO {
-  // once the total sum of table files reaches this, we will delete the oldest
-  // table file
-  // Default: 1GB
-  uint64_t max_table_files_size;
-
-  CompactionOptionsFIFO() : max_table_files_size(1 * 1024 * 1024 * 1024) {}
-  CompactionOptionsFIFO(uint64_t _max_table_files_size)
-      : max_table_files_size(_max_table_files_size) {}
-};
 
 // Compression options for different compression algorithms like Zlib
 struct CompressionOptions {
@@ -207,26 +161,6 @@ struct AdvancedColumnFamilyOptions {
   // change when data grows.
   std::vector<CompressionType> compression_per_level;
 
-  // Number of levels for this database
-  int num_levels = 7;
-
-  // Soft limit on number of level-0 files. We start slowing down writes at this
-  // point. A value <0 means that no writing slow down will be triggered by
-  // number of files in level-0.
-  //
-  // Default: 20
-  //
-  // Dynamically changeable through SetOptions() API
-  int level0_slowdown_writes_trigger = 20;
-
-  // Maximum number of level-0 files.  We stop writes at this point.
-  //
-  // Default: 36
-  //
-  // Dynamically changeable through SetOptions() API
-  int level0_stop_writes_trigger = 36;
-
-
   // used in build-index case, we need assure all records
   // maintain existed during flush&compaction until build-index process finished
   bool background_disable_merge = false;
@@ -315,16 +249,6 @@ struct AdvancedColumnFamilyOptions {
   // Dynamically changeable through SetOptions() API
   double max_bytes_for_level_multiplier = 10;
 
-  // Different max-size multipliers for different levels.
-  // These are multiplied by max_bytes_for_level_multiplier to arrive
-  // at the max-size of each level.
-  //
-  // Default: 1
-  //
-  // Dynamically changeable through SetOptions() API
-  std::vector<int> max_bytes_for_level_multiplier_additional =
-      std::vector<int>(num_levels, 1);
-
   // We try to limit number of bytes in one compaction to be lower than this
   // threshold. But it's not guaranteed.
   // Value 0 will be sanitized.
@@ -343,20 +267,6 @@ struct AdvancedColumnFamilyOptions {
   //
   // Default: 256GB
   uint64_t hard_pending_compaction_bytes_limit = 256 * 1073741824ull;
-
-  // The compaction style. Default: kCompactionStyleLevel
-  CompactionStyle compaction_style = kCompactionStyleLevel;
-
-  // If level compaction_style = kCompactionStyleLevel, for each level,
-  // which files are prioritized to be picked to compact.
-  // Default: kByCompensatedSize
-  CompactionPri compaction_pri = kByCompensatedSize;
-
-  // The options needed to support Universal Style compactions
-  CompactionOptionsUniversal compaction_options_universal;
-
-  // The options for FIFO compaction style
-  CompactionOptionsFIFO compaction_options_fifo;
 
   // An iteration->Next() sequentially skips over keys with the same
   // user-key unless this option is set. This number specifies the number
@@ -431,10 +341,6 @@ struct AdvancedColumnFamilyOptions {
   explicit AdvancedColumnFamilyOptions(const Options& options);
 
   // ---------------- OPTIONS NOT SUPPORTED ANYMORE ----------------
-
-  // NOT SUPPORTED ANYMORE
-  // This does not do anything anymore.
-  int max_mem_compaction_level;
 
   // NOT SUPPORTED ANYMORE -- this options is no longer used
   // Puts are delayed to options.delayed_write_rate when any level has a

@@ -29,7 +29,6 @@
 #include "storage/storage_manager.h"
 #include "util/thread_local.h"
 #include "util/misc_utility.h"
-#include "smartengine/compaction_job_stats.h"
 #include "smartengine/db.h"
 #include "smartengine/env.h"
 #include "smartengine/options.h"
@@ -289,8 +288,6 @@ class ColumnFamilyData {
            && storage_manager_.can_shrink();
   }
   void print_internal_stat();
-  // thread-safe
-  int NumberLevels() const { return ioptions_.num_levels; }
 
   // thread-safe
   const util::EnvOptions* soptions() const;

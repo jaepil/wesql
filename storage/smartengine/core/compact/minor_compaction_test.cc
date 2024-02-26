@@ -145,8 +145,6 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   int file_size = db_write_buffer_size * 1024;
   opt.target_file_size_base = file_size;
 
-  opt.minor_window_size = 4;
-
   opt.compaction_type = 1; // should be 1 here
 
   std::string db_path_ = test::TmpDir() + "/minor_compaction_test";

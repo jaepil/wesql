@@ -26,7 +26,6 @@
 #include <mutex>
 #include "smartengine/async_callback.h"
 #include "smartengine/iterator.h"
-#include "smartengine/listener.h"
 #include "smartengine/metadata.h"
 #include "smartengine/options.h"
 #include "smartengine/snapshot.h"
@@ -34,17 +33,10 @@
 #include "smartengine/thread_status.h"
 #include "smartengine/transaction_log.h"
 #include "smartengine/types.h"
-#include "smartengine/version.h"
 
 #ifdef _WIN32
 // Windows API macro interference
 #undef DeleteFile
-#endif
-
-#if defined(__GNUC__) || defined(__clang__)
-#define ROCKSDB_DEPRECATED_FUNC __attribute__((__deprecated__))
-#elif _WIN32
-#define ROCKSDB_DEPRECATED_FUNC __declspec(deprecated)
 #endif
 
 namespace smartengine {
@@ -56,8 +48,6 @@ struct ColumnFamilyOptions;
 struct ReadOptions;
 struct WriteOptions;
 struct FlushOptions;
-struct CompactionOptions;
-struct CompactRangeOptions;
 }
 
 namespace table {
@@ -171,10 +161,6 @@ class ColumnFamilyHandle {
   // current handle.
   virtual const util::Comparator* GetComparator() const = 0;
 };
-
-static const int kMajorVersion = __ROCKSDB_MAJOR__;
-static const int kMinorVersion = __ROCKSDB_MINOR__;
-
 // A range of keys
 struct Range {
   common::Slice start;  // Included in the range
@@ -741,25 +727,6 @@ class DB {
     GetApproximateMemTableStats(DefaultColumnFamily(), range, count, size);
   }
 
-  // Deprecated versions of GetApproximateSizes
-  ROCKSDB_DEPRECATED_FUNC virtual void GetApproximateSizes(
-      const Range* range, int n, uint64_t* sizes, bool include_memtable) {
-    uint8_t include_flags = SizeApproximationFlags::INCLUDE_FILES;
-    if (include_memtable) {
-      include_flags |= SizeApproximationFlags::INCLUDE_MEMTABLES;
-    }
-    GetApproximateSizes(DefaultColumnFamily(), range, n, sizes, include_flags);
-  }
-  ROCKSDB_DEPRECATED_FUNC virtual void GetApproximateSizes(
-      ColumnFamilyHandle* column_family, const Range* range, int n,
-      uint64_t* sizes, bool include_memtable) {
-    uint8_t include_flags = SizeApproximationFlags::INCLUDE_FILES;
-    if (include_memtable) {
-      include_flags |= SizeApproximationFlags::INCLUDE_MEMTABLES;
-    }
-    GetApproximateSizes(column_family, range, n, sizes, include_flags);
-  }
-
   // Compact the underlying storage for the key range [*begin,*end].
   // The actual compaction interval might be superset of [*begin, *end].
   // In particular, deleted and overwritten versions are discarded,
@@ -777,39 +744,12 @@ class DB {
   // the files. In this case, client could set options.change_level to true, to
   // move the files back to the minimum level capable of holding the data set
   // or a given level (specified by non-negative options.target_level).
-  virtual common::Status CompactRange(
-      const common::CompactRangeOptions& options,
-      ColumnFamilyHandle* column_family, const common::Slice* begin,
-      const common::Slice* end,
-      const uint32_t manual_compact_type = 8/* Stream*/) = 0;
-  virtual common::Status CompactRange(
-      const common::CompactRangeOptions& options,
-      const common::Slice* begin,
-      const common::Slice* end,
-      const uint32_t manual_compact_type = 8/* Stream*/) {
-    return CompactRange(options, DefaultColumnFamily(), begin, end, manual_compact_type);
-  }
-
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status CompactRange(
-      ColumnFamilyHandle* column_family, const common::Slice* begin,
-      const common::Slice* end, bool change_level = false,
-      int target_level = -1, uint32_t target_path_id = 0) {
-    common::CompactRangeOptions options;
-    options.change_level = change_level;
-    options.target_level = target_level;
-    options.target_path_id = target_path_id;
-    return CompactRange(options, column_family, begin, end);
-  }
-
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status CompactRange(
-      const common::Slice* begin, const common::Slice* end,
-      bool change_level = false, int target_level = -1,
-      uint32_t target_path_id = 0) {
-    common::CompactRangeOptions options;
-    options.change_level = change_level;
-    options.target_level = target_level;
-    options.target_path_id = target_path_id;
-    return CompactRange(options, DefaultColumnFamily(), begin, end);
+  virtual common::Status CompactRange(ColumnFamilyHandle* column_family,
+                                      const uint32_t manual_compact_type) = 0;
+  //TODO:Zhao Dongsheng, this interface unused?
+  virtual common::Status CompactRange(const uint32_t manual_compact_type)
+  {
+    return CompactRange(DefaultColumnFamily(), manual_compact_type);
   }
 
   virtual int reset_pending_shrink(const uint64_t subtable_id) = 0;
@@ -826,27 +766,6 @@ class DB {
 
   virtual common::Status SetDBOptions(
       const std::unordered_map<std::string, std::string>& new_options) = 0;
-
-  // CompactFiles() inputs a list of files specified by file numbers and
-  // compacts them to the specified level. Note that the behavior is different
-  // from CompactRange() in that CompactFiles() performs the compaction job
-  // using the CURRENT thread.
-  //
-  // @see GetDataBaseMetaData
-  // @see GetColumnFamilyMetaData
-  virtual common::Status CompactFiles(
-      const common::CompactionOptions& compact_options,
-      ColumnFamilyHandle* column_family,
-      const std::vector<std::string>& input_file_names, const int output_level,
-      const int output_path_id = -1) = 0;
-
-  virtual common::Status CompactFiles(
-      const common::CompactionOptions& compact_options,
-      const std::vector<std::string>& input_file_names, const int output_level,
-      const int output_path_id = -1) {
-    return CompactFiles(compact_options, DefaultColumnFamily(),
-                        input_file_names, output_level, output_path_id);
-  }
 
   // This function will wait until all currently running background processes
   // finish. After it returns, no background process will be run until
@@ -865,23 +784,6 @@ class DB {
   //
   virtual common::Status EnableAutoCompaction(
       const std::vector<ColumnFamilyHandle*>& column_family_handles) = 0;
-
-  // Number of levels used for this DB.
-  virtual int NumberLevels(ColumnFamilyHandle* column_family) = 0;
-  virtual int NumberLevels() { return NumberLevels(DefaultColumnFamily()); }
-
-  // Maximum level to which a new compacted memtable is pushed if it
-  // does not create overlap.
-  virtual int MaxMemCompactionLevel(ColumnFamilyHandle* column_family) = 0;
-  virtual int MaxMemCompactionLevel() {
-    return MaxMemCompactionLevel(DefaultColumnFamily());
-  }
-
-  // Number of files in level-0 that would stop writes.
-  virtual int Level0StopWriteTrigger(ColumnFamilyHandle* column_family) = 0;
-  virtual int Level0StopWriteTrigger() {
-    return Level0StopWriteTrigger(DefaultColumnFamily());
-  }
 
   // Get DB name -- the exact same name that was provided as an argument to
   // DB::Open()
@@ -1050,109 +952,6 @@ class DB {
   }
   virtual storage::StorageLogger * GetStorageLogger() {
     return nullptr;
-  }
-
-
-  // AddFile() is deprecated, please use IngestExternalFile()
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      ColumnFamilyHandle* column_family,
-      const std::vector<std::string>& file_path_list, bool move_file = false,
-      bool skip_snapshot_check = false) {
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
-  }
-
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      const std::vector<std::string>& file_path_list, bool move_file = false,
-      bool skip_snapshot_check = false) {
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
-  }
-
-  // AddFile() is deprecated, please use IngestExternalFile()
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      ColumnFamilyHandle* column_family, const std::string& file_path,
-      bool move_file = false, bool skip_snapshot_check = false) {
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
-  }
-
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      const std::string& file_path, bool move_file = false,
-      bool skip_snapshot_check = false) {
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
-  }
-
-  // Load table file with information "file_info" into "column_family"
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      ColumnFamilyHandle* column_family,
-      const std::vector<table::ExternalSstFileInfo>& file_info_list,
-      bool move_file = false, bool skip_snapshot_check = false) {
-    std::vector<std::string> external_files;
-    for (const table::ExternalSstFileInfo& file_info : file_info_list) {
-      external_files.push_back(file_info.file_path);
-    }
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
-  }
-
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      const std::vector<table::ExternalSstFileInfo>& file_info_list,
-      bool move_file = false, bool skip_snapshot_check = false) {
-    std::vector<std::string> external_files;
-    for (const table::ExternalSstFileInfo& file_info : file_info_list) {
-      external_files.push_back(file_info.file_path);
-    }
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
-  }
-
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      ColumnFamilyHandle* column_family,
-      const table::ExternalSstFileInfo* file_info, bool move_file = false,
-      bool skip_snapshot_check = false) {
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
-  }
-
-  ROCKSDB_DEPRECATED_FUNC virtual common::Status AddFile(
-      const table::ExternalSstFileInfo* file_info, bool move_file = false,
-      bool skip_snapshot_check = false) {
-    common::IngestExternalFileOptions ifo;
-    ifo.move_files = move_file;
-    ifo.snapshot_consistency = !skip_snapshot_check;
-    ifo.allow_global_seqno = false;
-    ifo.allow_blocking_flush = false;
-    return common::Status::kOk;
   }
 
 #endif  // ROCKSDB_LITE

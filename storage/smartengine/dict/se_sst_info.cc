@@ -176,15 +176,6 @@ common::Status SeSstFile::commit() {
                             fileinfo.file_size, fileinfo.num_entries);
     }
     if (!rollbacked) {
-      // Add the file to the database
-      // Set the snapshot_consistency parameter to false since no one
-      // should be accessing the table we are bulk loading
-      common::IngestExternalFileOptions opts;
-      opts.move_files = true;
-      opts.snapshot_consistency = false;
-      opts.allow_global_seqno = false;
-      opts.allow_blocking_flush = false;
-      //s = m_db->IngestExternalFile(m_cf, {m_name}, opts);
       s = m_db->InstallSstExternal(m_cf, mtables_);
       if (m_tracing) {
         // NO_LINT_DEBUG

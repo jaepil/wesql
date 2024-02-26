@@ -17,7 +17,6 @@
 #include "memory/mod_info.h"
 #include "util/string_util.h"
 #include "smartengine/cache.h"
-#include "smartengine/compaction_filter.h"
 #include "smartengine/convenience.h"
 #include "smartengine/filter_policy.h"
 #include "smartengine/memtablerep.h"
@@ -64,7 +63,6 @@ DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
       mutable_db_options.base_background_compactions;
   options.max_background_compactions =
       mutable_db_options.max_background_compactions;
-  options.max_subcompactions = immutable_db_options.max_subcompactions;
   options.max_background_flushes = immutable_db_options.max_background_flushes;
   options.max_background_dumps = mutable_db_options.max_background_dumps;
   options.dump_memtable_limit_size = mutable_db_options.dump_memtable_limit_size;
@@ -103,7 +101,6 @@ DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
   options.use_adaptive_mutex = immutable_db_options.use_adaptive_mutex;
   options.bytes_per_sync = immutable_db_options.bytes_per_sync;
   options.wal_bytes_per_sync = immutable_db_options.wal_bytes_per_sync;
-  options.listeners = immutable_db_options.listeners;
   options.enable_thread_tracking = immutable_db_options.enable_thread_tracking;
   options.delayed_write_rate = mutable_db_options.delayed_write_rate;
   options.allow_concurrent_memtable_write =
@@ -148,16 +145,6 @@ DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
       mutable_db_options.concurrent_writable_file_buffer_switch_limit;
   options.use_direct_write_for_wal =
       mutable_db_options.use_direct_write_for_wal;
-  options.compaction_type = 
-      immutable_db_options.compaction_type;
-  options.compaction_mode = 
-      immutable_db_options.compaction_mode;
-  options.cpu_compaction_thread_num = 
-      immutable_db_options.cpu_compaction_thread_num;
-  options.fpga_compaction_thread_num =
-      immutable_db_options.fpga_compaction_thread_num;
-  options.fpga_device_id =
-      immutable_db_options.fpga_device_id;
   options.auto_shrink_enabled = mutable_db_options.auto_shrink_enabled;
   options.max_free_extent_percent = mutable_db_options.max_free_extent_percent;
   options.shrink_allocate_interval = mutable_db_options.shrink_allocate_interval;
@@ -191,15 +178,10 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
       mutable_cf_options.level0_file_num_compaction_trigger;
   cf_opts.level0_layer_num_compaction_trigger =
       mutable_cf_options.level0_layer_num_compaction_trigger;
-  cf_opts.minor_window_size = mutable_cf_options.minor_window_size;
   cf_opts.level1_extents_major_compaction_trigger =
       mutable_cf_options.level1_extents_major_compaction_trigger;
   cf_opts.level2_usage_percent =
       mutable_cf_options.level2_usage_percent;
-  cf_opts.level0_slowdown_writes_trigger =
-      mutable_cf_options.level0_slowdown_writes_trigger;
-  cf_opts.level0_stop_writes_trigger =
-      mutable_cf_options.level0_stop_writes_trigger;
   cf_opts.max_compaction_bytes = mutable_cf_options.max_compaction_bytes;
   cf_opts.target_file_size_base = mutable_cf_options.target_file_size_base;
   cf_opts.target_file_size_multiplier =
@@ -209,12 +191,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
   cf_opts.max_bytes_for_level_multiplier =
       mutable_cf_options.max_bytes_for_level_multiplier;
 
-  cf_opts.max_bytes_for_level_multiplier_additional.clear();
-  for (auto value :
-       mutable_cf_options.max_bytes_for_level_multiplier_additional) {
-    cf_opts.max_bytes_for_level_multiplier_additional.emplace_back(value);
-  }
-
   // Misc options
   cf_opts.max_sequential_skip_in_iterations =
       mutable_cf_options.max_sequential_skip_in_iterations;
@@ -223,8 +199,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
   cf_opts.compression = mutable_cf_options.compression;
 
   cf_opts.table_factory = options.table_factory;
-  // TODO(yhchiang): find some way to handle the following derived options
-  // * max_file_size
   cf_opts.scan_add_blocks_limit = options.scan_add_blocks_limit;
   cf_opts.bottommost_level = options.bottommost_level;
   cf_opts.compaction_task_extents_limit = options.compaction_task_extents_limit;
@@ -368,14 +342,6 @@ bool ParseOptionHelper(char* opt_address, const OptionType& opt_type,
     case OptionType::kDouble:
       *reinterpret_cast<double*>(opt_address) = ParseDouble(value);
       break;
-    case OptionType::kCompactionStyle:
-      return ParseEnum<CompactionStyle>(
-          compaction_style_string_map, value,
-          reinterpret_cast<CompactionStyle*>(opt_address));
-    case OptionType::kCompactionPri:
-      return ParseEnum<CompactionPri>(
-          compaction_pri_string_map, value,
-          reinterpret_cast<CompactionPri*>(opt_address));
     case OptionType::kCompressionType:
       return ParseEnum<CompressionType>(
           compression_type_string_map, value,
@@ -436,11 +402,19 @@ bool GetTableFilterPolicy(const std::string& value,
   return true;
 }
 
-bool GetCompressionType(const std::string& value, CompressionType* out) {
-  if (nullptr == out) {
-    return false;
-  }
-  return ParseEnum<CompressionType>(compression_type_string_map, value, out);
+CompressionType get_compression_type(const ImmutableCFOptions &ioptions,
+                                     const MutableCFOptions &mutable_cf_options,
+                                     const int level)
+{
+  // If the user has specified a different compression level for each level,
+  // then pick the compression for that level.
+  if (!ioptions.compression_per_level.empty()) {
+    assert(level >= 0 && level <= 2);
+    const int n = static_cast<int>(ioptions.compression_per_level.size()) - 1;
+    return ioptions.compression_per_level[std::max(0, std::min(level, n))];
+  } else {
+    return mutable_cf_options.compression;
+  }  
 }
 
 bool GetVectorCompressionType(const std::string& value,
@@ -491,14 +465,6 @@ bool SerializeSingleOptionHelper(const char* opt_address,
       *value = EscapeOptionString(
           *(reinterpret_cast<const std::string*>(opt_address)));
       break;
-    case OptionType::kCompactionStyle:
-      return SerializeEnum<CompactionStyle>(
-          compaction_style_string_map,
-          *(reinterpret_cast<const CompactionStyle*>(opt_address)), value);
-    case OptionType::kCompactionPri:
-      return SerializeEnum<CompactionPri>(
-          compaction_pri_string_map,
-          *(reinterpret_cast<const CompactionPri*>(opt_address)), value);
     case OptionType::kCompressionType:
       return SerializeEnum<CompressionType>(
           compression_type_string_map,
@@ -529,20 +495,6 @@ bool SerializeSingleOptionHelper(const char* opt_address,
       } else {
         *value = *ptr ? (*ptr)->Name() : kNullptrString;
       }
-      break;
-    }
-    case OptionType::kCompactionFilter: {
-      // it's a const pointer of const CompactionFilter*
-      const auto* ptr =
-          reinterpret_cast<const CompactionFilter* const*>(opt_address);
-      *value = *ptr ? (*ptr)->Name() : kNullptrString;
-      break;
-    }
-    case OptionType::kCompactionFilterFactory: {
-      const auto* ptr =
-          reinterpret_cast<const std::shared_ptr<CompactionFilterFactory>*>(
-              opt_address);
-      *value = ptr->get() ? ptr->get()->Name() : kNullptrString;
       break;
     }
     case OptionType::kMemTableRepFactory: {

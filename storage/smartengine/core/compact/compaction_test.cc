@@ -72,7 +72,6 @@ DEFINE_bool(snapshot_task, false, "Whether to snapshot each task");
 DEFINE_int32(stats_interval, 5, "Interval between two reports");
 DEFINE_int32(device_id, 0, "FPGA device ID");
 DEFINE_int32(fpga_driver_threads_num, 12, "FPGA driver thread num");
-DEFINE_int32(compaction_mode, 0, "0 cpu, 1 fpga, 2 check");
 
 //size_t g_thread_num = 1;
 //size_t g_key_size = 20;
@@ -169,8 +168,6 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   // Arena will assert kBlockSize in 4096 to (2u << 30)
   opt.arena_block_size = 4096 * 2;
   opt.memtable_huge_page_size = 4096 * 2;
-
-  opt.compaction_type = 0; // should be 0 here
 
   int file_size = db_write_buffer_size * 1024;
   opt.target_file_size_base = file_size;
@@ -368,7 +365,6 @@ class CompactionTest : public testing::Test {
     comp->table_space_id_ = 0;
     // Default is minor task
     comp->task_type_ = db::TaskType::MINOR_COMPACTION_TASK;
-    comp->minor_compaction_type_ = 2; // new stream compaction
   }
 
   void print_raw_meta(const db::MemTable *memtable) {
@@ -656,9 +652,9 @@ class CompactionTest : public testing::Test {
     extent_builder_.reset(NewTableBuilder(
         context_->icf_options_, internal_comparator_, &props_,
         cf_desc_.column_family_id_, cf_desc_.column_family_name_, &mini_tables_,
-        GetCompressionType(context_->icf_options_,
-                           context_->mutable_cf_options_,
-                           level/*level*/ ) /* compression type */,
+        get_compression_type(context_->icf_options_,
+                             context_->mutable_cf_options_,
+                             level),
         context_->icf_options_.compression_opts, output_layer_position,
         &compression_dict_, true));
   }
@@ -1065,7 +1061,6 @@ class CompactionTest : public testing::Test {
   std::atomic<bool> shutting_down_;
   std::atomic<bool> bg_stopped_;
   //CompactionTestRunningStatus status_;
-  std::unique_ptr<CompactionScheduler> compaction_scheduler_;
   util::autovector<MemTable*> mems_;
   WriteBufferManager *wb_;
   ArenaAllocator alloc_;

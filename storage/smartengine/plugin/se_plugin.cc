@@ -244,16 +244,6 @@ static int se_init_func(void *const p)
       DEFAULT_SE_CONCURRENT_WRITABLE_FILE_SINGLE_BUFFER_SIZE; // 64KB
   se_db_options.concurrent_writable_file_buffer_switch_limit =
       DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_SWITCH_LIMIT; // 32 KB
-  if (se_default_cf_options.level0_slowdown_writes_trigger <
-      se_default_cf_options.level0_file_num_compaction_trigger) {
-    se_default_cf_options.level0_slowdown_writes_trigger =
-        se_default_cf_options.level0_file_num_compaction_trigger;
-  }
-  if (se_default_cf_options.level0_stop_writes_trigger <
-      se_default_cf_options.level0_slowdown_writes_trigger) {
-    se_default_cf_options.level0_stop_writes_trigger =
-      se_default_cf_options.level0_slowdown_writes_trigger;
-  }
   if (nullptr != se_cf_compression_per_level &&
       !smartengine::common::GetVectorCompressionType(
           std::string(se_cf_compression_per_level),

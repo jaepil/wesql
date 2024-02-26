@@ -13,10 +13,9 @@
 #include <string>
 #include <vector>
 
-#include "compact/compaction_iteration_stats.h"
+#include "compact/compaction_stats.h"
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
-#include "smartengine/compaction_filter.h"
 #include "memory/page_arena.h"
 
 namespace smartengine {
@@ -26,22 +25,6 @@ class Env;
 
 namespace storage {
 class ChangeInfo;
-
-// A wrapper around Compaction. Has a much smaller interface, only what
-// CompactionIterator uses. Tests can override it.
-class CompactionProxy {
- public:
-  virtual ~CompactionProxy() = default;
-  virtual int level(size_t compaction_input_level = 0) const = 0;
-  virtual bool KeyNotExistsBeyondOutputLevel(
-      const common::Slice& user_key, std::vector<size_t>* level_ptrs) const = 0;
-  virtual bool bottommost_level() const = 0;
-  virtual int number_levels() const = 0;
-  virtual common::Slice GetLargestUserKey() const = 0;
- protected:
-  CompactionProxy() = default;
-};
-
 
 class CompactionIterator {
  public:
@@ -56,13 +39,9 @@ class CompactionIterator {
       bool expect_valid_internal_key,
       storage::ChangeInfo &change_info,
       memory::ArenaAllocator &arena,
-      std::unique_ptr<CompactionProxy> compaction,
-      const storage::CompactionFilter* compaction_filter = nullptr,
       const std::atomic<bool>* shutting_down = nullptr,
       const std::atomic<bool>* bg_stopped = nullptr,
       const std::atomic<int64_t>* cancel_type = nullptr,
-//      memory::ArenaAllocator* row_arena = nullptr,
-//      const common::SeSchema *schema = nullptr,
       const common::Slice *l2_largest_key = nullptr,
       const bool background_disable_merge = false);
 
@@ -124,17 +103,13 @@ class CompactionIterator {
   const common::SequenceNumber earliest_write_conflict_snapshot_;
   util::Env* env_;
   bool expect_valid_internal_key_;
-  std::unique_ptr<CompactionProxy> compaction_;
-  const storage::CompactionFilter* compaction_filter_;
   const std::atomic<bool>* shutting_down_;
   const std::atomic<bool>* bg_stopped_;
   const std::atomic<int64_t>* cancel_type_;
-  bool bottommost_level_;
   bool valid_ = false;
   bool visible_at_tip_;
   common::SequenceNumber earliest_snapshot_;
   common::SequenceNumber latest_snapshot_;
-  bool ignore_snapshots_;
 
   // State
   //
@@ -172,18 +147,7 @@ class CompactionIterator {
   // PinnedIteratorsManager used to pin input_ Iterator blocks while reading
   // merge operands and then releasing them after consuming them.
   db::PinnedIteratorsManager pinned_iters_mgr_;
-  std::string compaction_filter_value_;
-  db::InternalKey compaction_filter_skip_until_;
-  // "level_ptrs" holds indices that remember which file of an associated
-  // level we were last checking during the last call to compaction->
-  // KeyNotExistsBeyondOutputLevel(). This allows future calls to the function
-  // to pick off where it left off since each subcompaction's key range is
-  // increasing so a later call to the function must be looking for a key that
-  // is in or beyond the last file checked during the previous call
-  std::vector<size_t> level_ptrs_;
   CompactionIterationStats iter_stats_;
-//  memory::ArenaAllocator* row_arena_;
-//  const common::SeSchema *dst_schema_;
 
   storage::ChangeInfo &change_info_;
   memory::ArenaAllocator &arena_;

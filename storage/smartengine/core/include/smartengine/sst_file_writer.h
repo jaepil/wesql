@@ -20,6 +20,7 @@ namespace smartengine {
 
 namespace db {
 struct MiniTables;
+class ColumnFamilyHandle;
 }
 
 namespace util {

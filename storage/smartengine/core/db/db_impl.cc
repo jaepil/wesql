@@ -98,13 +98,11 @@
 #include "util/string_util.h"
 #include "util/sync_point.h"
 #include "smartengine/cache.h"
-#include "smartengine/compaction_filter.h"
 #include "smartengine/db.h"
 #include "smartengine/env.h"
 #include "smartengine/statistics.h"
 #include "smartengine/status.h"
 #include "smartengine/table.h"
-#include "smartengine/version.h"
 #include "smartengine/write_buffer_manager.h"
 #include "storage/storage_logger.h"
 
@@ -136,13 +134,7 @@ CompressionType GetCompressionFlush(
   // Compressing memtable flushes might not help unless the sequential load
   // optimization is used for leveled compaction. Otherwise the CPU and
   // latency overhead is not offset by saving much space.
-  if (ioptions.compaction_style == kCompactionStyleUniversal) {
-    if (ioptions.compaction_options_universal.compression_size_percent < 0) {
-      return mutable_cf_options.compression;
-    } else {
-      return kNoCompression;
-    }
-  } else if ( static_cast<uint64_t>(level) < ioptions.compression_per_level.size()) {
+  if ( static_cast<uint64_t>(level) < ioptions.compression_per_level.size()) {
     // For leveled compress when min_level_to_compress != 0.
     return ioptions.compression_per_level[level];
   } else {
@@ -435,33 +427,6 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
   VersionSet *vs_ptr = MOD_NEW_OBJECT(ModId::kDBImpl, VersionSet, dbname_, &immutable_db_options_,
       env_options_, table_cache_.get(), write_buffer_manager_, &write_controller_);
   versions_.reset(vs_ptr);
-  //column_family_memtables_.reset(
-  //    new ColumnFamilyMemTablesImpl(versions_->GetColumnFamilySet()));
- 
-  int ret = Status::kOk; 
-  if (immutable_db_options_.compaction_type == 1) {
-    //TODO get parameter from options 
-    CompactionMode comp_mode = (CompactionMode)immutable_db_options_.compaction_mode;
-    // todo for fpga
-//    compaction_scheduler_.reset(
-//        new CompactionScheduler(comp_mode,
-//          immutable_db_options_.fpga_device_id,
-//          immutable_db_options_.fpga_compaction_thread_num,
-//          immutable_db_options_.cpu_compaction_thread_num,
-//          this->stats_,
-//          immutable_db_options_.info_log.get()));
-//    ret = compaction_scheduler_->init();
-    __SE_LOG(INFO,
-        "Note: Use MinorCompaction(FPGA) instead of StreamCompaction!");
-  } else {
-    __SE_LOG(INFO,
-        "Note: Use StreamCompaction instead of MinorCompaction!");
-  }
-
-  assert(ret == Status::kOk);
-  if (ret != Status::kOk) {
-    abort();
-  }
 
   QueryPerfContext *ctx = get_tls_query_perf_context();
   ctx->opt_enable_count_ = mutable_db_options_.query_trace_enable_count;
@@ -3126,10 +3091,6 @@ void DBImpl::EraseThreadsStatusDbInfo() const {}
 // A global method that can dump out the build version
 void DumpSmartEngineBuildVersion() {
 #if !defined(IOS_CROSS_COMPILE)
-  // if we compile with Xcode, we don't run build_detect_vesion, so we don't
-  // generate util/build_version.cc
-  __SE_LOG(INFO, "smartengine version: %d.%d.%d\n", ROCKSDB_MAJOR,
-                   ROCKSDB_MINOR, ROCKSDB_PATCH);
   __SE_LOG(INFO, "Git sha %s", smartengine_build_git_sha);
   __SE_LOG(INFO, "Compile date %s", smartengine_build_compile_date);
 #endif
@@ -3627,46 +3588,6 @@ int DBImpl::get_all_level0_cfs(std::vector<db::ColumnFamilyData*> &level0_cfs) {
   return ret;
 }
 #endif
-
-int DBImpl::pushdown_all_level0() {
-  int ret = Status::kOk;
-  // todo check if is nouse
-  /*
-  // compact all the L0 data to L1
-  // FIXME: some error may loop for ever
-  // speedup the compaction use parallel manual compaction
-  int push_down_times = 0;
-  std::vector<db::ColumnFamilyData*> level0_cfs;
-  get_all_level0_cfs(level0_cfs); 
-  while (level0_cfs.size() > 0 && push_down_times < 3600) { 
-    clear_all_compaction_jobs();
-    for (ColumnFamilyData *cfd : level0_cfs) {
-      // only do minor compaction
-      cfd->set_compaction_priority(CompactionPriority::LOW);
-      cfd->set_compaction_state(ColumnFamilyData::MINOR);
-      Status s = RunManualCompaction(cfd, ColumnFamilyData::kCompactAllLevels,
-                        cfd->NumberLevels() - 1, 0, nullptr, nullptr, true);
-      if (!s.ok()) {
-        ret = s.code();
-        SE_LOG(ERROR, "run manual compaction failed", K(ret));
-        return ret;
-      } else {
-        SE_LOG(INFO, "complete one cf level0 compaction", K(cfd->GetID()), K(push_down_times));
-      } 
-    }
-    level0_cfs.clear();
-    // check the next round
-    get_all_level0_cfs(level0_cfs);
-    push_down_times++;
-  }
- 
-  if (level0_cfs.size() > 0) {
-     ret = Status::kAborted;
-     SE_LOG(ERROR, "try to pushdown all level0 data failed, shrink aborted", K(ret));
-  }
-*/
-  return ret;
-}
 
 // no cfcompaction job will be added
 void DBImpl::set_all_pending_compaction() {

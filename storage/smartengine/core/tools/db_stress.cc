@@ -171,8 +171,6 @@ DEFINE_int64(compressed_cache_size, -1,
              "Number of bytes to use as a cache of compressed data."
              " Negative means use default settings.");
 
-DEFINE_int32(compaction_style, Options().compaction_style, "");
-
 DEFINE_int32(level0_file_num_compaction_trigger,
              Options().level0_file_num_compaction_trigger,
              "Level0 compaction start trigger");
@@ -188,13 +186,6 @@ DEFINE_int32(level1_extents_major_compaction_trigger,
 DEFINE_int32(level2_usage_percent,
              Options().level2_usage_percent,
              "Level2 auto major self compaction start trigger");
-
-DEFINE_int32(level0_slowdown_writes_trigger,
-             Options().level0_slowdown_writes_trigger,
-             "Number of files in level-0 that will slow down writes");
-
-DEFINE_int32(level0_stop_writes_trigger, Options().level0_stop_writes_trigger,
-             "Number of files in level-0 that will trigger put stop.");
 
 DEFINE_int32(block_size,
              static_cast<int32_t>(BlockBasedTableOptions().block_size),
@@ -216,21 +207,6 @@ DEFINE_int32(max_background_flushes, Options().max_background_flushes,
              "The maximum number of concurrent background flushes "
              "that can occur in parallel.");
 
-DEFINE_int32(universal_size_ratio, 0,
-             "The ratio of file sizes that trigger"
-             " compaction in universal style");
-
-DEFINE_int32(universal_min_merge_width, 0,
-             "The minimum number of files to "
-             "compact in universal style compaction");
-
-DEFINE_int32(universal_max_merge_width, 0,
-             "The max number of files to compact"
-             " in universal style compaction");
-
-DEFINE_int32(universal_max_size_amplification_percent, 0,
-             "The max size amplification for universal style compaction");
-
 DEFINE_int32(clear_column_family_one_in, 1000000,
              "With a chance of 1/N, delete a sub table and then recreate "
              "it again. If N == 0, never drop/create column families. "
@@ -244,18 +220,11 @@ DEFINE_int64(cache_size, 2LL * KB * KB * KB,
 DEFINE_bool(use_clock_cache, false,
             "Replace default LRU block cache with clock cache.");
 
-DEFINE_uint64(subcompactions, 1,
-              "Maximum number of subcompactions to divide L0-L1 compactions "
-              "into.");
-
 DEFINE_bool(allow_concurrent_memtable_write, true,
             "Allow multi-writers to update mem tables in parallel.");
 
 DEFINE_bool(enable_write_thread_adaptive_yield, true,
             "Use a yielding spin loop for brief writer thread waits.");
-
-static const bool FLAGS_subcompactions_dummy __attribute__((unused)) =
-    RegisterFlagValidator(&FLAGS_subcompactions, &ValidateUint32Range);
 
 static bool ValidateInt32Positive(const char* flagname, int32_t value) {
   if (value < 0) {
@@ -327,11 +296,6 @@ DEFINE_uint64(max_bytes_for_level_base, 256 * KB, "Max bytes for level-1");
 
 DEFINE_double(max_bytes_for_level_multiplier, 2,
               "A multiplier to compute max bytes for level-N (N >= 2)");
-
-// Temporarily disable this to allows it to detect new bugs
-DEFINE_int32(compact_files_one_in, 0,
-             "If non-zero, then CompactFiles() will be called one for every N "
-             "operations IN AVERAGE.  0 indicates CompactFiles() is disabled.");
 
 static bool ValidateInt32Percent(const char* flagname, int32_t value) {
   if (value < 0 || value > 100) {
@@ -622,10 +586,6 @@ class Stats {
 
   void AddErrors(int n) { errors_ += n; }
 
-  void AddNumCompactFilesSucceed(int n) { num_compact_files_succeed_ += n; }
-
-  void AddNumCompactFilesFailed(int n) { num_compact_files_failed_ += n; }
-
   void Report(const char* name) {
     std::string extra;
     if (bytes_ < 1 || done_ < 1) {
@@ -868,110 +828,6 @@ struct ThreadState {
       : tid(index), rand(1000 + index + _shared->GetSeed()), shared(_shared) {}
 };
 
-class DbStressListener : public EventListener {
- public:
-  DbStressListener(const std::string& db_name,
-                   const std::vector<DbPath>& db_paths)
-      : db_name_(db_name), db_paths_(db_paths), rand_(301) {}
-  virtual ~DbStressListener() {}
-#ifndef ROCKSDB_LITE
-  virtual void OnFlushCompleted(DB* db, const FlushJobInfo& info) override {
-    assert(db);
-    assert(db->GetName() == db_name_);
-    assert(IsValidColumnFamilyName(info.cf_name));
-    VerifyFilePath(info.file_path);
-    // pretending doing some work here
-    std::this_thread::sleep_for(std::chrono::microseconds(rand_.Uniform(5000)));
-  }
-
-  virtual void OnCompactionCompleted(DB* db,
-                                     const CompactionJobInfo& ci) override {
-    assert(db);
-    assert(db->GetName() == db_name_);
-    assert(IsValidColumnFamilyName(ci.cf_name));
-    assert(ci.input_files.size() + ci.output_files.size() > 0U);
-    for (const auto& file_path : ci.input_files) {
-      VerifyFilePath(file_path);
-    }
-    for (const auto& file_path : ci.output_files) {
-      VerifyFilePath(file_path);
-    }
-    // pretending doing some work here
-    std::this_thread::sleep_for(std::chrono::microseconds(rand_.Uniform(5000)));
-  }
-
-  virtual void OnTableFileCreated(const TableFileCreationInfo& info) override {
-    assert(info.db_name == db_name_);
-    assert(IsValidColumnFamilyName(info.cf_name));
-    VerifyFilePath(info.file_path);
-    assert(info.job_id > 0 || FLAGS_compact_files_one_in > 0);
-    if (info.status.ok()) {
-      assert(info.file_size > 0);
-      assert(info.table_properties.data_size > 0);
-      assert(info.table_properties.raw_key_size > 0);
-      assert(info.table_properties.num_entries > 0);
-    }
-  }
-
- protected:
-  bool IsValidColumnFamilyName(const std::string& cf_name) const {
-    if (cf_name == kDefaultColumnFamilyName) {
-      return true;
-    }
-    // The column family names in the stress tests are numbers.
-    for (size_t i = 0; i < cf_name.size(); ++i) {
-      if (cf_name[i] < '0' || cf_name[i] > '9') {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  void VerifyFileDir(const std::string& file_dir) {
-#ifndef NDEBUG
-    if (db_name_ == file_dir) {
-      return;
-    }
-    for (const auto& db_path : db_paths_) {
-      if (db_path.path == file_dir) {
-        return;
-      }
-    }
-    assert(false);
-#endif  // !NDEBUG
-  }
-
-  void VerifyFileName(const std::string& file_name) {
-#ifndef NDEBUG
-    uint64_t file_number;
-    FileType file_type;
-    bool result = ParseFileName(file_name, &file_number, &file_type);
-    assert(result);
-    assert(file_type == kTableFile);
-#endif  // !NDEBUG
-  }
-
-  void VerifyFilePath(const std::string& file_path) {
-#ifndef NDEBUG
-    size_t pos = file_path.find_last_of("/");
-    if (pos == std::string::npos) {
-      VerifyFileName(file_path);
-    } else {
-      if (pos > 0) {
-        VerifyFileDir(file_path.substr(0, pos));
-      }
-      VerifyFileName(file_path.substr(pos));
-    }
-#endif  // !NDEBUG
-  }
-#endif  // !ROCKSDB_LITE
-
- private:
-  std::string db_name_;
-  std::vector<DbPath> db_paths_;
-  Random rand_;
-};
-
 }  // namespace
 
 class StressTest {
@@ -1076,18 +932,6 @@ class StressTest {
              ToString(FLAGS_level2_usage_percent + 10),
          }
         },
-        {"level0_slowdown_writes_trigger",
-         {
-             ToString(FLAGS_level0_slowdown_writes_trigger),
-             ToString(FLAGS_level0_slowdown_writes_trigger + 2),
-             ToString(FLAGS_level0_slowdown_writes_trigger + 4),
-         }},
-        {"level0_stop_writes_trigger",
-         {
-             ToString(FLAGS_level0_stop_writes_trigger),
-             ToString(FLAGS_level0_stop_writes_trigger + 2),
-             ToString(FLAGS_level0_stop_writes_trigger + 4),
-         }},
         {"max_compaction_bytes",
          {
              ToString(FLAGS_target_file_size_base * 5),
@@ -1511,9 +1355,7 @@ class StressTest {
     } else if (name == "level0_file_num_compaction_trigger" ||
                name == "level0_layer_num_compaction_trigger" ||
                name == "level1_extents_major_compaction_trigger" ||
-               name == "level2_usage_percent" ||
-               name == "level0_slowdown_writes_trigger" ||
-               name == "level0_stop_writes_trigger") {
+               name == "level2_usage_percent") {
       opts["level0_file_num_compaction_trigger"] =
           options_table_["level0_file_num_compaction_trigger"][value_idx];
       opts["level0_layer_num_compaction_trigger"] =
@@ -1522,10 +1364,6 @@ class StressTest {
           options_table_["level1_extents_major_compaction_trigger"][value_idx];
       opts["level2_usage_percent"] =
           options_table_["level2_usage_percent"][value_idx];
-      opts["level0_slowdown_writes_trigger"] =
-          options_table_["level0_slowdown_writes_trigger"][value_idx];
-      opts["level0_stop_writes_trigger"] =
-          options_table_["level0_stop_writes_trigger"][value_idx];
     } else {
       opts[name] = options_table_[name][value_idx];
     }
@@ -1613,57 +1451,6 @@ class StressTest {
         }
       }
 
-#ifndef ROCKSDB_LITE  // Lite does not support GetColumnFamilyMetaData
-      if (FLAGS_compact_files_one_in > 0 &&
-          thread->rand.Uniform(FLAGS_compact_files_one_in) == 0) {
-        auto* random_cf =
-            column_families_[thread->rand.Next() % FLAGS_column_families];
-        ColumnFamilyMetaData cf_meta_data;
-        db_->GetColumnFamilyMetaData(random_cf, &cf_meta_data);
-
-        // Randomly compact up to three consecutive files from a level
-        const int kMaxRetry = 3;
-        for (int attempt = 0; attempt < kMaxRetry; ++attempt) {
-          size_t random_level = thread->rand.Uniform(
-              static_cast<int>(cf_meta_data.levels.size()));
-
-          const auto& files = cf_meta_data.levels[random_level].files;
-          if (files.size() > 0) {
-            size_t random_file_index =
-                thread->rand.Uniform(static_cast<int>(files.size()));
-            if (files[random_file_index].being_compacted) {
-              // Retry as the selected file is currently being compacted
-              continue;
-            }
-
-            std::vector<std::string> input_files;
-            input_files.push_back(files[random_file_index].name);
-            if (random_file_index > 0 &&
-                !files[random_file_index - 1].being_compacted) {
-              input_files.push_back(files[random_file_index - 1].name);
-            }
-            if (random_file_index + 1 < files.size() &&
-                !files[random_file_index + 1].being_compacted) {
-              input_files.push_back(files[random_file_index + 1].name);
-            }
-
-            size_t output_level =
-                std::min(random_level + 1, cf_meta_data.levels.size() - 1);
-            auto s =
-                db_->CompactFiles(CompactionOptions(), random_cf, input_files,
-                                  static_cast<int>(output_level));
-            if (!s.ok()) {
-              printf("Unable to perform CompactFiles(): %s\n",
-                     s.ToString().c_str());
-              thread->stats.AddNumCompactFilesFailed(1);
-            } else {
-              thread->stats.AddNumCompactFilesSucceed(1);
-            }
-            break;
-          }
-        }
-      }
-#endif                // !ROCKSDB_LITE
 
       long rand_key = thread->rand.Next() % max_key;
       int rand_column_family = thread->rand.Next() % FLAGS_column_families;
@@ -1957,8 +1744,6 @@ class StressTest {
   }
 
   void PrintEnv() const {
-    fprintf(stdout, "smartengine version           : %d.%d\n", kMajorVersion,
-            kMinorVersion);
     fprintf(stdout, "Column families           : %d\n", FLAGS_column_families);
     if (!FLAGS_test_batches_snapshots) {
       fprintf(stdout, "Clear CFs one in          : %d\n",
@@ -1996,8 +1781,6 @@ class StressTest {
             1 << FLAGS_log2_keys_per_lock);
     std::string compression = CompressionTypeToString(FLAGS_compression_type_e);
     fprintf(stdout, "Compression               : %s\n", compression.c_str());
-    fprintf(stdout, "Max subcompactions        : %" PRIu64 "\n",
-            FLAGS_subcompactions);
 
     const char* memtablerep = "";
     switch (FLAGS_rep_factory) {
@@ -2042,8 +1825,6 @@ class StressTest {
         FLAGS_max_write_buffer_number_to_maintain;
     options_.max_background_compactions = FLAGS_max_background_compactions;
     options_.max_background_flushes = FLAGS_max_background_flushes;
-    options_.compaction_style =
-        static_cast<CompactionStyle>(FLAGS_compaction_style);
     options_.max_open_files = FLAGS_open_files;
     options_.statistics = dbstats;
     options_.env = FLAGS_env;
@@ -2059,15 +1840,11 @@ class StressTest {
     options_.max_bytes_for_level_base = FLAGS_max_bytes_for_level_base;
     options_.max_bytes_for_level_multiplier =
         FLAGS_max_bytes_for_level_multiplier;
-    options_.level0_stop_writes_trigger = FLAGS_level0_stop_writes_trigger;
-    options_.level0_slowdown_writes_trigger =
-        FLAGS_level0_slowdown_writes_trigger;
     options_.level0_file_num_compaction_trigger =
         FLAGS_level0_file_num_compaction_trigger;
     options_.compression = FLAGS_compression_type_e;
     options_.create_if_missing = true;
     options_.max_manifest_file_size = 10 * 1024;
-    options_.max_subcompactions = static_cast<uint32_t>(FLAGS_subcompactions);
     options_.allow_concurrent_memtable_write =
         FLAGS_allow_concurrent_memtable_write;
     options_.enable_write_thread_adaptive_yield =
@@ -2091,24 +1868,6 @@ class StressTest {
         fprintf(stderr,
                 "RocksdbLite only supports skip list mem table. Skip "
                 "--rep_factory\n");
-    }
-
-    // set universal style compaction configurations, if applicable
-    if (FLAGS_universal_size_ratio != 0) {
-      options_.compaction_options_universal.size_ratio =
-          FLAGS_universal_size_ratio;
-    }
-    if (FLAGS_universal_min_merge_width != 0) {
-      options_.compaction_options_universal.min_merge_width =
-          FLAGS_universal_min_merge_width;
-    }
-    if (FLAGS_universal_max_merge_width != 0) {
-      options_.compaction_options_universal.max_merge_width =
-          FLAGS_universal_max_merge_width;
-    }
-    if (FLAGS_universal_max_size_amplification_percent != 0) {
-      options_.compaction_options_universal.max_size_amplification_percent =
-          FLAGS_universal_max_size_amplification_percent;
     }
 
     fprintf(stdout, "DB path: [%s]\n", FLAGS_db.c_str());
@@ -2163,9 +1922,6 @@ class StressTest {
         cf_descriptors.emplace_back(name, ColumnFamilyOptions(options_));
         column_family_names_.push_back(name);
       }
-      options_.listeners.clear();
-      options_.listeners.emplace_back(
-          new DbStressListener(FLAGS_db, options_.db_paths));
       options_.create_missing_column_families = true;
       s = DB::Open(DBOptions(options_), FLAGS_db, cf_descriptors,
                    &column_families_, &db_);

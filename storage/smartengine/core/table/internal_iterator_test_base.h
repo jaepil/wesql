@@ -19,6 +19,7 @@
 #include "smartengine/cache.h"
 #include "db/version_set.h"
 #include "db/dbformat.h"
+#include "options/options_helper.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_logger.h"
 #include "storage/storage_manager.h"
@@ -106,8 +107,6 @@ struct TestArgs {
     // Arena will assert kBlockSize in 4096 to (2u << 30)
     options_->arena_block_size = 4096 * 2;
     options_->memtable_huge_page_size = 4096 * 2;
-
-    options_->compaction_type = 0; // should be 0 here
 
     int file_size = db_write_buffer_size * 1024;
     options_->target_file_size_base = file_size;
@@ -390,9 +389,9 @@ void InternalIteratorTestBase::open_extent_builder()
                                         cf_desc_.column_family_id_,
                                         cf_desc_.column_family_name_,
                                         &mini_tables_,
-                                        storage::GetCompressionType(context_->icf_options_,
-                                                                    context_->mutable_cf_options_,
-                                                                    level_),
+                                        get_compression_type(context_->icf_options_,
+                                                             context_->mutable_cf_options_,
+                                                             level_),
                                         context_->icf_options_.compression_opts,
                                         output_layer_position,
                                         &compression_dict_,

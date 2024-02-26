@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <climits>
 #include <stddef.h>
 #include <stdint.h>
 #include <memory>

@@ -47,7 +47,6 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions &options)
       db_paths(options.db_paths),
       db_log_dir(options.db_log_dir),
       wal_dir(options.wal_dir),
-      max_subcompactions(options.max_subcompactions),
       max_background_flushes(options.max_background_flushes),
       max_log_file_size(options.max_log_file_size),
       log_file_time_to_roll(options.log_file_time_to_roll),
@@ -78,7 +77,6 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions &options)
       use_adaptive_mutex(options.use_adaptive_mutex),
       bytes_per_sync(options.bytes_per_sync),
       wal_bytes_per_sync(options.wal_bytes_per_sync),
-      listeners(options.listeners),
       enable_thread_tracking(options.enable_thread_tracking),
       allow_concurrent_memtable_write(options.allow_concurrent_memtable_write),
       enable_write_thread_adaptive_yield(
@@ -97,11 +95,6 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions &options)
 #endif  // ROCKSDB_LITE
       fail_if_options_file_error(options.fail_if_options_file_error),
       avoid_flush_during_recovery(options.avoid_flush_during_recovery),
-      compaction_type(options.compaction_type),
-      compaction_mode(options.compaction_mode),
-      cpu_compaction_thread_num(options.cpu_compaction_thread_num),
-      fpga_compaction_thread_num(options.fpga_compaction_thread_num),
-      fpga_device_id(options.fpga_device_id),
       table_cache_size(options.table_cache_size) {
 }
 
@@ -155,9 +148,6 @@ void ImmutableDBOptions::Dump() const {
                    wal_dir.c_str());
   __SE_LOG(INFO, "               Options.table_cache_numshardbits: %d",
                    table_cache_numshardbits);
-  __SE_LOG(INFO,
-                   "                     Options.max_subcompactions: %" PRIu32,
-                   max_subcompactions);
   __SE_LOG(INFO, "                 Options.max_background_flushes: %d",
                    max_background_flushes);
   __SE_LOG(INFO,
@@ -239,16 +229,6 @@ void ImmutableDBOptions::Dump() const {
 #endif  // ROCKDB_LITE
   __SE_LOG(INFO, "            Options.avoid_flush_during_recovery: %d",
                    avoid_flush_during_recovery);
-  __SE_LOG(INFO, "                        Options.compaction_type: %s",
-                   compaction_type == 0 ? "Stream" : "Minor for FPGA");
-  __SE_LOG(INFO, "                        Options.compaction_mode: %d",
-                   compaction_mode);
-  __SE_LOG(INFO, "              Options.cpu_compaction_thread_num: %d",
-                   cpu_compaction_thread_num);
-  __SE_LOG(INFO, "             Options.fpga_compaction_thread_num: %d",
-                   fpga_compaction_thread_num);
-  __SE_LOG(INFO, "                         Options.fpga_device_id: %d",
-                   fpga_device_id);
   __SE_LOG(INFO, "                       Options.table_cache_size: %d",
                    table_cache_size);
 }

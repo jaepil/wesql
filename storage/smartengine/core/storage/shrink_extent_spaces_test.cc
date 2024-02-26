@@ -69,7 +69,7 @@ public:
     ASSERT_OK(Flush(0));
     ASSERT_OK(db_->Delete(writeOpt, cfh0, "k1"));
     Flush(0); 
-    dbfull()->CompactRange(CompactRangeOptions(), cfh0, nullptr, nullptr, 13);
+    dbfull()->CompactRange(cfh0, 13);
     dbfull()->TEST_WaitForCompact();
     {
       shrink_job_.reset(new ShrinkExtentSpacesJob(2, db_mutex, dbfull()->versions_->get_global_ctx()));
@@ -91,7 +91,7 @@ public:
       ASSERT_OK(dbfull()->Delete(writeOpt, cfh2, key));
       ASSERT_OK(Flush(2));
     }
-    dbfull()->CompactRange(CompactRangeOptions(), cfh2, nullptr, nullptr, 13);
+    dbfull()->CompactRange(cfh2, 13);
     dbfull()->TEST_WaitForCompact();
     {
       shrink_job_.reset(new ShrinkExtentSpacesJob(2, db_mutex, dbfull()->versions_->get_global_ctx()));

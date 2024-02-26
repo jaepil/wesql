@@ -65,11 +65,6 @@ ColumnFamilyHandleImpl::ColumnFamilyHandleImpl(
 
 ColumnFamilyHandleImpl::~ColumnFamilyHandleImpl() {
   if (cfd_ != nullptr) {
-#ifndef ROCKSDB_LITE
-    for (auto& listener : cfd_->ioptions()->listeners) {
-      listener->OnColumnFamilyHandleDeletionStarted(this);
-    }
-#endif  // ROCKSDB_LITE
     mutex_->Lock();
     if (cfd_->Unref()) {
       MOD_DELETE_OBJECT(ColumnFamilyData, cfd_);
@@ -187,28 +182,11 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
     result.min_write_buffer_number_to_merge = 1;
   }
 
-  if (result.num_levels < 1) {
-    result.num_levels = 1;
-  }
-  if (result.compaction_style == kCompactionStyleLevel &&
-      result.num_levels < 2) {
-    result.num_levels = 2;
-  }
   if (result.max_write_buffer_number < 2) {
     result.max_write_buffer_number = 2;
   }
   if (result.max_write_buffer_number_to_maintain < 0) {
     result.max_write_buffer_number_to_maintain = 0;
-  }
-
-  if (result.compaction_style == kCompactionStyleFIFO) {
-    result.num_levels = 1;
-    // since we delete level0 files in FIFO compaction when there are too many
-    // of them, these options don't really mean anything
-    result.level0_file_num_compaction_trigger = std::numeric_limits<int>::max();
-    result.level0_layer_num_compaction_trigger = std::numeric_limits<int>::max();
-    result.level0_slowdown_writes_trigger = std::numeric_limits<int>::max();
-    result.level0_stop_writes_trigger = std::numeric_limits<int>::max();
   }
 
   if (result.max_bytes_for_level_multiplier <= 0) {
@@ -225,46 +203,6 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
     result.level0_layer_num_compaction_trigger = std::numeric_limits<int>::max();
   }
 
-  if (result.minor_window_size <= 0) {
-    __SE_LOG(WARN, "minor_window_size cannot be 0");
-    result.minor_window_size = 8;
-  }
-  if (result.minor_window_size > (1 << 16)) {
-    __SE_LOG(WARN, "minor_window_size cannot be larger than (2^16)");
-    result.minor_window_size = (1 << 16);
-  }
-
-  if (result.level0_stop_writes_trigger <
-          result.level0_slowdown_writes_trigger ||
-      result.level0_slowdown_writes_trigger <
-          result.level0_file_num_compaction_trigger) {
-    __SE_LOG(WARN,
-                  "This condition must be satisfied: "
-                  "level0_stop_writes_trigger(%d) >= "
-                  "level0_slowdown_writes_trigger(%d) >= "
-                  "level0_file_num_compaction_trigger(%d)",
-                  result.level0_stop_writes_trigger,
-                  result.level0_slowdown_writes_trigger,
-                  result.level0_file_num_compaction_trigger);
-    if (result.level0_slowdown_writes_trigger <
-        result.level0_file_num_compaction_trigger) {
-      result.level0_slowdown_writes_trigger =
-          result.level0_file_num_compaction_trigger;
-    }
-    if (result.level0_stop_writes_trigger <
-        result.level0_slowdown_writes_trigger) {
-      result.level0_stop_writes_trigger = result.level0_slowdown_writes_trigger;
-    }
-    __SE_LOG(WARN,
-                  "Adjust the value to "
-                  "level0_stop_writes_trigger(%d)"
-                  "level0_slowdown_writes_trigger(%d)"
-                  "level0_file_num_compaction_trigger(%d)",
-                  result.level0_stop_writes_trigger,
-                  result.level0_slowdown_writes_trigger,
-                  result.level0_file_num_compaction_trigger);
-  }
-
   if (result.soft_pending_compaction_bytes_limit == 0) {
     result.soft_pending_compaction_bytes_limit =
         result.hard_pending_compaction_bytes_limit;
@@ -273,17 +211,6 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
                  result.hard_pending_compaction_bytes_limit) {
     result.soft_pending_compaction_bytes_limit =
         result.hard_pending_compaction_bytes_limit;
-  }
-
-  if (result.level_compaction_dynamic_level_bytes) {
-    if (result.compaction_style != kCompactionStyleLevel ||
-        db_options.db_paths.size() > 1U) {
-      // 1. level_compaction_dynamic_level_bytes only makes sense for
-      //    level-based compaction.
-      // 2. we don't yet know how to make both of this feature and multiple
-      //    DB path work.
-      result.level_compaction_dynamic_level_bytes = false;
-    }
   }
 
   if (result.max_compaction_bytes == 0) {
@@ -396,7 +323,7 @@ ColumnFamilyData::ColumnFamilyData(Options &options)
       commit_log_seq_(0),
       storage_logger_(nullptr),
       sst_largest_seq_(0),
-      task_picker_(mutable_cf_options_, options.compaction_type, 0, options.level_compaction_dynamic_level_bytes),
+      task_picker_(mutable_cf_options_, 0, options.level_compaction_dynamic_level_bytes),
       dcfd_(nullptr),
       cancel_task_type_(0),
       range_start_(0),
@@ -437,7 +364,7 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(global_ctx), KP(column_family_set));
   } else if (IS_NULL(internal_stats = MOD_NEW_OBJECT(memory::ModId::kSubTable, InternalStats,
-          ioptions_.num_levels,  global_ctx->env_, this))) {
+          global_ctx->env_, this))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for internal_stats", K(ret));
   } else if (IS_NULL(table_cache = MOD_NEW_OBJECT(memory::ModId::kSubTable, TableCache,
@@ -620,108 +547,6 @@ const double kIncSlowdownRatio = 0.8;
 const double kDecSlowdownRatio = 1 / kIncSlowdownRatio;
 const double kNearStopSlowdownRatio = 0.6;
 const double kDelayRecoverSlowdownRatio = 1.4;
-
-namespace {
-// If penalize_stop is true, we further reduce slowdown rate.
-#if 0
-std::unique_ptr<WriteControllerToken> SetupDelay(
-    WriteController* write_controller, uint64_t compaction_needed_bytes,
-    uint64_t prev_compaction_need_bytes, bool penalize_stop,
-    bool auto_comapctions_disabled) {
-  const uint64_t kMinWriteRate = 16 * 1024u;  // Minimum write rate 16KB/s.
-
-  uint64_t max_write_rate = write_controller->max_delayed_write_rate();
-  uint64_t write_rate = write_controller->delayed_write_rate();
-
-  if (auto_comapctions_disabled) {
-    // When auto compaction is disabled, always use the value user gave.
-    write_rate = max_write_rate;
-  } else if (write_controller->NeedsDelay() && max_write_rate > kMinWriteRate) {
-    // If user gives rate less than kMinWriteRate, don't adjust it.
-    //
-    // If already delayed, need to adjust based on previous compaction debt.
-    // When there are two or more column families require delay, we always
-    // increase or reduce write rate based on information for one single
-    // column family. It is likely to be OK but we can improve if there is a
-    // problem.
-    // Ignore compaction_needed_bytes = 0 case because compaction_needed_bytes
-    // is only available in level-based compaction
-    //
-    // If the compaction debt stays the same as previously, we also further slow
-    // down. It usually means a mem table is full. It's mainly for the case
-    // where both of flush and compaction are much slower than the speed we
-    // insert to mem tables, so we need to actively slow down before we get
-    // feedback signal from compaction and flushes to avoid the full stop
-    // because of hitting the max write buffer number.
-    //
-    // If DB just falled into the stop condition, we need to further reduce
-    // the write rate to avoid the stop condition.
-    if (penalize_stop) {
-      // Penalize the near stop or stop condition by more agressive slowdown.
-      // This is to provide the long term slowdown increase signal.
-      // The penalty is more than the reward of recovering to the normal
-      // condition.
-      write_rate = static_cast<uint64_t>(static_cast<double>(write_rate) *
-                                         kNearStopSlowdownRatio);
-      if (write_rate < kMinWriteRate) {
-        write_rate = kMinWriteRate;
-      }
-    } else if (prev_compaction_need_bytes > 0 &&
-               prev_compaction_need_bytes <= compaction_needed_bytes) {
-      write_rate = static_cast<uint64_t>(static_cast<double>(write_rate) *
-                                         kIncSlowdownRatio);
-      if (write_rate < kMinWriteRate) {
-        write_rate = kMinWriteRate;
-      }
-    } else if (prev_compaction_need_bytes > compaction_needed_bytes) {
-      // We are speeding up by ratio of kSlowdownRatio when we have paid
-      // compaction debt. But we'll never speed up to faster than the write rate
-      // given by users.
-      write_rate = static_cast<uint64_t>(static_cast<double>(write_rate) *
-                                         kDecSlowdownRatio);
-      if (write_rate > max_write_rate) {
-        write_rate = max_write_rate;
-      }
-    }
-  }
-  return write_controller->GetDelayToken(write_rate);
-}
-#endif
-
-#if 0
-int GetL0ThresholdSpeedupCompaction(int level0_file_num_compaction_trigger,
-                                    int level0_slowdown_writes_trigger) {
-  // SanitizeOptions() ensures it.
-  assert(level0_file_num_compaction_trigger <= level0_slowdown_writes_trigger);
-
-  if (level0_file_num_compaction_trigger < 0) {
-    return std::numeric_limits<int>::max();
-  }
-
-  const int64_t twice_level0_trigger =
-      static_cast<int64_t>(level0_file_num_compaction_trigger) * 2;
-
-  const int64_t one_fourth_trigger_slowdown =
-      static_cast<int64_t>(level0_file_num_compaction_trigger) +
-      ((level0_slowdown_writes_trigger - level0_file_num_compaction_trigger) /
-       4);
-
-  assert(twice_level0_trigger >= 0);
-  assert(one_fourth_trigger_slowdown >= 0);
-
-  // 1/4 of the way between L0 compaction trigger threshold and slowdown
-  // condition.
-  // Or twice as compaction trigger, if it is smaller.
-  int64_t res = std::min(twice_level0_trigger, one_fourth_trigger_slowdown);
-  if (res >= port::kMaxInt32) {
-    return port::kMaxInt32;
-  } else {
-    // res fits in int
-    return static_cast<int>(res);
-  }
-}
-#endif
-}  // namespace
 
 const EnvOptions* ColumnFamilyData::soptions() const {
   //TODO:yuanfeng
@@ -1362,7 +1187,6 @@ Status ColumnFamilyData::SetOptions(
                                           &new_mutable_cf_options);
   if (s.ok()) {
     mutable_cf_options_ = new_mutable_cf_options;
-    mutable_cf_options_.RefreshDerivedOptions(ioptions_);
   }
   return s;
 }

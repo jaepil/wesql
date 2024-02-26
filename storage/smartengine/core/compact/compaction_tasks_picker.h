@@ -77,7 +77,6 @@ class CompactionTasksPicker {
     DECLARE_TO_STRING();
   };
   CompactionTasksPicker(common::MutableCFOptions &mutable_cf_options,
-                        const uint64_t compaction_type,
                         const uint32_t cf_id,
                         const bool dynamic_trigger_adjust);
   ~CompactionTasksPicker() {}
@@ -180,7 +179,6 @@ class CompactionTasksPicker {
   uint32_t cf_id_;
   const common::MutableCFOptions &mcf_options_;
   int64_t minor_merge_limit_;
-  uint64_t minor_compaction_type_; // 0stream/1minor(for fpga)
   bool dynamic_trigger_adjust_;
 };
 }

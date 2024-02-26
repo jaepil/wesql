@@ -243,7 +243,6 @@ class CacheBench {
   }
 
   void PrintEnv() const {
-    printf("smartengine version     : %d.%d\n", kMajorVersion, kMinorVersion);
     printf("Number of threads   : %d\n", FLAGS_threads);
     printf("Ops per thread      : %" PRIu64 "\n", FLAGS_ops_per_thread);
     printf("Cache size          : %" PRIu64 "\n", FLAGS_cache_size);

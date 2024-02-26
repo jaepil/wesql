@@ -139,14 +139,12 @@ class InternalStats {
     INTERNAL_DB_STATS_ENUM_MAX,
   };
 
-  InternalStats(int num_levels, util::Env* env, ColumnFamilyData* cfd)
+  InternalStats(util::Env* env, ColumnFamilyData* cfd)
       : db_stats_{},
         cf_stats_value_{},
         cf_stats_count_{},
-        comp_stats_(num_levels),
 //        file_read_latency_(num_levels),
         bg_error_count_(0),
-        number_levels_(num_levels),
         env_(env),
         cfd_(cfd),
         started_at_(env->NowMicros()) {}
@@ -273,9 +271,6 @@ class InternalStats {
       cf_stats_count_[i] = 0;
       cf_stats_value_[i] = 0;
     }
-    for (auto& comp_stat : comp_stats_) {
-      comp_stat.Clear();
-    }
 //    for (auto& h : file_read_latency_) {
 //      h.Clear();
 //    }
@@ -287,17 +282,9 @@ class InternalStats {
     extent_comp_stats_.perf_stats_.reset();
   }
 
-  void AddCompactionStats(int level, const CompactionStats& stats) {
-    comp_stats_[level].Add(stats);
-  }
-
   void add_compaction_stats(const storage::Compaction::Statstics& statstics) {
     extent_comp_stats_.record_stats_.add(statstics.record_stats_);
     extent_comp_stats_.perf_stats_.add(statstics.perf_stats_);
-  }
-
-  void IncBytesMoved(int level, uint64_t amount) {
-    comp_stats_[level].bytes_moved += amount;
   }
 
   void AddCFStats(InternalCFStatsType type, uint64_t value) {
@@ -365,10 +352,6 @@ class InternalStats {
   // Per-ColumnFamily stats
   uint64_t cf_stats_value_[INTERNAL_CF_STATS_ENUM_MAX];
   uint64_t cf_stats_count_[INTERNAL_CF_STATS_ENUM_MAX];
-  // Per-ColumnFamily/level compaction stats
-  // Currently used for flush statistics, comp_stats_[0] store flush level0
-  // rate, comp_stats_[1] store flush level1 rate
-  std::vector<CompactionStats> comp_stats_;
 //  std::vector<monitor::HistogramImpl> file_read_latency_;
 
   // Per-ColumnFamily/level compaction stats for smartengine
@@ -482,8 +465,6 @@ class InternalStats {
   bool HandleSsTables(std::string* value, common::Slice suffix, DBImpl* db);
   bool HandleAggregatedTableProperties(std::string* value, common::Slice suffix,
                                        DBImpl* db);
-  bool HandleAggregatedTablePropertiesAtLevel(std::string* value,
-                                              common::Slice suffix, DBImpl* db);
   //TODO: @yuanfeng unused code, delete future
   bool HandleNumImmutableMemTable(uint64_t* value, DBImpl* db);
   bool HandleNumImmutableMemTableFlushed(uint64_t* value, DBImpl* db);
@@ -536,7 +517,6 @@ class InternalStats {
   // or compaction will cause the counter to increase too.
   uint64_t bg_error_count_;
 
-  const int number_levels_;
   util::Env* env_;
   ColumnFamilyData* cfd_;
   uint64_t started_at_;

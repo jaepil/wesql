@@ -20,7 +20,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <bitset>
-#include "meta_data.h"
 #include "range_iterator.h"
 #include "table/format.h"
 #include "table/iter_heap.h"
@@ -37,39 +36,6 @@
 
 namespace smartengine {
 namespace storage {
-
-/**
- * MetaValueRangeIterator takes a range(start_key,end_key) iterator
- * and iterate start_key, end_key sequentially.
- */
-// no use
-//class MetaValueRangeIterator
-//    : public RangeAdaptorIterator<table::InternalIterator> {
-// public:
-//  MetaValueRangeIterator() : RangeAdaptorIterator<table::InternalIterator>() {}
-//  explicit MetaValueRangeIterator(const storage::MetaType &type,
-//                                  table::InternalIterator *iter)
-//      : RangeAdaptorIterator<table::InternalIterator>(type, iter) {}
-//  virtual ~MetaValueRangeIterator() {}
-//
-//  virtual common::Slice user_key() const override { return key(); }
-//
-// protected:
-//  virtual int extract_range(const common::Slice &key_in,
-//                            const common::Slice &value_in) override {
-//    meta_descriptor_.range_.end_key_ = key_in;
-//    int64_t pos = 0;
-//    ExtentMetaValue meta_value;
-//    int r = meta_value.deserialize(value_in.data(), value_in.size(), pos);
-//    if (0 == r) {
-//      meta_descriptor_.range_.start_key_ = meta_value.get_start_key();
-//      meta_descriptor_.block_position_ = meta_value.get_extent_list();
-//    } else {
-//      valid_ = false;
-//    }
-//    return r;
-//  }
-//};
 
 class DataBlockIndexRangeIterator
     : public RangeAdaptorIterator<table::InternalIterator> {
@@ -231,7 +197,6 @@ class ReuseBlockMergeIterator {
   static const int64_t RESERVE_CHILD_NUM = 4;
   static const int64_t RESERVE_DESC_NUM = 16;
   static const int64_t MAX_CHILD_NUM = 16;
-  static const int64_t MINOR_MAX_CHILD_NUM = 4;
 
   typedef util::BinaryHeap<RangeIterator *, MinHeapComparator<RangeIterator> >
       MergerMinIterHeap;

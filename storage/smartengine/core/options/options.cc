@@ -26,7 +26,6 @@
 #include "table/extent_table_factory.h"
 #include "util/compression.h"
 #include "smartengine/cache.h"
-#include "smartengine/compaction_filter.h"
 #include "smartengine/comparator.h"
 #include "smartengine/env.h"
 #include "smartengine/memtablerep.h"
@@ -58,25 +57,16 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       bloom_locality(options.bloom_locality),
       arena_block_size(options.arena_block_size),
       compression_per_level(options.compression_per_level),
-      num_levels(options.num_levels),
-      level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
-      level0_stop_writes_trigger(options.level0_stop_writes_trigger),
       target_file_size_base(options.target_file_size_base),
       target_file_size_multiplier(options.target_file_size_multiplier),
       level_compaction_dynamic_level_bytes(
           options.level_compaction_dynamic_level_bytes),
       max_bytes_for_level_multiplier(options.max_bytes_for_level_multiplier),
-      max_bytes_for_level_multiplier_additional(
-          options.max_bytes_for_level_multiplier_additional),
       max_compaction_bytes(options.max_compaction_bytes),
       soft_pending_compaction_bytes_limit(
           options.soft_pending_compaction_bytes_limit),
       hard_pending_compaction_bytes_limit(
           options.hard_pending_compaction_bytes_limit),
-      compaction_style(options.compaction_style),
-      compaction_pri(options.compaction_pri),
-      compaction_options_universal(options.compaction_options_universal),
-      compaction_options_fifo(options.compaction_options_fifo),
       max_sequential_skip_in_iterations(
           options.max_sequential_skip_in_iterations),
       memtable_factory(options.memtable_factory),
@@ -87,10 +77,6 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       force_consistency_checks(options.force_consistency_checks),
       report_bg_io_stats(options.report_bg_io_stats) {
   assert(memtable_factory.get() != nullptr);
-  if (max_bytes_for_level_multiplier_additional.size() <
-      static_cast<unsigned int>(num_levels)) {
-    max_bytes_for_level_multiplier_additional.resize(num_levels, 1);
-  }
 }
 
 ColumnFamilyOptions::ColumnFamilyOptions()
@@ -103,8 +89,6 @@ ColumnFamilyOptions::ColumnFamilyOptions()
 ColumnFamilyOptions::ColumnFamilyOptions(const Options& options)
     : AdvancedColumnFamilyOptions(options),
       comparator(options.comparator),
-      compaction_filter(options.compaction_filter),
-      compaction_filter_factory(options.compaction_filter_factory),
       write_buffer_size(options.write_buffer_size),
       flush_delete_percent(options.flush_delete_percent),
       compaction_delete_percent(options.compaction_delete_percent),
@@ -117,7 +101,6 @@ ColumnFamilyOptions::ColumnFamilyOptions(const Options& options)
           options.level0_file_num_compaction_trigger),
       level0_layer_num_compaction_trigger(
           options.level0_layer_num_compaction_trigger),
-      minor_window_size(options.minor_window_size),
       level1_extents_major_compaction_trigger(
           options.level1_extents_major_compaction_trigger),
       level2_usage_percent(options.level2_usage_percent),
@@ -148,7 +131,6 @@ DBOptions::DBOptions(const Options &options)
           options.delete_obsolete_files_period_micros),
       base_background_compactions(options.base_background_compactions),
       max_background_compactions(options.max_background_compactions),
-      max_subcompactions(options.max_subcompactions),
       max_background_flushes(options.max_background_flushes),
       max_background_dumps(options.max_background_dumps),
       dump_memtable_limit_size(options.dump_memtable_limit_size),
@@ -183,7 +165,6 @@ DBOptions::DBOptions(const Options &options)
       use_adaptive_mutex(options.use_adaptive_mutex),
       bytes_per_sync(options.bytes_per_sync),
       wal_bytes_per_sync(options.wal_bytes_per_sync),
-      listeners(options.listeners),
       enable_thread_tracking(options.enable_thread_tracking),
       delayed_write_rate(options.delayed_write_rate),
       allow_concurrent_memtable_write(options.allow_concurrent_memtable_write),
@@ -215,11 +196,6 @@ DBOptions::DBOptions(const Options &options)
       concurrent_writable_file_buffer_switch_limit(
           options.concurrent_writable_file_buffer_switch_limit),
       use_direct_write_for_wal(options.use_direct_write_for_wal),
-      compaction_type(options.compaction_type),
-      compaction_mode(options.compaction_mode),
-      cpu_compaction_thread_num(options.cpu_compaction_thread_num),
-      fpga_compaction_thread_num(options.fpga_compaction_thread_num),
-      fpga_device_id(options.fpga_device_id),
       query_trace_enable_count(options.query_trace_enable_count),
       query_trace_print_stats(options.query_trace_print_stats),
       mutex_backtrace_threshold_ns(options.mutex_backtrace_threshold_ns),
@@ -242,11 +218,6 @@ void DBOptions::Dump() const {
 void ColumnFamilyOptions::Dump() const {
   __SE_LOG(INFO, "                       Options.comparator: %s",
                    comparator->Name());
-  __SE_LOG(INFO, "                Options.compaction_filter: %s",
-                   compaction_filter ? compaction_filter->Name() : "None");
-  __SE_LOG(INFO, "        Options.compaction_filter_factory: %s",
-                compaction_filter_factory ? compaction_filter_factory->Name()
-                                          : "None");
   __SE_LOG(INFO, "                 Options.memtable_factory: %s",
                    memtable_factory->Name());
   __SE_LOG(INFO, "                    Options.table_factory: %s",
@@ -280,8 +251,6 @@ void ColumnFamilyOptions::Dump() const {
       bottommost_compression == kDisableCompressionOption
           ? "Disabled"
           : CompressionTypeToString(bottommost_compression).c_str());
-  __SE_LOG(INFO, "                       Options.num_levels: %d",
-                   num_levels);
   __SE_LOG(INFO, " Options.min_write_buffer_number_to_merge: %d",
                    min_write_buffer_number_to_merge);
   __SE_LOG(INFO, "Options.max_write_buffer_number_to_maintain: %d",
@@ -303,12 +272,6 @@ void ColumnFamilyOptions::Dump() const {
                    level2_usage_percent);
   __SE_LOG(INFO, "Options.level0_layer_num_compaction_trigger: %d",
                    level0_layer_num_compaction_trigger);
-  __SE_LOG(INFO, "                Options.minor_window_size: %d",
-                   minor_window_size);
-  __SE_LOG(INFO, "   Options.level0_slowdown_writes_trigger: %d",
-                   level0_slowdown_writes_trigger);
-  __SE_LOG(INFO, "       Options.level0_stop_writes_trigger: %d",
-                   level0_stop_writes_trigger);
   __SE_LOG(INFO, "            Options.target_file_size_base: %" PRIu64,
                    target_file_size_base);
   __SE_LOG(INFO, "      Options.target_file_size_multiplier: %d",
@@ -319,13 +282,6 @@ void ColumnFamilyOptions::Dump() const {
                    level_compaction_dynamic_level_bytes);
   __SE_LOG(INFO, "   Options.max_bytes_for_level_multiplier: %f",
                    max_bytes_for_level_multiplier);
-  for (size_t i = 0; i < max_bytes_for_level_multiplier_additional.size();
-       i++) {
-    __SE_LOG(
-        INFO,
-        "Options.max_bytes_for_level_multiplier_addtl[%" ROCKSDB_PRIszt "]: %d",
-        i, max_bytes_for_level_multiplier_additional[i]);
-  }
   __SE_LOG(INFO, "Options.max_sequential_skip_in_iterations: %" PRIu64,
                    max_sequential_skip_in_iterations);
   __SE_LOG(INFO, "             Options.max_compaction_bytes: %" PRIu64,
@@ -342,46 +298,6 @@ void ColumnFamilyOptions::Dump() const {
   __SE_LOG(INFO, "         Options.disable_auto_compactions: %d",
                    disable_auto_compactions);
 
-  const auto& it_compaction_style =
-      compaction_style_to_string.find(compaction_style);
-  std::string str_compaction_style;
-  if (it_compaction_style == compaction_style_to_string.end()) {
-    assert(false);
-    str_compaction_style = "unknown_" + std::to_string(compaction_style);
-  } else {
-    str_compaction_style = it_compaction_style->second;
-  }
-  __SE_LOG(INFO, "                 Options.compaction_style: %s",
-                   str_compaction_style.c_str());
-
-  const auto& it_compaction_pri = compaction_pri_to_string.find(compaction_pri);
-  std::string str_compaction_pri;
-  if (it_compaction_pri == compaction_pri_to_string.end()) {
-    assert(false);
-    str_compaction_pri = "unknown_" + std::to_string(compaction_pri);
-  } else {
-    str_compaction_pri = it_compaction_pri->second;
-  }
-  __SE_LOG(INFO, "                   Options.compaction_pri: %s",
-                   str_compaction_pri.c_str());
-  __SE_LOG(INFO, "Options.compaction_options_universal.size_ratio: %u",
-                   compaction_options_universal.size_ratio);
-  __SE_LOG(INFO,
-                "Options.compaction_options_universal.min_merge_width: %u",
-                compaction_options_universal.min_merge_width);
-  __SE_LOG(INFO,
-                "Options.compaction_options_universal.max_merge_width: %u",
-                compaction_options_universal.max_merge_width);
-  __SE_LOG(INFO,
-                   "Options.compaction_options_universal."
-                   "max_size_amplification_percent: %u",
-                   compaction_options_universal.max_size_amplification_percent);
-  __SE_LOG(
-      INFO, "Options.compaction_options_universal.compression_size_percent: %d",
-      compaction_options_universal.compression_size_percent);
-  __SE_LOG(
-      INFO, "Options.compaction_options_fifo.max_table_files_size: %" PRIu64,
-      compaction_options_fifo.max_table_files_size);
   std::string collector_names;
   for (const auto& collector_factory : table_properties_collector_factories) {
     collector_names.append(collector_factory->Name());
@@ -413,107 +329,9 @@ void Options::DumpCFOptions() const {
   ColumnFamilyOptions::Dump();
 }  // Options::DumpCFOptions
 
-//
-// The goal of this method is to create a configuration that
-// allows an application to write all files into L0 and
-// then do a single compaction to output all files into L1.
-Options* Options::PrepareForBulkLoad() {
-  // never slowdown ingest.
-  level0_file_num_compaction_trigger = (1 << 30);
-  level0_layer_num_compaction_trigger = (1 << 30);
-  minor_window_size = (1 << 10);
-  level1_extents_major_compaction_trigger = (1 << 30);
-  level2_usage_percent = 0;
-  level0_slowdown_writes_trigger = (1 << 30);
-  level0_stop_writes_trigger = (1 << 30);
-  soft_pending_compaction_bytes_limit = 0;
-  hard_pending_compaction_bytes_limit = 0;
-
-  // no auto compactions please. The application should issue a
-  // manual compaction after all data is loaded into L0.
-  disable_auto_compactions = true;
-  // A manual compaction run should pick all files in L0 in
-  // a single compaction run.
-  max_compaction_bytes = (static_cast<uint64_t>(1) << 60);
-
-  // It is better to have only 2 levels, otherwise a manual
-  // compaction would compact at every possible level, thereby
-  // increasing the total time needed for compactions.
-  num_levels = 2;
-
-  // Need to allow more write buffers to allow more parallism
-  // of flushes.
-  max_write_buffer_number = 6;
-  min_write_buffer_number_to_merge = 1;
-
-  // When compaction is disabled, more parallel flush threads can
-  // help with write throughput.
-  max_background_flushes = 4;
-
-  // Prevent a memtable flush to automatically promote files
-  // to L1. This is helpful so that all files that are
-  // input to the manual compaction are all at L0.
-  max_background_compactions = 2;
-  base_background_compactions = 2;
-  max_background_dumps = 2;
-  // The compaction would create large files in L1.
-  target_file_size_base = 256 * 1024 * 1024;
-  return this;
-}
-
 Options* Options::OptimizeForSmallDb() {
   ColumnFamilyOptions::OptimizeForSmallDb();
   DBOptions::OptimizeForSmallDb();
-  return this;
-}
-
-Options* Options::OldDefaults(int rocksdb_major_version,
-                              int rocksdb_minor_version) {
-  ColumnFamilyOptions::OldDefaults(rocksdb_major_version,
-                                   rocksdb_minor_version);
-  DBOptions::OldDefaults(rocksdb_major_version, rocksdb_minor_version);
-  return this;
-}
-
-DBOptions* DBOptions::OldDefaults(int rocksdb_major_version,
-                                  int rocksdb_minor_version) {
-  if (rocksdb_major_version < 4 ||
-      (rocksdb_major_version == 4 && rocksdb_minor_version < 7)) {
-    max_file_opening_threads = 1;
-    table_cache_numshardbits = 4;
-  }
-  if (rocksdb_major_version < 5 ||
-      (rocksdb_major_version == 5 && rocksdb_minor_version < 2)) {
-    delayed_write_rate = 2 * 1024U * 1024U;
-  }
-
-  max_open_files = 5000;
-  base_background_compactions = -1;
-  wal_recovery_mode = WALRecoveryMode::kTolerateCorruptedTailRecords;
-  return this;
-}
-
-ColumnFamilyOptions* ColumnFamilyOptions::OldDefaults(
-    int rocksdb_major_version, int rocksdb_minor_version) {
-  if (rocksdb_major_version < 4 ||
-      (rocksdb_major_version == 4 && rocksdb_minor_version < 7)) {
-    write_buffer_size = 4 << 20;
-    flush_delete_percent = 100;
-    compaction_delete_percent = 100;
-    flush_delete_percent_trigger = 700000;
-    flush_delete_record_trigger = 700000;
-    target_file_size_base = 2 * 1048576;
-    max_bytes_for_level_base = 10 * 1048576;
-    soft_pending_compaction_bytes_limit = 0;
-    hard_pending_compaction_bytes_limit = 0;
-  }
-  if (rocksdb_major_version < 5) {
-    level0_stop_writes_trigger = 24;
-  } else if (rocksdb_major_version == 5 && rocksdb_minor_version < 2) {
-    level0_stop_writes_trigger = 30;
-  }
-  compaction_pri = CompactionPri::kByCompensatedSize;
-
   return this;
 }
 
@@ -536,57 +354,6 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForSmallDb() {
 }
 
 #ifndef ROCKSDB_LITE
-
-ColumnFamilyOptions* ColumnFamilyOptions::OptimizeLevelStyleCompaction(
-    uint64_t memtable_memory_budget) {
-  write_buffer_size = static_cast<size_t>(memtable_memory_budget / 4);
-  // merge two memtables when flushing to L0
-  min_write_buffer_number_to_merge = 2;
-  // this means we'll use 50% extra memory in the worst case, but will reduce
-  // write stalls.
-  max_write_buffer_number = 6;
-  // start flushing L0->L1 as soon as possible. each file on level0 is
-  // (memtable_memory_budget / 2). This will flush level 0 when it's bigger than
-  // memtable_memory_budget.
-  level0_file_num_compaction_trigger = 2;
-  level0_layer_num_compaction_trigger = 16;
-  minor_window_size = 64;
-  level1_extents_major_compaction_trigger = 1000;
-  level2_usage_percent = 70;
-  // doesn't really matter much, but we don't want to create too many files
-  target_file_size_base = memtable_memory_budget / 8;
-  // make Level1 size equal to Level0 size, so that L0->L1 compactions are fast
-  max_bytes_for_level_base = memtable_memory_budget;
-
-  // level style compaction
-  compaction_style = kCompactionStyleLevel;
-
-  // only compress levels >= 2
-  compression_per_level.resize(num_levels);
-  for (int i = 0; i < num_levels; ++i) {
-    if (i < 2) {
-      compression_per_level[i] = kNoCompression;
-    } else {
-      compression_per_level[i] = kSnappyCompression;
-    }
-  }
-  return this;
-}
-
-ColumnFamilyOptions* ColumnFamilyOptions::OptimizeUniversalStyleCompaction(
-    uint64_t memtable_memory_budget) {
-  write_buffer_size = static_cast<size_t>(memtable_memory_budget / 4);
-  // merge two memtables when flushing to L0
-  min_write_buffer_number_to_merge = 2;
-  // this means we'll use 50% extra memory in the worst case, but will reduce
-  // write stalls.
-  max_write_buffer_number = 6;
-  // universal style compaction
-  compaction_style = kCompactionStyleUniversal;
-  compaction_options_universal.compression_size_percent = 80;
-  return this;
-}
-
 DBOptions* DBOptions::IncreaseParallelism(int total_threads) {
   max_background_compactions = total_threads - 1;
   max_background_flushes = 1;

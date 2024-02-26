@@ -785,11 +785,8 @@ int ha_smartengine::optimize(THD *const thd, HA_CHECK_OPT *const check_opt)
   int rc = 0;
   for (uint i = 0; i < m_tbl_def->m_key_count; i++) {
     se_db->Flush(common::FlushOptions(), m_key_descr_arr[i]->get_cf());
-    if (!se_db->CompactRange(common::CompactRangeOptions(),
-                           m_key_descr_arr[i]->get_cf(),
-                           nullptr,
-                           nullptr,
-                           db::TaskType::MANUAL_FULL_AMOUNT_TASK).ok()) {
+    if (!se_db->CompactRange(m_key_descr_arr[i]->get_cf(),
+                             db::TaskType::MANUAL_FULL_AMOUNT_TASK).ok()) {
       rc = 1;
       break;
     }
@@ -3260,7 +3257,7 @@ int ha_smartengine::calculate_stats(const TABLE *const table_arg,
   }
 
   // get se table properties for these ranges
-  common::TablePropertiesCollection props;
+  db::TablePropertiesCollection props;
   for (auto it : ranges) {
     const auto old_size MY_ATTRIBUTE((__unused__)) = props.size();
     const auto status = se_db->GetPropertiesOfTablesInRange(

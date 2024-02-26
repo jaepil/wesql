@@ -23,7 +23,6 @@
 #include "se_cf_options.h"
 #include <string>
 #include "dict/se_cf_manager.h"
-#include "util/se_compact_filter.h"
 #include "smartengine/utilities/convenience.h"
 
 namespace smartengine
@@ -39,7 +38,6 @@ bool SeSubtableOptions::init(
   // ToDo: validate default_cf_options
   m_default_cf_opts = default_cf_options;
   m_default_cf_opts.comparator = &s_pk_comparator;
-  m_default_cf_opts.compaction_filter_factory.reset(new SeCompactFilterFactory);
 
   m_default_cf_opts.table_factory.reset(table::NewExtentBasedTableFactory(table_options));
 

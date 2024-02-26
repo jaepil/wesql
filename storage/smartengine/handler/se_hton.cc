@@ -25,7 +25,6 @@
 #include "sql_class.h"
 #include "query_options.h"
 #include "ha_smartengine.h"
-#include "index/se_event_listener.h"
 #include "transaction/se_transaction_factory.h"
 #include "core/util/memory_stat.h"
 
@@ -196,9 +195,7 @@ common::DBOptions se_init_se_db_options()
   common::DBOptions o;
 
   o.create_if_missing = true;
-  o.listeners.push_back(std::make_shared<SeEventListener>(&ddl_manager));
   o.info_log_level = util::InfoLogLevel::INFO_LEVEL;
-  o.max_subcompactions = DEFAULT_SUBCOMPACTIONS;
 
   return o;
 }

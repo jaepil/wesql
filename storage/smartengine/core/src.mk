@@ -111,7 +111,6 @@ LIB_SOURCES =                                                   \
   util/bloom.cc                                                 \
   util/build_version.cc                                         \
   util/coding.cc                                                \
-  util/compaction_job_stats_impl.cc                             \
   util/comparator.cc                                            \
   util/concurrent_arena.cc                                      \
   util/crc32c.cc                                                \
@@ -143,7 +142,6 @@ LIB_SOURCES =                                                   \
 	util/aio_wrapper.cc																						\
 	util/to_string.cc                                             \
 	util/misc_utility.cc                                          \
-  compact/meta_data.cc                                          \
   compact/reuse_block_merge_iterator.cc                         \
   compact/range_iterator.cc                                     \
   compact/compaction_job.cc																			\

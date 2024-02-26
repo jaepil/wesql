@@ -102,23 +102,6 @@ struct CompactRecordStats {
   double write_amp;
 };
 
-struct MinorCompactStats {
-  MinorCompactStats();
-
-  void reset();
-  MinorCompactStats &add(const MinorCompactStats &stats);
-
-  DECLARE_SERIALIZATION();
-  DECLARE_TO_STRING();
-  // MinorCompaction(FPGA) related
-  int64_t split_minor_tasks;
-  int64_t trival_minor_tasks;
-  int64_t total_minor_ways;
-  int64_t total_minor_blocks;
-  int64_t shared_blocks;
-  int64_t cliped_blocks;
-};
-
 struct CompactPerfStats {
   CompactPerfStats();
 
@@ -155,6 +138,30 @@ struct CompactPerfStats {
   int64_t wait_task;
   int64_t wait_task_pend;
 };
+
+struct CompactionIterationStats {
+  // Compaction statistics
+
+  // Doesn't include records skipped because of
+  // storage::CompactionFilter::Decision::kRemoveAndSkipUntil.
+  int64_t num_record_drop_user = 0;
+
+  int64_t num_record_drop_hidden = 0;
+  int64_t num_record_drop_obsolete = 0;
+  uint64_t total_filter_time = 0;
+
+  // Input statistics
+  uint64_t num_input_records = 0;
+  uint64_t num_input_deletion_records = 0;
+  uint64_t num_input_corrupt_records = 0;
+  uint64_t total_input_raw_key_bytes = 0;
+  uint64_t total_input_raw_value_bytes = 0;
+
+  // Single-Delete diagnostics for exceptional situations
+  uint64_t num_single_del_fallthru = 0;
+  uint64_t num_single_del_mismatch = 0;
+};
+
 }
 }
 

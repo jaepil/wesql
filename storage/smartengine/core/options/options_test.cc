@@ -73,7 +73,6 @@ TEST_F(OptionsTest, GetOptionsFromMapTest) {
       {"num_levels", "8"},
       {"level0_file_num_compaction_trigger", "8"},
       {"level0_layer_num_compaction_trigger", "16"},
-      {"minor_window_size", "64"},
       {"level1_extents_major_compaction_trigger", "1000"},
       {"level2_usage_percent", "70"},
       {"level0_slowdown_writes_trigger", "9"},

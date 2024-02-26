@@ -36,18 +36,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
     const ColumnFamilyOptions& ioptions,
     const MutableCFOptions& mutable_cf_options);
 
-static std::map<CompactionStyle, std::string> compaction_style_to_string = {
-    {kCompactionStyleLevel, "kCompactionStyleLevel"},
-    {kCompactionStyleUniversal, "kCompactionStyleUniversal"},
-    {kCompactionStyleFIFO, "kCompactionStyleFIFO"},
-    {kCompactionStyleNone, "kCompactionStyleNone"}};
-
-static std::map<CompactionPri, std::string> compaction_pri_to_string = {
-    {kByCompensatedSize, "kByCompensatedSize"},
-    {kOldestLargestSeqFirst, "kOldestLargestSeqFirst"},
-    {kOldestSmallestSeqFirst, "kOldestSmallestSeqFirst"},
-    {kMinOverlappingRatio, "kMinOverlappingRatio"}};
-
 #ifndef ROCKSDB_LITE
 
 Status GetMutableOptionsFromStrings(
@@ -133,13 +121,16 @@ Status GetDBOptionsFromMapInternal(
 // and construct a FilterPolicy object
 bool GetTableFilterPolicy(const std::string& value,
                           std::shared_ptr<const table::FilterPolicy>* policy);
-// A helper function to parse ColumnFamilyOptions::CompressionType from string
-bool GetCompressionType(const std::string& value, CompressionType* out);
 // A helper function to parse ColumnFamilyOptions::vector<CompressionType> from string
 bool GetVectorCompressionType(const std::string& value,
                               std::vector<CompressionType>* out);
 // A helper function to parse CompressionOptions from string
 bool GetCompressionOptions(const std::string& value, CompressionOptions* out);
+
+CompressionType get_compression_type(const ImmutableCFOptions &ioptions,
+                                     const MutableCFOptions &mutable_cf_options,
+                                     const int level);
+
 static std::unordered_map<std::string, OptionTypeInfo> db_options_type_info = {
     /*
      // not yet supported
@@ -283,9 +274,6 @@ static std::unordered_map<std::string, OptionTypeInfo> db_options_type_info = {
       OptionVerificationType::kNormal, false, 0}},
     {"wal_dir",
      {offsetof(struct DBOptions, wal_dir), OptionType::kString,
-      OptionVerificationType::kNormal, false, 0}},
-    {"max_subcompactions",
-     {offsetof(struct DBOptions, max_subcompactions), OptionType::kUInt32T,
       OptionVerificationType::kNormal, false, 0}},
     {"WAL_size_limit_MB",
      {offsetof(struct DBOptions, WAL_size_limit_MB), OptionType::kUInt64T,
@@ -452,14 +440,6 @@ inline int offset_of(T1 T2::*member) {
 }
 
 static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
-    /* not yet supported
-    CompactionOptionsFIFO compaction_options_fifo;
-    CompactionOptionsUniversal compaction_options_universal;
-    CompressionOptions compression_opts;
-    TablePropertiesCollectorFactories table_properties_collector_factories;
-    typedef std::vector<std::shared_ptr<TablePropertiesCollectorFactory>>
-        TablePropertiesCollectorFactories;
-     */
     {"report_bg_io_stats",
      {offset_of(&ColumnFamilyOptions::report_bg_io_stats), OptionType::kBoolean,
       OptionVerificationType::kNormal, true,
@@ -516,10 +496,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
      {offset_of(&ColumnFamilyOptions::level0_layer_num_compaction_trigger),
       OptionType::kInt, OptionVerificationType::kNormal, true,
       offsetof(struct MutableCFOptions, level0_layer_num_compaction_trigger)}},
-    {"minor_window_size",
-     {offset_of(&ColumnFamilyOptions::minor_window_size),
-      OptionType::kInt, OptionVerificationType::kNormal, true,
-      offsetof(struct MutableCFOptions, minor_window_size)}},
     {"level1_extents_major_compaction_trigger",
      {offset_of(&ColumnFamilyOptions::level1_extents_major_compaction_trigger),
       OptionType::kInt, OptionVerificationType::kNormal, true,
@@ -528,18 +504,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
      {offset_of(&ColumnFamilyOptions::level2_usage_percent),
       OptionType::kInt, OptionVerificationType::kNormal, true,
       offsetof(struct MutableCFOptions, level2_usage_percent)}},
-    {"level0_slowdown_writes_trigger",
-     {offset_of(&ColumnFamilyOptions::level0_slowdown_writes_trigger),
-      OptionType::kInt, OptionVerificationType::kNormal, true,
-      offsetof(struct MutableCFOptions, level0_slowdown_writes_trigger)}},
-    {"level0_stop_writes_trigger",
-     {offset_of(&ColumnFamilyOptions::level0_stop_writes_trigger),
-      OptionType::kInt, OptionVerificationType::kNormal, true,
-      offsetof(struct MutableCFOptions, level0_stop_writes_trigger)}},
-    {"max_grandparent_overlap_factor",
-     {0, OptionType::kInt, OptionVerificationType::kDeprecated, true, 0}},
-    {"max_mem_compaction_level",
-     {0, OptionType::kInt, OptionVerificationType::kDeprecated, false, 0}},
     {"max_write_buffer_number",
      {offset_of(&ColumnFamilyOptions::max_write_buffer_number),
       OptionType::kInt, OptionVerificationType::kNormal, true,
@@ -550,9 +514,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
     {"min_write_buffer_number_to_merge",
      {offset_of(&ColumnFamilyOptions::min_write_buffer_number_to_merge),
       OptionType::kInt, OptionVerificationType::kNormal, false, 0}},
-    {"num_levels",
-     {offset_of(&ColumnFamilyOptions::num_levels), OptionType::kInt,
-      OptionVerificationType::kNormal, false, 0}},
     {"source_compaction_factor",
      {0, OptionType::kInt, OptionVerificationType::kDeprecated, true, 0}},
     {"target_file_size_multiplier",
@@ -600,12 +561,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
      {offset_of(&ColumnFamilyOptions::max_bytes_for_level_multiplier),
       OptionType::kDouble, OptionVerificationType::kNormal, true,
       offsetof(struct MutableCFOptions, max_bytes_for_level_multiplier)}},
-    {"max_bytes_for_level_multiplier_additional",
-     {offset_of(
-          &ColumnFamilyOptions::max_bytes_for_level_multiplier_additional),
-      OptionType::kVectorInt, OptionVerificationType::kNormal, true,
-      offsetof(struct MutableCFOptions,
-               max_bytes_for_level_multiplier_additional)}},
     {"max_sequential_skip_in_iterations",
      {offset_of(&ColumnFamilyOptions::max_sequential_skip_in_iterations),
       OptionType::kUInt64T, OptionVerificationType::kNormal, true,
@@ -637,20 +592,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
     {"table_factory",
      {offset_of(&ColumnFamilyOptions::table_factory), OptionType::kTableFactory,
       OptionVerificationType::kByName, false, 0}},
-    {"compaction_filter",
-     {offset_of(&ColumnFamilyOptions::compaction_filter),
-      OptionType::kCompactionFilter, OptionVerificationType::kByName, false,
-      0}},
-    {"compaction_filter_factory",
-     {offset_of(&ColumnFamilyOptions::compaction_filter_factory),
-      OptionType::kCompactionFilterFactory, OptionVerificationType::kByName,
-      false, 0}},
-    {"compaction_style",
-     {offset_of(&ColumnFamilyOptions::compaction_style),
-      OptionType::kCompactionStyle, OptionVerificationType::kNormal, false, 0}},
-    {"compaction_pri",
-     {offset_of(&ColumnFamilyOptions::compaction_pri),
-      OptionType::kCompactionPri, OptionVerificationType::kNormal, false, 0}},
     {"scan_add_blocks_limit",
      {offset_of(&ColumnFamilyOptions::scan_add_blocks_limit),
       OptionType::kInt, OptionVerificationType::kNormal, true,
@@ -804,20 +745,6 @@ static std::unordered_map<std::string, table::ChecksumType>
     checksum_type_string_map = {{"kNoChecksum", table::kNoChecksum},
                                 {"kCRC32c", table::kCRC32c},
                                 {"kxxHash", table::kxxHash}};
-
-static std::unordered_map<std::string, CompactionStyle>
-    compaction_style_string_map = {
-        {"kCompactionStyleLevel", kCompactionStyleLevel},
-        {"kCompactionStyleUniversal", kCompactionStyleUniversal},
-        {"kCompactionStyleFIFO", kCompactionStyleFIFO},
-        {"kCompactionStyleNone", kCompactionStyleNone}};
-
-static std::unordered_map<std::string, CompactionPri>
-    compaction_pri_string_map = {
-        {"kByCompensatedSize", kByCompensatedSize},
-        {"kOldestLargestSeqFirst", kOldestLargestSeqFirst},
-        {"kOldestSmallestSeqFirst", kOldestSmallestSeqFirst},
-        {"kMinOverlappingRatio", kMinOverlappingRatio}};
 
 static std::unordered_map<std::string, WALRecoveryMode>
     wal_recovery_mode_string_map = {

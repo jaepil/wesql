@@ -13,6 +13,7 @@
 #include "util/testutil.h"
 
 #include <cctype>
+#include <climits>
 #include <sstream>
 
 #include "db/memtable_list.h"
@@ -195,15 +196,6 @@ CompressionType RandomCompressionType(Random* rnd) {
   return static_cast<CompressionType>(rnd->Uniform(6));
 }
 
-void RandomCompressionTypeVector(const size_t count,
-                                 std::vector<CompressionType>* types,
-                                 Random* rnd) {
-  types->clear();
-  for (size_t i = 0; i < count; ++i) {
-    types->emplace_back(RandomCompressionType(rnd));
-  }
-}
-
 BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
   BlockBasedTableOptions opt;
   opt.cache_index_and_filter_blocks = rnd->Uniform(2);
@@ -219,14 +211,6 @@ BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
   opt.whole_key_filtering = rnd->Uniform(2);
 
   return opt;
-}
-
-CompactionFilter* RandomCompactionFilter(Random* rnd) {
-  return new ChanglingCompactionFilter(RandomName(rnd, 10));
-}
-
-CompactionFilterFactory* RandomCompactionFilterFactory(Random* rnd) {
-  return new ChanglingCompactionFilterFactory(RandomName(rnd, 10));
 }
 
 void RandomInitDBOptions(DBOptions* db_opt, Random* rnd) {
@@ -268,9 +252,6 @@ void RandomInitDBOptions(DBOptions* db_opt, Random* rnd) {
   db_opt->db_log_dir = "path/to/db_log_dir";
   db_opt->wal_dir = "path/to/wal_dir";
 
-  // uint32_t options
-  db_opt->max_subcompactions = rnd->Uniform(100000);
-
   // uint64_t options
   static const uint64_t uint_max = static_cast<uint64_t>(UINT_MAX);
   db_opt->WAL_size_limit_MB = uint_max + rnd->Uniform(100000);
@@ -287,8 +268,6 @@ void RandomInitDBOptions(DBOptions* db_opt, Random* rnd) {
 }
 
 void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
-  cf_opt->compaction_style = (CompactionStyle)(rnd->Uniform(4));
-
   // boolean options
   cf_opt->report_bg_io_stats = rnd->Uniform(2);
   cf_opt->disable_auto_compactions = rnd->Uniform(2);
@@ -305,24 +284,13 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
   // int options
   cf_opt->level0_file_num_compaction_trigger = rnd->Uniform(100);
   cf_opt->level0_layer_num_compaction_trigger = rnd->Uniform(100);
-  cf_opt->minor_window_size = rnd->Uniform(100);
   cf_opt->level1_extents_major_compaction_trigger = rnd->Uniform(100);
   cf_opt->level2_usage_percent = rnd->Uniform(100);
-  cf_opt->level0_slowdown_writes_trigger = rnd->Uniform(100);
-  cf_opt->level0_stop_writes_trigger = rnd->Uniform(100);
   cf_opt->max_bytes_for_level_multiplier = rnd->Uniform(100);
-  cf_opt->max_mem_compaction_level = rnd->Uniform(100);
   cf_opt->max_write_buffer_number = rnd->Uniform(100);
   cf_opt->max_write_buffer_number_to_maintain = rnd->Uniform(100);
   cf_opt->min_write_buffer_number_to_merge = rnd->Uniform(100);
-  cf_opt->num_levels = rnd->Uniform(100);
   cf_opt->target_file_size_multiplier = rnd->Uniform(100);
-
-  // vector int options
-  cf_opt->max_bytes_for_level_multiplier_additional.resize(cf_opt->num_levels);
-  for (int i = 0; i < cf_opt->num_levels; i++) {
-    cf_opt->max_bytes_for_level_multiplier_additional[i] = rnd->Uniform(100);
-  }
 
   // size_t options
   cf_opt->arena_block_size = rnd->Uniform(10000);
@@ -343,16 +311,8 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
   // unsigned int options
   cf_opt->rate_limit_delay_max_milliseconds = rnd->Uniform(10000);
 
-  if (cf_opt->compaction_filter) {
-    delete cf_opt->compaction_filter;
-  }
-  cf_opt->compaction_filter = RandomCompactionFilter(rnd);
-  cf_opt->compaction_filter_factory.reset(RandomCompactionFilterFactory(rnd));
-
   // custom typed options
   cf_opt->compression = RandomCompressionType(rnd);
-  RandomCompressionTypeVector(cf_opt->num_levels,
-                              &cf_opt->compression_per_level, rnd);
 }
 
 Status DestroyDir(Env* env, const std::string& dir) {

@@ -17,25 +17,6 @@
 namespace smartengine {
 namespace tools {
 
-class CompactorCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "compact"; }
-
-  CompactorCommand(const std::vector<std::string>& params,
-                   const std::map<std::string, std::string>& options,
-                   const std::vector<std::string>& flags);
-
-  static void Help(std::string& ret);
-
-  virtual void DoCommand() override;
-
- private:
-  bool null_from_;
-  std::string from_;
-  bool null_to_;
-  std::string to_;
-};
-
 class DBFileDumperCommand : public tools::LDBCommand {
  public:
   static std::string Name() { return "dump_live_files"; }
@@ -47,32 +28,6 @@ class DBFileDumperCommand : public tools::LDBCommand {
   static void Help(std::string& ret);
 
   virtual void DoCommand() override;
-};
-
-class DBLoaderCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "load"; }
-
-  DBLoaderCommand(std::string& db_name, std::vector<std::string>& args);
-
-  DBLoaderCommand(const std::vector<std::string>& params,
-                  const std::map<std::string, std::string>& options,
-                  const std::vector<std::string>& flags);
-
-  static void Help(std::string& ret);
-  virtual void DoCommand() override;
-
-  virtual common::Options PrepareOptionsForOpenDB() override;
-
- private:
-  bool create_if_missing_;
-  bool disable_wal_;
-  bool bulk_load_;
-  bool compact_;
-
-  static const std::string ARG_DISABLE_WAL;
-  static const std::string ARG_BULK_LOAD;
-  static const std::string ARG_COMPACT;
 };
 
 struct SliceHasher {
@@ -188,60 +143,6 @@ class CreateColumnFamilyCommand : public tools::LDBCommand {
 
  private:
   std::string new_cf_name_;
-};
-
-class ReduceDBLevelsCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "reduce_levels"; }
-
-  ReduceDBLevelsCommand(const std::vector<std::string>& params,
-                        const std::map<std::string, std::string>& options,
-                        const std::vector<std::string>& flags);
-
-  virtual common::Options PrepareOptionsForOpenDB() override;
-
-  virtual void DoCommand() override;
-
-  virtual bool NoDBOpen() override { return true; }
-
-  static void Help(std::string& msg);
-
-  static std::vector<std::string> PrepareArgs(const std::string& db_path,
-                                              int new_levels,
-                                              bool print_old_level = false);
-
- private:
-  int old_levels_;
-  int new_levels_;
-  bool print_old_levels_;
-
-  static const std::string ARG_NEW_LEVELS;
-  static const std::string ARG_PRINT_OLD_LEVELS;
-
-  common::Status GetOldNumOfLevels(common::Options& opt, int* levels);
-};
-
-class ChangeCompactionStyleCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "change_compaction_style"; }
-
-  ChangeCompactionStyleCommand(
-      const std::vector<std::string>& params,
-      const std::map<std::string, std::string>& options,
-      const std::vector<std::string>& flags);
-
-  virtual common::Options PrepareOptionsForOpenDB() override;
-
-  virtual void DoCommand() override;
-
-  static void Help(std::string& msg);
-
- private:
-  int old_compaction_style_;
-  int new_compaction_style_;
-
-  static const std::string ARG_OLD_COMPACTION_STYLE;
-  static const std::string ARG_NEW_COMPACTION_STYLE;
 };
 
 class WALDumperCommand : public tools::LDBCommand {

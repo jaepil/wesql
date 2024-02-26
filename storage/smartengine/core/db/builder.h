@@ -18,7 +18,6 @@
 #include "util/event_logger.h"
 #include "smartengine/comparator.h"
 #include "smartengine/env.h"
-#include "smartengine/listener.h"
 #include "smartengine/options.h"
 #include "smartengine/status.h"
 #include "smartengine/table_properties.h"

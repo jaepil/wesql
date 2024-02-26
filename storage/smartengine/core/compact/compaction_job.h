@@ -4,7 +4,6 @@
 #define SMARTENGINE_STORAGE_COMPACTION_JOB_H_
 
 #include "split_compaction.h"
-#include "minor_compaction.h"
 
 namespace smartengine {
 
@@ -99,8 +98,6 @@ class CompactionJob {
       compaction_tasks_.pop_front();
 
       report_started_compaction();
-      set_compaction_type(get_task_type());
-      set_compaction_input_extent(one->get_input_extent());
     }
     return one;
   }
@@ -190,10 +187,6 @@ class CompactionJob {
   void destroy_range_iterators(RangeIterator **iters, const int64_t num);
 
   void report_started_compaction();
- 
-  void set_compaction_type(int compaction_type);
-
-  void set_compaction_input_extent(const int64_t *input_extent);
 
  private:
   using CompactionTask = std::deque<Compaction *, memory::stl_adapt_allocator<Compaction *>>;

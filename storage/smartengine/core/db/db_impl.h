@@ -60,7 +60,6 @@
 namespace smartengine {
 
 namespace storage {
-class CompactionScheduler;
 class CompactionJob;
 class Compaction;
 class ShrinkExtentSpacesJobTest;
@@ -74,11 +73,6 @@ class Arena;
 namespace table {
 struct ExternalSstFileInfo;
 }
-
-namespace common {
-struct MemTableInfo;
-}
-
 namespace db {
 class MemTable;
 class TableCache;
@@ -266,25 +260,10 @@ class DBImpl : public DB {
                                            uint64_t* const count,
                                            uint64_t* const size) override;
   using DB::CompactRange;
-  virtual common::Status CompactRange(
-      const common::CompactRangeOptions& options,
-      ColumnFamilyHandle* column_family,
-      const common::Slice* begin,
-      const common::Slice* end,
-      const uint32_t compact_type = TaskType::STREAM_COMPACTION_TASK) override;
+  virtual common::Status CompactRange(ColumnFamilyHandle* column_family,
+                                      const uint32_t compact_type) override;
 
-  virtual common::Status CompactRange(
-      const common::CompactRangeOptions& options,
-      const common::Slice* begin,
-      const common::Slice* end,
-      const uint32_t manual_compact_type = TaskType::STREAM_COMPACTION_TASK) override;
-
-  using DB::CompactFiles;
-  virtual common::Status CompactFiles(
-      const common::CompactionOptions& compact_options,
-      ColumnFamilyHandle* column_family,
-      const std::vector<std::string>& input_file_names, const int output_level,
-      const int output_path_id = -1) override;
+  virtual common::Status CompactRange(const uint32_t manual_compact_type) override;
 
   virtual common::Status PauseBackgroundWork() override;
   virtual common::Status ContinueBackgroundWork() override;
@@ -304,13 +283,6 @@ class DBImpl : public DB {
   virtual common::Status SetDBOptions(
       const std::unordered_map<std::string, std::string>& options_map) override;
 
-  using DB::NumberLevels;
-  virtual int NumberLevels(ColumnFamilyHandle* column_family) override;
-  using DB::MaxMemCompactionLevel;
-  virtual int MaxMemCompactionLevel(ColumnFamilyHandle* column_family) override;
-  using DB::Level0StopWriteTrigger;
-  virtual int Level0StopWriteTrigger(
-      ColumnFamilyHandle* column_family) override;
   virtual const std::string& GetName() const override;
   virtual util::Env* GetEnv() const override;
   using DB::GetOptions;
@@ -458,23 +430,9 @@ class DBImpl : public DB {
 
   virtual common::Status GetDbIdentity(std::string& identity) const override;
 
-  common::Status RunManualCompaction(ColumnFamilyData* cfd, int input_level,
-                                     int output_level, uint32_t output_path_id,
-                                     const common::Slice* begin,
-                                     const common::Slice* end, bool exclusive,
-                                     bool disallow_trivial_move = false);
-
-  common::Status RunCompaction(ColumnFamilyData* cfd, JobContext* context);
-
 #ifndef NDEBUG
   // Extra methods (for testing) that are not in the public DB interface
   // Implemented in db_impl_debug.cc
-
-  // Compact any files in the named level that overlap [*begin, *end]
-  common::Status TEST_CompactRange(int level, const common::Slice* begin,
-                                   const common::Slice* end,
-                                   ColumnFamilyHandle* column_family = nullptr,
-                                   bool disallow_trivial_move = false);
 
   void TEST_HandleWALFull();
 
@@ -897,22 +855,6 @@ protected:
   common::Status RenameTempFileToOptionsFile(const std::string& file_name);
   common::Status DeleteObsoleteOptionsFiles();
 
-  void NotifyOnFlushBegin(ColumnFamilyData* cfd, FileMetaData* file_meta,
-                          const common::MutableCFOptions& mutable_cf_options,
-                          int job_id, table::TableProperties prop);
-
-  void NotifyOnFlushCompleted(
-      ColumnFamilyData* cfd, FileMetaData* file_meta,
-      const common::MutableCFOptions& mutable_cf_options, int job_id,
-      table::TableProperties prop);
-
-  void NotifyOnCompactionCompleted(ColumnFamilyData* cfd, Compaction* c,
-                                   const common::Status& st,
-                                   const storage::CompactionJobStats& job_stats,
-                                   int job_id);
-  void NotifyOnMemTableSealed(ColumnFamilyData* cfd,
-                              const common::MemTableInfo& mem_table_info);
-
   void NewThreadStatusCfInfo(ColumnFamilyData* cfd) const;
 
   void EraseThreadStatusCfInfo(ColumnFamilyData* cfd) const;
@@ -1234,7 +1176,7 @@ protected:
   static void bg_work_recycle(void* db);
   static void bg_work_shrink(void *arg);
   static void bg_work_ebr(void *db);
-  void BackgroundCallCompaction(void* arg);
+  void BackgroundCallCompaction();
   void BackgroundCallFlush();
   void background_call_dump();
   void background_call_gc();
@@ -1619,7 +1561,6 @@ protected:
     DECLARE_AND_DEFINE_TO_STRING(KVP_(sub_table), KV_(dropped_time))
   };
 
-  std::unique_ptr<storage::CompactionScheduler> compaction_scheduler_;
   // flush_queue_ and compaction_queue_ hold column families that we need to
   // flush and compact, respectively.
   // A column family is inserted into flush_queue_ when it satisfies condition
@@ -1712,30 +1653,9 @@ protected:
 
   //max sequence number among all recovery point after recovery sst data
   common::SequenceNumber max_seq_in_rp_;
-  // Information for a manual compaction
-  struct ManualCompaction {
-    ColumnFamilyData* cfd;
-    int input_level;
-    int output_level;
-    uint32_t output_path_id;
-    common::Status status;
-    bool done;
-    bool in_progress;            // compaction request being processed?
-    bool incomplete;             // only part of requested range compacted
-    bool exclusive;              // current behavior of only one manual
-    bool disallow_trivial_move;  // Force actual compaction to run
-    const InternalKey* begin;    // nullptr means beginning of key range
-    const InternalKey* end;      // nullptr means end of key range
-    InternalKey* manual_end;     // how far we are compacting
-    InternalKey tmp_storage;     // Used to keep track of compaction progress
-    InternalKey tmp_storage1;    // Used to keep track of compaction progress
-    smartengine::storage::Compaction* compaction;
-  };
-  std::deque<ManualCompaction*> manual_compaction_dequeue_;
 
   struct CompactionArg {
     DBImpl* db;
-    ManualCompaction* m;
   };
 
   // Have we encountered a background error in paranoid mode?
@@ -1851,14 +1771,6 @@ protected:
                               const DBPropertyInfo& property_info,
                               bool is_locked, uint64_t* value);
 
-  bool HasPendingManualCompaction();
-  bool HasExclusiveManualCompaction();
-  void AddManualCompaction(ManualCompaction* m);
-  void RemoveManualCompaction(ManualCompaction* m);
-  bool ShouldntRunManualCompaction(ManualCompaction* m);
-  bool HaveManualCompaction(ColumnFamilyData* cfd);
-  bool MCOverlap(ManualCompaction* m, ManualCompaction* m1);
-
   size_t GetWalPreallocateBlockSize(uint64_t write_buffer_size) const;
   // put the flush meta to storage manager
   common::Status install_flush_result(ColumnFamilyData* cfd,
@@ -1875,8 +1787,6 @@ protected:
   int clear_all_compaction_jobs();
   int clear_all_jobs_and_set_pending();
   int check_no_jobs_and_reset_pending();
-  // shrink extent space can't deal with the level0 extents
-  int pushdown_all_level0();
 
   // not called by others
   //int get_all_level0_cfs(std::vector<db::ColumnFamilyData*> &level0_cfs);

@@ -9,7 +9,6 @@
 
 #include "compact/compaction_iterator.h"
 #include "table/internal_iterator.h"
-//#include "utilities/field_extractor/field_extractor.h"
 #include "smartengine/slice.h"
 #include "storage/storage_manager.h"
 #include "util/stop_watch.h"
@@ -36,8 +35,6 @@ CompactionIterator::CompactionIterator(
     bool expect_valid_internal_key,
     ChangeInfo &change_info,
     ArenaAllocator  &arena,
-    std::unique_ptr<CompactionProxy> compaction,
-    const CompactionFilter* compaction_filter,
     const std::atomic<bool>* shutting_down,
     const std::atomic<bool>* bg_stopped,
     const std::atomic<int64_t>* cancel_type,
@@ -49,23 +46,14 @@ CompactionIterator::CompactionIterator(
       earliest_write_conflict_snapshot_(earliest_write_conflict_snapshot),
       env_(env),
       expect_valid_internal_key_(expect_valid_internal_key),
-      compaction_(std::move(compaction)),
-      compaction_filter_(compaction_filter),
       shutting_down_(shutting_down),
       bg_stopped_(bg_stopped),
       cancel_type_(cancel_type),
       valid_(false),
-      ignore_snapshots_(false),
       change_info_(change_info),
       arena_(arena),
       l2_largest_key_(l2_largest_key),
       background_disable_merge_(background_disable_merge) {
-  assert(compaction_filter_ == nullptr || compaction_ != nullptr);
-  bottommost_level_ =
-      compaction_ == nullptr ? false : compaction_->bottommost_level();
-  if (compaction_ != nullptr) {
-    level_ptrs_ = std::vector<size_t>(compaction_->number_levels(), 0);
-  }
 
   if (snapshots_->size() == 0) {
     // optimize for fast path if there are no snapshots
@@ -76,11 +64,6 @@ CompactionIterator::CompactionIterator(
     visible_at_tip_ = false;
     earliest_snapshot_ = snapshots_->at(0);
     latest_snapshot_ = snapshots_->back();
-  }
-  if (compaction_filter_ != nullptr) {
-    if (compaction_filter_->IgnoreSnapshots()) ignore_snapshots_ = true;
-  } else {
-    ignore_snapshots_ = false;
   }
   input_->SetPinnedItersMgr(&pinned_iters_mgr_);
 }
@@ -191,52 +174,6 @@ void CompactionIterator::NextFromInput() {
       current_user_key_sequence_ = kMaxSequenceNumber;
       current_user_key_snapshot_ = 0;
 
-      // apply the compaction filter to the first occurrence of the user key
-      if (compaction_filter_ != nullptr && ikey_.type == kTypeValue &&
-          (visible_at_tip_ || ikey_.sequence > latest_snapshot_ ||
-           ignore_snapshots_)) {
-        // If the user has specified a compaction filter and the sequence
-        // number is greater than any external snapshot, then invoke the
-        // filter. If the return value of the compaction filter is true,
-        // replace the entry with a deletion marker.
-        CompactionFilter::Decision filter;
-        compaction_filter_value_.clear();
-        compaction_filter_skip_until_.Clear();
-        {
-          StopWatchNano timer(env_, true);
-          filter = compaction_filter_->FilterV2(
-              compaction_->level(), ikey_.user_key,
-              CompactionFilter::ValueType::kValue, value_,
-              &compaction_filter_value_, compaction_filter_skip_until_.rep());
-          iter_stats_.total_filter_time +=
-              env_ != nullptr ? timer.ElapsedNanos() : 0;
-        }
-
-        if (filter == CompactionFilter::Decision::kRemoveAndSkipUntil &&
-            cmp_->Compare(*compaction_filter_skip_until_.rep(),
-                          ikey_.user_key) <= 0) {
-          // Can't skip to a key smaller than the current one.
-          // Keep the key as per FilterV2 documentation.
-          filter = CompactionFilter::Decision::kKeep;
-        }
-
-        if (filter == CompactionFilter::Decision::kRemove) {
-          // convert the current key to a delete; key_ is pointing into
-          // current_key_ at this point, so updating current_key_ updates key()
-          ikey_.type = kTypeDeletion;
-          current_key_.UpdateInternalKey(ikey_.sequence, kTypeDeletion);
-          // no value associated with delete
-          value_.clear();
-          iter_stats_.num_record_drop_user++;
-        } else if (filter == CompactionFilter::Decision::kChangeValue) {
-          value_ = compaction_filter_value_;
-        } else if (filter == CompactionFilter::Decision::kRemoveAndSkipUntil) {
-          need_skip = true;
-          compaction_filter_skip_until_.ConvertFromUserKey(kMaxSequenceNumber,
-                                                           kValueTypeForSeek);
-          skip_until = compaction_filter_skip_until_.Encode();
-        }
-      }
     } else {
 
       // Update the current key to reflect the new sequence number/type without

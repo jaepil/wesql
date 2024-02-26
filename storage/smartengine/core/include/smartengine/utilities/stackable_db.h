@@ -177,31 +177,15 @@ class StackableDB : public db::DB {
   }
 
   using DB::CompactRange;
-  virtual common::Status CompactRange(
-      const common::CompactRangeOptions& options,
-      ColumnFamilyHandle* column_family,
-      const common::Slice* begin,
-      const common::Slice* end,
-      const uint32_t manual_compact_type = 8/* Stream*/) override {
-    return db_->CompactRange(options, column_family, begin, end, manual_compact_type);
+  virtual common::Status CompactRange( ColumnFamilyHandle* column_family,
+                                       const uint32_t manual_compact_type) override
+  {
+    return db_->CompactRange(column_family, manual_compact_type);
   }
 
-  virtual common::Status CompactRange(
-      const common::CompactRangeOptions& options,
-      const common::Slice* begin,
-      const common::Slice* end,
-      const uint32_t compact_type = 8) override {
-    return db_->CompactRange(options, begin, end, compact_type);
-  }
-
-  using DB::CompactFiles;
-  virtual common::Status CompactFiles(
-      const common::CompactionOptions& compact_options,
-      ColumnFamilyHandle* column_family,
-      const std::vector<std::string>& input_file_names, const int output_level,
-      const int output_path_id = -1) override {
-    return db_->CompactFiles(compact_options, column_family, input_file_names,
-                             output_level, output_path_id);
+  virtual common::Status CompactRange(const uint32_t compact_type) override
+  {
+    return db_->CompactRange(compact_type);
   }
 
   virtual common::Status PauseBackgroundWork() override {
@@ -214,23 +198,6 @@ class StackableDB : public db::DB {
   virtual common::Status EnableAutoCompaction(
       const std::vector<ColumnFamilyHandle*>& column_family_handles) override {
     return db_->EnableAutoCompaction(column_family_handles);
-  }
-
-  using DB::NumberLevels;
-  virtual int NumberLevels(ColumnFamilyHandle* column_family) override {
-    return db_->NumberLevels(column_family);
-  }
-
-  using DB::MaxMemCompactionLevel;
-  virtual int MaxMemCompactionLevel(
-      ColumnFamilyHandle* column_family) override {
-    return db_->MaxMemCompactionLevel(column_family);
-  }
-
-  using DB::Level0StopWriteTrigger;
-  virtual int Level0StopWriteTrigger(
-      ColumnFamilyHandle* column_family) override {
-    return db_->Level0StopWriteTrigger(column_family);
   }
 
   virtual const std::string& GetName() const override { return db_->GetName(); }
