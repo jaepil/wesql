@@ -853,7 +853,7 @@ static int se_i_s_compact_stats_fill_table(
     }
     std::map<std::string, double> props;
     bool bool_ret MY_ATTRIBUTE((__unused__));
-    bool_ret = se_db->GetMapProperty(cfh, "se.cfstats", &props);
+    bool_ret = se_db->GetMapProperty(cfh, "smartengine.cfstats", &props);
     assert(bool_ret);
 
     for (auto const &prop_ent : props) {

@@ -32,8 +32,9 @@ class SeKeyDef;
 
 extern bool se_compaction_sequential_deletes_count_sd;
 
+//TODO: Zhao Dongsheng.This structure has been deprecated and will be removed in the future.
 struct SeCompactParams {
-  uint64_t m_deletes, m_window, m_file_size;
+  uint64_t m_deletes = 0, m_window = 0, m_file_size = 0;
 };
 
 struct SeIndexStats {

@@ -279,7 +279,7 @@ std::pair<Slice, Slice> GetPropertyNameAndArg(const Slice& property) {
 }
 }
 
-static const std::string rocksdb_prefix = "smartengine.";
+static const std::string smartengine_prefix = "smartengine.";
 
 static const std::string num_files_at_level_prefix = "num-files-at-level";
 static const std::string compression_ratio_at_level_prefix =
@@ -363,82 +363,82 @@ static const string block_cache_total_memory_used =
 //static const string db_total_memory_allocated = "db-total-memory-allocated";
 
 const std::string DB::Properties::kNumFilesAtLevelPrefix =
-    rocksdb_prefix + num_files_at_level_prefix;
+    smartengine_prefix + num_files_at_level_prefix;
 const std::string DB::Properties::kCompressionRatioAtLevelPrefix =
-    rocksdb_prefix + compression_ratio_at_level_prefix;
-const std::string DB::Properties::kStats = rocksdb_prefix + allstats;
-const std::string DB::Properties::kSSTables = rocksdb_prefix + sstables;
-const std::string DB::Properties::kCFStats = rocksdb_prefix + cfstats;
+    smartengine_prefix + compression_ratio_at_level_prefix;
+const std::string DB::Properties::kStats = smartengine_prefix + allstats;
+const std::string DB::Properties::kSSTables = smartengine_prefix + sstables;
+const std::string DB::Properties::kCFStats = smartengine_prefix + cfstats;
 const std::string DB::Properties::kCFStatsNoFileHistogram =
-    rocksdb_prefix + cfstats_no_file_histogram;
+    smartengine_prefix + cfstats_no_file_histogram;
 const std::string DB::Properties::kCFFileHistogram =
-    rocksdb_prefix + cf_file_histogram;
-const std::string DB::Properties::kDBStats = rocksdb_prefix + dbstats;
-const std::string DB::Properties::kCompactionStats = rocksdb_prefix + compactions;
-const std::string DB::Properties::kMeta = rocksdb_prefix + meta;
-const std::string DB::Properties::kLevelStats = rocksdb_prefix + levelstats;
+    smartengine_prefix + cf_file_histogram;
+const std::string DB::Properties::kDBStats = smartengine_prefix + dbstats;
+const std::string DB::Properties::kCompactionStats = smartengine_prefix + compactions;
+const std::string DB::Properties::kMeta = smartengine_prefix + meta;
+const std::string DB::Properties::kLevelStats = smartengine_prefix + levelstats;
 const std::string DB::Properties::kNumImmutableMemTable =
-    rocksdb_prefix + num_immutable_mem_table;
+    smartengine_prefix + num_immutable_mem_table;
 const std::string DB::Properties::kNumImmutableMemTableFlushed =
-    rocksdb_prefix + num_immutable_mem_table_flushed;
+    smartengine_prefix + num_immutable_mem_table_flushed;
 const std::string DB::Properties::kMemTableFlushPending =
-    rocksdb_prefix + mem_table_flush_pending;
+    smartengine_prefix + mem_table_flush_pending;
 const std::string DB::Properties::kCompactionPending =
-    rocksdb_prefix + compaction_pending;
+    smartengine_prefix + compaction_pending;
 const std::string DB::Properties::kNumRunningCompactions =
-    rocksdb_prefix + num_running_compactions;
+    smartengine_prefix + num_running_compactions;
 const std::string DB::Properties::kNumRunningFlushes =
-    rocksdb_prefix + num_running_flushes;
+    smartengine_prefix + num_running_flushes;
 const std::string DB::Properties::kBackgroundErrors =
-    rocksdb_prefix + background_errors;
+    smartengine_prefix + background_errors;
 const std::string DB::Properties::kCurSizeActiveMemTable =
-    rocksdb_prefix + cur_size_active_mem_table;
+    smartengine_prefix + cur_size_active_mem_table;
 const std::string DB::Properties::kCurSizeAllMemTables =
-    rocksdb_prefix + cur_size_all_mem_tables;
+    smartengine_prefix + cur_size_all_mem_tables;
 const std::string DB::Properties::kSizeAllMemTables =
-    rocksdb_prefix + size_all_mem_tables;
+    smartengine_prefix + size_all_mem_tables;
 const std::string DB::Properties::kNumEntriesActiveMemTable =
-    rocksdb_prefix + num_entries_active_mem_table;
+    smartengine_prefix + num_entries_active_mem_table;
 const std::string DB::Properties::kNumEntriesImmMemTables =
-    rocksdb_prefix + num_entries_imm_mem_tables;
+    smartengine_prefix + num_entries_imm_mem_tables;
 const std::string DB::Properties::kNumDeletesActiveMemTable =
-    rocksdb_prefix + num_deletes_active_mem_table;
+    smartengine_prefix + num_deletes_active_mem_table;
 const std::string DB::Properties::kNumDeletesImmMemTables =
-    rocksdb_prefix + num_deletes_imm_mem_tables;
+    smartengine_prefix + num_deletes_imm_mem_tables;
 const std::string DB::Properties::kEstimateNumKeys =
-    rocksdb_prefix + estimate_num_keys;
+    smartengine_prefix + estimate_num_keys;
 const std::string DB::Properties::kEstimateTableReadersMem =
-    rocksdb_prefix + estimate_table_readers_mem;
+    smartengine_prefix + estimate_table_readers_mem;
 const std::string DB::Properties::kIsFileDeletionsEnabled =
-    rocksdb_prefix + is_file_deletions_enabled;
+    smartengine_prefix + is_file_deletions_enabled;
 const std::string DB::Properties::kNumSnapshots =
-    rocksdb_prefix + num_snapshots;
+    smartengine_prefix + num_snapshots;
 const std::string DB::Properties::kOldestSnapshotTime =
-    rocksdb_prefix + oldest_snapshot_time;
+    smartengine_prefix + oldest_snapshot_time;
 const std::string DB::Properties::kNumLiveVersions =
-    rocksdb_prefix + num_live_versions;
+    smartengine_prefix + num_live_versions;
 const std::string DB::Properties::kCurrentSuperVersionNumber =
-    rocksdb_prefix + current_version_number;
+    smartengine_prefix + current_version_number;
 const std::string DB::Properties::kEstimateLiveDataSize =
-    rocksdb_prefix + estimate_live_data_size;
+    smartengine_prefix + estimate_live_data_size;
 const std::string DB::Properties::kMinLogNumberToKeep =
-    rocksdb_prefix + min_log_number_to_keep;
+    smartengine_prefix + min_log_number_to_keep;
 const std::string DB::Properties::kTotalSstFilesSize =
-    rocksdb_prefix + total_sst_files_size;
-const std::string DB::Properties::kBaseLevel = rocksdb_prefix + base_level;
+    smartengine_prefix + total_sst_files_size;
+const std::string DB::Properties::kBaseLevel = smartengine_prefix + base_level;
 const std::string DB::Properties::kEstimatePendingCompactionBytes =
-    rocksdb_prefix + estimate_pending_comp_bytes;
+    smartengine_prefix + estimate_pending_comp_bytes;
 const std::string DB::Properties::kAggregatedTableProperties =
-    rocksdb_prefix + aggregated_table_properties;
+    smartengine_prefix + aggregated_table_properties;
 const std::string DB::Properties::kAggregatedTablePropertiesAtLevel =
-    rocksdb_prefix + aggregated_table_properties_at_level;
+    smartengine_prefix + aggregated_table_properties_at_level;
 const std::string DB::Properties::kActualDelayedWriteRate =
-    rocksdb_prefix + actual_delayed_write_rate;
+    smartengine_prefix + actual_delayed_write_rate;
 const std::string DB::Properties::kIsWriteStopped =
-    rocksdb_prefix + is_write_stopped;
+    smartengine_prefix + is_write_stopped;
 
 #define DEFINE_DB_PROPERTY(name, str_name) \
-  const std::string DB::Properties::name = rocksdb_prefix + str_name;
+  const std::string DB::Properties::name = smartengine_prefix + str_name;
 DEFINE_DB_PROPERTY(kDBMemoryStats, db_memory_stats);
 DEFINE_DB_PROPERTY(kActiveMemTableTotalNumber, active_mem_table_total_number);
 DEFINE_DB_PROPERTY(kActiveMemTableTotalMemoryAllocated,
