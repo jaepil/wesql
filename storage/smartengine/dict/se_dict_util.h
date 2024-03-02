@@ -22,7 +22,7 @@
 #include "dd/types/table.h"
 #include "dict/se_index.h"
 #include "util/se_utils.h"
-#include "smartengine/db.h"
+#include "db/db.h"
 
 class Field;
 class MDL_ticket;

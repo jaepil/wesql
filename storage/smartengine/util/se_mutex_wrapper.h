@@ -30,7 +30,7 @@
 #include "mysql/plugin.h"
 
 /* se header files */
-#include "smartengine/utilities/transaction_db_mutex.h"
+#include "transactions/transaction_db_mutex.h"
 
 namespace smartengine {
 

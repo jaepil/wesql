@@ -20,7 +20,7 @@
 #define SMARTENGINE_SYSTEM_VARS_H_
 
 #include "util/se_mutex_wrapper.h"
-#include "core/include/smartengine/table.h"
+#include "table/table.h"
 
 struct SYS_VAR;
 class THD;

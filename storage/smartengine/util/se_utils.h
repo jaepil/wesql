@@ -20,6 +20,10 @@
 /* C++ standard header files */
 #include <chrono>
 #include <string>
+#ifdef HAVE_JEMALLOC
+#include <jemalloc/jemalloc.h>
+#endif
+#include <regex>
 
 /* MySQL header files */
 #include "sql/log.h"
@@ -32,16 +36,8 @@
 #include "thr_lock.h"
 
 /* se header files */
-#include "smartengine/iterator.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
-
-#ifdef HAVE_JEMALLOC
-#include <jemalloc/jemalloc.h>
-#endif
-
-#include <regex>
+#include "options/options.h"
+#include "table/iterator.h"
 
 class Field;
 

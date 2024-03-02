@@ -12,19 +12,13 @@
 #include <utility>
 #include <vector>
 #include "db/table_properties_collector.h"
+#include "env/env.h"
 #include "options/cf_options.h"
 #include "storage/storage_common.h"
 #include "table/scoped_arena_iterator.h"
 #include "util/event_logger.h"
-#include "smartengine/comparator.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
-#include "smartengine/status.h"
-#include "smartengine/table_properties.h"
-#include "smartengine/types.h"
 
 namespace smartengine {
-
 namespace common {
 struct Options;
 }

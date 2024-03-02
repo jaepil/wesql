@@ -11,9 +11,9 @@
 
 #pragma once
 #include <vector>
+#include "db/db.h"
+#include "db/snapshot.h"
 #include "storage/multi_version_extent_meta_layer.h"
-#include "smartengine/db.h"
-#include "smartengine/se_constants.h"
 
 namespace smartengine {
 namespace db {

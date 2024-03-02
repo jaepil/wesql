@@ -18,10 +18,11 @@
 #define SMARTENGINE_INCLUDE_STORAGE_LOGGER_H_
 #include "db/log_reader.h"
 #include "db/log_writer.h"
-#include "util/lock_free_fixed_queue.h"
 #include "memory/page_arena.h"
-#include "storage_log_entry.h"
-#include "extent_space_manager.h"
+#include "options/db_options.h"
+#include "storage/storage_log_entry.h"
+#include "storage/extent_space_manager.h"
+#include "util/lock_free_fixed_queue.h"
 
 namespace smartengine
 {

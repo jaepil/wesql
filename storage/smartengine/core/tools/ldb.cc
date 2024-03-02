@@ -7,7 +7,7 @@
 //
 #ifndef ROCKSDB_LITE
 
-#include "smartengine/ldb_tool.h"
+#include "tools/ldb_tool.h"
 
 int main(int argc, char** argv) {
   smartengine::tools::LDBTool tool;

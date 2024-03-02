@@ -10,21 +10,19 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
+
 #include <stdint.h>
 #include <limits>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "options/options.h"
+#include "table/extent_table_reader.h"
 #include "table/meta_blocks.h"
 #include "table/table_builder.h"
-#include "smartengine/flush_block_policy.h"
-#include "smartengine/options.h"
-#include "smartengine/status.h"
-#include "table/extent_table_reader.h"
 
 namespace smartengine {
-
 namespace common {
 class ImmutableCFOptions;
 enum CompressionType;
@@ -46,8 +44,8 @@ class WritableBuffer;
 }
 
 namespace table {
-
 class BlockBasedTableOptions;
+class FlushBlockPolicy;
 class TableProperties;
 class BlockHandle;
 class PropertyBlockBuilder;

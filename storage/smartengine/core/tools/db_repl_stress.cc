@@ -19,10 +19,9 @@ int main() {
 
 #include <gflags/gflags.h>
 
-#include "db/write_batch_internal.h"
+#include "db/db.h"
 #include "util/testutil.h"
-#include "smartengine/db.h"
-#include "smartengine/types.h"
+#include "write_batch/write_batch_internal.h"
 
 // Run a thread to perform Put's.
 // Another thread uses GetUpdatesSince API to keep getting the updates.

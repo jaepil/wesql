@@ -35,12 +35,10 @@
 #include "util/coding.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
-#include "smartengine/slice.h"
-
-using namespace smartengine;
-using namespace common;
 
 namespace smartengine {
+using namespace common;
+
 namespace util {
 
 common::Status IOError(const std::string& context, int err_number) {

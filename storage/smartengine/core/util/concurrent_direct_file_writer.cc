@@ -16,32 +16,27 @@
 
 
 #include "util/concurrent_direct_file_writer.h"
-
 #include <algorithm>
 #include <mutex>
-
 #include "db/log_writer.h"
 #include "logger/log_module.h"
 #include "monitoring/histogram.h"
-#include "monitoring/iostats_context_imp.h"
 #include "monitoring/query_perf_context.h"
 #include "port/port.h"
 #include "util/random.h"
 #include "util/rate_limiter.h"
 #include "util/sync_point.h"
-#include "smartengine/se_constants.h"
-
-using namespace smartengine::monitor;
-using namespace smartengine::port;
-using namespace smartengine::db;
-using namespace smartengine::common;
 
 namespace smartengine {
+using namespace monitor;
+using namespace port;
+using namespace db;
+using namespace common;
+
 namespace common {
 class Status;
 class Slice;
 class WritableFile;
-class IOStatsContext;
 class EnvOptions;
 }  // namespace common
 

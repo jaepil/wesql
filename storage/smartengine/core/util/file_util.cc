@@ -6,17 +6,14 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 #include "util/file_util.h"
-
 #include <algorithm>
 #include <string>
-
 #include "util/file_reader_writer.h"
 #include "util/sst_file_manager_impl.h"
-#include "smartengine/env.h"
-
-using namespace smartengine::common;
 
 namespace smartengine {
+using namespace common;
+
 namespace util {
 static const uint64_t PAGE_SIZE = 4096;
 // Utility function to copy a file up to a specified length

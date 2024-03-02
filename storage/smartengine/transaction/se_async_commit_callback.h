@@ -20,7 +20,7 @@
 #define SMARTENGINE_TRANSACTION_ASYNC_COMMIT_CALLBACK_H_
 
 #include "sql_base.h"
-#include "smartengine/async_callback.h"
+#include "db/async_callback.h"
 
 namespace smartengine
 {

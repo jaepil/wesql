@@ -1,23 +1,20 @@
 // Portions Copyright (c) 2023, ApeCloud Inc Holding Limited
 // Portions Copyright (c) 2020, Alibaba Group Holding Limited
-#include "compaction_job.h"
+
+#include "compact/compaction_job.h"
 #include <algorithm>
+#include "compact/range_iterator.h"
 #include "db/db_iter.h"
 #include "db/internal_stats.h"
-#include "storage/storage_manager.h"
-#include "storage/multi_version_extent_meta_layer.h"
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
-#include "util/to_string.h"
-#include "smartengine/options.h"
-#include "smartengine/se_constants.h"
-#include "storage/multi_version_extent_meta_layer.h"
-#include "compaction_job.h"
-#include "range_iterator.h"
-//#include "storage/level0_meta.h"
 #include "monitoring/thread_status_util.h"
+#include "options/options.h"
+#include "storage/storage_manager.h"
+#include "storage/multi_version_extent_meta_layer.h"
+#include "util/to_string.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace db;
 using namespace util;
@@ -25,9 +22,7 @@ using namespace monitor;
 using namespace util;
 using namespace memory;
 
-namespace smartengine {
 namespace storage {
-
 CompactionJob::CompactionJob(ArenaAllocator &arena)
     : arena_(arena),
       storage_manager_(nullptr),

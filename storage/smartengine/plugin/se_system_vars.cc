@@ -21,9 +21,10 @@
 #include "se_hton.h"
 #include "transaction/se_transaction.h"
 #include "transaction/se_transaction_factory.h"
-#include "core/include/smartengine/options.h"
+#include "core/options/options.h"
 #include "core/cache/row_cache.h"
 #include "core/util/sync_point.h"
+#include "core/util/rate_limiter.h"
 
 namespace smartengine
 {

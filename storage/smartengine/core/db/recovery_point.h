@@ -17,7 +17,6 @@
 #pragma once
 #include "util/to_string.h"
 #include "util/serialization.h"
-#include "smartengine/types.h"
 
 namespace smartengine
 {

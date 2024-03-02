@@ -11,7 +11,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "smartengine/options.h"
+#include "options/options.h"
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -20,27 +20,20 @@
 #include <inttypes.h>
 #include <limits>
 
+#include "memtable/memtablerep.h"
 #include "monitoring/statistics.h"
 #include "options/db_options.h"
 #include "options/options_helper.h"
 #include "table/extent_table_factory.h"
+#include "table/table_properties.h"
 #include "util/compression.h"
-#include "smartengine/cache.h"
-#include "smartengine/comparator.h"
-#include "smartengine/env.h"
-#include "smartengine/memtablerep.h"
-#include "smartengine/slice.h"
-#include "smartengine/sst_file_manager.h"
-#include "smartengine/table.h"
-#include "smartengine/table_properties.h"
-#include "smartengine/wal_filter.h"
+#include "util/sst_file_manager.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace table;
 using namespace cache;
 
-namespace smartengine {
 namespace common {
 
 AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions() {
@@ -178,9 +171,6 @@ DBOptions::DBOptions(const Options &options)
       parallel_wal_recovery(options.parallel_wal_recovery),
       parallel_recovery_thread_num(options.parallel_recovery_thread_num),
       row_cache(options.row_cache),
-#ifndef ROCKSDB_LITE
-      wal_filter(options.wal_filter),
-#endif  // ROCKSDB_LITE
       fail_if_options_file_error(options.fail_if_options_file_error),
       dump_malloc_stats(options.dump_malloc_stats),
       avoid_flush_during_recovery(options.avoid_flush_during_recovery),

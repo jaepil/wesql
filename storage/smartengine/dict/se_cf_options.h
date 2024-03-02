@@ -22,7 +22,7 @@
 #include <unordered_map>
 #include <memory>
 #include "util/se_comparator.h"
-#include "smartengine/table.h"
+#include "table/table.h"
 
 namespace smartengine {
 

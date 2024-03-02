@@ -9,19 +9,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "smartengine/filter_policy.h"
+#include "table/filter_policy.h"
 
 #include "table/full_filter_block.h"
 #include "memory/base_malloc.h"
 #include "util/coding.h"
 #include "util/hash.h"
-#include "smartengine/slice.h"
-
-using namespace smartengine::table;
-using namespace smartengine::common;
-using namespace smartengine::util;
 
 namespace smartengine {
+using namespace table;
+using namespace common;
+using namespace util;
+
 namespace table {
 
 class BlockBasedFilterBlockBuilder;

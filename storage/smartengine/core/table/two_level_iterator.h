@@ -10,10 +10,10 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
+
+#include "env/env.h"
 #include "table/iterator_wrapper.h"
 #include "monitoring/query_perf_context.h"
-#include "smartengine/env.h"
-#include "smartengine/iterator.h"
 
 namespace smartengine {
 

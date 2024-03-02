@@ -31,7 +31,7 @@
 #include "storage/storage_logger.h"
 #include "util/ebr.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace table;
@@ -39,7 +39,6 @@ using namespace monitor;
 using namespace storage;
 using namespace memory;
 
-namespace smartengine {
 namespace db {
 Status DBImpl::SyncClosedLogs(JobContext* job_context) {
   TEST_SYNC_POINT("DBImpl::SyncClosedLogs:Start");
@@ -388,6 +387,60 @@ Status DBImpl::ContinueBackgroundWork() {
     MaybeScheduleFlushOrCompaction();
   }
   return Status::OK();
+}
+
+// Will lock the mutex_,  will wait for completion if wait is true
+void DBImpl::CancelAllBackgroundWork(bool wait) {
+  InstrumentedMutexLock l(&mutex_);
+
+  __SE_LOG(INFO,
+                 "Shutdown: canceling all background work");
+
+  if (!shutting_down_.load(std::memory_order_acquire) &&
+      has_unpersisted_data_.load(std::memory_order_relaxed) &&
+      !mutable_db_options_.avoid_flush_during_shutdown) {
+    int ret = Status::kOk;
+    GlobalContext* global_ctx = nullptr;
+    SubTable* sub_table = nullptr;
+    if (nullptr == (global_ctx = versions_->get_global_ctx())) {
+      ret = Status::kCorruption;
+      SE_LOG(WARN, "global ctx must not nullptr", K(ret));
+    } else {
+      SubTableMap& all_sub_tables = global_ctx->all_sub_table_->sub_table_map_;
+      for (auto iter = all_sub_tables.begin();
+           Status::kOk && all_sub_tables.end() != iter; ++iter) {
+        if (nullptr == (sub_table = iter->second)) {
+          ret = Status::kCorruption;
+          SE_LOG(WARN, "subtable must not nullptr", K(ret),
+                      K(iter->first));
+        } else if (sub_table->IsDropped()) {
+          // do nothing
+          SE_LOG(INFO, "subtable has been dropped", "index_id",
+                      iter->first);
+        } else if (sub_table->mem()->IsEmpty()) {
+          // do nothing
+          SE_LOG(INFO, "subtable is empty", "index_id", iter->first);
+        } else {
+          sub_table->Ref();
+          mutex_.Unlock();
+          FlushMemTable(sub_table, FlushOptions());
+          mutex_.Lock();
+          sub_table->Unref();
+        }
+      }
+    }
+  }
+
+  shutting_down_.store(true, std::memory_order_release);
+  bg_cv_.SignalAll();
+  if (!wait) {
+    return;
+  }
+  // Wait for background work to finish
+  while (bg_compaction_scheduled_ || bg_flush_scheduled_ || bg_gc_scheduled_ 
+         || bg_dump_scheduled_ || master_thread_running() || bg_ebr_scheduled_) {
+    bg_cv_.Wait();
+  }
 }
 
 Status DBImpl::Flush(const FlushOptions& flush_options,

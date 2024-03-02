@@ -5,11 +5,10 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
+#include "db/snapshot_impl.h"
+#include "db/db.h"
 #include "logger/log_module.h"
 #include "storage/multi_version_extent_meta_layer.h"
-#include "smartengine/snapshot.h"
-#include "smartengine/db.h"
-#include "snapshot_impl.h"
 
 namespace smartengine {
 namespace db {

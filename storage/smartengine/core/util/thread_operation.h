@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include "smartengine/thread_status.h"
-
 #include <string>
 
 namespace smartengine {

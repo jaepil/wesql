@@ -17,7 +17,9 @@
 #ifndef SMARTENGINE_INCLUDE_EXTENT_SPACE_H_
 #define SMARTENGINE_INCLUDE_EXTENT_SPACE_H_
 
-#include "data_file.h"
+#include <map>
+#include "storage/data_file.h"
+
 namespace smartengine
 {
 namespace storage

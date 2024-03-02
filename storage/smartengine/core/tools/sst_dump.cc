@@ -7,7 +7,7 @@
 //
 #ifndef ROCKSDB_LITE
 
-#include "smartengine/sst_dump_tool.h"
+#include "tools/sst_dump_tool.h"
 
 int main(int argc, char** argv) {
   smartengine::tools::SSTDumpTool tool;

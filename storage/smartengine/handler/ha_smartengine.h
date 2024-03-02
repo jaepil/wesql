@@ -42,14 +42,11 @@
 #include "mysql/components/services/bits/psi_rwlock_bits.h"
 
 /* se header files */
-#include "smartengine/cache.h"
-#include "smartengine/perf_context.h"
-#include "smartengine/statistics.h"
-#include "smartengine/utilities/transaction_db.h"
-#include "smartengine/utilities/write_batch_with_index.h"
+#include "monitoring/statistics.h"
+#include "transactions/transaction_db.h"
 #include "storage/storage_manager.h"
-#include "smartengine/iterator.h"
-#include "smartengine/parallel_read.h"
+#include "table/parallel_read.h"
+#include "write_batch/write_batch_with_index.h"
 
 /* SE handler header files */
 #include "./se_dd_operations.h"

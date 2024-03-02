@@ -16,22 +16,23 @@
 
 #include "storage/io_extent.h"
 #include <unistd.h>
-
 #include "storage/extent_space_manager.h"
 #include "table/format.h"
+#include "util/rate_limiter.h"
 
-using namespace smartengine;
+namespace smartengine
+{
 using namespace util;
 using namespace common;
 using namespace table;
 
-namespace smartengine {
-
-namespace table {
+namespace table
+{
 extern const uint64_t kExtentBasedTableMagicNumber;
 }
 
-namespace storage {
+namespace storage
+{
 
 // change system error number to string
 Status io_error(const std::string &context, int err_number) {

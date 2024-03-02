@@ -16,15 +16,15 @@
 
 #pragma once
 
-#include "port/likely.h"
-#include "smartengine/status.h"
-
 #include <atomic>
-
-using namespace smartengine::util;
-using namespace smartengine::common;
+#include "port/likely.h"
+#include "util/se_constants.h"
+#include "util/status.h"
 
 namespace smartengine {
+using namespace common;
+using namespace util;
+
 namespace util{
 
 /*

@@ -16,14 +16,9 @@
 
 #pragma once
 
-#include "smartengine/slice.h"
-#include "util/spin_lock.h"
-
 #include <atomic>
 #include <pthread.h>
-
-using namespace smartengine;
-using namespace smartengine::common;
+#include "util/spin_lock.h"
 
 namespace smartengine {
 namespace util {

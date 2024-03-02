@@ -25,10 +25,12 @@
 #include <sstream>
 #include <vector>
 
-#include "db/memtable.h"
+#include "db/db.h"
 #include "db/version_set.h"
-#include "db/write_batch_internal.h"
+#include "memtable/memtable.h"
 #include "options/cf_options.h"
+#include "port/port.h"
+#include "tools/ldb_cmd.h"
 #include "storage/extent_space_manager.h"
 #include "table/block.h"
 #include "table/block_builder.h"
@@ -39,27 +41,15 @@
 #include "table/table_reader.h"
 #include "util/compression.h"
 #include "util/random.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/iterator.h"
-#include "smartengine/status.h"
-#include "smartengine/table_properties.h"
-#include "smartengine/utilities/ldb_cmd.h"
-#include "smartengine/se_constants.h"
+#include "write_batch/write_batch_internal.h"
 
-#include "port/port.h"
-
-using namespace smartengine;
+namespace smartengine {
 using namespace table;
 using namespace common;
 using namespace util;
 using namespace db;
-using namespace tools;
 using namespace memory;
 using namespace logger;
-
-namespace smartengine {
-
 
 namespace tools {
 

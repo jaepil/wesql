@@ -6,16 +6,14 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "db/write_controller.h"
-
 #include <atomic>
 #include <cassert>
 #include <ratio>
-#include "smartengine/env.h"
-
-using namespace smartengine;
-using namespace util;
+#include "env/env.h"
 
 namespace smartengine {
+using namespace util;
+
 namespace db {
 
 std::unique_ptr<WriteControllerToken> WriteController::GetStopToken() {

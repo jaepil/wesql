@@ -21,15 +21,13 @@
 #include "port/stack_trace.h"
 #include "table/format.h"
 #include "util/coding.h"
-#include "smartengine/comparator.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
 using namespace monitor;
 
-namespace smartengine {
 namespace table {
 
 // Helper routine: decode the next block entry starting at "p",

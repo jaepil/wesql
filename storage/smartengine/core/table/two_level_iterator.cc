@@ -11,21 +11,18 @@
 
 #include "table/two_level_iterator.h"
 #include "db/pinned_iterators_manager.h"
+#include "options/options.h"
 #include "table/block.h"
 #include "table/format.h"
 #include "util/arena.h"
-#include "smartengine/options.h"
-#include "smartengine/table.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace db;
 using namespace util;
 using namespace monitor;
 
-namespace smartengine {
 namespace table {
-
 namespace {
 
 class TwoLevelIterator : public InternalIterator {

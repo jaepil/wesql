@@ -8,16 +8,13 @@
 #include "table/get_context.h"
 #include "db/pinned_iterators_manager.h"
 #include "monitoring/statistics.h"
-#include "smartengine/env.h"
-#include "smartengine/statistics.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
 using namespace monitor;
 
-namespace smartengine {
 namespace table {
 
 GetContext::GetContext(const Comparator* ucmp,

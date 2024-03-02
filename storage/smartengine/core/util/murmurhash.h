@@ -14,7 +14,7 @@
 */
 #pragma once
 #include <stdint.h>
-#include "smartengine/slice.h"
+#include "util/slice.h"
 
 #if defined(__x86_64__)
 #define MURMUR_HASH MurmurHash64A

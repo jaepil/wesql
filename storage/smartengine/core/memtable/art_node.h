@@ -15,17 +15,6 @@
  */
 #pragma once
 
-#include "port/likely.h"
-#include "smartengine/status.h"
-#include "smartengine/se_constants.h"
-#include "util/opt_latch.h"
-#include "logger/log_module.h"
-#include "memory/base_malloc.h"
-#include "util/coding.h"
-#include "smartengine/slice.h"
-#include "util/common.h"
-#include "logger/log_module.h"
-
 #ifdef __x86_64__
 #include <x86intrin.h>
 #include <emmintrin.h>
@@ -33,6 +22,12 @@
 #endif
 #include <cstdio>
 #include <queue>
+#include "port/likely.h"
+#include "util/opt_latch.h"
+#include "logger/log_module.h"
+#include "memory/base_malloc.h"
+#include "util/coding.h"
+#include "util/common.h"
 
 namespace smartengine {
 namespace memtable {

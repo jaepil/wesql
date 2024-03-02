@@ -29,9 +29,7 @@
 #include "format.h"
 #include "util/hash.h"
 #include "memory/base_malloc.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
-#include "smartengine/table.h"
+#include "options/options.h"
 
 namespace smartengine {
 namespace table {

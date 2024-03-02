@@ -32,15 +32,15 @@
 
 #include "db/column_family.h"
 #include "db/dbformat.h"
+#include "db/file_number.h"
 #include "db/log_reader.h"
 #include "db/table_cache.h"
 #include "db/write_controller.h"
+#include "env/env.h"
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
 #include "port/port.h"
 #include "storage/storage_manager.h"
-#include "smartengine/env.h"
-#include "file_number.h"
 
 namespace smartengine {
 
@@ -231,10 +231,6 @@ class VersionSet {
   uint64_t manifest_file_size() const { return manifest_file_size_; }
 
   log::Writer *get_descriptor_log() { return descriptor_log_.get(); }
-
-  // This function doesn't support leveldb SST filenames
-  void GetLiveFilesMetaData(std::vector<common::LiveFileMetaData>* metadata,
-                            monitor::InstrumentedMutex *mu = nullptr);
 
   void GetObsoleteFiles(std::vector<FileMetaData*>* files,
                         std::vector<std::string>* manifest_filenames,

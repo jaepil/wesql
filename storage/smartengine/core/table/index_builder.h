@@ -20,10 +20,8 @@
 
 #include "table/block_builder.h"
 #include "table/format.h"
-#include "smartengine/comparator.h"
 
 namespace smartengine {
-
 namespace util {
 class WritableBuffer;
 }

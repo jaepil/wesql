@@ -12,7 +12,7 @@
 #include "util/coding.h"
 
 #include <algorithm>
-#include "smartengine/slice.h"
+#include "util/slice.h"
 
 namespace smartengine {
 namespace util {

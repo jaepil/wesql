@@ -15,22 +15,17 @@
  */
 
 #include "db/replay_threadpool_executor.h"
-#include "smartengine/status.h"
-#include "smartengine/se_constants.h"
-#include "util/mutexlock.h"
-#include "smartengine/env.h"
-#include "logger/log_module.h"
-#include "logger/log_module.h"
-#include "util/sync_point.h"
-
 #include <thread>
-
-using namespace smartengine;
-using namespace common;
+#include "util/mutexlock.h"
+#include "logger/log_module.h"
+#include "util/se_constants.h"
+#include "util/sync_point.h"
+#include "util/status.h"
 
 namespace smartengine {
-namespace db {
+using namespace common;
 
+namespace db {
 using util::FixedQueue;
 
 template<typename Deleter>

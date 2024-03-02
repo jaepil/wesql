@@ -17,13 +17,10 @@
 #include <vector>
 #include "db/table_properties_collector.h"
 #include "options/cf_options.h"
-#include "util/file_reader_writer.h"
-#include "smartengine/options.h"
-#include "smartengine/table_properties.h"
 #include "storage/storage_common.h"
+#include "util/file_reader_writer.h"
 
 namespace smartengine {
-
 namespace monitor {
 class HistogramImpl;
 }

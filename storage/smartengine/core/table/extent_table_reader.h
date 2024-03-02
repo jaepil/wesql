@@ -27,13 +27,8 @@
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
-#include "smartengine/options.h"
-#include "smartengine/statistics.h"
-#include "smartengine/status.h"
-#include "smartengine/table.h"
 
 namespace smartengine {
-
 namespace cache {
 class Cache;
 }

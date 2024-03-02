@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <algorithm>
 #include <string>
+#include "db/db.h"
 #include "db/db_impl.h"
 #include "db/job_context.h"
 #include "db/version_set.h"
@@ -27,15 +28,12 @@
 #include "util/filename.h"
 #include "util/mutexlock.h"
 #include "util/sync_point.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace monitor;
 using namespace util;
 
-namespace smartengine {
 namespace db {
 
 Status DBImpl::DisableFileDeletions() {

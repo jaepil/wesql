@@ -3,15 +3,14 @@
 // LICENSE file in the root directory of this source tree. An additional grant
 // of patent rights can be found in the PATENTS file in the same directory.
 
-#include <sstream>
 #include "monitoring/iostats_context_imp.h"
-#include "smartengine/env.h"
+#include <sstream>
+#include "env/env.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 
-namespace smartengine {
 namespace monitor {
 
 #ifndef IOS_CROSS_COMPILE

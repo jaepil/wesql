@@ -14,12 +14,10 @@
 #include <algorithm>
 #include <cstdio>
 #include "port/likely.h"
-#include "smartengine/statistics.h"
+namespace smartengine {
 
-using namespace smartengine;
 using namespace util;
 
-namespace smartengine {
 namespace monitor {
 
 std::shared_ptr<Statistics> CreateDBStatistics() {

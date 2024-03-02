@@ -45,16 +45,15 @@
 #include "env/io_posix.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_updater.h"
+#include "options/options.h"
 #include "port/port.h"
 #include "util/coding.h"
 #include "util/random.h"
+#include "util/se_constants.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
 #include "util/thread_local.h"
 #include "util/threadpool_imp.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
-#include "smartengine/se_constants.h"
 
 #if !defined(TMPFS_MAGIC)
 #define TMPFS_MAGIC 0x01021994
@@ -66,12 +65,10 @@
 #define EXT4_SUPER_MAGIC 0xEF53
 #endif
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 
-namespace smartengine {
 namespace util {
-
 namespace {
 
 ThreadStatusUpdater* CreateThreadStatusUpdater() {

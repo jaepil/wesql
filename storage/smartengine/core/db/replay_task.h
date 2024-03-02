@@ -17,8 +17,8 @@
 #pragma once
 
 #include "db/db_impl.h"
-#include "db/write_batch_internal.h"
 #include "util/callback_util.h"
+#include "write_batch/write_batch_internal.h"
 
 namespace smartengine {
 namespace db {

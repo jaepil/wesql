@@ -10,7 +10,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "smartengine/slice.h"
+#include "util/slice.h"
+
 #include <stdio.h>
 #include <algorithm>
 #include "memory/allocator.h"
@@ -18,8 +19,9 @@
 #include "util/string_util.h"
 #include "util/to_string.h"
 
-using namespace smartengine::memory;
 namespace smartengine {
+using namespace memory;
+
 namespace common {
 // 2 small internal utility functions, for efficient hex conversions
 // and no need for snprintf, toupper etc...

@@ -23,14 +23,14 @@
 #include "compact/compaction_job.h"
 #include "compact/mt_ext_compaction.h"
 #include "db/builder.h"
+#include "db/db.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
-#include "db/memtable.h"
-#include "db/memtable_list.h"
 #include "db/version_set.h"
 #include "logger/log_module.h"
+#include "memtable/memtable_list.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_util.h"
 #include "memory/page_arena.h"
@@ -52,11 +52,6 @@
 #include "util/stop_watch.h"
 #include "util/sync_point.h"
 #include "util/to_string.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/statistics.h"
-#include "smartengine/status.h"
-#include "smartengine/table.h"
 
 namespace smartengine {
 using namespace util;
@@ -65,6 +60,7 @@ using namespace monitor;
 using namespace table;
 using namespace storage;
 using namespace memory;
+
 namespace db {
 
 BaseFlush::BaseFlush(ColumnFamilyData* cfd,

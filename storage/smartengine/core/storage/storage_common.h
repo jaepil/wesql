@@ -19,11 +19,11 @@
 #include <unordered_map>
 #include <set>
 #include "memory/stl_adapt_allocator.h"
-#include "smartengine/options.h"
+#include "options/options.h"
 #include "util/autovector.h"
 #include "util/to_string.h"
+#include "util/se_constants.h"
 #include "util/serialization.h"
-#include "smartengine/se_constants.h"
 
 namespace smartengine
 {

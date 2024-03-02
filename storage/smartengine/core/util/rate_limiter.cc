@@ -15,12 +15,11 @@
 #include "port/port.h"
 #include "util/sync_point.h"
 #include "logger/log_module.h"
-#include "smartengine/env.h"
-
-using namespace smartengine::monitor;
-using namespace smartengine::port;
 
 namespace smartengine {
+using namespace monitor;
+using namespace port;
+
 namespace util {
 
 // Pending request

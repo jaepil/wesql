@@ -13,11 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include "compact/split_compaction.h"
+
 #include "logger/log_module.h"
-#include "split_compaction.h"
 #include "db/builder.h"
 #include "db/table_cache.h"
 #include "db/table_properties_collector.h"
+#include "memory/mod_info.h"
 #include "options/db_options.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
@@ -27,24 +30,16 @@
 #include "table/table_builder.h"
 #include "util/arena.h"
 #include "util/file_reader_writer.h"
-#include "memory/mod_info.h"
 #include "util/stop_watch.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
-#include "smartengine/se_constants.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace table;
 using namespace util;
 using namespace common;
 using namespace db;
 using namespace monitor;
 
-namespace smartengine {
 namespace storage {
-
-
-
 SplitCompaction::SplitCompaction(const CompactionContext &context,
                                  const ColumnFamilyDesc &cf,
                                  memory::ArenaAllocator &arena)

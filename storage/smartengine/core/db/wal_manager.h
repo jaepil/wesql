@@ -20,12 +20,10 @@
 #include <vector>
 
 #include "db/version_set.h"
+#include "env/env.h"
 #include "options/db_options.h"
 #include "port/port.h"
-#include "smartengine/env.h"
-#include "smartengine/status.h"
-#include "smartengine/transaction_log.h"
-#include "smartengine/types.h"
+#include "transactions/transaction_log.h"
 
 namespace smartengine {
 namespace db {

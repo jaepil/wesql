@@ -21,6 +21,9 @@
 #ifndef OS_WIN
 #include <unistd.h>
 #endif
+#ifdef OS_WIN
+#include <io.h>  // open/close
+#endif
 #include <iostream>
 #include <fcntl.h>
 #include <gflags/gflags.h>
@@ -39,40 +42,33 @@
 
 #include "db/db_impl.h"
 #include "db/version_set.h"
+#include "memory/mod_info.h"
+#include "memtable/memtablerep.h"
 #include "monitoring/histogram.h"
+#include "monitoring/perf_level_imp.h"
 #include "monitoring/statistics.h"
+#include "monitoring/thread_status.h"
+#include "options/options.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
+// TODO @zhencheng : use QUERY TRACE to print this.
+// #include "smartengine/perf_context.h"
+#include "table/filter_policy.h"
+#include "transactions/optimistic_transaction_db.h"
+#include "transactions/transaction.h"
+#include "transactions/transaction_db.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
 #include "util/mutexlock.h"
 #include "util/random.h"
+#include "util/rate_limiter.h"
 #include "util/string_util.h"
 #include "util/testutil.h"
 #include "util/transaction_test_util.h"
 #include "util/xxhash.h"
-#include "memory/mod_info.h"
 #include "util/lock_free_fixed_queue.h"
-#include "smartengine/cache.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/filter_policy.h"
-#include "smartengine/memtablerep.h"
-#include "smartengine/options.h"
-// TODO @zhencheng : use QUERY TRACE to print this.
-// #include "smartengine/perf_context.h"
-#include "smartengine/perf_level.h"
-#include "smartengine/rate_limiter.h"
-#include "smartengine/slice.h"
-#include "smartengine/utilities/object_registry.h"
-#include "smartengine/utilities/optimistic_transaction_db.h"
-#include "smartengine/utilities/transaction.h"
-#include "smartengine/utilities/transaction_db.h"
-#include "smartengine/write_batch.h"
+#include "write_batch/write_batch.h"
 
-#ifdef OS_WIN
-#include <io.h>  // open/close
-#endif
 
 using GFLAGS::ParseCommandLineFlags;
 using GFLAGS::RegisterFlagValidator;
@@ -741,11 +737,6 @@ static bool ValidateTableCacheNumshardbits(const char* flagname,
 }
 DEFINE_int32(table_cache_numshardbits, 4, "");
 
-#ifndef ROCKSDB_LITE
-DEFINE_string(env_uri, "",
-              "URI for registry Env lookup. Mutually exclusive"
-              " with --hdfs.");
-#endif  // ROCKSDB_LITE
 DEFINE_string(hdfs, "",
               "Name of hdfs environment. Mutually exclusive with"
               " --env_uri.");
@@ -6946,41 +6937,12 @@ int db_bench_tool(int argc, char** argv) {
     initialized = true;
   }
   ParseCommandLineFlags(&argc, &argv, true);
-#ifndef ROCKSDB_LITE
-  if (FLAGS_statistics && !FLAGS_statistics_string.empty()) {
-    fprintf(stderr,
-            "Cannot provide both --statistics and --statistics_string.\n");
-    exit(1);
-  }
-  if (!FLAGS_statistics_string.empty()) {
-    std::unique_ptr<Statistics> custom_stats_guard;
-    dbstats.reset(NewCustomObject<Statistics>(FLAGS_statistics_string,
-                                              &custom_stats_guard));
-    custom_stats_guard.release();
-    if (dbstats == nullptr) {
-      fprintf(stderr, "No Statistics registered matching string: %s\n",
-              FLAGS_statistics_string.c_str());
-      exit(1);
-    }
-  }
-#endif  // ROCKSDB_LITE
   if (FLAGS_statistics) {
     dbstats = CreateDBStatistics();
   }
 
   FLAGS_compression_type_e =
       StringToCompressionType(FLAGS_compression_type.c_str());
-
-#ifndef ROCKSDB_LITE
-  std::unique_ptr<Env> custom_env_guard;
-  if (!FLAGS_env_uri.empty()) {
-    FLAGS_env = NewCustomObject<Env>(FLAGS_env_uri, &custom_env_guard);
-    if (FLAGS_env == nullptr) {
-      fprintf(stderr, "No Env registered for URI: %s\n", FLAGS_env_uri.c_str());
-      exit(1);
-    }
-  }
-#endif  // ROCKSDB_LITE
 
   if (!strcasecmp(FLAGS_compaction_fadvice.c_str(), "NONE"))
     FLAGS_compaction_fadvice_e = Options::NONE;

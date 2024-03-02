@@ -9,21 +9,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "smartengine/comparator.h"
+#include "util/comparator.h"
 #include <stdint.h>
 #include <algorithm>
 #include <memory>
 #include "db/dbformat.h"
 #include "port/port.h"
 #include "storage/storage_manager.h"
-#include "smartengine/slice.h"
-
-using namespace smartengine::port;
-using namespace smartengine::db;
-using namespace smartengine::storage;
-using namespace smartengine::common;
 
 namespace smartengine {
+using namespace port;
+using namespace db;
+using namespace storage;
+using namespace common;
+
 namespace util {
 
 Comparator::~Comparator() {}

@@ -5,17 +5,17 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
-#include "db/memtable.h"
-#include "memtable/inlineskiplist.h"
-#include "util/arena.h"
-#include "smartengine/memtablerep.h"
 
-using namespace smartengine;
+#include "memtable/inlineskiplist.h"
+#include "memtable/memtable.h"
+#include "memtable/memtablerep.h"
+#include "util/arena.h"
+
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
 
-namespace smartengine {
 namespace memtable {
 namespace {
 class SkipListRep : public MemTableRep {

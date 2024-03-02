@@ -15,10 +15,10 @@
 #include <limits>
 #include <string>
 
-#include "util/aligned_buffer.h"
-#include "util/coding.h"
+#include "aligned_buffer.h"
+#include "coding.h"
 #include "memory/mod_info.h"
-#include "smartengine/options.h"
+#include "options/options.h"
 
 #ifdef HAVE_SNAPPY
 #include <snappy.h>

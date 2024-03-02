@@ -7,11 +7,10 @@
 
 #pragma once
 
-#include "smartengine/status.h"
+#include "util/status.h"
 
 namespace smartengine {
 namespace db {
-
 class DB;
 
 class WriteCallback {

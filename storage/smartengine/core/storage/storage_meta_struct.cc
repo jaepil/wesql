@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#include "logger/log_module.h"
 #include "storage/storage_meta_struct.h"
+#include "logger/log_module.h"
 #include "memory/modtype_define.h"
-#include "storage_common.h"
+#include "storage/storage_common.h"
+#include "table/table_properties.h"
 
 namespace smartengine
 {

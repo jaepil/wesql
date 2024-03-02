@@ -7,16 +7,15 @@
 
 #include "table/full_filter_block.h"
 
+#include "table/filter_policy.h"
 #include "monitoring/query_perf_context.h"
 #include "port/port.h"
 #include "util/coding.h"
-#include "smartengine/filter_policy.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace monitor;
 
-namespace smartengine {
 namespace table {
 
 FullFilterBlockBuilder::FullFilterBlockBuilder(bool whole_key_filtering,

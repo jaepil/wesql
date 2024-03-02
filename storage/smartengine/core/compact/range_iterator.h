@@ -25,8 +25,6 @@
 #include "db/dbformat.h"
 #include "table/internal_iterator.h"
 #include "util/to_string.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
 #include "storage/io_extent.h"
 #include "storage/storage_common.h"
 #include "util/heap.h"

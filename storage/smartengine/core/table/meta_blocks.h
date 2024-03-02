@@ -13,15 +13,12 @@
 
 #include "db/builder.h"
 #include "db/table_properties_collector.h"
+#include "options/options.h"
 #include "table/block_builder.h"
 #include "table/format.h"
 #include "util/kv_map.h"
-#include "smartengine/comparator.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
 
 namespace smartengine {
-
 namespace util {
 class Logger;
 }

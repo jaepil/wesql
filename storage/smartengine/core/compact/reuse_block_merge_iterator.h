@@ -24,15 +24,11 @@
 #include "table/format.h"
 #include "table/iter_heap.h"
 #include "table/iterator_wrapper.h"
-//#include "storage/storage_meta_struct.h"
 #include "storage/storage_manager.h"
 #include "memory/allocator.h"
 #include "util/autovector.h"
 #include "util/heap.h"
 #include "memory/page_arena.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
-#include "smartengine/se_constants.h"
 
 namespace smartengine {
 namespace storage {

@@ -25,13 +25,13 @@
 #include "mysql/plugin.h"
 #include "dict/se_charset_info.h"
 #include "dict/se_dict_util.h"
+#include "util/rate_limiter.h"
 #include "util/se_mutex_wrapper.h"
 #include "util/se_logger.h"
 #include "transaction/se_transaction.h"
 #include "core/cache/row_cache.h"
 #include "core/util/sync_point.h"
 #include "core/options/options_helper.h"
-#include "smartengine/utilities/convenience.h"
 
 // Internal MySQL APIs not exposed in any header.
 extern "C" {
@@ -446,7 +446,7 @@ static int se_done_func(void *const p)
   se_flush_all_memtables();
 
   // Stop all se background work
-  smartengine::common::CancelAllBackgroundWork(se_db->GetBaseDB(), true);
+  se_db->CancelAllBackgroundWork(true /*wait*/);
 
   // Signal the background thread to stop and to persist all stats collected
   // from background flushes and compactions. This will add more keys to a new

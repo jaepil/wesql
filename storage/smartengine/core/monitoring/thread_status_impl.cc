@@ -4,17 +4,15 @@
 // of patent rights can be found in the PATENTS file in the same directory.
 //
 
+#include "monitoring/thread_status.h"
 #include <sstream>
-
+#include "env/env.h"
 #include "util/string_util.h"
 #include "util/thread_operation.h"
-#include "smartengine/env.h"
-#include "smartengine/thread_status.h"
-
-using namespace smartengine;
-using namespace common;
 
 namespace smartengine {
+using namespace common;
+
 namespace util {
 
 #ifdef ROCKSDB_USING_THREAD_STATUS

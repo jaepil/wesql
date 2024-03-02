@@ -14,7 +14,6 @@
 
 #include <stdint.h>
 #include "util/aligned_buffer.h"
-#include "smartengine/slice.h"
 
 namespace smartengine {
 namespace table {

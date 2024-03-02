@@ -9,19 +9,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "smartengine/iterator.h"
-#include "table/internal_iterator.h"
+#include "table/iterator.h"
+
 #include "table/iterator_wrapper.h"
 #include "util/arena.h"
 #include "db/dbformat.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace table;
-using namespace common;
 using namespace db;
 using namespace util;
 
-namespace smartengine {
 namespace common {
 
 Cleanable::Cleanable() {
@@ -94,15 +92,15 @@ void Cleanable::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
 }  // namespace common
 
 namespace db {
-Status Iterator::GetProperty(std::string prop_name, std::string* prop) {
+common::Status Iterator::GetProperty(std::string prop_name, std::string* prop) {
   if (prop == nullptr) {
-    return Status::InvalidArgument("prop is nullptr");
+    return common::Status::InvalidArgument("prop is nullptr");
   }
   if (prop_name == "rocksdb.iterator.is-key-pinned") {
     *prop = "0";
-    return Status::OK();
+    return common::Status::OK();
   }
-  return Status::InvalidArgument("Undentified property.");
+  return common::Status::InvalidArgument("Undentified property.");
 }
 common::SequenceNumber Iterator::key_seq() const
 {
@@ -113,57 +111,57 @@ common::SequenceNumber Iterator::key_seq() const
 namespace {
 class EmptyIterator : public Iterator {
  public:
-  explicit EmptyIterator(const Status& s) : status_(s) {}
+  explicit EmptyIterator(const common::Status& s) : status_(s) {}
   virtual bool Valid() const override { return false; }
-  virtual void Seek(const Slice& target) override {}
-  virtual void SeekForPrev(const Slice& target) override {}
+  virtual void Seek(const common::Slice& target) override {}
+  virtual void SeekForPrev(const common::Slice& target) override {}
   virtual void SeekToFirst() override {}
   virtual void SeekToLast() override {}
   virtual void Next() override { assert(false); }
   virtual void Prev() override { assert(false); }
-  Slice key() const override {
+  common::Slice key() const override {
     assert(false);
-    return Slice();
+    return common::Slice();
   }
-  Slice value() const override {
+  common::Slice value() const override {
     assert(false);
-    return Slice();
+    return common::Slice();
   }
-  virtual Status status() const override { return status_; }
+  virtual common::Status status() const override { return status_; }
 
  private:
-  Status status_;
+  common::Status status_;
 };
 
 class EmptyInternalIterator : public InternalIterator {
  public:
-  explicit EmptyInternalIterator(const Status& s) : status_(s) {}
+  explicit EmptyInternalIterator(const common::Status& s) : status_(s) {}
   virtual bool Valid() const override { return false; }
-  virtual void Seek(const Slice& target) override {}
-  virtual void SeekForPrev(const Slice& target) override {}
+  virtual void Seek(const common::Slice& target) override {}
+  virtual void SeekForPrev(const common::Slice& target) override {}
   virtual void SeekToFirst() override {}
   virtual void SeekToLast() override {}
   virtual void Next() override { assert(false); }
   virtual void Prev() override { assert(false); }
-  Slice key() const override {
+  common::Slice key() const override {
     assert(false);
-    return Slice();
+    return common::Slice();
   }
-  Slice value() const override {
+  common::Slice value() const override {
     assert(false);
-    return Slice();
+    return common::Slice();
   }
-  virtual Status status() const override { return status_; }
+  virtual common::Status status() const override { return status_; }
 
  private:
-  Status status_;
+  common::Status status_;
 };
 }  // namespace
 
 namespace db {
-Iterator* NewEmptyIterator() { return new EmptyIterator(Status::OK()); }
+Iterator* NewEmptyIterator() { return new EmptyIterator(common::Status::OK()); }
 
-Iterator* NewErrorIterator(const Status& status) {
+Iterator* NewErrorIterator(const common::Status& status) {
   return new EmptyIterator(status);
 }
 }
@@ -171,7 +169,7 @@ Iterator* NewErrorIterator(const Status& status) {
 namespace table {
 InternalIterator* NewEmptyInternalIterator() {
 //  return new EmptyInternalIterator(Status::OK());
-  return MOD_NEW_OBJECT(memory::ModId::kDefaultMod, EmptyInternalIterator, Status::OK());
+  return MOD_NEW_OBJECT(memory::ModId::kDefaultMod, EmptyInternalIterator, common::Status::OK());
 }
 
 InternalIterator* NewEmptyInternalIterator(memory::SimpleAllocator* arena) {
@@ -179,16 +177,16 @@ InternalIterator* NewEmptyInternalIterator(memory::SimpleAllocator* arena) {
     return NewEmptyInternalIterator();
   } else {
     auto mem = arena->alloc(sizeof(EmptyIterator));
-    return new (mem) EmptyInternalIterator(Status::OK());
+    return new (mem) EmptyInternalIterator(common::Status::OK());
   }
 }
 
-InternalIterator* NewErrorInternalIterator(const Status& status) {
+InternalIterator* NewErrorInternalIterator(const common::Status& status) {
 //  return new EmptyInternalIterator(status);
   return MOD_NEW_OBJECT(memory::ModId::kDefaultMod, EmptyInternalIterator, status);
 }
 
-InternalIterator* NewErrorInternalIterator(const Status& status, memory::SimpleAllocator* arena) {
+InternalIterator* NewErrorInternalIterator(const common::Status& status, memory::SimpleAllocator* arena) {
   if (arena == nullptr) {
     return NewErrorInternalIterator(status);
   } else {

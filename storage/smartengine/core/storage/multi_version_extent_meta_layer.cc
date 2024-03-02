@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
+#include "storage/multi_version_extent_meta_layer.h"
+#include "storage/extent_space_manager.h"
 #include "util/arena.h"
-#include "multi_version_extent_meta_layer.h"
-#include "extent_space_manager.h"
-#include "smartengine/status.h"
 
 namespace smartengine
 {

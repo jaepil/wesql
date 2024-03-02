@@ -13,19 +13,14 @@
 #include <stdio.h>
 #include <string>
 #include <utility>
+#include "db/db.h"
 #include "util/coding.h"
 #include "util/serialization.h"
 #include "port/likely.h"
-#include "smartengine/comparator.h"
-#include "smartengine/db.h"
-#include "smartengine/filter_policy.h"
-#include "smartengine/slice.h"
-#include "smartengine/table.h"
-#include "smartengine/types.h"
 #include "storage/io_extent.h"
+#include "table/table.h"
 
 namespace smartengine {
-
 namespace storage {
 class ChangeInfo;
 }

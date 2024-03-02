@@ -10,6 +10,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 
+#include "db/db.h"
+
 #include <atomic>
 #include <deque>
 #include <functional>
@@ -34,11 +36,12 @@
 #include "db/wal_manager.h"
 #include "db/write_controller.h"
 #include "db/write_thread.h"
-#include "memtable_list.h"
+#include "env/env.h"
+#include "memtable/memtable_list.h"
+#include "memtable/memtablerep.h"
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
 #include "port/port.h"
-#include "smartengine/cache.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_common.h"
 #include "table/scoped_arena_iterator.h"
@@ -49,16 +52,10 @@
 #include "util/thread_local.h"
 #include "util/heap.h"
 #include "util/concurrent_hash_map.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/memtablerep.h"
-#include "smartengine/status.h"
-#include "smartengine/transaction_log.h"
-#include "smartengine/write_buffer_manager.h"
-#include "smartengine/utilities/transaction.h"
+#include "transactions/transaction.h"
+#include "transactions/transaction_log.h"
 
 namespace smartengine {
-
 namespace storage {
 class CompactionJob;
 class Compaction;
@@ -267,6 +264,7 @@ class DBImpl : public DB {
 
   virtual common::Status PauseBackgroundWork() override;
   virtual common::Status ContinueBackgroundWork() override;
+  virtual void CancelAllBackgroundWork(bool wait) override;
 
   virtual common::Status EnableAutoCompaction(
       const std::vector<ColumnFamilyHandle*>& column_family_handles) override;
@@ -350,17 +348,6 @@ class DBImpl : public DB {
                                     const common::Slice* begin,
                                     const common::Slice* end);
 
-  virtual void GetLiveFilesMetaData(
-      std::vector<common::LiveFileMetaData>* metadata) override;
-
-  // Obtains the meta data of the specified column family of the DB.
-  // common::Status::NotFound() will be returned if the current DB does not have
-  // any column family match the specified name.
-  // TODO(yhchiang): output parameter is placed in the end in this codebase.
-  virtual void GetColumnFamilyMetaData(
-      ColumnFamilyHandle* column_family,
-      common::ColumnFamilyMetaData* metadata) override;
-
   VersionSet* get_version_set() { return versions_.get(); }
 
   // Similar to Write() but will call the callback once on the single write
@@ -423,10 +410,6 @@ class DBImpl : public DB {
   // make sure not to compact any keys that would prevent a write-conflict from
   // being detected.
   const Snapshot* GetSnapshotForWriteConflictBoundary();
-
-  // checks if all live files exist on file system and that their file sizes
-  // match to our in-memory records
-  virtual common::Status CheckConsistency();
 
   virtual common::Status GetDbIdentity(std::string& identity) const override;
 
@@ -656,8 +639,6 @@ class DBImpl : public DB {
   const common::ImmutableDBOptions& immutable_db_options() const {
     return immutable_db_options_;
   }
-
-  void CancelAllBackgroundWork(bool wait);
 
   // Find Super version and reference it. Based on options, it might return
   // the thread local cached one.

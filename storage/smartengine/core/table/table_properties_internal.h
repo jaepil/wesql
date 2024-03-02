@@ -7,14 +7,11 @@
 
 #pragma once
 
-#include "smartengine/iterator.h"
-#include "smartengine/status.h"
+#include "util/status.h"
 
 namespace smartengine {
 namespace table {
-
 class InternalIterator;
-class BlockHandle;
 
 // Seek to the properties block.
 // If it successfully seeks to the properties block, "is_found" will be

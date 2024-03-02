@@ -29,17 +29,15 @@ int main() {
 #include <vector>
 
 #include "db/dbformat.h"
-#include "db/memtable.h"
+#include "memtable/memtable.h"
+#include "memtable/memtablerep.h"
+#include "options/options.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "util/arena.h"
 #include "util/mutexlock.h"
 #include "util/stop_watch.h"
 #include "util/testutil.h"
-#include "smartengine/comparator.h"
-#include "smartengine/memtablerep.h"
-#include "smartengine/options.h"
-#include "smartengine/write_buffer_manager.h"
 
 using GFLAGS::ParseCommandLineFlags;
 using GFLAGS::RegisterFlagValidator;

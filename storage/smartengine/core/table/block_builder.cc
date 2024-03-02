@@ -39,13 +39,11 @@
 #include <algorithm>
 #include "db/dbformat.h"
 #include "util/coding.h"
-#include "smartengine/comparator.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace common;
 
-namespace smartengine {
 namespace table {
 
 BlockBuilder::BlockBuilder(int block_restart_interval, bool use_delta_encoding,

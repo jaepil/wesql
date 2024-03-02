@@ -7,10 +7,9 @@
 
 #include <string>
 
+#include "db/db.h"
+#include "env/env.h"
 #include "monitoring/thread_status_updater.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/thread_status.h"
 
 namespace smartengine {
 namespace db {

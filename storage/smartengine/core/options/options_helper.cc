@@ -13,18 +13,15 @@
 #include <cstdlib>
 #include <unordered_set>
 #include <vector>
-#include "table/extent_table_factory.h"
 #include "memory/mod_info.h"
+#include "memtable/memtablerep.h"
+#include "options/options.h"
+#include "table/extent_table_factory.h"
+#include "table/filter_policy.h"
+#include "util/rate_limiter.h"
 #include "util/string_util.h"
-#include "smartengine/cache.h"
-#include "smartengine/convenience.h"
-#include "smartengine/filter_policy.h"
-#include "smartengine/memtablerep.h"
-#include "smartengine/options.h"
-#include "smartengine/rate_limiter.h"
-#include "smartengine/table.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace table;
 using namespace util;
 using namespace db;
@@ -32,7 +29,6 @@ using namespace storage;
 using namespace memtable;
 using namespace cache;
 
-namespace smartengine {
 namespace common {
 
 DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
@@ -119,9 +115,6 @@ DBOptions BuildDBOptions(const ImmutableDBOptions& immutable_db_options,
   options.parallel_recovery_thread_num = immutable_db_options.parallel_recovery_thread_num;
   options.allow_2pc = immutable_db_options.allow_2pc;
   options.row_cache = immutable_db_options.row_cache;
-#ifndef ROCKSDB_LITE
-  options.wal_filter = immutable_db_options.wal_filter;
-#endif  // ROCKSDB_LITE
   options.fail_if_options_file_error =
       immutable_db_options.fail_if_options_file_error;
   options.avoid_flush_during_recovery =
@@ -609,83 +602,6 @@ Status GetMutableDBOptionsFromStrings(
   return Status::OK();
 }
 
-Status StringToMap(const std::string& opts_str,
-                   std::unordered_map<std::string, std::string>* opts_map) {
-  assert(opts_map);
-  // Example:
-  //   opts_str = "write_buffer_size=1024;max_write_buffer_number=2;"
-  //              "nested_opt={opt1=1;opt2=2};max_bytes_for_level_base=100"
-  size_t pos = 0;
-  std::string opts = trim(opts_str);
-  while (pos < opts.size()) {
-    size_t eq_pos = opts.find('=', pos);
-    if (eq_pos == std::string::npos) {
-      return Status::InvalidArgument("Mismatched key value pair, '=' expected");
-    }
-    std::string key = trim(opts.substr(pos, eq_pos - pos));
-    if (key.empty()) {
-      return Status::InvalidArgument("Empty key found");
-    }
-
-    // skip space after '=' and look for '{' for possible nested options
-    pos = eq_pos + 1;
-    while (pos < opts.size() && isspace(opts[pos])) {
-      ++pos;
-    }
-    // Empty value at the end
-    if (pos >= opts.size()) {
-      (*opts_map)[key] = "";
-      break;
-    }
-    if (opts[pos] == '{') {
-      int count = 1;
-      size_t brace_pos = pos + 1;
-      while (brace_pos < opts.size()) {
-        if (opts[brace_pos] == '{') {
-          ++count;
-        } else if (opts[brace_pos] == '}') {
-          --count;
-          if (count == 0) {
-            break;
-          }
-        }
-        ++brace_pos;
-      }
-      // found the matching closing brace
-      if (count == 0) {
-        (*opts_map)[key] = trim(opts.substr(pos + 1, brace_pos - pos - 1));
-        // skip all whitespace and move to the next ';'
-        // brace_pos points to the next position after the matching '}'
-        pos = brace_pos + 1;
-        while (pos < opts.size() && isspace(opts[pos])) {
-          ++pos;
-        }
-        if (pos < opts.size() && opts[pos] != ';') {
-          return Status::InvalidArgument(
-              "Unexpected chars after nested options");
-        }
-        ++pos;
-      } else {
-        return Status::InvalidArgument(
-            "Mismatched curly braces for nested options");
-      }
-    } else {
-      size_t sc_pos = opts.find(';', pos);
-      if (sc_pos == std::string::npos) {
-        (*opts_map)[key] = trim(opts.substr(pos));
-        // It either ends with a trailing semi-colon or the last key-value pair
-        break;
-      } else {
-        (*opts_map)[key] = trim(opts.substr(pos, sc_pos - pos));
-      }
-      pos = sc_pos + 1;
-    }
-  }
-
-  return Status::OK();
-}
-
-
 bool SerializeSingleDBOption(std::string* opt_string,
                              const DBOptions& db_options,
                              const std::string& name,
@@ -705,29 +621,6 @@ bool SerializeSingleDBOption(std::string* opt_string,
   return result;
 }
 
-Status GetStringFromDBOptions(std::string* opt_string,
-                              const DBOptions& db_options,
-                              const std::string& delimiter) {
-  assert(opt_string);
-  opt_string->clear();
-  for (auto iter = db_options_type_info.begin();
-       iter != db_options_type_info.end(); ++iter) {
-    if (iter->second.verification == OptionVerificationType::kDeprecated) {
-      // If the option is no longer used and marked as deprecated,
-      // we skip it in the serialization.
-      continue;
-    }
-    std::string single_output;
-    bool result = SerializeSingleDBOption(&single_output, db_options,
-                                          iter->first, delimiter);
-    assert(result);
-    if (result) {
-      opt_string->append(single_output);
-    }
-  }
-  return Status::OK();
-}
-
 bool SerializeSingleColumnFamilyOption(std::string* opt_string,
                                        const ColumnFamilyOptions& cf_options,
                                        const std::string& name,
@@ -745,54 +638,6 @@ bool SerializeSingleColumnFamilyOption(std::string* opt_string,
     *opt_string = name + "=" + value + delimiter;
   }
   return result;
-}
-
-Status GetStringFromColumnFamilyOptions(std::string* opt_string,
-                                        const ColumnFamilyOptions& cf_options,
-                                        const std::string& delimiter) {
-  assert(opt_string);
-  opt_string->clear();
-  for (auto iter = cf_options_type_info.begin();
-       iter != cf_options_type_info.end(); ++iter) {
-    if (iter->second.verification == OptionVerificationType::kDeprecated) {
-      // If the option is no longer used and marked as deprecated,
-      // we skip it in the serialization.
-      continue;
-    }
-    std::string single_output;
-    bool result = SerializeSingleColumnFamilyOption(&single_output, cf_options,
-                                                    iter->first, delimiter);
-    if (result) {
-      opt_string->append(single_output);
-    } else {
-      return Status::InvalidArgument("failed to serialize %s\n",
-                                     iter->first.c_str());
-    }
-    assert(result);
-  }
-  return Status::OK();
-}
-
-Status GetStringFromCompressionType(std::string* compression_str,
-                                    CompressionType compression_type) {
-  bool ok = SerializeEnum<CompressionType>(compression_type_string_map,
-                                           compression_type, compression_str);
-  if (ok) {
-    return Status::OK();
-  } else {
-    return Status::InvalidArgument("Invalid compression types");
-  }
-}
-
-std::vector<CompressionType> GetSupportedCompressions() {
-  std::vector<CompressionType> supported_compressions;
-  for (const auto& comp_to_name : compression_type_string_map) {
-    CompressionType t = comp_to_name.second;
-    if (t != kDisableCompressionOption && CompressionTypeSupported(t)) {
-      supported_compressions.push_back(t);
-    }
-  }
-  return supported_compressions;
 }
 
 bool SerializeSingleBlockBasedTableOption(
@@ -942,143 +787,6 @@ std::string ParsePlainTableOptions(const std::string& name,
   }
   return "";
 }
-
-Status GetBlockBasedTableOptionsFromMap(
-    const BlockBasedTableOptions& table_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    BlockBasedTableOptions* new_table_options, bool input_strings_escaped) {
-  assert(new_table_options);
-  *new_table_options = table_options;
-  for (const auto& o : opts_map) {
-    auto error_message = ParseBlockBasedTableOption(
-        o.first, o.second, new_table_options, input_strings_escaped);
-    if (error_message != "") {
-      const auto iter = block_based_table_type_info.find(o.first);
-      if (iter == block_based_table_type_info.end() ||
-          !input_strings_escaped ||  // !input_strings_escaped indicates
-                                     // the old API, where everything is
-                                     // parsable.
-          (iter->second.verification != OptionVerificationType::kByName &&
-           iter->second.verification !=
-               OptionVerificationType::kByNameAllowNull &&
-           iter->second.verification != OptionVerificationType::kDeprecated)) {
-        // Restore "new_options" to the default "base_options".
-        *new_table_options = table_options;
-        return Status::InvalidArgument("Can't parse BlockBasedTableOptions:",
-                                       o.first + " " + error_message);
-      }
-    }
-  }
-  return Status::OK();
-}
-
-Status GetBlockBasedTableOptionsFromString(
-    const BlockBasedTableOptions& table_options, const std::string& opts_str,
-    BlockBasedTableOptions* new_table_options) {
-  std::unordered_map<std::string, std::string> opts_map;
-  Status s = StringToMap(opts_str, &opts_map);
-  if (!s.ok()) {
-    return s;
-  }
-  return GetBlockBasedTableOptionsFromMap(table_options, opts_map,
-                                          new_table_options);
-}
-
-Status GetPlainTableOptionsFromMap(
-    const PlainTableOptions& table_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    PlainTableOptions* new_table_options, bool input_strings_escaped) {
-  assert(new_table_options);
-  *new_table_options = table_options;
-  for (const auto& o : opts_map) {
-    auto error_message = ParsePlainTableOptions(
-        o.first, o.second, new_table_options, input_strings_escaped);
-    if (error_message != "") {
-      const auto iter = plain_table_type_info.find(o.first);
-      if (iter == plain_table_type_info.end() ||
-          !input_strings_escaped ||  // !input_strings_escaped indicates
-                                     // the old API, where everything is
-                                     // parsable.
-          (iter->second.verification != OptionVerificationType::kByName &&
-           iter->second.verification !=
-               OptionVerificationType::kByNameAllowNull &&
-           iter->second.verification != OptionVerificationType::kDeprecated)) {
-        // Restore "new_options" to the default "base_options".
-        *new_table_options = table_options;
-        return Status::InvalidArgument("Can't parse PlainTableOptions:",
-                                       o.first + " " + error_message);
-      }
-    }
-  }
-  return Status::OK();
-}
-
-Status GetPlainTableOptionsFromString(const PlainTableOptions& table_options,
-                                      const std::string& opts_str,
-                                      PlainTableOptions* new_table_options) {
-  std::unordered_map<std::string, std::string> opts_map;
-  Status s = StringToMap(opts_str, &opts_map);
-  if (!s.ok()) {
-    return s;
-  }
-  return GetPlainTableOptionsFromMap(table_options, opts_map,
-                                     new_table_options);
-}
-
-Status GetDBOptionsFromMap(
-    const DBOptions& base_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    DBOptions* new_options, bool input_strings_escaped) {
-  return GetDBOptionsFromMapInternal(base_options, opts_map, new_options,
-                                     input_strings_escaped);
-}
-
-Status GetDBOptionsFromMapInternal(
-    const DBOptions& base_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    DBOptions* new_options, bool input_strings_escaped,
-    std::vector<std::string>* unsupported_options_names) {
-  assert(new_options);
-  *new_options = base_options;
-  if (unsupported_options_names) {
-    unsupported_options_names->clear();
-  }
-  for (const auto& o : opts_map) {
-    auto s =
-        ParseDBOption(o.first, o.second, new_options, input_strings_escaped);
-    if (!s.ok()) {
-      if (s.IsNotSupported()) {
-        // If the deserialization of the specified option is not supported
-        // and an output vector of unsupported_options is provided, then
-        // we log the name of the unsupported option and proceed.
-        if (unsupported_options_names != nullptr) {
-          unsupported_options_names->push_back(o.first);
-        }
-        // Note that we still return Status::OK in such case to maintain
-        // the backward compatibility in the old public API defined in
-        // smartengine/convenience.h
-      } else {
-        // Restore "new_options" to the default "base_options".
-        *new_options = base_options;
-        return s;
-      }
-    }
-  }
-  return Status::OK();
-}
-
-Status GetDBOptionsFromString(const DBOptions& base_options,
-                              const std::string& opts_str,
-                              DBOptions* new_options) {
-  std::unordered_map<std::string, std::string> opts_map;
-  Status s = StringToMap(opts_str, &opts_map);
-  if (!s.ok()) {
-    *new_options = base_options;
-    return s;
-  }
-  return GetDBOptionsFromMap(base_options, opts_map, new_options);
-}
-
 
 #endif  // !ROCKSDB_LITE
 

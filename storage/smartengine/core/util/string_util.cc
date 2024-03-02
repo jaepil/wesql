@@ -22,14 +22,12 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "smartengine/env.h"
-#include "smartengine/slice.h"
-
-using namespace smartengine::common;
+#include "util/slice.h"
 
 namespace smartengine {
-namespace util {
+using namespace common;
 
+namespace util {
 const std::string kNullptrString = "nullptr";
 
 std::vector<std::string> StringSplit(const std::string& arg, char delim) {

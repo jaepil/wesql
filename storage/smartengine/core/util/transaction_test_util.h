@@ -9,10 +9,10 @@
 
 #ifndef ROCKSDB_LITE
 
+#include "options/options.h"
 #include "port/port.h"
-#include "smartengine/options.h"
-#include "smartengine/utilities/optimistic_transaction_db.h"
-#include "smartengine/utilities/transaction_db.h"
+#include "transactions/optimistic_transaction_db.h"
+#include "transactions/transaction_db.h"
 
 namespace smartengine {
 

@@ -29,17 +29,15 @@
 #include <vector>
 
 #include "db/batch_group.h"
+#include "db/db.h"
 #include "db/log_writer.h"
+#include "env/env.h"
 #include "monitoring/instrumented_mutex.h"
 #include "port/port.h"
 #include "util/lock_free_fixed_queue.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/status.h"
 
 namespace smartengine {
 namespace db {
-
 using util::FixedQueue;
 
 class PiplineQueueManager {

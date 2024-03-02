@@ -45,6 +45,7 @@ int main() {
 #include "db/version_set.h"
 #include "monitoring/histogram.h"
 #include "port/port.h"
+#include "table/filter_policy.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -52,11 +53,7 @@ int main() {
 #include "util/random.h"
 #include "util/string_util.h"
 #include "util/testutil.h"
-#include "smartengine/cache.h"
-#include "smartengine/env.h"
-#include "smartengine/slice.h"
-#include "smartengine/statistics.h"
-#include "smartengine/write_batch.h"
+#include "write_batch/write_batch.h"
 
 using GFLAGS::ParseCommandLineFlags;
 using GFLAGS::RegisterFlagValidator;

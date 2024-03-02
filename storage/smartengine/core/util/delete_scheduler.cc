@@ -17,11 +17,10 @@
 #include "util/mutexlock.h"
 #include "util/sst_file_manager_impl.h"
 #include "util/sync_point.h"
-#include "smartengine/env.h"
-
-using namespace smartengine::port;
 
 namespace smartengine {
+using namespace port;
+
 namespace util {
 
 DeleteScheduler::DeleteScheduler(Env* env, const std::string& trash_dir,

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 #include "row_cache.h"
+#include "env/env.h"
 #include "logger/log_module.h"
-#include "smartengine/env.h"
+
 namespace smartengine
 {
 using namespace common;

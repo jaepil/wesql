@@ -10,19 +10,18 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/log_reader.h"
-#include "db/log_writer.h"
 
 #include <stdio.h>
+#include "env/env.h"
+#include "db/log_writer.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/file_reader_writer.h"
-#include "smartengine/env.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace common;
 
-namespace smartengine {
 namespace db {
 namespace log {
 

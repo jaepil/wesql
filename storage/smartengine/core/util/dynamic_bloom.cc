@@ -12,14 +12,12 @@
 #include "port/port.h"
 #include "memory/allocator.h"
 #include "util/hash.h"
-#include "smartengine/slice.h"
-
-using namespace smartengine::port;
 
 namespace smartengine {
 using namespace memory;
-namespace util {
+using namespace port;
 
+namespace util {
 namespace {
 
 uint32_t GetTotalBitsForLocality(uint32_t total_bits) {

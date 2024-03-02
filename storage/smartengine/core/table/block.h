@@ -24,13 +24,12 @@
 
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
-#include "table/internal_iterator.h"
 #include "memory/base_malloc.h"
-#include "smartengine/iterator.h"
-#include "smartengine/options.h"
 #include "monitoring/query_perf_context.h"
+#include "options/options.h"
+#include "table/format.h"
+#include "table/internal_iterator.h"
 
-#include "format.h"
 
 namespace smartengine {
 

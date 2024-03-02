@@ -25,15 +25,12 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/xxhash.h"
-#include "smartengine/env.h"
-#include "smartengine/se_constants.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace monitor;
 
-namespace smartengine {
 namespace table {
 
 extern const uint64_t kExtentBasedTableMagicNumber;

@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-#include "range_iterator.h"
+#include "compact/range_iterator.h"
 #include "compact/compaction.h"
-#include "smartengine/se_constants.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace db;
 using namespace util;
 using namespace memory;
 
-namespace smartengine {
 namespace storage {
 
 Range Range::deep_copy(Allocator &allocator) const {

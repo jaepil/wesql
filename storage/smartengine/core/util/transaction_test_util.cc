@@ -16,12 +16,12 @@
 #include <inttypes.h>
 #include <string>
 
+#include "db/db.h"
+#include "transactions/transaction.h"
+#include "transactions/transaction_db.h"
+#include "transactions/optimistic_transaction_db.h"
 #include "util/random.h"
 #include "util/string_util.h"
-#include "smartengine/db.h"
-#include "smartengine/utilities/optimistic_transaction_db.h"
-#include "smartengine/utilities/transaction.h"
-#include "smartengine/utilities/transaction_db.h"
 
 using namespace smartengine::db;
 using namespace smartengine::common;

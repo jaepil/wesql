@@ -51,7 +51,7 @@
 #include "port/port.h"
 #include "memory/allocator.h"
 #include "util/random.h"
-#include "smartengine/slice.h"
+#include "util/slice.h"
 
 namespace smartengine {
 namespace memtable {

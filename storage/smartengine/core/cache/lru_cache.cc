@@ -21,22 +21,20 @@
 #include <stdlib.h>
 #include <string>
 #include <thread>
-
 #include "cache/row_cache.h"
+#include "env/env.h"
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
 #include "memory/base_malloc.h"
-#include "util/mutexlock.h"
-#include "smartengine/env.h"
 #include "monitoring/query_perf_context.h"
+#include "util/mutexlock.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace memory;
 using namespace monitor;
 
-namespace smartengine {
 namespace cache {
 
 LRUHandleTable::LRUHandleTable()

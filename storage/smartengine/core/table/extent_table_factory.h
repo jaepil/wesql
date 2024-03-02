@@ -10,14 +10,12 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
-#include <stdint.h>
 
+#include <stdint.h>
 #include <memory>
 #include <string>
-
 #include "db/dbformat.h"
-#include "smartengine/flush_block_policy.h"
-#include "smartengine/table.h"
+#include "table/flush_block_policy.h"
 
 namespace smartengine {
 

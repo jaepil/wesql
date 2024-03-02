@@ -25,18 +25,15 @@
 #include "util/file_reader_writer.h"
 #include "util/stop_watch.h"
 #include "util/sync_point.h"
-#include "smartengine/statistics.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace table;
 using namespace cache;
 using namespace util;
 using namespace common;
 using namespace monitor;
 
-namespace smartengine {
 namespace db {
-
 namespace {
 
 template <class T>

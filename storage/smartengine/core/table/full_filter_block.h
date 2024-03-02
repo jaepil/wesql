@@ -13,11 +13,10 @@
 #include <string>
 #include <vector>
 #include "db/dbformat.h"
-#include "table/filter_block.h"
 #include "memory/base_malloc.h"
+#include "options/options.h"
+#include "table/filter_block.h"
 #include "util/hash.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
 
 namespace smartengine {
 namespace table {

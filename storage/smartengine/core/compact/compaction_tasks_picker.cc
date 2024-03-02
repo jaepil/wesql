@@ -20,14 +20,12 @@
 #include "options/cf_options.h"
 #include "storage/multi_version_extent_meta_layer.h"
 #include "storage/storage_manager.h"
-#include "smartengine/se_constants.h"
-#include "smartengine/env.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace storage;
 using namespace util;
 using namespace memory;
-namespace smartengine {
+
 namespace db {
 
 CompactionTasksPicker::CompactionTasksPicker(

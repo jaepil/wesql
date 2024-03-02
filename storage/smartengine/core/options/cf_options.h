@@ -13,9 +13,8 @@
 #include <vector>
 
 #include "db/dbformat.h"
-#include "options/db_options.h"
+#include "options/options.h"
 #include "util/compression.h"
-#include "smartengine/options.h"
 
 namespace smartengine {
 

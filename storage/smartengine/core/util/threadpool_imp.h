@@ -11,11 +11,10 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 
-#include "smartengine/env.h"
-#include "smartengine/threadpool.h"
-
+#include "util/threadpool.h"
 #include <functional>
 #include <memory>
+#include "env/env.h"
 
 namespace smartengine {
 namespace util {

@@ -14,12 +14,8 @@
 #include <string>
 #include <vector>
 #include <memory>
-
 #include "options/cf_options.h"
 #include "options/db_options.h"
-#include "smartengine/options.h"
-#include "smartengine/status.h"
-#include "smartengine/table.h"
 
 namespace smartengine {
 
@@ -106,16 +102,6 @@ struct OptionTypeInfo {
 // based on the specified OptionType.
 bool SerializeSingleOptionHelper(const char* opt_address,
                                  const OptionType opt_type, std::string* value);
-
-// In addition to its public version defined in smartengine/convenience.h,
-// this further takes an optional output vector "unsupported_options_names",
-// which stores the name of all the unsupported options specified in "opts_map".
-Status GetDBOptionsFromMapInternal(
-    const DBOptions& base_options,
-    const std::unordered_map<std::string, std::string>& opts_map,
-    DBOptions* new_options, bool input_strings_escaped,
-    std::vector<std::string>* unsupported_options_names = nullptr);
-
 
 // A helper function to parse options for FilterPolicy from string
 // and construct a FilterPolicy object

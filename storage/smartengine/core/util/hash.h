@@ -14,8 +14,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
-
-#include "smartengine/slice.h"
+#include "util/slice.h"
 
 namespace smartengine {
 namespace util {

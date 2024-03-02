@@ -15,19 +15,13 @@
  */
 
 #include "db/replay_thread_pool.h"
-#include "smartengine/se_constants.h"
-#include "smartengine/status.h"
-#include "smartengine/env.h"
-#include "logger/log_module.h"
-#include "logger/log_module.h"
-#include "db/replay_threadpool_executor.cc"
-
 #include <thread>
-
-using namespace smartengine;
-using namespace common;
+#include "db/replay_threadpool_executor.cc"
+#include "logger/log_module.h"
 
 namespace smartengine {
+using namespace common;
+
 namespace db {
 
 template class ReplayThreadPoolExecutor<ReplayTaskDeleter>;

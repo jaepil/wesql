@@ -9,13 +9,11 @@
 
 #include <string>
 #include "util/dynamic_bloom.h"
-#include "smartengine/slice.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 
-namespace smartengine {
 namespace table {
 
 void BloomBlockBuilder::AddKeysHashes(

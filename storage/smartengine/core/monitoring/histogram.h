@@ -10,8 +10,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
-#include "smartengine/statistics.h"
 
+#include <atomic>
 #include <cassert>
 #include <map>
 #include <mutex>
@@ -20,6 +20,131 @@
 
 namespace smartengine {
 namespace monitor {
+
+/**
+ * Keep adding histogram's here.
+ * Any histogram whould have value less than HISTOGRAM_ENUM_MAX
+ * Add a new Histogram by assigning it the current value of HISTOGRAM_ENUM_MAX
+ * Add a string representation in HistogramsNameMap below
+ * And increment HISTOGRAM_ENUM_MAX
+ */
+enum Histograms : uint32_t {
+  DB_GET = 0,
+  DB_WRITE,
+  COMPACTION_TIME,
+  SUBCOMPACTION_SETUP_TIME,
+  TABLE_SYNC_MICROS,
+  COMPACTION_OUTFILE_SYNC_MICROS,
+  WAL_FILE_SYNC_MICROS,
+  MANIFEST_FILE_SYNC_MICROS,
+  // TIME SPENT IN IO DURING TABLE OPEN
+  TABLE_OPEN_IO_MICROS,
+  DB_MULTIGET,
+  READ_BLOCK_COMPACTION_MICROS,
+  READ_BLOCK_GET_MICROS,
+  WRITE_RAW_BLOCK_MICROS,
+  STALL_L0_SLOWDOWN_COUNT,
+  STALL_MEMTABLE_COMPACTION_COUNT,
+  STALL_L0_NUM_FILES_COUNT,
+  HARD_RATE_LIMIT_DELAY_COUNT,
+  SOFT_RATE_LIMIT_DELAY_COUNT,
+  NUM_FILES_IN_SINGLE_COMPACTION,
+  DB_SEEK,
+  WRITE_STALL,
+  SST_READ_MICROS,
+  // The number of subcompactions actually scheduled during a compaction
+  NUM_SUBCOMPACTIONS_SCHEDULED,
+  // Value size distribution in each operation
+  BYTES_PER_READ,
+  BYTES_PER_WRITE,
+  BYTES_PER_MULTIGET,
+
+  // number of bytes compressed/decompressed
+  // number of bytes is when uncompressed; i.e. before/after respectively
+  BYTES_COMPRESSED,
+  BYTES_DECOMPRESSED,
+  COMPRESSION_TIMES_NANOS,
+  DECOMPRESSION_TIMES_NANOS,
+  ENTRY_PER_LOG_COPY,
+  BYTES_PER_LOG_COPY,
+  TIME_PER_LOG_COPY,
+  BYTES_PER_LOG_WRITE,
+  TIME_PER_LOG_WRITE,
+  PIPLINE_GROUP_SIZE,
+  PIPLINE_LOOP_COUNT,
+  PIPLINE_TRY_LOG_COPY_COUNT,
+  PIPLINE_TRY_LOG_WRITE_COUNT,
+  PIPLINE_CONCURRENT_RUNNING_WORKER_THERADS,
+  PIPLINE_LOG_QUEUE_LENGTH,
+  PIPLINE_MEM_QUEUE_LENGTH,
+  PIPLINE_COMMIT_QUEUE_LENGTH,
+  DEMO_WATCH_TIME_NANOS,
+  HISTOGRAM_ENUM_MAX,  // TODO(ldemailly): enforce HistogramsNameMap match
+};
+
+const std::vector<std::pair<Histograms, std::string>> HistogramsNameMap = {
+    {DB_GET, "smartengine.db.get.micros"},
+    {DB_WRITE, "smartengine.db.write.micros"},
+    {COMPACTION_TIME, "smartengine.compaction.times.micros"},
+    {SUBCOMPACTION_SETUP_TIME, "smartengine.compactionjob.setup.times.micros"},
+    {TABLE_SYNC_MICROS, "smartengine.table.sync.micros"},
+    {COMPACTION_OUTFILE_SYNC_MICROS, "smartengine.compaction.outfile.sync.micros"},
+    {WAL_FILE_SYNC_MICROS, "smartengine.wal.file.sync.micros"},
+    {MANIFEST_FILE_SYNC_MICROS, "smartengine.manifest.file.sync.micros"},
+    {TABLE_OPEN_IO_MICROS, "smartengine.table.open.io.micros"},
+    {DB_MULTIGET, "smartengine.db.multiget.micros"},
+    {READ_BLOCK_COMPACTION_MICROS, "smartengine.read.block.compaction.micros"},
+    {READ_BLOCK_GET_MICROS, "smartengine.read.block.get.micros"},
+    {WRITE_RAW_BLOCK_MICROS, "smartengine.write.raw.block.micros"},
+    {STALL_L0_SLOWDOWN_COUNT, "smartengine.l0.slowdown.count"},
+    {STALL_MEMTABLE_COMPACTION_COUNT, "smartengine.memtable.compaction.count"},
+    {STALL_L0_NUM_FILES_COUNT, "smartengine.num.files.stall.count"},
+    {HARD_RATE_LIMIT_DELAY_COUNT, "smartengine.hard.rate.limit.delay.count"},
+    {SOFT_RATE_LIMIT_DELAY_COUNT, "smartengine.soft.rate.limit.delay.count"},
+    {NUM_FILES_IN_SINGLE_COMPACTION, "smartengine.numextents.in.singlecompaction"},
+    {DB_SEEK, "smartengine.db.seek.micros"},
+    {WRITE_STALL, "smartengine.db.write.stall"},
+    {SST_READ_MICROS, "smartengine.sst.read.micros"},
+    {NUM_SUBCOMPACTIONS_SCHEDULED, "smartengine.num.compactiontasks.scheduled"},
+    {BYTES_PER_READ, "smartengine.bytes.per.read"},
+    {BYTES_PER_WRITE, "smartengine.bytes.per.write"},
+    {BYTES_PER_MULTIGET, "smartengine.bytes.per.multiget"},
+    {BYTES_COMPRESSED, "smartengine.bytes.compressed"},
+    {BYTES_DECOMPRESSED, "smartengine.bytes.decompressed"},
+    {COMPRESSION_TIMES_NANOS, "smartengine.compression.times.nanos"},
+    {DECOMPRESSION_TIMES_NANOS, "smartengine.decompression.times.nanos"},
+    {ENTRY_PER_LOG_COPY, "smartengine.log.per.copy.num"},
+    {BYTES_PER_LOG_COPY, "smartengine.log.per.copy.bytes"},
+    {TIME_PER_LOG_COPY, "smartengine.log.per.copy.time.nanos"},
+    {BYTES_PER_LOG_WRITE, "smartengine.log.per.write.bytes"},
+    {TIME_PER_LOG_WRITE, "smartengine.log.per.write.time.nanos"},
+    {PIPLINE_GROUP_SIZE, "smartengine.pipline.group.size"},
+    {PIPLINE_LOOP_COUNT, "smartengine.pipline.loop.count"},
+    {PIPLINE_TRY_LOG_COPY_COUNT, "smartengine.pipline.loop.try.log.copy.count"},
+    {PIPLINE_TRY_LOG_WRITE_COUNT, "smartengine.pipline.loop.try.log.write.count"},
+    {PIPLINE_CONCURRENT_RUNNING_WORKER_THERADS,
+     "smartengine.pipline.concurrent.running.worker.threads"},
+    {PIPLINE_LOG_QUEUE_LENGTH, "smartengine.pipline.log.quque.length"},
+    {PIPLINE_MEM_QUEUE_LENGTH, "smartengine.pipline.mem.queue.length"},
+    {PIPLINE_COMMIT_QUEUE_LENGTH, "smartengine.pipline.commit.queue.length"},
+    {DEMO_WATCH_TIME_NANOS, "smartengine.demo.time.nanos"},
+};
+
+struct HistogramData {
+  double median;
+  double percentile95;
+  double percentile99;
+  double average;
+  double standard_deviation;
+  // zero-initialize new members since old Statistics::histogramData()
+  // implementations won't write them.
+  double max = 0.0;
+};
+
+enum HistogramsInternal : uint32_t {
+  INTERNAL_HISTOGRAM_START = HISTOGRAM_ENUM_MAX,
+  INTERNAL_HISTOGRAM_ENUM_MAX
+};
 
 class HistogramBucketMapper {
  public:

@@ -26,7 +26,7 @@
 #include "dict/se_cf_options.h"
 #include "dict/se_log_ddl.h"
 #include "db/column_family.h"
-#include "smartengine/db.h"
+#include "db/db.h"
 
 namespace smartengine
 {

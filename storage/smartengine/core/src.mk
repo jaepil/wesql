@@ -1,12 +1,23 @@
 # These are the sources from which librocksdb.a is built:
 LIB_SOURCES =                                                   \
+  backup/hotbackup_impl.cc                                      \
   cache/clock_cache.cc                                          \
   cache/lru_cache.cc                                            \
-	cache/row_cache.cc                                            \
+  cache/row_cache.cc                                            \
   cache/sharded_cache.cc                                        \
+  compact/reuse_block_merge_iterator.cc                         \
+  compact/range_iterator.cc                                     \
+  compact/compaction_job.cc                                     \
+  compact/compaction.cc                                         \
+  compact/split_compaction.cc                                   \
+  compact/mt_ext_compaction.cc                                  \
+  compact/compaction_tasks_picker.cc                            \
+  compact/task_type.cc                                          \
+  compact/compaction_iterator.cc                                \
+  compact/new_compaction_iterator.cc                            \
+  compact/compaction_stats.cc                                   \
   db/builder.cc                                                 \
   db/column_family.cc                                           \
-  db/convenience.cc                                             \
   db/db_filesnapshot.cc                                         \
   db/db_impl.cc                                                 \
   db/db_impl_write.cc                                           \
@@ -20,23 +31,18 @@ LIB_SOURCES =                                                   \
   db/replay_task.cc                                             \
   db/replay_thread_pool.cc                                      \
   db/replay_threadpool_executor.cc                              \
-	db/dump_job.cc                                                \
+  db/dump_job.cc                                                \
   db/flush_job.cc                                               \
   db/flush_scheduler.cc                                         \
   db/internal_stats.cc                                          \
   db/log_reader.cc                                              \
   db/log_writer.cc                                              \
-  db/memtable.cc                                                \
-  db/memtable_list.cc                                           \
-  db/recovery_point.cc																					\
+  db/recovery_point.cc                                          \
   db/snapshot_impl.cc                                           \
   db/table_cache.cc                                             \
   db/table_properties_collector.cc                              \
-  db/transaction_log_impl.cc                                    \
   db/version_set.cc                                             \
   db/wal_manager.cc                                             \
-  db/write_batch.cc                                             \
-  db/write_batch_base.cc                                        \
   db/write_controller.cc                                        \
   db/write_thread.cc                                            \
   db/batch_group.cc                                             \
@@ -45,11 +51,13 @@ LIB_SOURCES =                                                   \
   env/env_posix.cc                                              \
   env/io_posix.cc                                               \
   env/memenv.cc                                                 \
-	logger/logger.cc                                              \
-	memory/chunk_allocator.cc                                     \
-	memory/alloc_mgr.cc                                           \
-	memory/mod_info.cc                                            \
+  logger/logger.cc                                              \
+  memory/chunk_allocator.cc                                     \
+  memory/alloc_mgr.cc                                           \
+  memory/mod_info.cc                                            \
+  memtable/memtable.cc                                          \
   memtable/memtable_allocator.cc                                \
+  memtable/memtable_list.cc                                     \
   memtable/skiplistrep.cc                                       \
   memtable/art.cc                                               \
   memtable/art_node.cc                                          \
@@ -59,7 +67,7 @@ LIB_SOURCES =                                                   \
   monitoring/instrumented_mutex.cc                              \
   monitoring/iostats_context.cc                                 \
   monitoring/perf_level.cc                                      \
-  monitoring/query_perf_context.cc                        	    \
+  monitoring/query_perf_context.cc                              \
   monitoring/statistics.cc                                      \
   monitoring/thread_status_impl.cc                              \
   monitoring/thread_status_updater.cc                           \
@@ -73,21 +81,21 @@ LIB_SOURCES =                                                   \
   options/options_sanity_check.cc                               \
   port/port_posix.cc                                            \
   port/stack_trace.cc                                           \
-	storage/change_info.cc																				\
-	storage/data_file.cc																					\
-	storage/extent_meta_manager.cc																\
-	storage/extent_space.cc																				\
+  storage/change_info.cc                                        \
+  storage/data_file.cc                                          \
+  storage/extent_meta_manager.cc                                \
+  storage/extent_space.cc                                       \
   storage/extent_space_manager.cc                               \
   storage/io_extent.cc                                          \
-	storage/large_object_extent_manager.cc												\
-	storage/shrink_job.cc																					\
-	storage/storage_common.cc                                     \
-	storage/storage_logger.cc																			\
-	storage/storage_log_entry.cc																	\
+  storage/large_object_extent_manager.cc                        \
+  storage/shrink_job.cc                                         \
+  storage/storage_common.cc                                     \
+  storage/storage_logger.cc                                     \
+  storage/storage_log_entry.cc                                  \
   storage/storage_manager.cc                                    \
-	storage/storage_meta_struct.cc																\
-	storage/table_space.cc																				\
-	storage/multi_version_extent_meta_layer.cc										\
+  storage/storage_meta_struct.cc                                \
+  storage/table_space.cc                                        \
+  storage/multi_version_extent_meta_layer.cc                    \
   table/block.cc                                                \
   table/extent_table_builder.cc                                 \
   table/extent_table_factory.cc                                 \
@@ -97,16 +105,17 @@ LIB_SOURCES =                                                   \
   table/flush_block_policy.cc                                   \
   table/format.cc                                               \
   table/full_filter_block.cc                                    \
-  table/filter_manager.cc                                    		\
+  table/filter_manager.cc                                       \
   table/get_context.cc                                          \
   table/index_builder.cc                                        \
   table/iterator.cc                                             \
   table/merging_iterator.cc                                     \
   table/meta_blocks.cc                                          \
+  table/parallel_read.cc                                        \
   table/sst_file_writer.cc                                      \
   table/table_properties.cc                                     \
   table/two_level_iterator.cc                                   \
-	table/sstable_scan_iterator.cc                                \
+  table/sstable_scan_iterator.cc                                \
   util/arena.cc                                                 \
   util/bloom.cc                                                 \
   util/build_version.cc                                         \
@@ -139,33 +148,23 @@ LIB_SOURCES =                                                   \
   util/transaction_test_util.cc                                 \
   util/xxhash.cc                                                \
   util/memory_stat.cc                                           \
-	util/aio_wrapper.cc																						\
-	util/to_string.cc                                             \
-	util/misc_utility.cc                                          \
-  compact/reuse_block_merge_iterator.cc                         \
-  compact/range_iterator.cc                                     \
-  compact/compaction_job.cc																			\
-  compact/compaction.cc                                         \
-	compact/split_compaction.cc																		\
-	compact/mt_ext_compaction.cc																	\
-	compact/compaction_tasks_picker.cc														\
-	compact/task_type.cc																					\
-	compact/compaction_iterator.cc																\
-  compact/new_compaction_iterator.cc														\
-  compact/compaction_stats.cc                                   \
-  utilities/checkpoint/checkpoint.cc                            \
-  utilities/checkpoint/hotbackup_impl.cc                        \
-  utilities/transactions/optimistic_transaction_db_impl.cc      \
-  utilities/transactions/optimistic_transaction_impl.cc         \
-  utilities/transactions/transaction_base.cc                    \
-  utilities/transactions/transaction_db_impl.cc                 \
-  utilities/transactions/transaction_db_mutex_impl.cc           \
-  utilities/transactions/transaction_impl.cc                    \
-  utilities/transactions/transaction_lock_mgr.cc                \
-  utilities/transactions/transaction_util.cc                    \
-  utilities/write_batch_with_index/write_batch_with_index.cc    \
-  utilities/write_batch_with_index/write_batch_with_index_internal.cc    \
-  utilities/parallel_read/parallel_read.cc                      
+  util/aio_wrapper.cc                                           \
+  util/to_string.cc                                             \
+  util/misc_utility.cc                                          \
+  transactions/optimistic_transaction_db_impl.cc                \
+  transactions/optimistic_transaction_impl.cc                   \
+  transactions/transaction_base.cc                              \
+  transactions/transaction_db_impl.cc                           \
+  transactions/transaction_db_mutex_impl.cc                     \
+  transactions/transaction_impl.cc                              \
+  transactions/transaction_log_impl.cc                          \
+  transactions/transaction_lock_mgr.cc                          \
+  transactions/transaction_util.cc                              \
+  write_batch/write_batch.cc                                    \
+  write_batch/write_batch_base.cc                               \
+  write_batch/write_batch_with_index.cc                         \
+  write_batch/write_batch_with_index_internal.cc
+
 TOOL_LIB_SOURCES = \
   tools/ldb_cmd.cc                                               \
   tools/ldb_tool.cc                                              \
@@ -187,59 +186,10 @@ TEST_LIB_SOURCES = \
 MAIN_SOURCES =                                                    \
   cache/cache_bench.cc                                                   \
   cache/cache_test.cc                                                    \
-  db/column_family_test.cc                                              \
-  db/compaction_job_stats_test.cc                                       \
-  db/compaction_job_test.cc                                             \
-  db/compaction_picker_test.cc                                          \
-  db/comparator_db_test.cc                                              \
-  db/corruption_test.cc                                                 \
-  db/db_basic_test.cc                                                   \
-  db/db_block_cache_test.cc                                             \
-  db/db_bloom_filter_test.cc                                            \
-  db/db_compaction_filter_test.cc                                       \
-  db/db_compaction_test.cc                                              \
-  db/db_dynamic_level_test.cc                                           \
-  db/db_flush_test.cc                                                    \
-  db/db_inplace_update_test.cc                                          \
-  db/db_io_failure_test.cc                                              \
-  db/db_iter_test.cc                                                    \
-  db/db_iterator_test.cc                                                \
-  db/db_log_iter_test.cc                                                \
-  db/db_options_test.cc                                                 \
-  db/db_sst_test.cc                                                     \
-  db/db_table_properties_test.cc                                        \
-  db/db_tailing_iter_test.cc                                            \
-  db/db_test.cc                                                         \
-  db/db_universal_compaction_test.cc                                    \
-  db/db_wal_test.cc                                                     \
-  db/dbformat_test.cc                                                   \
-  db/deletefile_test.cc                                                 \
-  db/external_sst_file_basic_test.cc                                    \
-  db/external_sst_file_test.cc                                          \
-  db/fault_injection_test.cc                                            \
-  db/filename_test.cc                                                   \
-  db/flush_job_test.cc                                                  \
-  db/listener_test.cc                                                   \
-  db/log_test.cc                                                        \
-  db/manual_compaction_test.cc                                          \
-  db/merge_test.cc                                                      \
-  db/options_file_test.cc                                               \
-  db/perf_context_test.cc                                               \
-  db/prefix_test.cc                                                     \
-	db/shrink_job_test.cc                                                 \
-  db/table_properties_collector_test.cc                                 \
-  db/version_builder_test.cc                                            \
-  db/wal_manager_test.cc                                                \
-  db/write_batch_test.cc                                                \
-  db/write_callback_test.cc                                             \
-  db/write_controller_test.cc                                           \
   env/env_basic_test.cc                                                 \
   env/env_test.cc                                                       \
   env/mock_env_test.cc                                                  \
-  memtable/inlineskiplist_test.cc                                       \
-  memtable/art_test.cc                                                  \
   memtable/memtablerep_bench.cc                                         \
-  memtable/skiplist_test.cc                                             \
   memory/alloc_mgr_test.cc                                      \
   monitoring/histogram_test.cc                                          \
   monitoring/iostats_context_test.cc                                    \
@@ -272,7 +222,58 @@ MAIN_SOURCES =                                                    \
   utilities/checkpoint/checkpoint_test.cc                               \
   utilities/column_aware_encoding_exp.cc                                \
   utilities/column_aware_encoding_test.cc                               \
-  utilities/transactions/optimistic_transaction_test.cc                 \
-  utilities/transactions/transaction_test.cc                            \
-  utilities/write_batch_with_index/write_batch_with_index_test.cc       \
-  utilities/parallel_read/parallel_read_test.cc                         \
+  unittest/backup/hotbackup_test.cc                                     \
+  unittest/db/column_family_test.cc                                     \
+  unittest/db/compaction_job_stats_test.cc                              \
+  unittest/db/compaction_job_test.cc                                    \
+  unittest/db/compaction_picker_test.cc                                 \
+  unittest/db/comparator_db_test.cc                                     \
+  unittest/db/corruption_test.cc                                        \
+  unittest/db/db_basic_test.cc                                          \
+  unittest/db/db_block_cache_test.cc                                    \
+  unittest/db/db_bloom_filter_test.cc                                   \
+  unittest/db/db_compaction_filter_test.cc                              \
+  unittest/db/db_compaction_test.cc                                     \
+  unittest/db/db_dynamic_level_test.cc                                  \
+  unittest/db/db_flush_test.cc                                          \
+  unittest/db/db_inplace_update_test.cc                                 \
+  unittest/db/db_io_failure_test.cc                                     \
+  unittest/db/db_iter_test.cc                                           \
+  unittest/db/db_iterator_test.cc                                       \
+  unittest/db/db_log_iter_test.cc                                       \
+  unittest/db/db_options_test.cc                                        \
+  unittest/db/db_sst_test.cc                                            \
+  unittest/db/db_table_properties_test.cc                               \
+  unittest/db/db_tailing_iter_test.cc                                   \
+  unittest/db/db_test.cc                                                \
+  unittest/db/db_universal_compaction_test.cc                           \
+  unittest/db/db_wal_test.cc                                            \
+  unittest/db/dbformat_test.cc                                          \
+  unittest/db/deletefile_test.cc                                        \
+  unittest/db/external_sst_file_basic_test.cc                           \
+  unittest/db/external_sst_file_test.cc                                 \
+  unittest/db/fault_injection_test.cc                                   \
+  unittest/db/filename_test.cc                                          \
+  unittest/db/flush_job_test.cc                                         \
+  unittest/db/listener_test.cc                                          \
+  unittest/db/log_test.cc                                               \
+  unittest/db/manual_compaction_test.cc                                 \
+  unittest/db/merge_test.cc                                             \
+  unittest/db/options_file_test.cc                                      \
+  unittest/db/perf_context_test.cc                                      \
+  unittest/db/prefix_test.cc                                            \
+  unittest/db/shrink_job_test.cc                                        \
+  unittest/db/table_properties_collector_test.cc                        \
+  unittest/db/version_builder_test.cc                                   \
+  unittest/db/wal_manager_test.cc                                       \
+  unittest/db/write_batch_test.cc                                       \
+  unittest/db/write_callback_test.cc                                    \
+  unittest/db/write_controller_test.cc                                  \
+  unittest/memtable/art_test.cc                                         \
+  unittest/memtable/inlineskiplist_test.cc                              \
+  unittest/memtable/skiplist_test.cc                                    \
+  unittest/table/parallel_read_test.cc                         					\
+  unittest/transactions/optimistic_transaction_test.cc                  \
+  unittest/transactions/transaction_test.cc                             \
+  unittest/write_batch/write_batch_with_index_test.cc                   \
+  unittest/write_batch/write_batch_test.cc                              \

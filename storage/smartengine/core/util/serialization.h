@@ -24,10 +24,8 @@
 #include <string.h>
 #include <unordered_set>
 #include <unordered_map>
-//#include "autovector.h"
 #include "template_util.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
+#include "util/status.h"
 
 #ifndef UNUSED
 #define UNUSED(x) ((void)x)

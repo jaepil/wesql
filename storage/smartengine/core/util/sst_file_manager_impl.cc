@@ -12,13 +12,11 @@
 #include "port/port.h"
 #include "util/mutexlock.h"
 #include "util/sync_point.h"
-#include "smartengine/env.h"
-#include "smartengine/sst_file_manager.h"
-
-using namespace smartengine::port;
-using namespace smartengine::common;
 
 namespace smartengine {
+using namespace port;
+using namespace common;
+
 namespace util {
 
 #ifndef ROCKSDB_LITE

@@ -16,10 +16,13 @@
 
 #ifndef IS_CONCURRENCY_SPIN_LOCK_H_
 #define IS_CONCURRENCY_SPIN_LOCK_H_ 1
+
+#include <cassert>
+#include <new>
 #include <pthread.h>
+
 namespace smartengine
 {
-
 namespace util
 {
 /**

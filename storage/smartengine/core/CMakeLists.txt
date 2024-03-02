@@ -139,28 +139,6 @@ add_library(build_version OBJECT ${BUILD_VERSION_CC})
 target_include_directories(build_version PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/util)
 
-#option(WITH_IS "build with IS" ON)
-#if (WITH_IS)
-#  message(STATUS "IS library enabled")
-#  set (IS_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/IS)
-#  if (NOT EXISTS ${IS_ROOT_DIR})
-#    message(STATUS "${IS_ROOT_DIR} is not exists, install IS first.")
-#  else()
-#    find_package(IS REQUIRED)
-#    if (IS_FOUND)
-#      #message(STATUS "found is dir: ${IS_INCLUDE_DIR} ${IS_LIBRARIES}")
-#      include_directories(${IS_INCLUDE_DIR})
-#      include_directories(${IS_INCLUDE_DIR}/memory)
-#      include_directories(${IS_INCLUDE_DIR}/xpaxos/include)
-#      include_directories(${IS_INCLUDE_DIR}/dependency/tbb/include)
-#      list(APPEND THIRDPARTY_LIBS ${IS_LIBRARIES})
-#      if(WITH_TBB)
-#        list(APPEND THIRDPARTY_LIBS ${TBB_LIBRARIES})
-#      endif()
-#    endif()
-#  endif()
-#endif()
-
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zi /nologo /EHsc /GS /Gd /GR /GF /fp:precise /Zc:wchar_t /Zc:forScope /errorReport:queue")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /FC /d2Zi+ /W3 /wd4127 /wd4800 /wd4996 /wd4351")
@@ -313,7 +291,7 @@ if(HAVE_MALLOC_USABLE_SIZE)
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
-include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR}/unittest/)
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third-party/gmock-1.7.0/fused-src)
 find_package(Threads REQUIRED)
 
@@ -379,13 +357,13 @@ ENDIF()
 # Main library source code
 
 set(SOURCES
+        backup/hotbackup_impl.cc
         cache/clock_cache.cc
         cache/lru_cache.cc
         cache/sharded_cache.cc
         cache/row_cache.cc
         db/builder.cc
         db/column_family.cc
-        db/convenience.cc
         db/db_filesnapshot.cc
         db/db_impl.cc
         db/db_impl_write.cc
@@ -402,17 +380,12 @@ set(SOURCES
         db/internal_stats.cc
         db/log_reader.cc
         db/log_writer.cc
-        db/memtable.cc
-        db/memtable_list.cc
         db/recovery_point.cc
         db/snapshot_impl.cc
         db/table_cache.cc
         db/table_properties_collector.cc
-        db/transaction_log_impl.cc
         db/version_set.cc
         db/wal_manager.cc
-        db/write_batch.cc
-        db/write_batch_base.cc
         db/write_controller.cc
         db/write_thread.cc
         db/batch_group.cc
@@ -431,6 +404,8 @@ set(SOURCES
         memtable/art.cc
         memtable/art_node.cc
         memtable/artrep.cc
+        memtable/memtable.cc
+        memtable/memtable_list.cc
         monitoring/histogram.cc
         monitoring/histogram_windowing.cc
         monitoring/instrumented_mutex.cc
@@ -479,6 +454,7 @@ set(SOURCES
         table/iterator.cc
         table/merging_iterator.cc
         table/meta_blocks.cc
+        table/parallel_read.cc
         table/sst_file_writer.cc
         table/table_properties.cc
         table/two_level_iterator.cc
@@ -516,7 +492,6 @@ set(SOURCES
         util/status_message.cc
         util/string_util.cc
         util/sync_point.cc
-        util/testutil.cc
         util/thread_local.cc
         util/threadpool_imp.cc
         util/transaction_test_util.cc
@@ -540,19 +515,19 @@ set(SOURCES
         compact/task_type.cc
         compact/compaction_iterator.cc
         compact/new_compaction_iterator.cc
-        utilities/checkpoint/checkpoint.cc
-        utilities/checkpoint/hotbackup_impl.cc
-        utilities/transactions/optimistic_transaction_db_impl.cc
-        utilities/transactions/optimistic_transaction_impl.cc
-        utilities/transactions/transaction_base.cc
-        utilities/transactions/transaction_db_impl.cc
-        utilities/transactions/transaction_db_mutex_impl.cc
-        utilities/transactions/transaction_impl.cc
-        utilities/transactions/transaction_lock_mgr.cc
-        utilities/transactions/transaction_util.cc
-        utilities/write_batch_with_index/write_batch_with_index.cc
-        utilities/write_batch_with_index/write_batch_with_index_internal.cc
-        utilities/parallel_read/parallel_read.cc
+        transactions/optimistic_transaction_db_impl.cc
+        transactions/optimistic_transaction_impl.cc
+        transactions/transaction_base.cc
+        transactions/transaction_db_impl.cc
+        transactions/transaction_db_mutex_impl.cc
+        transactions/transaction_impl.cc
+        transactions/transaction_log_impl.cc
+        transactions/transaction_lock_mgr.cc
+        transactions/transaction_util.cc
+        write_batch/write_batch.cc
+        write_batch/write_batch_base.cc
+        write_batch/write_batch_with_index.cc
+        write_batch/write_batch_with_index_internal.cc
     )
 
 if(WIN32)
@@ -626,10 +601,69 @@ else()
 endif()
 
 set(TESTS
-        memtable/art_test.cc
-        cache/cache_test.cc
-        cache/row_cache_test.cc
+        unittest/backup/hotbackup_test.cc
+        unittest/cache/cache_test.cc
+        unittest/cache/row_cache_test.cc
         #cache/lru_cache_test.cc
+        unittest/env/env_basic_test.cc
+        #unittest/env/env_test.cc
+        unittest/env/mock_env_test.cc
+        unittest/memory/alloc_mgr_test.cc
+        unittest/memory/chunk_allocator_test.cc
+        unittest/monitoring/histogram_test.cc
+        unittest/monitoring/iostats_context_test.cc
+        #unittest/monitoring/statistics_test.cc
+        #unittest/options/options_settable_test.cc
+        unittest/storage/data_file_test.cc
+        unittest/storage/extent_space_test.cc
+        #unittest/storage/extent_space_manager_test.cc
+        #unittest/storage/io_extent_test.cc
+        #unittest/storage/level0_meta_test.cc
+        #unittest/storage/shrink_extent_spaces_test.cc
+        unittest/storage/storage_common_test.cc
+        #storage/storage_manager_test.cc
+        unittest/storage/storage_logger_test.cc
+        unittest/storage/table_space_test.cc
+        #unittest/table/block_test.cc
+        unittest/table/full_filter_block_test.cc
+        unittest/table/merger_test.cc
+        #unittest/table/extent_table_test.cc
+        unittest/table/in_mem_extent_table_test.cc
+        unittest/table/sstable_scan_iterator_test.cc
+        unittest/tools/ldb_cmd_test.cc
+        #unittest/tools/reduce_levels_test.cc
+        #unittest/tools/sst_dump_test.cc
+        #unittest/tools/backup_check_test.cc
+        unittest/util/arena_test.cc
+        #unittest/util/alloc_mgr_test.cc
+        #unittest/util/auto_roll_logger_test.cc
+        unittest/util/autovector_test.cc
+        unittest/util/bloom_test.cc
+        unittest/util/aio_test.cc
+        unittest/util/coding_test.cc
+        unittest/util/crc32c_test.cc
+        unittest/util/defer_test.cc
+        unittest/util/delete_scheduler_test.cc
+        unittest/util/dynamic_bloom_test.cc
+        unittest/util/increment_number_allocator_test.cc
+        #unittest/util/event_logger_test.cc
+        unittest/util/file_reader_writer_test.cc
+        unittest/util/filelock_test.cc
+        unittest/util/heap_test.cc
+        unittest/util/rate_limiter_test.cc
+        unittest/util/ring_buffer_test.cc
+        unittest/util/thread_list_test.cc
+        unittest/util/thread_local_test.cc
+        unittest/util/concurrent_direct_file_writer_test.cc
+        unittest/util/serialization_test.cc
+        unittest/util/fast_latch_test.cc
+        unittest/util/time_interval_test.cc
+        unittest/util/concurrent_hash_map_test.cc
+        #unittest/util/page_arena_test.cc
+        #unittest/compact/reuse_block_merge_iterator_test.cc
+        unittest/compact/compaction_test.cc
+        #unittest/compact/minor_compaction_test.cc
+        #unittest/compact/minor_compaction_util_test.cc
         #db/column_family_test.cc
         #db/compact_files_test.cc
         #db/compaction_iterator_test.cc
@@ -637,18 +671,18 @@ set(TESTS
         #db/corruption_test.cc
         #db/cuckoo_table_db_test.cc
         #db/db_basic_test.cc
-        db/bugfix_39705890_allocate_extent_failed_test.cc
-        db/bugfix_25168148_test.cc
-        db/db_block_cache_test.cc
+        unittest/db/bugfix_39705890_allocate_extent_failed_test.cc
+        unittest/db/bugfix_25168148_test.cc
+        unittest/db/db_block_cache_test.cc
         #db/db_bloom_filter_test.cc
         #db/db_compaction_filter_test.cc
         #        db/db_compaction_test.cc
         #db/db_dynamic_level_test.cc
         #db/db_flush_test.cc
-        db/db_recovery_failed_test.cc
-        db/db_transaction_pipline_test.cc
+        unittest/db/db_recovery_failed_test.cc
+        unittest/db/db_transaction_pipline_test.cc
         #db/db_io_failure_test.cc
-        db/db_iter_test.cc
+        unittest/db/db_iter_test.cc
         #db/db_iterator_test.cc
         #db/db_log_iter_test.cc
         #db/db_options_test.cc
@@ -659,112 +693,40 @@ set(TESTS
         #db/db_test.cc
         #db/db_test2.cc
         #db/db_wal_test.cc
-        db/dbformat_test.cc
+        unittest/db/dbformat_test.cc
         #db/delete_extents_test.cc
         #db/deletefile_test.cc
         #db/external_sst_file_basic_test.cc
         #db/external_sst_file_test.cc
         #db/fault_injection_test.cc
-        db/filename_test.cc
+        unittest/db/filename_test.cc
         #db/flush_job_test.cc
         #db/listener_test.cc
-        db/log_test.cc
+        unittest/db/log_test.cc
         #db/manual_compaction_test.cc
         #db/memtable_list_test.cc
-        db/options_file_test.cc
-        db/perf_context_test.cc
+        unittest/db/options_file_test.cc
+        unittest/db/perf_context_test.cc
         #db/prefix_test.cc
-        db/recover_no_space_test.cc
+        unittest/db/recover_no_space_test.cc
         #db/table_properties_collector_test.cc
-        db/shrink_job_test.cc
-        db/wal_manager_test.cc
-        db/write_batch_test.cc
+        unittest/db/shrink_job_test.cc
+        unittest/db/wal_manager_test.cc
         #db/write_callback_test.cc
-        db/write_controller_test.cc
+        unittest/db/write_controller_test.cc
         #db/end_key_pushdown_test.cc
-        db/parallel_recovery_test.cc
-        db/2pc_parallel_recovery_test.cc
-        db/replay_thread_pool_test.cc
-        env/env_basic_test.cc
-        #env/env_test.cc
-        env/mock_env_test.cc
-        memory/alloc_mgr_test.cc
-        memory/chunk_allocator_test.cc
-        memtable/inlineskiplist_test.cc
-        memtable/skiplist_test.cc
-        monitoring/histogram_test.cc
-        monitoring/iostats_context_test.cc
-        #monitoring/statistics_test.cc
-        #options/options_settable_test.cc
-        storage/data_file_test.cc
-        storage/extent_space_test.cc
-        #storage/extent_space_manager_test.cc
-        #storage/io_extent_test.cc
-        #storage/level0_meta_test.cc
-        #storage/shrink_extent_spaces_test.cc
-        storage/storage_common_test.cc
-        #storage/storage_manager_test.cc
-        storage/storage_logger_test.cc
-        storage/table_space_test.cc
-        #table/block_test.cc
-        table/full_filter_block_test.cc
-        table/merger_test.cc
-        #table/extent_table_test.cc
-        table/in_mem_extent_table_test.cc
-        table/sstable_scan_iterator_test.cc
-        tools/ldb_cmd_test.cc
-        #tools/reduce_levels_test.cc
-        #tools/sst_dump_test.cc
-        #tools/backup_check_test.cc
-        util/arena_test.cc
-        #util/alloc_mgr_test.cc
-        #util/auto_roll_logger_test.cc
-        util/autovector_test.cc
-        util/bloom_test.cc
-        util/aio_test.cc
-        util/coding_test.cc
-        util/crc32c_test.cc
-        util/defer_test.cc
-        util/delete_scheduler_test.cc
-        util/dynamic_bloom_test.cc
-        util/increment_number_allocator_test.cc
-        #util/event_logger_test.cc
-        util/file_reader_writer_test.cc
-        util/filelock_test.cc
-        util/heap_test.cc
-        util/rate_limiter_test.cc
-        util/ring_buffer_test.cc
-        util/thread_list_test.cc
-        util/thread_local_test.cc
-        util/concurrent_direct_file_writer_test.cc
-        util/serialization_test.cc
-        util/fast_latch_test.cc
-        util/time_interval_test.cc
-        util/concurrent_hash_map_test.cc
-        #util/page_arena_test.cc
-        #compact/reuse_block_merge_iterator_test.cc
-        compact/compaction_test.cc
-        #compact/minor_compaction_test.cc
-        #compact/minor_compaction_util_test.cc
-        #utilities/checkpoint/checkpoint_test.cc
-        utilities/checkpoint/hotbackup_test.cc
-        #utilities/date_tiered/date_tiered_test.cc
-        #utilities/document/document_db_test.cc
-        #utilities/document/json_document_test.cc
-        #utilities/geodb/geodb_test.cc
-        #utilities/lua/rocks_lua_test.cc
-        #utilities/object_registry_test.cc
-        #utilities/option_change_migration/option_change_migration_test.cc
-        #utilities/persistent_cache/hash_table_test.cc
-        #utilities/persistent_cache/persistent_cache_test.cc
-        #utilities/redis/redis_lists_test.cc
-        #utilities/spatialdb/spatial_db_test.cc
-        #utilities/table_properties_collectors/compact_on_deletion_collector_test.cc
-        #utilities/transactions/optimistic_transaction_test.cc
-        #utilities/transactions/transaction_test.cc
-        #utilities/ttl/ttl_test.cc
-        #utilities/write_batch_with_index/write_batch_with_index_test.cc
-        utilities/parallel_read/parallel_read_test.cc
+        unittest/db/parallel_recovery_test.cc
+        unittest/db/2pc_parallel_recovery_test.cc
+        unittest/db/replay_thread_pool_test.cc
+        unittest/logger/logger_test.cc
+        unittest/memtable/art_test.cc
+        unittest/memtable/inlineskiplist_test.cc
+        unittest/memtable/skiplist_test.cc
+        unittest/table/parallel_read_test.cc
+        #unittest/transactions/optimistic_transaction_test.cc
+        #unittest/transactions/transaction_test.cc
+        unittest/write_batch/write_batch_test.cc
+        #unittest/write_batch_with_index_test.cc
 )
 
 set(BENCHMARKS
@@ -772,22 +734,24 @@ set(BENCHMARKS
   memtable/memtablerep_bench.cc
   tools/db_bench.cc
   tools/perf_memtable_search.cc)
-add_library(testharness OBJECT util/testharness.cc)
+add_library(testharness OBJECT unittest/util/testharness.cc)
+add_library(testutil OBJECT unittest/util/testutil.cc)
 foreach(sourcefile ${BENCHMARKS})
   get_filename_component(exename ${sourcefile} NAME_WE)
   add_executable(${exename}${ARTIFACT_SUFFIX} ${sourcefile}
-    $<TARGET_OBJECTS:testharness>)
+    $<TARGET_OBJECTS:testharness>
+    $<TARGET_OBJECTS:testutil>)
   target_link_libraries(${exename}${ARTIFACT_SUFFIX} gmock ${LIBS} gflags)
 endforeach(sourcefile ${BENCHMARKS})
 
 # For test util library that is build only in DEBUG mode
 # and linked to tests. Add test only code that is not #ifdefed for Release here.
 set(TESTUTIL_SOURCE
-    db/db_test_util.cc
     env/mock_env.cc
     monitoring/thread_status_updater_debug.cc
     table/mock_table.cc
-    util/fault_injection_test_env.cc
+    unittest/db/db_test_util.cc
+    unittest/util/fault_injection_test_env.cc
 )
 # test utilities are only build in debug
 enable_testing()
@@ -810,7 +774,8 @@ set(TEST_EXES ${TESTS})
 foreach(sourcefile ${TEST_EXES})
     get_filename_component(exename ${sourcefile} NAME_WE)
     add_executable(${exename}${ARTIFACT_SUFFIX} ${sourcefile}
-      $<TARGET_OBJECTS:testharness>)
+      $<TARGET_OBJECTS:testharness>
+      $<TARGET_OBJECTS:testutil>)
     set_target_properties(${exename}${ARTIFACT_SUFFIX}
       PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD_RELEASE 1
       EXCLUDE_FROM_DEFAULT_BUILD_MINRELEASE 1

@@ -24,7 +24,7 @@
 #include "./m_ctype.h"
 
 /* se header files */
-#include "smartengine/comparator.h"
+#include "util/comparator.h"
 
 /* MyX header files */
 #include "./se_utils.h"

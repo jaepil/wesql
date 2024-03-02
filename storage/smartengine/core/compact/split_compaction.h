@@ -17,15 +17,14 @@
 #ifndef SMARTENGINE_STORAGE_SPLIT_COMPACTION_H_
 #define SMARTENGINE_STORAGE_SPLIT_COMPACTION_H_
 
-#include "compaction.h"
-#include "compaction_stats.h"
-#include "reuse_block_merge_iterator.h"
+#include "compact/compaction.h"
+#include "compact/compaction_stats.h"
+#include "compact/reuse_block_merge_iterator.h"
+#include "options/options.h"
 #include "storage/storage_manager.h"
 #include "table/block.h"
 #include "table/two_level_iterator.h"
 #include "util/aligned_buffer.h"
-#include "smartengine/cache.h"
-#include "smartengine/options.h"
 
 namespace smartengine {
 namespace storage {

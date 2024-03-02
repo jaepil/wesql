@@ -21,14 +21,10 @@
 #include <thread>
 #include <vector>
 #include <time.h>
-
 #ifdef ROCKSDB_JEMALLOC
 #include "jemalloc/jemalloc.h"
 #endif
-
-#include "smartengine/env.h"
-#include "smartengine/status.h"
-#include "smartengine/se_constants.h"
+#include "env/env.h"
 #include "cache/lru_cache.h"
 #include "cache/row_cache.h"
 #include "monitoring/histogram.h"
@@ -38,13 +34,12 @@
 #include "memory/alloc_mgr.h"
 #include "port/likely.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace common;
 using namespace cache;
 using namespace memory;
 
-namespace smartengine {
 namespace monitor {
 
 thread_local QueryPerfContext *tls_query_perf_context = nullptr;

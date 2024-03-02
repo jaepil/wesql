@@ -19,16 +19,11 @@
 
 #include "options/db_options.h"
 #include "port/port.h"
+#include "transactions/transaction_log.h"
 #include "util/concurrent_direct_file_writer.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
-#include "smartengine/transaction_log.h"
 
 namespace smartengine {
-
 namespace util {
-
 class Directory;
 class Env;
 class WritableFileWriter;

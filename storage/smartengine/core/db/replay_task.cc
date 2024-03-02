@@ -16,18 +16,16 @@
 
 #include "db/replay_task.h"
 #include "db/replay_thread_pool.h"
-#include "db/write_batch_internal.h"
-#include "smartengine/write_batch.h"
-#include "smartengine/status.h"
 #include "logger/log_module.h"
 #include "logger/log_module.h"
 #include "util/filename.h"
 #include "util/sync_point.h"
-
-using namespace smartengine;
-using namespace common;
+#include "write_batch/write_batch.h"
+#include "write_batch/write_batch_internal.h"
 
 namespace smartengine {
+using namespace common;
+
 namespace db {
 void ReplayTask::run() {
   int ret = Status::kOk;

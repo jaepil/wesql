@@ -17,7 +17,6 @@
 
 #include "logger/log_module.h"
 #include "util/random.h"
-#include "smartengine/env.h"
 
 namespace smartengine
 {

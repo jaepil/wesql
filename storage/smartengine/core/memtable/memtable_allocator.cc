@@ -13,14 +13,13 @@
 
 #include <assert.h>
 #include "util/arena.h"
-#include "smartengine/write_buffer_manager.h"
+#include "util/write_buffer_manager.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace db;
 using namespace memory;
 
-namespace smartengine {
 namespace memtable {
 
 MemTableAllocator::MemTableAllocator(Allocator* allocator,

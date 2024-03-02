@@ -22,8 +22,9 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include "db/db.h"
+#include "table/table_properties.h"
 #include "util/se_utils.h"
-#include "smartengine/db.h"
 
 namespace smartengine
 {

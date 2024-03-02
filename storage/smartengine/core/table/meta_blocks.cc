@@ -16,15 +16,12 @@
 #include "table/table_properties_internal.h"
 #include "util/coding.h"
 #include "util/serialization.h"
-#include "smartengine/table.h"
-#include "smartengine/table_properties.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
 
-namespace smartengine {
 namespace table {
 
 MetaIndexBuilder::MetaIndexBuilder()

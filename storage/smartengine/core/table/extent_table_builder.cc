@@ -8,40 +8,35 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
+
+#include "table/extent_table_builder.h"
+
 #include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
-
 #include <list>
 #include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
-
 #include "cache/row_cache.h"
 #include "db/dbformat.h"
 #include "db/version_set.h"
-
-#include "smartengine/comparator.h"
-#include "smartengine/env.h"
-#include "smartengine/filter_policy.h"
-#include "smartengine/flush_block_policy.h"
-#include "smartengine/table.h"
-#include "smartengine/se_constants.h"
-
+#include "memory/base_malloc.h"
+#include "storage/extent_space_manager.h"
+#include "storage/storage_manager.h"
+#include "table/index_builder.h"
 #include "table/block.h"
 #include "table/block_builder.h"
-#include "table/extent_table_builder.h"
 #include "table/extent_table_factory.h"
 #include "table/extent_table_reader.h"
 #include "table/filter_block.h"
+#include "table/filter_policy.h"
 #include "table/format.h"
 #include "table/full_filter_block.h"
 #include "table/meta_blocks.h"
 #include "table/table_builder.h"
-
-#include "memory/base_malloc.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -50,11 +45,7 @@
 #include "util/sync_point.h"
 #include "util/xxhash.h"
 
-#include "storage/extent_space_manager.h"
-#include "storage/storage_manager.h"
-#include "table/index_builder.h"
-
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace common;
 using namespace db;
@@ -62,7 +53,6 @@ using namespace monitor;
 using namespace cache;
 using namespace memory;
 
-namespace smartengine {
 namespace table {
 
 typedef BlockBasedTableOptions::IndexType IndexType;

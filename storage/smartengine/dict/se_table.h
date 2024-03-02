@@ -22,7 +22,7 @@
 #include "dd/types/table.h"
 #include "my_inttypes.h"
 #include "dict/se_dict_struct.h"
-#include "smartengine/slice.h"
+#include "util/slice.h"
 
 namespace smartengine
 {

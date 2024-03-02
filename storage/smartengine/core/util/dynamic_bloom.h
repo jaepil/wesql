@@ -7,14 +7,12 @@
 
 #pragma once
 
-#include <string>
-
-#include "smartengine/slice.h"
-
-#include "port/port.h"
-
 #include <atomic>
 #include <memory>
+#include <string>
+#include "memory/allocator.h"
+#include "port/port.h"
+#include "util/slice.h"
 
 namespace smartengine {
 namespace common {

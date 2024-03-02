@@ -15,17 +15,16 @@
  */
 
 #include "util/ebr.h"
+#include "logger/log_module.h"
 #include "port/likely.h"
-#include "smartengine/se_constants.h"
-#include "logger/log_module.h"
-#include "smartengine/status.h"
-#include "logger/log_module.h"
-
-using namespace smartengine;
-using namespace smartengine::memory;
-using namespace smartengine::logger;
+#include "util/status.h"
+#include "util/se_constants.h"
 
 namespace smartengine {
+using namespace common;
+using namespace memory;
+using namespace logger;
+
 namespace util {
 
 void LocalEBR::enter_critical_area(uint32_t global_epoch) {

@@ -8,13 +8,12 @@
 
 #pragma once
 
+#include "table/iterator.h"
+
 #include <string>
-#include "smartengine/comparator.h"
-#include "smartengine/iterator.h"
-#include "smartengine/status.h"
+#include "util/comparator.h"
 
 namespace smartengine {
-
 namespace common {
 class Cleanable;
 }

@@ -11,10 +11,12 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include "port/port.h"
 #include "memory/base_malloc.h"
 #include "memory/mod_info.h"
-#include "smartengine/status.h"
+#include "util/slice.h"
+#include "util/status.h"
 
 namespace smartengine {
 namespace util {

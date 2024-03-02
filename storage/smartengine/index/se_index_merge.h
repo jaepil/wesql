@@ -24,7 +24,7 @@
 #include <vector>
 #include "handler.h"
 #include "util/se_comparator.h"
-#include "smartengine/db.h"
+#include "db/db.h"
 
 namespace smartengine
 {

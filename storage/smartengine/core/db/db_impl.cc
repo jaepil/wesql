@@ -52,17 +52,13 @@
 #include "db/job_context.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
-#include "db/memtable.h"
-#include "db/memtable_list.h"
 #include "db/table_cache.h"
 #include "db/table_cache.h"
 #include "db/table_properties_collector.h"
-#include "db/transaction_log_impl.h"
 #include "db/version_set.h"
-#include "db/write_batch_internal.h"
 #include "db/write_callback.h"
 #include "logger/log_module.h"
-#include "monitoring/iostats_context_imp.h"
+#include "memtable/memtable_list.h"
 #include "monitoring/query_perf_context.h"
 #include "monitoring/thread_status_updater.h"
 #include "monitoring/thread_status_util.h"
@@ -78,6 +74,7 @@
 #include "table/merging_iterator.h"
 #include "table/table_builder.h"
 #include "table/two_level_iterator.h"
+#include "transactions/transaction_log_impl.h"
 #include "memory/alloc_mgr.h"
 #include "util/autovector.h"
 #include "util/build_version.h"
@@ -97,16 +94,10 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
-#include "smartengine/cache.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/statistics.h"
-#include "smartengine/status.h"
-#include "smartengine/table.h"
-#include "smartengine/write_buffer_manager.h"
 #include "storage/storage_logger.h"
+#include "write_batch/write_batch_internal.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace monitor;
@@ -115,7 +106,6 @@ using namespace table;
 using namespace storage;
 using namespace memory;
 
-namespace smartengine {
 namespace db {
 
 #ifdef WITH_STRESS_CHECK
@@ -439,60 +429,6 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
   immutable_db_options_.Dump();
   mutable_db_options_.Dump();
   DumpSupportInfo();
-}
-
-// Will lock the mutex_,  will wait for completion if wait is true
-void DBImpl::CancelAllBackgroundWork(bool wait) {
-  InstrumentedMutexLock l(&mutex_);
-
-  __SE_LOG(INFO,
-                 "Shutdown: canceling all background work");
-
-  if (!shutting_down_.load(std::memory_order_acquire) &&
-      has_unpersisted_data_.load(std::memory_order_relaxed) &&
-      !mutable_db_options_.avoid_flush_during_shutdown) {
-    int ret = Status::kOk;
-    GlobalContext* global_ctx = nullptr;
-    SubTable* sub_table = nullptr;
-    if (nullptr == (global_ctx = versions_->get_global_ctx())) {
-      ret = Status::kCorruption;
-      SE_LOG(WARN, "global ctx must not nullptr", K(ret));
-    } else {
-      SubTableMap& all_sub_tables = global_ctx->all_sub_table_->sub_table_map_;
-      for (auto iter = all_sub_tables.begin();
-           Status::kOk && all_sub_tables.end() != iter; ++iter) {
-        if (nullptr == (sub_table = iter->second)) {
-          ret = Status::kCorruption;
-          SE_LOG(WARN, "subtable must not nullptr", K(ret),
-                      K(iter->first));
-        } else if (sub_table->IsDropped()) {
-          // do nothing
-          SE_LOG(INFO, "subtable has been dropped", "index_id",
-                      iter->first);
-        } else if (sub_table->mem()->IsEmpty()) {
-          // do nothing
-          SE_LOG(INFO, "subtable is empty", "index_id", iter->first);
-        } else {
-          sub_table->Ref();
-          mutex_.Unlock();
-          FlushMemTable(sub_table, FlushOptions());
-          mutex_.Lock();
-          sub_table->Unref();
-        }
-      }
-    }
-  }
-
-  shutting_down_.store(true, std::memory_order_release);
-  bg_cv_.SignalAll();
-  if (!wait) {
-    return;
-  }
-  // Wait for background work to finish
-  while (bg_compaction_scheduled_ || bg_flush_scheduled_ || bg_gc_scheduled_ 
-         || bg_dump_scheduled_ || master_thread_running() || bg_ebr_scheduled_) {
-    bg_cv_.Wait();
-  }
 }
 
 DBImpl::~DBImpl() {
@@ -2789,53 +2725,7 @@ Status DBImpl::DeleteFilesInRange(ColumnFamilyHandle* column_family,
   return status;
 }
 
-void DBImpl::GetLiveFilesMetaData(std::vector<LiveFileMetaData>* metadata) {
-  InstrumentedMutexLock l(&mutex_);
-  versions_->GetLiveFilesMetaData(metadata, &mutex_);
-}
-
-void DBImpl::GetColumnFamilyMetaData(ColumnFamilyHandle* column_family,
-                                     ColumnFamilyMetaData* cf_meta) {
-  assert(column_family);
-  auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family)->cfd();
-  auto* sv = GetAndRefSuperVersion(cfd);
-  ReturnAndCleanupSuperVersion(cfd, sv);
-}
-
 #endif  // ROCKSDB_LITE
-
-Status DBImpl::CheckConsistency() {
-  mutex_.AssertHeld();
-  std::vector<LiveFileMetaData> metadata;
-  versions_->GetLiveFilesMetaData(&metadata, &mutex_);
-
-  std::string corruption_messages;
-  for (const auto& md : metadata) {
-    // md.name has a leading "/".
-    std::string file_path = md.db_path + md.name;
-
-    uint64_t fsize = MAX_EXTENT_SIZE;
-    Status s = Status::OK(); //env_->GetFileSize(file_path, &fsize);
-    if (!s.ok() &&
-        env_->GetFileSize(Rocks2LevelTableFileName(file_path), &fsize).ok()) {
-      s = Status::OK();
-    }
-    if (!s.ok()) {
-      corruption_messages +=
-          "Can't access " + md.name + ": " + s.ToString() + "\n";
-    } else if (fsize != md.size) {
-      corruption_messages += "Sst file size mismatch: " + file_path +
-                             ". Size recorded in manifest " +
-                             ToString(md.size) + ", actual size " +
-                             ToString(fsize) + "\n";
-    }
-  }
-  if (corruption_messages.size() == 0) {
-    return Status::OK();
-  } else {
-    return Status::Corruption(corruption_messages);
-  }
-}
 
 Status DBImpl::GetDbIdentity(std::string& identity) const {
   std::string idfilename = IdentityFileName(dbname_);

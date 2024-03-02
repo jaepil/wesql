@@ -20,12 +20,11 @@
 #include <libaio.h>
 #include <unistd.h>
 #include <unordered_set>
-//#include "env/env_myfs.h"
-#include "smartengine/status.h"
 #include "logger/log_module.h"
-#include "smartengine/se_constants.h"
 #include "monitoring/query_perf_context.h"
-#include "thread_local.h"
+#include "util/status.h"
+#include "util/se_constants.h"
+#include "util/thread_local.h"
 
 namespace smartengine {
 namespace util {

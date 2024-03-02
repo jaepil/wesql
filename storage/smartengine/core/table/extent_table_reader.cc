@@ -16,22 +16,16 @@
 #include <utility>
 #include <vector>
 
+#include "cache/sharded_cache.h"
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
-
-#include "smartengine/cache.h"
-#include "smartengine/comparator.h"
-#include "smartengine/env.h"
-#include "smartengine/filter_policy.h"
-#include "smartengine/iterator.h"
-#include "smartengine/options.h"
-#include "smartengine/statistics.h"
-#include "smartengine/table.h"
-#include "smartengine/table_properties.h"
-
+#include "monitoring/query_perf_context.h"
+#include "options/options.h"
+#include "storage/extent_space_manager.h"
 #include "table/block.h"
 #include "table/extent_table_factory.h"
 #include "table/filter_block.h"
+#include "table/filter_policy.h"
 #include "table/filter_manager.h"
 #include "table/format.h"
 #include "table/full_filter_block.h"
@@ -40,18 +34,14 @@
 #include "table/meta_blocks.h"
 #include "table/two_level_iterator.h"
 #include "table/sstable_scan_struct.h"
-
-#include "monitoring/query_perf_context.h"
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
-#include "cache/sharded_cache.h"
 
-#include "storage/extent_space_manager.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace cache;
@@ -59,7 +49,6 @@ using namespace monitor;
 using namespace db;
 using namespace memory;
 
-namespace smartengine {
 namespace table {
 
 using std::unique_ptr;

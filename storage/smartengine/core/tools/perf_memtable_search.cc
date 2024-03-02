@@ -25,10 +25,10 @@
 #include <sys/time.h>
 
 #include "db/column_family.h"
+#include "db/db.h"
 #include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/version_set.h"
-#include "db/write_batch_internal.h"
 #include "options/options_helper.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
@@ -39,15 +39,13 @@
 #include "util/random.h"
 #include "util/serialization.h"
 #include "util/serialization.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/types.h"
-#include "smartengine/write_batch.h"
+#include "write_batch/write_batch.h"
+#include "write_batch/write_batch_internal.h"
 
 DEFINE_int32(threads, 1, "Num of parallel search threads");
 using GFLAGS::ParseCommandLineFlags;
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace cache;
@@ -56,7 +54,6 @@ using namespace table;
 using namespace memory;
 using namespace logger;
 
-namespace smartengine {
 namespace storage {
 
 class StorageManagerTest {
@@ -486,7 +483,7 @@ class StorageManagerTest {
 int main(int argc, char **argv) {
   ParseCommandLineFlags(&argc, &argv, true);
 
-  storage::StorageManagerTest test;
+  smartengine::storage::StorageManagerTest test;
   for (int i = 1; i < argc; i++) {
     test.load_data(argv[i]);
   }

@@ -10,23 +10,18 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "table/index_builder.h"
+
 #include <assert.h>
 #include <inttypes.h>
-
 #include <list>
-#include <string>
-
 #include "table/format.h"
-#include "smartengine/comparator.h"
-#include "smartengine/flush_block_policy.h"
 
-using namespace smartengine;
+// Without anonymous namespace here, we fail the warning -Wmissing-prototypes
+namespace smartengine {
 using namespace db;
 using namespace util;
 using namespace common;
 
-// Without anonymous namespace here, we fail the warning -Wmissing-prototypes
-namespace smartengine {
 namespace table {
 // Create a index builder based on its type.
 IndexBuilder* IndexBuilder::CreateIndexBuilder(

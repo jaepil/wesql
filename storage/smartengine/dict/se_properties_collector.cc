@@ -24,8 +24,8 @@
 #include "my_stacktrace.h"
 #include "sql_array.h"
 #include "dict/se_ddl_manager.h"
+#include "util/se_constants.h"
 #include "util/se_utils.h"
-#include "smartengine/se_constants.h"
 
 namespace smartengine
 {

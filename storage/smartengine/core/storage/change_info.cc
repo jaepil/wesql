@@ -15,7 +15,7 @@
  */
 
 #include "change_info.h"
-#include "smartengine/status.h"
+#include "util/status.h"
 
 namespace smartengine
 {

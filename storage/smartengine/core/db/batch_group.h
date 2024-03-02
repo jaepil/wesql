@@ -27,19 +27,15 @@
 #include <mutex>
 #include <type_traits>
 #include <vector>
-
+#include "db/async_callback.h"
 #include "db/log_writer.h"
 #include "db/write_callback.h"
 #include "monitoring/instrumented_mutex.h"
+#include "options/options.h"
 #include "util/autovector.h"
-#include "smartengine/async_callback.h"
-#include "smartengine/options.h"
-#include "smartengine/status.h"
-#include "smartengine/types.h"
-#include "smartengine/write_batch.h"
+#include "write_batch/write_batch.h"
 
 namespace smartengine {
-
 namespace util {
 class SpinMutex;
 }

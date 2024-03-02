@@ -12,11 +12,8 @@
 #pragma once
 #include <stdint.h>
 #include <memory>
-
 #include "db/log_format.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
+#include "options/options.h"
 #include "util/aio_wrapper.h"
 
 namespace smartengine {

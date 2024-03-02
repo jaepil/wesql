@@ -17,31 +17,27 @@
 #ifndef SMARTENGINE_STORAGE_COMPACTION_H_
 #define SMARTENGINE_STORAGE_COMPACTION_H_
 
-#include "db/table_properties_collector.h"
-#include "compaction_stats.h"
-#include "task_type.h"
-#include "memory/page_arena.h"
-#include "reuse_block_merge_iterator.h"
-#include "storage/storage_manager.h"
-
-#include "table/block.h"
-#include "table/two_level_iterator.h"
-#include "util/aligned_buffer.h"
-#include "smartengine/cache.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
-#include "util/threadpool_imp.h"
-
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #endif
+#include "compact/compaction_stats.h"
+#include "compact/reuse_block_merge_iterator.h"
+#include "compact/task_type.h"
+#include "db/table_properties_collector.h"
+#include "env/env.h"
+#include "memory/page_arena.h"
+#include "options/options.h"
+#include "storage/storage_manager.h"
+#include "table/block.h"
+#include "table/two_level_iterator.h"
+#include "util/aligned_buffer.h"
+#include "util/threadpool_imp.h"
 
 namespace smartengine {
 
 namespace db {
 class InternalKeyComparator;
-//enum CompactionTaskType : int;
 };
 
 namespace util {

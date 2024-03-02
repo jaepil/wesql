@@ -6,18 +6,17 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 #ifndef ROCKSDB_LITE
-#include "smartengine/ldb_tool.h"
+#include "tools/ldb_tool.h"
 #include "tools/ldb_cmd_impl.h"
-#include "smartengine/utilities/ldb_cmd.h"
+#include "tools/ldb_cmd.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
 using namespace table;
 using namespace cache;
 
-namespace smartengine {
 namespace tools {
 
 LDBOptions::LDBOptions() {}
@@ -80,8 +79,6 @@ void LDBCommandRunner::PrintHelp(const LDBOptions& ldb_options,
   ManifestDumpCommand::Help(ret);
   CheckpointDumpCommand::Help(ret);
   ListColumnFamiliesCommand::Help(ret);
-  DBFileDumperCommand::Help(ret);
-  CheckPointCommand::Help(ret);
 
   fprintf(stderr, "%s\n", ret.c_str());
 }

@@ -10,22 +10,18 @@
 #endif
 
 #include "db/db_info_dumper.h"
-
 #include <inttypes.h>
 #include <stdio.h>
 #include <algorithm>
 #include <string>
 #include <vector>
-
-#include "util/filename.h"
 #include "logger/log_module.h"
-#include "smartengine/env.h"
+#include "util/filename.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 
-namespace smartengine {
 namespace db {
 
 void DumpDBFileSummary(const ImmutableDBOptions& options,

@@ -9,15 +9,12 @@
 
 #ifndef ROCKSDB_LITE
 
+#include "util/sst_file_manager.h"
 #include <string>
-
 #include "port/port.h"
-
 #include "util/delete_scheduler.h"
-#include "smartengine/sst_file_manager.h"
 
 namespace smartengine {
-
 namespace util {
 class Env;
 class Logger;

@@ -5,19 +5,16 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#include "smartengine/table_properties.h"
+#include "table/table_properties.h"
 #include "port/port.h"
 #include "table/block.h"
 #include "table/internal_iterator.h"
 #include "table/table_properties_internal.h"
 #include "util/string_util.h"
-#include "smartengine/env.h"
-#include "smartengine/iterator.h"
-
-using namespace smartengine;
-using namespace common;
 
 namespace smartengine {
+using namespace common;
+
 namespace table {
 
 const uint32_t TablePropertiesCollectorFactory::Context::kUnknownColumnFamily =

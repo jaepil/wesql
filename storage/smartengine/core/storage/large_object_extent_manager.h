@@ -17,7 +17,6 @@
 #include <unordered_map>
 #include <vector>
 #include "util/serialization.h"
-#include "smartengine/types.h"
 #include "io_extent.h"
 
 

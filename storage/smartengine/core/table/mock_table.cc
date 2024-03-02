@@ -14,13 +14,12 @@
 #include "table/get_context.h"
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
-#include "smartengine/table_properties.h"
-
-using namespace smartengine::db;
-using namespace smartengine::common;
-using namespace smartengine::util;
 
 namespace smartengine {
+using namespace common;
+using namespace db;
+using namespace util;
+
 namespace db {
 class MiniTables;
 }

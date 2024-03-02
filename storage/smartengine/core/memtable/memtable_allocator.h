@@ -17,9 +17,11 @@
 
 #include <atomic>
 #include "memory/allocator.h"
-#include "smartengine/write_buffer_manager.h"
 
 namespace smartengine {
+namespace db {
+class WriteBufferManager;
+}
 
 namespace util {
 class Logger;

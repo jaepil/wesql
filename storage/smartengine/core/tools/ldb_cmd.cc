@@ -6,37 +6,13 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 #ifndef ROCKSDB_LITE
-#include "smartengine/utilities/ldb_cmd.h"
+#include "tools/ldb_cmd.h"
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
 
 #include <inttypes.h>
-
-#include "db/db_impl.h"
-#include "db/dbformat.h"
-#include "db/log_reader.h"
-#include "db/write_batch_internal.h"
-#include "memory/base_malloc.h"
-#include "logger/log_module.h"
-#include "port/dirent.h"
-#include "table/scoped_arena_iterator.h"
-#include "tools/ldb_cmd_impl.h"
-#include "tools/sst_dump_tool_imp.h"
-#include "util/coding.h"
-#include "util/filename.h"
-#include "util/string_util.h"
-#include "smartengine/cache.h"
-#include "smartengine/table_properties.h"
-#include "smartengine/utilities/backupable_db.h"
-#include "smartengine/utilities/checkpoint.h"
-#include "smartengine/utilities/object_registry.h"
-#include "smartengine/write_batch.h"
-#include "smartengine/write_buffer_manager.h"
-#include "smartengine/se_constants.h"
-#include "storage/extent_space_manager.h"
-
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -47,7 +23,25 @@
 #include <stdexcept>
 #include <string>
 
-using namespace smartengine;
+
+#include "db/db_impl.h"
+#include "db/dbformat.h"
+#include "db/log_reader.h"
+#include "memory/base_malloc.h"
+#include "logger/log_module.h"
+#include "port/dirent.h"
+#include "table/filter_policy.h"
+#include "table/scoped_arena_iterator.h"
+#include "tools/ldb_cmd_impl.h"
+#include "tools/sst_dump_tool_imp.h"
+#include "util/coding.h"
+#include "util/filename.h"
+#include "util/string_util.h"
+#include "storage/extent_space_manager.h"
+#include "write_batch/write_batch.h"
+#include "write_batch/write_batch_internal.h"
+
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
@@ -56,7 +50,6 @@ using namespace cache;
 using namespace storage;
 using namespace memory;
 
-namespace smartengine {
 namespace tools {
 
 const std::string LDBCommand::ARG_DB = "db";
@@ -91,7 +84,7 @@ namespace {
 void DumpWalFile(std::string wal_file, bool print_header, bool print_values,
                  LDBCommandExecuteResult* exec_state);
 
-void DumpSstFile(std::string filename, bool output_hex, bool show_properties);
+//void DumpSstFile(std::string filename, bool output_hex, bool show_properties);
 };
 
 LDBCommand* LDBCommand::InitFromCmdLineArgs(
@@ -204,13 +197,6 @@ LDBCommand* LDBCommand::SelectCommand(const ParsedParams& parsed_params) {
     return new CreateColumnFamilyCommand(parsed_params.cmd_params,
                                          parsed_params.option_map,
                                          parsed_params.flags);
-  } else if (parsed_params.cmd == DBFileDumperCommand::Name()) {
-    return new DBFileDumperCommand(parsed_params.cmd_params,
-                                   parsed_params.option_map,
-                                   parsed_params.flags);
-  } else if (parsed_params.cmd == CheckPointCommand::Name()) {
-    return new CheckPointCommand(parsed_params.cmd_params,
-                                 parsed_params.option_map, parsed_params.flags);
   }
   return nullptr;
 }
@@ -2029,155 +2015,6 @@ void DBQuerierCommand::DoCommand() {
   }
 }
 
-const std::string CheckPointCommand::ARG_CHECKPOINT_DIR = "checkpoint_dir";
-
-CheckPointCommand::CheckPointCommand(
-    const std::vector<std::string>& params,
-    const std::map<std::string, std::string>& options,
-    const std::vector<std::string>& flags)
-    : LDBCommand(options,
-                 flags,
-                 BuildCmdLineOptions({ARG_CHECKPOINT_DIR})) {
-  auto itr = options.find(ARG_CHECKPOINT_DIR);
-  if (itr == options.end()) {
-    exec_state_ = LDBCommandExecuteResult::Failed(
-        "--" + ARG_CHECKPOINT_DIR + ": missing checkpoint directory");
-  } else {
-    checkpoint_dir_ = itr->second;
-  }
-}
-
-void CheckPointCommand::Help(std::string& ret) {
-  ret.append("  ");
-  ret.append(CheckPointCommand::Name());
-  ret.append(" [--" + ARG_CHECKPOINT_DIR + "] ");
-  ret.append("\n");
-}
-
-void CheckPointCommand::DoCommand() {
-  if (!db_) {
-    assert(GetExecuteState().IsFailed());
-    return;
-  }
-  Checkpoint* checkpoint;
-  Status status = Checkpoint::Create(db_, &checkpoint);
-  status = checkpoint->CreateCheckpoint(checkpoint_dir_);
-  if (status.ok()) {
-    printf("OK\n");
-  } else {
-    exec_state_ = LDBCommandExecuteResult::Failed(status.ToString());
-  }
-}
-
-namespace {
-
-void DumpSstFile(std::string filename, bool output_hex, bool show_properties) {
-  std::string from_key;
-  std::string to_key;
-  if (filename.length() <= 4 ||
-      filename.rfind(".sst") != filename.length() - 4) {
-    std::cout << "Invalid sst file name." << std::endl;
-    return;
-  }
-  // no verification
-  SstFileReader reader(filename, false, output_hex);
-  Status st = reader.ReadSequential(true, -1, false,  // has_from
-                                    from_key, false,  // has_to
-                                    to_key);
-  if (!st.ok()) {
-    std::cerr << "Error in reading SST file " << filename << st.ToString()
-              << std::endl;
-    return;
-  }
-
-  if (show_properties) {
-    const TableProperties* table_properties;
-
-    std::shared_ptr<const TableProperties> table_properties_from_reader;
-    st = reader.ReadTableProperties(&table_properties_from_reader);
-    if (!st.ok()) {
-      std::cerr << filename << ": " << st.ToString()
-                << ". Try to use initial table properties" << std::endl;
-      table_properties = reader.GetInitTableProperties();
-    } else {
-      table_properties = table_properties_from_reader.get();
-    }
-    if (table_properties != nullptr) {
-      std::cout << std::endl << "Table Properties:" << std::endl;
-      std::cout << table_properties->ToString("\n") << std::endl;
-      std::cout << "# deleted keys: "
-                << GetDeletedKeys(table_properties->user_collected_properties)
-                << std::endl;
-    }
-  }
-}
-
-}  // namespace
-
-DBFileDumperCommand::DBFileDumperCommand(
-    const std::vector<std::string>& params,
-    const std::map<std::string, std::string>& options,
-    const std::vector<std::string>& flags)
-    : LDBCommand(options, flags, BuildCmdLineOptions({})) {}
-
-void DBFileDumperCommand::Help(std::string& ret) {
-  ret.append("  ");
-  ret.append(DBFileDumperCommand::Name());
-  ret.append("\n");
-}
-
-void DBFileDumperCommand::DoCommand() {
-  if (!db_) {
-    assert(GetExecuteState().IsFailed());
-    return;
-  }
-  Status s;
-
-  std::cout << "Manifest File" << std::endl;
-  std::cout << "==============================" << std::endl;
-  std::string manifest_filename;
-  s = ReadFileToString(db_->GetEnv(), CurrentFileName(db_->GetName()),
-                       &manifest_filename);
-  if (!s.ok() || manifest_filename.empty() ||
-      manifest_filename.back() != '\n') {
-    std::cerr << "Error when reading CURRENT file "
-              << CurrentFileName(db_->GetName()) << std::endl;
-  }
-  // remove the trailing '\n'
-  manifest_filename.resize(manifest_filename.size() - 1);
-  std::string manifest_filepath = db_->GetName() + "/" + manifest_filename;
-  std::cout << manifest_filepath << std::endl;
-  //ManifestDumpCommand::dump_manifest_file(manifest_filepath, false, false, false);
-  std::cout << std::endl;
-
-  std::cout << "SST Files" << std::endl;
-  std::cout << "==============================" << std::endl;
-  std::vector<LiveFileMetaData> metadata;
-  db_->GetLiveFilesMetaData(&metadata);
-  for (auto& fileMetadata : metadata) {
-    std::string filename = fileMetadata.db_path + fileMetadata.name;
-    std::cout << filename << " level:" << fileMetadata.level << std::endl;
-    std::cout << "------------------------------" << std::endl;
-    DumpSstFile(filename, false, true);
-    std::cout << std::endl;
-  }
-  std::cout << std::endl;
-
-  std::cout << "Write Ahead Log Files" << std::endl;
-  std::cout << "==============================" << std::endl;
-  VectorLogPtr wal_files;
-  s = db_->GetSortedWalFiles(wal_files);
-  if (!s.ok()) {
-    std::cerr << "Error when getting WAL files" << std::endl;
-  } else {
-    for (auto& wal : wal_files) {
-      // TODO(qyang): option.wal_dir should be passed into ldb command
-      std::string filename = db_->GetOptions().wal_dir + wal->PathName();
-      std::cout << filename << std::endl;
-      DumpWalFile(filename, true, true, &exec_state_);
-    }
-  }
-}
 }  // tools
 }  // namespace smartengine
 #endif  // ROCKSDB_LITE

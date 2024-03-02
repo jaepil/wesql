@@ -12,18 +12,16 @@
 #include "db/log_writer.h"
 
 #include <stdint.h>
+#include "env/env.h"
 #include "util/coding.h"
 #include "util/concurrent_direct_file_writer.h"
 #include "util/crc32c.h"
 #include "util/file_reader_writer.h"
-#include "smartengine/env.h"
-#include "smartengine/se_constants.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace common;
 
-namespace smartengine {
 namespace db {
 namespace log {
 

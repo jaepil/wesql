@@ -20,7 +20,7 @@ int main() {
   return 1;
 }
 #else
-#include <smartengine/db_bench_tool.h>
+#include "tools/db_bench_tool.h"
 int main(int argc, char** argv) {
   return smartengine::tools::db_bench_tool(argc, argv);
 }

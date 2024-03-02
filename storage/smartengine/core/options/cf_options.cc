@@ -20,14 +20,11 @@
 #include "options/db_options.h"
 #include "port/port.h"
 #include "table/filter_manager.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace db;
 using namespace util;
 
-namespace smartengine {
 namespace common {
 
 ImmutableCFOptions::ImmutableCFOptions(const Options& options)

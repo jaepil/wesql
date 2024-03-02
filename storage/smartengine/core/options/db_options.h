@@ -11,8 +11,7 @@
 
 #include <string>
 #include <vector>
-
-#include "smartengine/options.h"
+#include "options/options.h"
 
 namespace smartengine {
 namespace common {
@@ -78,9 +77,6 @@ struct ImmutableDBOptions {
   uint32_t parallel_recovery_thread_num;
   bool allow_2pc;
   std::shared_ptr<cache::RowCache> row_cache;
-#ifndef ROCKSDB_LITE
-  db::WalFilter* wal_filter;
-#endif  // ROCKSDB_LITE
   bool fail_if_options_file_error;
   bool avoid_flush_during_recovery;
   uint64_t table_cache_size;

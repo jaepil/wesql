@@ -12,15 +12,10 @@
 #pragma once
 #include <stdint.h>
 #include <string>
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
-#include "smartengine/table.h"
 #include "options/cf_options.h"
 #include "port/port.h"  // noexcept
 
 namespace smartengine {
-
 namespace common {
 struct ReadOptions;
 }

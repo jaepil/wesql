@@ -9,9 +9,6 @@
 #include <string>
 
 #include "options/db_options.h"
-#include "smartengine/env.h"
-#include "smartengine/status.h"
-#include "smartengine/types.h"
 
 namespace smartengine {
 namespace util {

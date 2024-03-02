@@ -29,10 +29,10 @@
 #include "db/internal_stats.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
-#include "db/memtable.h"
 #include "db/pinned_iterators_manager.h"
 #include "db/table_cache.h"
 #include "memory/base_malloc.h"
+#include "memtable/memtable.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_log_entry.h"
 #include "storage/storage_logger.h"
@@ -50,11 +50,8 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
-#include "smartengine/env.h"
-#include "smartengine/write_buffer_manager.h"
-#include "smartengine/se_constants.h"  // MAX_EXTENT_SIZE
 
-using namespace smartengine;
+namespace smartengine {
 using namespace storage;
 using namespace cache;
 using namespace table;
@@ -62,7 +59,6 @@ using namespace util;
 using namespace common;
 using namespace monitor;
 
-namespace smartengine {
 namespace db {
 int AllSubTable::DUMMY = 0;
 void *const AllSubTable::kAllSubtableInUse = &AllSubTable::DUMMY;
@@ -760,57 +756,6 @@ uint64_t VersionSet::ApproximateSize(ColumnFamilyData* cfd,
 
   return cfd->get_storage_manager()->approximate_size(cfd, start, end,
                                             start_level, end_level, sn, estimate_cost_depth);
-}
-
-// return the extent meta data
-void VersionSet::GetLiveFilesMetaData(std::vector<LiveFileMetaData>* metadata,
-                                      InstrumentedMutex *mu) {
-  //TODO:yuanfeng
-  /*
-  ExtentId extent_id;
-  Arena arena;
-  std::unique_ptr<InternalIterator, memory::ptr_destruct<InternalIterator>> iter;
-  ReadOptions read_options;
-
-  for (auto cfd : *column_family_set_) {
-    if (cfd->IsDropped()) {
-      continue;
-    }
-    const Snapshot *sn = cfd->get_meta_snapshot();
-    if (nullptr == sn) {
-      continue;
-    }
-
-    StorageManager* storage_manager = cfd->get_storage_manager();
-    for (int32_t level = 0; level < storage::MAX_TIER_COUNT; level++) {
-      iter.reset(storage_manager->get_single_level_iterator(read_options, &arena, sn, level));
-      if (nullptr == iter) {
-        continue;
-      }
-      iter->SeekToFirst();
-      while (iter->Valid()) {
-        extent_id = storage_manager->get_extent_id_from_iterator(iter.get(), level);
-        const ExtentMeta *extentmeta = storage_manager->get_extent_meta(extent_id);
-        assert(extentmeta != nullptr);
-        LiveFileMetaData filemetadata;
-        filemetadata.column_family_name = cfd->GetName();
-        filemetadata.db_path = db_options_->db_paths[0].path;
-        filemetadata.name = MakeTableFileName("", extent_id.file_number);
-        filemetadata.level = level;
-        filemetadata.size = MAX_EXTENT_SIZE;
-        filemetadata.smallestkey =
-            extentmeta->smallest_key_.user_key().ToString();
-        filemetadata.largestkey =
-            extentmeta->largest_key_.user_key().ToString();
-        filemetadata.smallest_seqno = extentmeta->smallest_seqno_;
-        filemetadata.largest_seqno = extentmeta->largest_seqno_;
-        metadata->push_back(filemetadata);
-        iter->Next();
-      }
-    }
-    cfd->release_meta_snapshot(sn, mu);
-  }
-  */
 }
 
 void VersionSet::GetObsoleteFiles(std::vector<FileMetaData*>* files,

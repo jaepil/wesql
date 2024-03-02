@@ -13,34 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <list>
+#include "table/filter_manager.h"
 
+#include <list>
+#include "cache/sharded_cache.h"
+#include "cache/lru_cache.h"
 #include "db/column_family.h"
 #include "db/table_cache.h"
+#include "monitoring/query_perf_context.h"
+#include "options/options.h"
 #include "port/likely.h"
 #include "table/filter_block.h"
-#include "table/filter_block.h"
-#include "table/filter_manager.h"
+#include "table/filter_policy.h"
 #include "table/format.h"
 #include "table/full_filter_block.h"
 #include "table/internal_iterator.h"
-#include "monitoring/query_perf_context.h"
 #include "util/murmurhash.h"
 #include "util/mutexlock.h"
 #include "util/sync_point.h"
-#include "cache/sharded_cache.h"
-#include "cache/lru_cache.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
 
-using namespace smartengine;
+
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace monitor;
 using namespace cache;
 using namespace db;
 
-namespace smartengine {
 namespace table {
 
 extern Cache::Handle *GetEntryFromCache(Cache *block_cache, const Slice &key,

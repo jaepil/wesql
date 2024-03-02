@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "smartengine/cache.h"
+#include "cache/cache.h"
 
 #if defined(TBB) && !defined(ROCKSDB_LITE)
 #define SUPPORT_CLOCK_CACHE

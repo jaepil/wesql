@@ -8,11 +8,9 @@
 
 #include <map>
 #include <string>
-
 #include "util/coding.h"
 #include "util/murmurhash.h"
-#include "smartengine/comparator.h"
-#include "smartengine/slice.h"
+#include "util/slice.h"
 
 namespace smartengine {
 namespace util {

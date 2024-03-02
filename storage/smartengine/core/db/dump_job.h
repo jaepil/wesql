@@ -20,9 +20,9 @@
 #include "db/flush_job.h"
 #include "db/job_context.h"
 #include "db/internal_stats.h"
-#include "db/memtable_list.h"
+#include "memtable/memtable_list.h"
+#include "memtable/memtablerep.h"
 #include "db/snapshot_impl.h"
-#include "smartengine/memtablerep.h"
 
 namespace smartengine {
 

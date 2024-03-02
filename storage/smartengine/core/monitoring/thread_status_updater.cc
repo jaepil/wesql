@@ -5,16 +5,15 @@
 
 #include "monitoring/thread_status_updater.h"
 #include <memory>
+#include "env/env.h"
 #include "port/likely.h"
 #include "util/mutexlock.h"
-#include "smartengine/env.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace db;
 using namespace util;
 
-namespace smartengine {
 namespace util {
 
 #ifdef ROCKSDB_USING_THREAD_STATUS

@@ -21,6 +21,7 @@
 #include "mysql/plugin.h"
 #include "mysql/psi/mysql_file.h"
 #include "sql_thd_internal_api.h"
+#include "logger/log_module.h"
 #include "util/arena.h"
 
 namespace smartengine

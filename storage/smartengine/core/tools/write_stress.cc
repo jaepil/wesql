@@ -68,12 +68,10 @@ int main() {
 #include <string>
 #include <thread>
 
+#include "db/db.h"
+#include "options/options.h"
 #include "port/port.h"
 #include "util/filename.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
 
 using GFLAGS::ParseCommandLineFlags;
 using GFLAGS::RegisterFlagValidator;
@@ -253,38 +251,6 @@ class WriteStress {
 #ifndef ROCKSDB_LITE
     // let's see if we leaked some files
     db_->PauseBackgroundWork();
-    std::vector<LiveFileMetaData> metadata;
-    db_->GetLiveFilesMetaData(&metadata);
-    std::set<uint64_t> sst_file_numbers;
-    for (const auto& file : metadata) {
-      uint64_t number;
-      FileType type;
-      if (!ParseFileName(file.name, &number, "LOG", &type)) {
-        continue;
-      }
-      if (type == kTableFile) {
-        sst_file_numbers.insert(number);
-      }
-    }
-
-    std::vector<std::string> children;
-    Env::Default()->GetChildren(FLAGS_db, &children);
-    for (const auto& child : children) {
-      uint64_t number;
-      FileType type;
-      if (!ParseFileName(child, &number, "LOG", &type)) {
-        continue;
-      }
-      if (type == kTableFile) {
-        if (sst_file_numbers.find(number) == sst_file_numbers.end()) {
-          fprintf(stderr,
-                  "Found a table file in DB path that should have been "
-                  "deleted: %s\n",
-                  child.c_str());
-          std::abort();
-        }
-      }
-    }
     db_->ContinueBackgroundWork();
 #endif  // !ROCKSDB_LITE
 

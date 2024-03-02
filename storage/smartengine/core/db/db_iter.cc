@@ -20,26 +20,22 @@
 #include "db/pinned_iterators_manager.h"
 #include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
+#include "options/options.h"
 #include "port/port.h"
+#include "storage/extent_space_manager.h"
 #include "table/internal_iterator.h"
 #include "util/arena.h"
 #include "util/filename.h"
 #include "util/mutexlock.h"
 #include "util/string_util.h"
-#include "smartengine/env.h"
-#include "smartengine/iterator.h"
-#include "smartengine/options.h"
-#include "smartengine/se_constants.h"
-#include "storage/extent_space_manager.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace monitor;
 using namespace util;
 using namespace common;
 using namespace table;
 using namespace storage;
 
-namespace smartengine {
 namespace db {
 
 // Memtables and sstables that make the DB representation contain

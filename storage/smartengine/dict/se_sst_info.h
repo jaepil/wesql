@@ -26,8 +26,8 @@
 #include <thread>
 #include <vector>
 
-#include "smartengine/db.h"
-#include "smartengine/sst_file_writer.h"
+#include "db/db.h"
+#include "table/sst_file_writer.h"
 
 namespace smartengine
 {

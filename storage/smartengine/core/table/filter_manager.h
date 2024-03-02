@@ -22,13 +22,8 @@
 #include <unordered_map>
 #include "db/db_impl.h"
 #include "port/port.h"
-#include "smartengine/cache.h"
-#include "smartengine/slice.h"
-#include "smartengine/statistics.h"
-#include "smartengine/status.h"
 
 namespace smartengine {
-
 namespace db {
 class InternalKeyComparator;
 class TableCache;

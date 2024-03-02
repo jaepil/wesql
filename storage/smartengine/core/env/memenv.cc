@@ -4,22 +4,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include <string.h>
+#include "env/env.h"
 
+#include <string.h>
 #include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
-
 #include "port/port.h"
 #include "util/mutexlock.h"
-#include "smartengine/env.h"
-#include "smartengine/status.h"
-
-using namespace smartengine;
-using namespace common;
 
 namespace smartengine {
+using namespace common;
+
 namespace util {
 
 #ifndef ROCKSDB_LITE

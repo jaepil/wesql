@@ -9,22 +9,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "smartengine/env.h"
+#include "env/env.h"
 
 #include <thread>
 #include <execinfo.h>
+#include "logger/log_module.h"
 #include "options/db_options.h"
 #include "port/port.h"
 #include "port/sys_time.h"
 #include "util/arena.h"
 #include "util/autovector.h"
-#include "logger/log_module.h"
-#include "smartengine/options.h"
-
-using namespace smartengine;
-using namespace common;
 
 namespace smartengine {
+using namespace common;
+
 namespace util {
 
 Env::~Env() {}

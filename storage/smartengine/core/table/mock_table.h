@@ -24,11 +24,8 @@
 #include "util/mutexlock.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
-#include "smartengine/comparator.h"
-#include "smartengine/table.h"
 
 namespace smartengine {
-
 namespace db {
 struct MiniTables;
 }

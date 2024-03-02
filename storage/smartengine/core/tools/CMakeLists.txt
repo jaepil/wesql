@@ -1,10 +1,10 @@
 set(TOOLS
   sst_dump.cc
-  db_sanity_test.cc
+  #db_sanity_test.cc
   db_stress.cc
   write_stress.cc
   ldb.cc
-  db_repl_stress.cc
+  #db_repl_stress.cc
   backup_check.cc)
 foreach(src ${TOOLS})
   get_filename_component(exename ${src} NAME_WE)

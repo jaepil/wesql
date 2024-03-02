@@ -28,7 +28,7 @@
 #include "dict/se_dict_manager.h"
 #include "util/se_utils.h"
 #include "util/se_threads.h"
-#include "smartengine/utilities/hotbackup.h"
+#include "backup/hotbackup.h"
 
 class handler;
 struct handlerton;

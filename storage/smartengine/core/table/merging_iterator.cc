@@ -10,10 +10,12 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "table/merging_iterator.h"
+
 #include <string>
 #include <vector>
 #include "db/pinned_iterators_manager.h"
 #include "monitoring/query_perf_context.h"
+#include "options/options.h"
 #include "table/internal_iterator.h"
 #include "table/iter_heap.h"
 #include "table/iterator_wrapper.h"
@@ -22,17 +24,13 @@
 #include "util/heap.h"
 #include "util/stop_watch.h"
 #include "util/sync_point.h"
-#include "smartengine/comparator.h"
-#include "smartengine/iterator.h"
-#include "smartengine/options.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace common;
 using namespace db;
 using namespace monitor;
 
-namespace smartengine {
 namespace table {
 // Without anonymous namespace here, we fail the warning -Wmissing-prototypes
 namespace {

@@ -17,21 +17,20 @@
 #include <vector>
 
 #include "compact/compaction_tasks_picker.h"
-#include "db/memtable_list.h"
+#include "db/db.h"
 #include "db/snapshot_impl.h"  // SnapshotList
 #include "db/table_cache.h"
 #include "db/table_properties_collector.h"
-#include "db/write_batch_internal.h"
 #include "db/write_controller.h"
+#include "env/env.h"
 #include "logger/log_module.h"
 #include "memory/page_arena.h"
+#include "memtable/memtable_list.h"
 #include "options/cf_options.h"
 #include "storage/storage_manager.h"
 #include "util/thread_local.h"
 #include "util/misc_utility.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
+#include "write_batch/write_batch_internal.h"
 
 namespace smartengine {
 

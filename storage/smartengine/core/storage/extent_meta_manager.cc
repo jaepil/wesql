@@ -15,10 +15,9 @@
  */
 
 #include "extent_meta_manager.h"
-#include "storage_log_entry.h"
-#include "storage_logger.h"
-#include "smartengine/se_constants.h"
-#include "smartengine/status.h"
+
+#include "storage/storage_logger.h"
+#include "storage/storage_log_entry.h"
 
 namespace smartengine
 {

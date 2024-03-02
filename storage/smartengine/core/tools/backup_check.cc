@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "smartengine/backup_check.h"
+#include "tools/backup_check.h"
 
 int main(int argc, char** argv) {
   smartengine::tools::BackupCheckTool tool;

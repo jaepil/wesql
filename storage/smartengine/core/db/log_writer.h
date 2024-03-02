@@ -17,8 +17,6 @@
 #include "db/log_format.h"
 #include "util/concurrent_direct_file_writer.h"
 #include "util/crc32c.h"
-#include "smartengine/slice.h"
-#include "smartengine/status.h"
 #include "logger/log_module.h"
 
 namespace smartengine {

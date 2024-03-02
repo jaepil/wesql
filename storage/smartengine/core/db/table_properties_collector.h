@@ -8,14 +8,12 @@
 // This file defines a collection of statistics collectors.
 #pragma once
 
-#include "smartengine/table_properties.h"
-
+#include "table/table_properties.h"
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace smartengine {
-
 namespace storage {
 struct ExtentMeta;
 }

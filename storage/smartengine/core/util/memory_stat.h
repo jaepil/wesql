@@ -22,8 +22,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "smartengine/cache.h"
-#include "smartengine/db.h"
+#include "db/db.h"
 
 namespace smartengine {
 

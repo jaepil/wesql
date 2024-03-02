@@ -20,26 +20,24 @@
 #include <memory>
 #include <vector>
 
+#include "options/options.h"
 #include "db/log_reader.h"
 #include "db/log_writer.h"
-#include "db/transaction_log_impl.h"
-#include "db/write_batch_internal.h"
 #include "port/port.h"
+#include "transactions/transaction_log_impl.h"
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
 #include "util/filename.h"
 #include "util/mutexlock.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
-#include "smartengine/write_batch.h"
+#include "write_batch/write_batch.h"
+#include "write_batch/write_batch_internal.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace util;
 using namespace common;
 
-namespace smartengine {
 namespace db {
 
 #ifndef ROCKSDB_LITE

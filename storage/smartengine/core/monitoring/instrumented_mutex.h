@@ -7,13 +7,11 @@
 
 #pragma once
 
+#include "env/env.h"
 #include "monitoring/statistics.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "util/stop_watch.h"
-#include "smartengine/env.h"
-#include "smartengine/statistics.h"
-#include "smartengine/thread_status.h"
 
 namespace smartengine {
 namespace monitor {

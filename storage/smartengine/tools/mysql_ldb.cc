@@ -5,7 +5,7 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 #include "se_comparator.h"
-#include "smartengine/ldb_tool.h"
+#include "tools/ldb_tool.h"
 
 int main(int argc, char **argv) {
   smartengine::common::Options db_options;

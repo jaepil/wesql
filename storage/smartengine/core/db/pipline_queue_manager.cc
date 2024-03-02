@@ -15,7 +15,7 @@
  */
 #include "db/pipline_queue_manager.h"
 #include "db/internal_stats.h"
-#include "db/write_batch_internal.h"
+#include "write_batch/write_batch_internal.h"
 
 using namespace smartengine;
 using namespace util;

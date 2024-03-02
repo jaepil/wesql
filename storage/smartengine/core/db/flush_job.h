@@ -19,28 +19,28 @@
 #include <vector>
 
 #include "db/column_family.h"
+#include "db/db.h"
 #include "db/dbformat.h"
 #include "db/flush_scheduler.h"
 #include "db/internal_stats.h"
 #include "db/job_context.h"
 #include "db/log_writer.h"
-#include "db/memtable_list.h"
 #include "db/snapshot_impl.h"
 #include "db/write_controller.h"
 #include "db/write_thread.h"
+#include "env/env.h"
+#include "memtable/memtable_list.h"
+#include "memtable/memtablerep.h"
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
 #include "port/port.h"
 #include "table/scoped_arena_iterator.h"
+#include "transactions/transaction_log.h"
 #include "util/arena.h"
 #include "util/autovector.h"
 #include "util/event_logger.h"
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/memtablerep.h"
-#include "smartengine/transaction_log.h"
 
 namespace smartengine {
 

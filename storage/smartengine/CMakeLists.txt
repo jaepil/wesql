@@ -46,7 +46,6 @@ INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/storage/smartengine/plugin
   ${CMAKE_SOURCE_DIR}/storage/smartengine/transaction
   ${CMAKE_SOURCE_DIR}/storage/smartengine/core
-  ${CMAKE_SOURCE_DIR}/storage/smartengine/core/include
   ${CMAKE_SOURCE_DIR}/storage/smartengine/core/db
 )
 

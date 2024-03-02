@@ -21,14 +21,14 @@
 #include <sys/mman.h>
 #endif
 #include <algorithm>
+#include "env/env.h"
 #include "port/port.h"
-#include "smartengine/env.h"
 #include "logger/log_module.h"
 
-using namespace smartengine::common;
-using namespace smartengine::port;
-
 namespace smartengine {
+using namespace common;
+using namespace port;
+
 namespace util {
 
 // MSVC complains that it is already defined since it is static in the header.

@@ -21,7 +21,7 @@
 #include <string>
 
 #include "port/port.h"
-#include "smartengine/write_batch.h"
+#include "write_batch/write_batch.h"
 
 namespace smartengine {
 namespace util {

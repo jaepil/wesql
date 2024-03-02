@@ -24,9 +24,8 @@
 #include "my_dir.h"
 #include "mysqld_error.h"
 #include "dict/se_cf_options.h"
-#include "smartengine/db.h"
-#include "smartengine/options.h"
-#include "smartengine/status.h"
+#include "options/options.h"
+#include "db/db.h"
 #include "storage/storage_log_entry.h"
 #include "storage/storage_logger.h"
 

@@ -7,12 +7,13 @@
 #pragma once
 #ifndef ROCKSDB_LITE
 
-#include "smartengine/sst_dump_tool.h"
+#include "tools/sst_dump_tool.h"
 
 #include <memory>
 #include <string>
 #include "db/dbformat.h"
 #include "options/cf_options.h"
+#include "table/table_properties.h"
 #include "util/file_reader_writer.h"
 
 namespace smartengine {

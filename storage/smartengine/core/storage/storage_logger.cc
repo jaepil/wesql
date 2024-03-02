@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-#include "smartengine/status.h"
+#include "storage/storage_logger.h"
+#include "backup/hotbackup.h"
+#include "db/log_reader.h"
+#include "db/version_set.h"
 #include "logger/log_module.h"
 #include "util/file_reader_writer.h"
 #include "util/string_util.h"
-#include "db/log_reader.h"
-#include "db/version_set.h"
-#include "storage_logger.h"
-#include "smartengine/utilities/hotbackup.h"
 
 namespace smartengine
 {
@@ -29,6 +28,7 @@ using namespace db;
 using namespace common;
 using namespace util;
 using namespace memory;
+
 namespace storage
 {
 __thread int64_t StorageLogger::local_trans_id_ = 0;

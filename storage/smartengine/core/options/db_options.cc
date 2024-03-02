@@ -8,25 +8,17 @@
 // of patent rights can be found in the PATENTS file in the same directory.
 
 #include "options/db_options.h"
-
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
-
 #include <inttypes.h>
-
 #include "cache/row_cache.h"
 #include "logger/log_module.h"
 #include "port/port.h"
-#include "smartengine/cache.h"
-#include "smartengine/env.h"
-#include "smartengine/sst_file_manager.h"
-#include "smartengine/wal_filter.h"
-
-using namespace smartengine;
-using namespace util;
+#include "util/sst_file_manager.h"
 
 namespace smartengine {
+using namespace util;
 namespace common {
 
 ImmutableDBOptions::ImmutableDBOptions() : ImmutableDBOptions(Options()) {}
@@ -90,9 +82,6 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions &options)
       parallel_recovery_thread_num(options.parallel_recovery_thread_num),
       allow_2pc(options.allow_2pc),
       row_cache(options.row_cache),
-#ifndef ROCKSDB_LITE
-      wal_filter(options.wal_filter),
-#endif  // ROCKSDB_LITE
       fail_if_options_file_error(options.fail_if_options_file_error),
       avoid_flush_during_recovery(options.avoid_flush_during_recovery),
       table_cache_size(options.table_cache_size) {
@@ -223,10 +212,6 @@ void ImmutableDBOptions::Dump() const {
     __SE_LOG(INFO,
                      "                              Options.row_cache: None");
   }
-#ifndef ROCKSDB_LITE
-  __SE_LOG(INFO, "                             Options.wal_filter: %s",
-                   wal_filter ? wal_filter->Name() : "None");
-#endif  // ROCKDB_LITE
   __SE_LOG(INFO, "            Options.avoid_flush_during_recovery: %d",
                    avoid_flush_during_recovery);
   __SE_LOG(INFO, "                       Options.table_cache_size: %d",

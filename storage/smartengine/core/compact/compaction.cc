@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "compaction.h"
+#include "compact/compaction.h"
+
 #include "compact/new_compaction_iterator.h"
 #include "db/builder.h"
 #include "db/table_cache.h"
@@ -31,21 +32,11 @@
 #include "table/table_builder.h"
 #include "util/arena.h"
 #include "util/file_reader_writer.h"
+#include "util/rate_limiter.h"
 #include "util/string_util.h"
 #include "util/to_string.h"
 #include "util/stop_watch.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
-#include "smartengine/se_constants.h"
 
-using namespace smartengine;
-using namespace table;
-using namespace util;
-using namespace common;
-using namespace db;
-using namespace monitor;
-using namespace memory;
-using namespace logger;
 
 #define START_PERF_STATS(item) \
   util::StopWatchNano item(context_.cf_options_->env, true);
@@ -54,6 +45,14 @@ using namespace logger;
   stats_.perf_stats_.item += item.ElapsedNanos(false);
 
 namespace smartengine {
+using namespace table;
+using namespace util;
+using namespace common;
+using namespace db;
+using namespace monitor;
+using namespace memory;
+using namespace logger;
+
 namespace storage {
 GeneralCompaction::GeneralCompaction(const CompactionContext &context,
                                      const ColumnFamilyDesc &cf,

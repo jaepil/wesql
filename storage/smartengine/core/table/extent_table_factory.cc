@@ -18,17 +18,15 @@
 #include "port/port.h"
 #include "table/extent_table_builder.h"
 #include "table/extent_table_reader.h"
+#include "table/filter_policy.h"
 #include "table/format.h"
-#include "smartengine/cache.h"
-#include "smartengine/flush_block_policy.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace cache;
 using namespace util;
 using namespace db;
 
-namespace smartengine {
 namespace table {
 
 ExtentBasedTableFactory::ExtentBasedTableFactory(

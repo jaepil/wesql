@@ -22,7 +22,7 @@
 #include "se_async_commit_callback.h"
 #include <set>
 #include "sql_string.h"
-#include "smartengine/utilities/transaction.h"
+#include "transactions/transaction.h"
 
 namespace smartengine
 {

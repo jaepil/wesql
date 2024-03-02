@@ -12,12 +12,11 @@
 #pragma once
 #include <stdint.h>
 #include <string>
+#include "db/db.h"
 #include "db/dbformat.h"
 #include "options/cf_options.h"
 #include "util/arena.h"
 #include "util/autovector.h"
-#include "smartengine/db.h"
-#include "smartengine/iterator.h"
 
 namespace smartengine {
 

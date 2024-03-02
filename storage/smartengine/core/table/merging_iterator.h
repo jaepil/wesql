@@ -12,10 +12,8 @@
 #pragma once
 
 #include "memory/allocator.h"
-#include "smartengine/types.h"
 
 namespace smartengine {
-
 namespace util {
 class Comparator;
 class Env;

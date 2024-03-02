@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "smartengine/utilities/ldb_cmd.h"
+#include "tools/ldb_cmd.h"
 
 #include <map>
 #include <string>
@@ -16,19 +16,6 @@
 
 namespace smartengine {
 namespace tools {
-
-class DBFileDumperCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "dump_live_files"; }
-
-  DBFileDumperCommand(const std::vector<std::string>& params,
-                      const std::map<std::string, std::string>& options,
-                      const std::vector<std::string>& flags);
-
-  static void Help(std::string& ret);
-
-  virtual void DoCommand() override;
-};
 
 struct SliceHasher {
   size_t operator() (const common::Slice &s) const {
@@ -278,24 +265,6 @@ class DBQuerierCommand : public tools::LDBCommand {
   static const char* GET_CMD;
   static const char* PUT_CMD;
   static const char* DELETE_CMD;
-};
-
-class CheckPointCommand : public tools::LDBCommand {
- public:
-  static std::string Name() { return "checkpoint"; }
-
-  CheckPointCommand(const std::vector<std::string>& params,
-                    const std::map<std::string, std::string>& options,
-                    const std::vector<std::string>& flags);
-
-  virtual void DoCommand() override;
-
-  static void Help(std::string& ret);
-
-  std::string checkpoint_dir_;
-
- private:
-  static const std::string ARG_CHECKPOINT_DIR;
 };
 
 }

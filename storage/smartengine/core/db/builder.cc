@@ -16,31 +16,26 @@
 #include <vector>
 
 #include "compact/compaction_iterator.h"
+#include "db/db.h"
 #include "db/dbformat.h"
 #include "db/internal_stats.h"
 #include "db/table_cache.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_util.h"
+#include "options/options.h"
 #include "table/internal_iterator.h"
 #include "table/table_builder.h"
 #include "util/file_reader_writer.h"
 #include "util/filename.h"
 #include "util/stop_watch.h"
 #include "util/sync_point.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
-#include "smartengine/iterator.h"
-#include "smartengine/options.h"
-#include "smartengine/table.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace storage;
 using namespace monitor;
 using namespace util;
 using namespace table;
 using namespace common;
-
-namespace smartengine {
 
 namespace db {
 

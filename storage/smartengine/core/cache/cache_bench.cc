@@ -15,18 +15,15 @@ int main() {
   return 1;
 }
 #else
-
+#include "cache/cache.h"
 #include <gflags/gflags.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <sys/types.h>
-
+#include "db/db.h"
 #include "port/port.h"
 #include "util/mutexlock.h"
 #include "util/random.h"
-#include "smartengine/cache.h"
-#include "smartengine/db.h"
-#include "smartengine/env.h"
 
 using GFLAGS::ParseCommandLineFlags;
 
@@ -52,13 +49,11 @@ DEFINE_bool(use_clock_cache, false, "");
 
 DEFINE_bool(use_xcache, false, "");
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace db;
-using namespace cache;
 
-namespace smartengine {
 namespace cache {
 
 class CacheBench;
@@ -266,7 +261,7 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  CacheBench bench;
+  smartengine::cache::CacheBench bench;
   if (FLAGS_populate_cache) {
     bench.PopulateCache();
   }

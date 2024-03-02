@@ -17,13 +17,10 @@
 #include <vector>
 
 #include "db/dbformat.h"
+#include "env/env.h"
 #include "options/cf_options.h"
 #include "port/port.h"
 #include "table/table_reader.h"
-#include "smartengine/cache.h"
-#include "smartengine/env.h"
-#include "smartengine/options.h"
-#include "smartengine/table.h"
 
 namespace smartengine {
 

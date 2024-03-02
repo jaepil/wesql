@@ -9,19 +9,16 @@
 
 #include "compact/compaction_iterator.h"
 #include "table/internal_iterator.h"
-#include "smartengine/slice.h"
 #include "storage/storage_manager.h"
 #include "util/stop_watch.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace storage;
 using namespace util;
 using namespace table;
 using namespace db;
 using namespace memory;
-
-namespace smartengine {
 
 namespace storage {
 

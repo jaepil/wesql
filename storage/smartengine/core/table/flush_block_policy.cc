@@ -5,17 +5,15 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#include "smartengine/flush_block_policy.h"
-#include "table/block_builder.h"
-#include "smartengine/options.h"
-#include "smartengine/slice.h"
+#include "table/flush_block_policy.h"
 
 #include <cassert>
-
-using namespace smartengine;
-using namespace common;
+#include "options/options.h"
+#include "table/block_builder.h"
 
 namespace smartengine {
+using namespace common;
+
 namespace table {
 
 // Flush block by size

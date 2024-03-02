@@ -5,15 +5,13 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#include "smartengine/sst_file_writer.h"
-
+#include "table/sst_file_writer.h"
 #include <vector>
 #include "db/column_family.h"
 #include "db/dbformat.h"
 #include "storage/storage_common.h"
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
-#include "smartengine/table.h"
 #include "table/table_builder.h"
 
 namespace smartengine {

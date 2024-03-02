@@ -9,7 +9,7 @@
 #pragma once
 
 #include "table/iterator_wrapper.h"
-#include "smartengine/comparator.h"
+#include "util/comparator.h"
 
 namespace smartengine {
 namespace table {

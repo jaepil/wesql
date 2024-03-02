@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
+#include "storage/data_file.h"
 #include "env/io_posix.h"
+#include "storage/change_info.h"
 #include "util/increment_number_allocator.h"
 #include "util/sync_point.h"
-#include "smartengine/se_constants.h"
-#include "change_info.h"
-#include "data_file.h"
 
 namespace smartengine
 {

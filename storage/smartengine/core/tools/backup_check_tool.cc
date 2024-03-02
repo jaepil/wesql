@@ -14,25 +14,24 @@
  * limitations under the License.
  */
 
-#include "smartengine/backup_check.h"
-#include "stdio.h"
+#include "tools/backup_check.h"
+
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include "ldb_cmd_impl.h"
-#include "smartengine/utilities/ldb_cmd.h"
+#include "tools/ldb_cmd.h"
 #include "storage/io_extent.h"
-#include "smartengine/slice.h"
 #include "sst_dump_tool_imp.h"
 #include "table/table_reader.h"
-#include "smartengine/backup_check.h"
 
 using namespace std;
-using namespace smartengine;
+
+namespace smartengine {
 using namespace storage;
 using namespace common;
 using namespace table;
 
-namespace smartengine {
 namespace tools {
 
 void print_help() {

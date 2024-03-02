@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "db/memtable.h"
+
 #include "memtable/art.h"
 #include "memtable/art_node.h"
+#include "memtable/memtable.h"
+#include "memtable/memtablerep.h"
 #include "util/arena.h"
-#include "smartengine/memtablerep.h"
 
 using namespace smartengine;
 using namespace smartengine::common;

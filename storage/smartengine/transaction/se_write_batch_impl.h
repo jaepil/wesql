@@ -22,7 +22,7 @@
 #include "se_transaction.h"
 #include "handler/se_hton.h"
 #include "plugin/se_system_vars.h"
-#include "smartengine/utilities/write_batch_with_index.h"
+#include "write_batch/write_batch_with_index.h"
 
 namespace smartengine
 {

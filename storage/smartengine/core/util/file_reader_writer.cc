@@ -23,12 +23,12 @@
 #include "util/aio_wrapper.h"
 #include "util/misc_utility.h"
 
-using namespace smartengine::monitor;
-using namespace smartengine::port;
-using namespace smartengine::common;
-using namespace smartengine::memory;
-
 namespace smartengine {
+using namespace monitor;
+using namespace port;
+using namespace common;
+using namespace memory;
+
 namespace util {
 
 SequentialFileReader::~SequentialFileReader() {

@@ -15,25 +15,22 @@
  */
 #pragma once
 
-#include "memtable/art_node.h"
-#include "smartengine/se_constants.h"
-#include "smartengine/slice.h"
-#include "logger/log_module.h"
-#include "util/coding.h"
-#include "util/common.h"
-#include "port/likely.h"
-#include "smartengine/status.h"
-#include "memory/base_malloc.h"
-#include "smartengine/memtablerep.h"
-#include "memory/allocator.h"
-#include "logger/log_module.h"
-#include "util/ebr.h"
-
 #include <sched.h>
 #include <functional>
 #include <cstdio>
 #include <queue>
 #include <unistd.h>
+
+#include "logger/log_module.h"
+#include "memory/allocator.h"
+#include "memory/base_malloc.h"
+#include "memtable/memtablerep.h"
+#include "memtable/art_node.h"
+#include "logger/log_module.h"
+#include "util/coding.h"
+#include "util/common.h"
+#include "port/likely.h"
+#include "util/ebr.h"
 
 namespace smartengine {
 namespace memtable {

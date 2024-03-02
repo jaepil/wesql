@@ -18,7 +18,6 @@
 #include "change_info.h"
 #include "extent_space_manager.h"
 #include "storage_meta_struct.h"
-#include "smartengine/se_constants.h"
 #include "port/likely.h"
 #include "logger/log_module.h"
 

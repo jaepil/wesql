@@ -7,12 +7,10 @@
 
 #pragma once
 #include <string>
+#include "env/env.h"
 #include "table/block.h"
-#include "smartengine/env.h"
-#include "smartengine/types.h"
 
 namespace smartengine {
-
 namespace db {
 class PinnedIteratorsManager;
 }

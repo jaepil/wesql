@@ -13,11 +13,8 @@
 #include <queue>
 #include <string>
 #include <thread>
-
 #include "monitoring/instrumented_mutex.h"
 #include "port/port.h"
-
-#include "smartengine/status.h"
 
 namespace smartengine {
 namespace util {

@@ -23,7 +23,6 @@
 #include "se_cf_options.h"
 #include <string>
 #include "dict/se_cf_manager.h"
-#include "smartengine/utilities/convenience.h"
 
 namespace smartengine
 {
