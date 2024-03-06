@@ -2411,13 +2411,18 @@ enum {
 static int se_i_s_se_table_space_fill_one_row(
     my_core::THD *const thd, my_core::Table_ref *const tables,
     const smartengine::storage::DataFileStatistics &data_file_statistics) {
-
-  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::TABLE_SPACE_ID]->store(data_file_statistics.table_space_id_, true);
-  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::EXTENT_SPACE_TYPE]->store(data_file_statistics.extent_space_type_, true);
-  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::FILE_NUMBER]->store(data_file_statistics.file_number_, true);
-  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::TOTAL_EXTENT_COUNT]->store(data_file_statistics.total_extent_count_, true);
-  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::USED_EXTENT_COUNT]->store(data_file_statistics.used_extent_count_, true);
-  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::FREE_EXTENT_COUNT]->store(data_file_statistics.free_extent_count_, true);
+  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::TABLE_SPACE_ID]->store(
+      data_file_statistics.table_space_id_, false);
+  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::EXTENT_SPACE_TYPE]->store(
+      data_file_statistics.extent_space_type_, false);
+  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::FILE_NUMBER]->store(
+      data_file_statistics.file_number_, false);
+  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::TOTAL_EXTENT_COUNT]
+      ->store(data_file_statistics.total_extent_count_, false);
+  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::USED_EXTENT_COUNT]->store(
+      data_file_statistics.used_extent_count_, false);
+  tables->table->field[SMARTENGINE_TABLE_SPACE_FIELD::FREE_EXTENT_COUNT]->store(
+      data_file_statistics.free_extent_count_, false);
 
   return my_core::schema_table_store_record(thd, tables->table);
 }
