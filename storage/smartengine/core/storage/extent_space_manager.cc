@@ -740,7 +740,6 @@ int ExtentSpaceManager::get_data_file_numbers(const std::string &dir_path,
   std::vector<std::string> data_file_names;
   uint64_t file_number;
   util::FileType file_type;
-  Slice dummy_slice;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -750,7 +749,7 @@ int ExtentSpaceManager::get_data_file_numbers(const std::string &dir_path,
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < data_file_names.size(); ++i) {
       file_name = data_file_names.at(i);
-      if (ParseFileName(file_name, &file_number, dummy_slice, &file_type) && util::kTableFile == file_type) {
+      if (ParseFileName(file_name, &file_number, &file_type) && util::kTableFile == file_type) {
         data_file_numbers.push_back(file_number);
         SE_LOG(INFO, "find data file", K(file_number), K(file_name));
       } else {

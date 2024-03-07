@@ -98,16 +98,11 @@ static void ReplicationThreadBody(void* arg) {
 DEFINE_uint64(num_inserts, 1000,
               "the num of inserts the first thread should"
               " perform.");
-DEFINE_uint64(wal_ttl_seconds, 1000, "the wal ttl for the run(in seconds)");
-DEFINE_uint64(wal_size_limit_MB, 10,
-              "the wal size limit for the run"
-              "(in MB)");
 
 int main(int argc, const char** argv) {
   SetUsageMessage(
       std::string("\nUSAGE:\n") + std::string(argv[0]) +
-      " --num_inserts=<num_inserts> --wal_ttl_seconds=<WAL_ttl_seconds>" +
-      " --wal_size_limit_MB=<WAL_size_limit_MB>");
+      " --num_inserts=<num_inserts>");
   ParseCommandLineFlags(&argc, const_cast<char***>(&argv), true);
 
   Env* env = Env::Default();
@@ -115,9 +110,6 @@ int main(int argc, const char** argv) {
   env->GetTestDirectory(&default_db_path);
   default_db_path += "db_repl_stress";
   Options options;
-  options.create_if_missing = true;
-  options.WAL_ttl_seconds = FLAGS_wal_ttl_seconds;
-  options.WAL_size_limit_MB = FLAGS_wal_size_limit_MB;
   DB* db;
   DestroyDB(default_db_path, options);
 
@@ -145,8 +137,8 @@ int main(int argc, const char** argv) {
   if (replThread.no_read < dataPump.no_records) {
     // no. read should be => than inserted.
     fprintf(stderr,
-            "No. of Record's written and read not same\nRead : %" ROCKSDB_PRIszt
-            " Written : %" ROCKSDB_PRIszt "\n",
+            "No. of Record's written and read not same\nRead : %ld"
+            " Written : %ld\n",
             replThread.no_read, dataPump.no_records);
     exit(1);
   }

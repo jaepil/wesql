@@ -27,7 +27,6 @@ extern struct st_mysql_plugin se_i_s_cfstats;
 extern struct st_mysql_plugin se_i_s_dbstats;
 extern struct st_mysql_plugin se_i_s_perf_context;
 extern struct st_mysql_plugin se_i_s_perf_context_global;
-//extern struct st_mysql_plugin se_i_s_cfoptions;
 extern struct st_mysql_plugin se_i_s_compact_stats;
 extern struct st_mysql_plugin se_i_s_global_info;
 extern struct st_mysql_plugin se_i_s_ddl;

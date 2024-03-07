@@ -11,12 +11,10 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "db/table_properties_collector.h"
 #include "env/env.h"
 #include "options/cf_options.h"
 #include "storage/storage_common.h"
 #include "table/scoped_arena_iterator.h"
-#include "util/event_logger.h"
 
 namespace smartengine {
 namespace common {
@@ -39,14 +37,11 @@ class Iterator;
 struct MiniTables;
 struct FileMetaData;
 class TableCache;
-class VersionEdit;
 class InternalStats;
 
 table::TableBuilder* NewTableBuilder(
     const common::ImmutableCFOptions& options,
     const InternalKeyComparator& internal_comparator,
-    const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-        int_tbl_prop_collector_factories,
     uint32_t column_family_id, const std::string& column_family_name,
     MiniTables* mtables, const common::CompressionType compression_type,
     const common::CompressionOptions& compression_opts, const storage::LayerPosition &output_layer_position,
@@ -60,15 +55,12 @@ int BuildTable(
     table::InternalIterator* iter,
     MiniTables* mtables,
     const InternalKeyComparator& internal_comparator,
-    const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-        int_tbl_prop_collector_factories,
     uint32_t column_family_id,
     const std::string& column_family_name,
     std::vector<common::SequenceNumber> snapshots,
     common::SequenceNumber earliest_write_conflict_snapshot,
     const common::CompressionType compression,
     const common::CompressionOptions& compression_opts,
-    bool paranoid_file_checks,
     InternalStats* internal_stats,
     const storage::LayerPosition &output_layer_position,
     const util::Env::IOPriority io_priority = util::Env::IO_HIGH,

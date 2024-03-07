@@ -41,7 +41,6 @@ public:
 TEST_F(WriteCheckpointFailedTest, version_set_write_checkpoint_failed)
 {
   Options options;
-  options.create_if_missing = true;
   options.env = env_;
   options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
   options.parallel_wal_recovery = false;

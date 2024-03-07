@@ -19,15 +19,19 @@
 #define SE_HANDLER_XE_INDEX_H_
 
 #include "my_base.h"
+#include "se_index_stats.h"
 #include "dd/types/index.h"
-#include "dict/se_index.h"
-#include "dict/se_properties_collector.h"
 #include "util/se_buff.h"
 
 class Field;
 
 namespace smartengine
 {
+namespace db
+{
+  class ColumnFamilyHandle;
+}
+
 class SeTableDef;
 class SeFieldPacking;
 struct SeInplaceDdlDictInfo;

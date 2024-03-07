@@ -24,7 +24,6 @@
 #include "compact/compaction_stats.h"
 #include "compact/reuse_block_merge_iterator.h"
 #include "compact/task_type.h"
-#include "db/table_properties_collector.h"
 #include "env/env.h"
 #include "memory/page_arena.h"
 #include "options/options.h"
@@ -262,8 +261,6 @@ class GeneralCompaction : public Compaction {
   memory::stl_adapt_allocator<std::pair<const int64_t,
   AsyncRandomAccessExtent *>, memory::ModId::kCompaction>>;
 
-  // TODO default options for create table builder, remove future
-  std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>> props_;
   std::string compression_dict_;
   // options for create builder and reader;
   CompactionContext context_;

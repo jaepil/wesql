@@ -44,10 +44,8 @@
 #include "table/table_builder.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
-#include "util/event_logger.h"
 #include "util/file_util.h"
 #include "util/filename.h"
-#include "util/log_buffer.h"
 #include "util/mutexlock.h"
 #include "util/stop_watch.h"
 #include "util/sync_point.h"
@@ -143,14 +141,12 @@ int BaseFlush::write_level0_table(MiniTables *mtables, uint64_t max_seq) {
                           merge_iter,
                           mtables,
                           cfd_->internal_comparator(),
-                          cfd_->int_tbl_prop_collector_factories(),
                           cfd_->GetID(),
                           cfd_->GetName(),
                           existing_snapshots_,
                           earliest_write_conflict_snapshot_,
                           output_compression_,
                           cfd_->ioptions()->compression_opts,
-                          mutable_cf_options_.paranoid_file_checks,
                           cfd_->internal_stats(),
                           output_layer_position,
                           Env::IO_HIGH,
@@ -348,13 +344,11 @@ int BaseFlush::fill_table_cache(const MiniTables &mtables) {
     FLUSH_LOG(WARN, "invalid ptr", K(ret), KP(db_options_.env), KP(env_options_), K(cfd_->GetID()));
     return ret;
   }
-  EnvOptions optimized_env_options = db_options_.env->OptimizeForCompactionTableWrite(
-      *env_options_, db_options_);
   for (size_t i = 0; i < mtables.metas.size() && SUCC(ret); i++) {
     const FileMetaData* meta = &mtables.metas[i];
     std::unique_ptr<InternalIterator, memory::ptr_destruct_delete<InternalIterator>> it(
         cfd_->table_cache()->NewIterator(ReadOptions(),
-                                         optimized_env_options,
+                                         *env_options_, //TODO(Zhao Dongsheng): the env_option is useless?
                                          cfd_->internal_comparator(),
                                          meta->fd,
                                          nullptr,
@@ -368,7 +362,10 @@ int BaseFlush::fill_table_cache(const MiniTables &mtables) {
                                          cfd_->internal_stats()));
     if (FAILED(it->status().code())) {
       FLUSH_LOG(WARN, "iterator occur error", K(ret), K(i));
-    } else if (mutable_cf_options_.paranoid_file_checks) {
+    //TODO(Zhao Dongsheng): Depreatd parameter paranoid_file_checks's value
+    //is false. Remove paranoid_file_checks and move this check logic to
+    //appropriate place in the future.
+    } else if (false) {
       for (it->SeekToFirst(); it->Valid(); it->Next()) {
       }
       if (FAILED(it->status().code())) {

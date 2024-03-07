@@ -334,9 +334,6 @@ static const std::string aggregated_table_properties_at_level =
     aggregated_table_properties + "-at-level";
 static const std::string num_running_compactions = "num-running-compactions";
 static const std::string num_running_flushes = "num-running-flushes";
-static const std::string actual_delayed_write_rate =
-    "actual-delayed-write-rate";
-static const std::string is_write_stopped = "is-write-stopped";
 
 // Memory stats parameters
 using std::string;
@@ -432,11 +429,6 @@ const std::string DB::Properties::kAggregatedTableProperties =
     smartengine_prefix + aggregated_table_properties;
 const std::string DB::Properties::kAggregatedTablePropertiesAtLevel =
     smartengine_prefix + aggregated_table_properties_at_level;
-const std::string DB::Properties::kActualDelayedWriteRate =
-    smartengine_prefix + actual_delayed_write_rate;
-const std::string DB::Properties::kIsWriteStopped =
-    smartengine_prefix + is_write_stopped;
-
 #define DEFINE_DB_PROPERTY(name, str_name) \
   const std::string DB::Properties::name = smartengine_prefix + str_name;
 DEFINE_DB_PROPERTY(kDBMemoryStats, db_memory_stats);
@@ -548,11 +540,6 @@ const std::unordered_map<std::string, DBPropertyInfo>
         {DB::Properties::kNumRunningCompactions,
          {false, nullptr, &InternalStats::HandleNumRunningCompactions,
           nullptr}},
-        {DB::Properties::kActualDelayedWriteRate,
-         {false, nullptr, &InternalStats::HandleActualDelayedWriteRate,
-          nullptr}},
-        {DB::Properties::kIsWriteStopped,
-         {false, nullptr, &InternalStats::HandleIsWriteStopped, nullptr}},
         {DB::Properties::kDBMemoryStats,
          {false, &InternalStats::HandleDBMemoryStats, nullptr, nullptr}},
         {DB::Properties::kActiveMemTableTotalNumber,
@@ -967,22 +954,6 @@ bool InternalStats::HandleMinLogNumberToKeep(uint64_t* value, DBImpl* db)
   return true;
 }
 
-bool InternalStats::HandleActualDelayedWriteRate(uint64_t* value, DBImpl* db)
-{
-  const WriteController& wc = db->write_controller();
-  if (!wc.NeedsDelay()) {
-    *value = 0;
-  } else {
-    *value = wc.delayed_write_rate();
-  }
-  return true;
-}
-
-bool InternalStats::HandleIsWriteStopped(uint64_t* value, DBImpl* db)
-{
-  *value = db->write_controller().IsStopped() ? 1 : 0;
-  return true;
-}
 bool InternalStats::HandleDBMemoryStats(std::string* value, Slice suffix,
                                         DBImpl* db) {
   DumpMemoryStats(value);

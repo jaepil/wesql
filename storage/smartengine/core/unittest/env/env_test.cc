@@ -699,7 +699,6 @@ TEST_F(EnvPosixTest, PositionedAppend) {
   unique_ptr<WritableFile> writable_file;
   EnvOptions options;
   options.use_direct_writes = true;
-  options.use_mmap_writes = false;
   IoctlFriendlyTmpdir ift;
   ASSERT_OK(env_->NewWritableFile(ift.name() + "/f", &writable_file, options));
   const size_t kBlockSize = 4096;
@@ -804,7 +803,6 @@ TEST_P(EnvPosixTestWithParam, AllocateTest) {
     }
 
     EnvOptions soptions;
-    soptions.use_mmap_writes = false;
     soptions.use_direct_reads = soptions.use_direct_writes = direct_io_;
     unique_ptr<WritableFile> wfile;
     ASSERT_OK(env_->NewWritableFile(fname, &wfile, soptions));

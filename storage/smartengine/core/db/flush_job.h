@@ -26,8 +26,6 @@
 #include "db/job_context.h"
 #include "db/log_writer.h"
 #include "db/snapshot_impl.h"
-#include "db/write_controller.h"
-#include "db/write_thread.h"
 #include "env/env.h"
 #include "memtable/memtable_list.h"
 #include "memtable/memtablerep.h"
@@ -38,7 +36,6 @@
 #include "transactions/transaction_log.h"
 #include "util/arena.h"
 #include "util/autovector.h"
-#include "util/event_logger.h"
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
 
@@ -148,9 +145,6 @@ class FlushJob : public BaseFlush {
   virtual int prepare_flush_task(MiniTables &mtables) override;
   virtual int run(MiniTables& mtables) override;
   void cancel();
-  table::TableProperties GetTableProperties() const {
-    return table_properties_;
-  }
   int prepare_flush_level1_task(MiniTables &mtables);
   int run_mt_ext_task(MiniTables &mtables);
   void set_meta_snapshot(const db::Snapshot *meta_snapshot) {
@@ -179,7 +173,6 @@ class FlushJob : public BaseFlush {
 
   const std::string& dbname_;
   monitor::Statistics* stats_;
-  table::TableProperties table_properties_;
   storage::CompactionContext compaction_context_;
   const db::Snapshot* meta_snapshot_;
   storage::MtExtCompaction *compaction_;

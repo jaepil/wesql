@@ -25,7 +25,6 @@
 #include "table/filter_manager.h"
 #include "memory/mod_info.h"
 #include "util/file_reader_writer.h"
-#include "util/sst_file_manager_impl.h"
 #include "util/sync_point.h"
 #include "storage/storage_logger.h"
 
@@ -48,16 +47,6 @@ Options SanitizeOptions(const std::string& dbname, const Options& src) {
 
 DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src) {
   DBOptions result(src);
-
-  // result.max_open_files means an "infinite" open files.
-  if (result.max_open_files != -1) {
-    int max_max_open_files = port::GetMaxOpenFiles();
-    if (max_max_open_files == -1) {
-      max_max_open_files = 1000000;
-    }
-    ClipToRange(&result.max_open_files, 20, max_max_open_files);
-  }
-
   if (!result.write_buffer_manager) {
     result.write_buffer_manager.reset(new WriteBufferManager(
         result.db_write_buffer_size, result.db_total_write_buffer_size));
@@ -80,20 +69,6 @@ DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src) {
     }
   }
 
-  if (result.WAL_ttl_seconds > 0 || result.WAL_size_limit_MB > 0) {
-    result.recycle_log_file_num = false;
-  }
-
-  if (result.recycle_log_file_num &&
-      (result.wal_recovery_mode == WALRecoveryMode::kPointInTimeRecovery ||
-       result.wal_recovery_mode == WALRecoveryMode::kAbsoluteConsistency)) {
-    // kPointInTimeRecovery is indistinguishable from
-    // kTolerateCorruptedTailRecords in recycle mode since we define
-    // the "end" of the log as the first corrupt record we encounter.
-    // kAbsoluteConsistency doesn't make sense because even a clean
-    // shutdown leaves old junk at the end of the log file.
-    result.wal_recovery_mode = WALRecoveryMode::kTolerateCorruptedTailRecords;
-  }
   if (result.parallel_wal_recovery &&
       result.wal_recovery_mode == WALRecoveryMode::kPointInTimeRecovery) {
     result.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
@@ -111,122 +86,34 @@ DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src) {
     result.db_paths.emplace_back(dbname, std::numeric_limits<uint64_t>::max());
   }
 
-  if (result.use_direct_reads && result.compaction_readahead_size == 0) {
-    result.compaction_readahead_size = 1024 * 1024 * 2;
-  }
-
-  if (result.compaction_readahead_size > 0 ||
-      result.use_direct_io_for_flush_and_compaction) {
-    result.new_table_reader_for_compaction_inputs = true;
-  }
-
   return result;
 }
 
 namespace {
 
-Status SanitizeOptionsByTable(
-    const DBOptions& db_opts,
-    const std::vector<ColumnFamilyDescriptor>& column_families) {
-  Status s;
-  for (auto cf : column_families) {
-    s = cf.options.table_factory->SanitizeOptions(db_opts, cf.options);
-    if (!s.ok()) {
-      return s;
-    }
-  }
-  return Status::OK();
+Status SanitizeOptionsByTable(const DBOptions &db_options,
+                              const ColumnFamilyOptions &cf_options)
+{
+  return cf_options.table_factory->SanitizeOptions(db_options, cf_options);
 }
 
-static Status ValidateOptions(
-    const DBOptions& db_options,
-    const std::string &dbname,
-    const std::vector<ColumnFamilyDescriptor>& column_families) {
+static Status ValidateOptions(const DBOptions& db_options,
+                              const ColumnFamilyOptions& cf_options)
+{
   Status s;
 
-  for (auto& cfd : column_families) {
-    s = CheckCompressionSupported(cfd.options);
-    if (s.ok() && db_options.allow_concurrent_memtable_write) {
-      s = CheckConcurrentWritesSupported(cfd.options);
-    }
-    if (!s.ok()) {
-      return s;
-    }
+  s = CheckCompressionSupported(cf_options);
+  if (s.ok() && db_options.allow_concurrent_memtable_write) {
+    s = CheckConcurrentWritesSupported(cf_options);
   }
 
-  if (db_options.db_paths.size() > 4) {
-    return Status::NotSupported(
-        "More than four DB paths are not supported yet. ");
+  if (s.ok() && db_options.db_paths.size() > 4) {
+    s = Status::NotSupported("More than four DB paths are not supported yet.");
   }
 
-  if (db_options.allow_mmap_reads && db_options.use_direct_reads) {
-    // Protect against assert in PosixMMapReadableFile constructor
-    return Status::NotSupported(
-        "If memory mapped reads (allow_mmap_reads) are enabled "
-        "then direct I/O reads (use_direct_reads) must be disabled. ");
-  }
-
-  if (db_options.allow_mmap_writes &&
-      db_options.use_direct_io_for_flush_and_compaction) {
-    return Status::NotSupported(
-        "If memory mapped writes (allow_mmap_writes) are enabled "
-        "then direct I/O writes (use_direct_io_for_flush_and_compaction) must "
-        "be disabled. ");
-  }
-
-  if (db_options.keep_log_file_num == 0) {
-    return Status::InvalidArgument("keep_log_file_num must be greater than 0");
-  }
-
-  return Status::OK();
-}
-}  // namespace
-Status DBImpl::NewDB() {
-  /*
-  VersionEdit new_db;
-  new_db.SetLogNumber(0);
-  new_db.SetNextFile(2);
-  new_db.SetLastSequence(0);
-  */
-
-  Status s;
-
-  /*
-  __SE_LOG(INFO, "Creating manifest 1 \n");
-  const std::string manifest = DescriptorFileName(dbname_, 1);
-  {
-    unique_ptr<WritableFile> file;
-    EnvOptions env_options = env_->OptimizeForManifestWrite(env_options_);
-    s = NewWritableFile(env_, manifest, &file, env_options);
-    if (!s.ok()) {
-      return s;
-    }
-    file->SetPreallocationBlockSize(
-        immutable_db_options_.manifest_preallocation_size);
-    unique_ptr<util::ConcurrentDirectFileWriter> file_writer(
-        new util::ConcurrentDirectFileWriter(std::move(file), env_options));
-    s = file_writer->init_multi_buffer();
-    if (!s.ok()) {
-      __SE_LOG(ERROR, "init multi log buffer failed for ManifestWrite");
-      return s;
-    }
-    log::Writer log(std::move(file_writer), 0, false);
-    std::string record;
-    new_db.EncodeTo(&record);
-    s = log.AddRecord(record);
-    if (s.ok()) {
-      s = SyncManifest(env_, &immutable_db_options_, log.file());
-    }
-  }
-  if (s.ok()) {
-    // Make "CURRENT" file that points to the new manifest file.
-    s = SetCurrentFile(env_, dbname_, 1, directories_.GetDbDir(), 0, 0);
-  } else {
-    env_->DeleteFile(manifest);
-  }
-  */
   return s;
 }
+}  // namespace
 
 Status DBImpl::Directories::CreateAndNewDirectory(
     Env* env, const std::string& dirname,
@@ -282,21 +169,17 @@ Status DBImpl::Directories::SetDirectories(
   return Status::OK();
 }
 
-Status DBImpl::Recover(
-    const std::vector<ColumnFamilyDescriptor>& column_families,
-    const ColumnFamilyOptions &cf_options, bool read_only,
-    bool error_if_log_file_exist, bool error_if_data_exists_in_logs) {
+Status DBImpl::Recover(const ColumnFamilyOptions &cf_options)
+{
   mutex_.AssertHeld();
 
   int ret = Status::kOk;
   assert(db_lock_ == nullptr);
 
-  if (FAILED(prepare_recovery(read_only, cf_options))) {
+  if (FAILED(prepare_recovery(cf_options))) {
     SE_LOG(ERROR, "fail to prepae recovery", K(ret));
   } else if (FAILED(recovery())) {
     SE_LOG(ERROR, "fail to replay manifest log or wal", K(ret));
-  } else if (FAILED(after_recovery())) {
-    SE_LOG(ERROR, "fail to do something after recovery", K(ret));
   } else {
     SE_LOG(INFO, "success to recovery smartengine log");
   }
@@ -304,48 +187,41 @@ Status DBImpl::Recover(
   return ret;
 }
 
-int DBImpl::prepare_recovery(bool read_only, const ColumnFamilyOptions &cf_options)
+int DBImpl::prepare_recovery(const ColumnFamilyOptions &cf_options)
 {
   int ret = Status::kOk;
   const uint64_t t1 = env_->NowMicros();
-  if (!read_only) {
-    if (FAILED(directories_.SetDirectories(env_, dbname_,
-                                           immutable_db_options_.wal_dir,
-                                           immutable_db_options_.db_paths).code())) {
-      SE_LOG(INFO, "fail to set directories", K(ret), K_(dbname), "wal_dir", immutable_db_options_.wal_dir);
-    } else if (FAILED(env_->LockFile(LockFileName(dbname_), &db_lock_).code())) {
-      SE_LOG(INFO, "fail to lock file", K(ret), K_(dbname));
-    } else {
-      if (FAILED(env_->FileExists(CurrentFileName(dbname_)).code())) {
-        if (Status::kNotFound != ret) {
-          SE_LOG(WARN, "unexpected error, when check current file exist or not", K(ret), K_(dbname));
-        } else {
-          if (immutable_db_options_.create_if_missing) {
-            //overwrite ret as design
-            const uint64_t t2 = env_->NowMicros();
-            if (FAILED(storage_logger_->external_write_checkpoint())) {
-              SE_LOG(WARN, "fail to external write checkpoint", K(ret), K_(dbname));
-            }
-            const uint64_t t3 = env_->NowMicros();
-            recovery_debug_info_.prepare_external_write_ckpt = t3 - t2;
-          }
-        }
-      } else {
-        if (immutable_db_options_.error_if_exists) {
-          ret = Status::kErrorUnexpected;
-          SE_LOG(WARN, "unexpected error, the dir should not exist as expected", K(ret), K_(dbname));
-        }
-      }
 
-      if (SUCCED(ret)) {
-        if (FAILED(env_->FileExists(IdentityFileName(dbname_)).code())) {
-          if (Status::kNotFound != ret) {
-            SE_LOG(WARN, "unexpected error, when check identity file exist", K(ret));
-          } else {
-            //overwite ret as disign
-            if (FAILED(SetIdentityFile(env_, dbname_).code())) {
-              SE_LOG(WARN, "fail to set identity file", K(ret), K_(dbname));
-            }
+  if (FAILED(directories_.SetDirectories(env_, dbname_,
+                                         immutable_db_options_.wal_dir,
+                                         immutable_db_options_.db_paths).code())) {
+    SE_LOG(INFO, "fail to set directories", K(ret), K_(dbname), "wal_dir", immutable_db_options_.wal_dir);
+  } else if (FAILED(env_->LockFile(LockFileName(dbname_), &db_lock_).code())) {
+    SE_LOG(INFO, "fail to lock file", K(ret), K_(dbname));
+  } else {
+    if (FAILED(env_->FileExists(CurrentFileName(dbname_)).code())) {
+      if (Status::kNotFound != ret) {
+        ret = Status::kErrorUnexpected;
+        SE_LOG(WARN, "unexpected error, when check current file exist or not", K(ret), K_(dbname));
+      } else {
+        //overwrite ret as design
+        const uint64_t t2 = env_->NowMicros();
+        if (FAILED(storage_logger_->external_write_checkpoint())) {
+          SE_LOG(WARN, "fail to external write checkpoint", K(ret), K_(dbname));
+        }
+        const uint64_t t3 = env_->NowMicros();
+        recovery_debug_info_.prepare_external_write_ckpt = t3 - t2;
+      }
+    }
+
+    if (SUCCED(ret)) {
+      if (FAILED(env_->FileExists(IdentityFileName(dbname_)).code())) {
+        if (Status::kNotFound != ret) {
+          SE_LOG(WARN, "unexpected error, when check identity file exist", K(ret));
+        } else {
+          //overwite ret as disign
+          if (FAILED(SetIdentityFile(env_, dbname_).code())) {
+            SE_LOG(WARN, "fail to set identity file", K(ret), K_(dbname));
           }
         }
       }
@@ -364,11 +240,6 @@ int DBImpl::prepare_recovery(bool read_only, const ColumnFamilyOptions &cf_optio
   const uint64_t t6 = env_->NowMicros();
   recovery_debug_info_.prepare = t6 - t1;
   return ret;
-}
-
-int DBImpl::after_recovery()
-{
-  return calc_max_total_in_memory_state();
 }
 
 int DBImpl::set_compaction_need_info() {
@@ -451,36 +322,6 @@ int DBImpl::create_default_subtbale(const ColumnFamilyOptions &cf_options)
   } else {
     default_cf_internal_stats_ = default_cf_handle_->cfd()->internal_stats();
     single_column_family_mode_ = false;
-  }
-
-  return ret;
-}
-
-int DBImpl::calc_max_total_in_memory_state()
-{
-  int ret = Status::kOk;
-  GlobalContext *global_ctx = nullptr;
-  AllSubTable *all_sub_table = nullptr;
-  ColumnFamilyData *sub_table = nullptr;
-
-  //used when recovery, no need to use threaa local AllSubtableMap
-  if (IS_NULL(global_ctx = versions_->get_global_ctx())) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, global ctx must not nullptr", K(ret));
-  } else if (IS_NULL(all_sub_table = global_ctx->all_sub_table_)) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, AllSubTable must not nullptr", K(ret));
-  } else {
-    SubTableMap &sub_table_map = all_sub_table->sub_table_map_;
-    for (auto iter = sub_table_map.begin(); SUCCED(ret) && iter != sub_table_map.end(); ++iter) {
-      if (IS_NULL(sub_table = iter->second)) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, subtable must not nullptr", K(ret), "index_id", iter->first);
-      } else {
-        max_total_in_memory_state_ += sub_table->GetLatestMutableCFOptions()->write_buffer_size *
-            sub_table->GetLatestMutableCFOptions()->max_write_buffer_number;
-      }
-    }
   }
 
   return ret;
@@ -1034,7 +875,9 @@ int DBImpl::recovery_write_memtable(WriteBatch &batch, uint64_t current_log_file
   int ret = Status::kOk;
   SequenceNumber first_seq_in_write_batch = 0;
 
-  ColumnFamilyMemTablesImpl column_family_memtables(versions_->global_ctx_->all_sub_table_->sub_table_map_, versions_->GetColumnFamilySet());
+  ColumnFamilyMemTablesImpl column_family_memtables(
+      versions_->get_global_ctx()->all_sub_table_->sub_table_map_,
+      versions_->GetColumnFamilySet());
 
   if (WALRecoveryMode::kPointInTimeRecovery == immutable_db_options_.wal_recovery_mode
       && kMaxSequenceNumber != next_allocate_sequence
@@ -1406,8 +1249,6 @@ int DBImpl::create_new_log_writer(ArenaAllocator &arena)
   EnvOptions env_options(initial_db_options_);
   EnvOptions opt_env_options = immutable_db_options_.env->OptimizeForLogWrite(
       env_options, BuildDBOptions(immutable_db_options_, mutable_db_options_));
-  //  unique_ptr<WritableFile> write_file;
-  //  unique_ptr<util::ConcurrentDirectFileWriter> concurrent_file_writer;
   WritableFile *write_file = nullptr;
   ConcurrentDirectFileWriter *concurrent_file_writer = nullptr;
   log::Writer *log_writer = nullptr;
@@ -1416,12 +1257,11 @@ int DBImpl::create_new_log_writer(ArenaAllocator &arena)
     SE_LOG(WARN, "fail to create write file", K(ret), K(new_log_number), K(log_file_name));
   } else {
     write_file->SetPreallocationBlockSize(GetWalPreallocateBlockSize(32 * 1024));
-    //    concurrent_file_writer.reset(new util::ConcurrentDirectFileWriter(std::move(write_file), opt_env_options));
     concurrent_file_writer = MOD_NEW_OBJECT(ModId::kDBImplWrite, ConcurrentDirectFileWriter, write_file, opt_env_options);
     if (FAILED(concurrent_file_writer->init_multi_buffer().code())) {
       SE_LOG(WARN, "fail to init multi buffer", K(ret), K(new_log_number), K(log_file_name));
     } else if (IS_NULL(log_writer = MOD_NEW_OBJECT(ModId::kDBImplWrite, log::Writer, concurrent_file_writer,
-            new_log_number, immutable_db_options_.recycle_log_file_num > 0, false/*not free mem*/))) {
+            new_log_number, false /**recycle_log_files*/, false /**not free mem*/))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for log_writer", K(ret));
     } else {
@@ -1434,156 +1274,20 @@ int DBImpl::create_new_log_writer(ArenaAllocator &arena)
   return ret;
 }
 
-//int DBImpl::init_gc_timer()
-//{
-//  int ret = Status::kOk;
-//  const uint64_t GC_SCHEDULER_INTERVAL = 5 * 60 * 1000; //5 minute
-//  std::function<int(void)> schedule_dump_func = std::bind(&DBImpl::schedule_gc, this);
-//
-//  if (IS_NULL(gc_timer_ = MOD_NEW_OBJECT(ModId::kDefaultMod,
-//                                         Timer,
-//                                         timer_service_,
-//                                         GC_SCHEDULER_INTERVAL,
-//                                         Timer::Repeatable,
-//                                         schedule_dump_func))) {
-//    ret = Status::kMemoryLimit;
-//    SE_LOG(WARN, "fail to allocate memory for gc timer", K(ret));
-//    assert(false);
-//  } else {
-//    gc_timer_->start();
-//    SE_LOG(INFO, "success to init gc timer");
-//  }
-//  return ret;
-//}
-//
-//int DBImpl::init_shrink_timer()
-//{
-//  int ret = Status::kOk;
-//  const uint64_t SHRINK_SCHEDULER_INTERVAL = 10 * 60 * 1000; //10 minute
-//  std::function<int(void)> schedule_shrink_func = std::bind(&DBImpl::schedule_shrink, this);
-//
-//  if (IS_NULL(shrink_timer_ = MOD_NEW_OBJECT(ModId::kDefaultMod,
-//                                             Timer,
-//                                             timer_service_,
-//                                             SHRINK_SCHEDULER_INTERVAL,
-//                                             Timer::Repeatable,
-//                                             schedule_shrink_func))) {
-//    ret = Status::kMemoryLimit;
-//    SE_LOG(WARN, "fail to allocate memory for shrink timer", K(ret));
-//  } else {
-//    shrink_timer_->start();
-//    SE_LOG(INFO, "success to init shrink timer");
-//  }
-//
-//  return ret;
-//}
-
-/*
-Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd, MemTable* mem) {
-  mutex_.AssertHeld();
-  const uint64_t start_micros = env_->NowMicros();
-  uint64_t bytes_written = 0;
-  MiniTables mtables;
-  mtables.space_manager = cfd->get_extent_space_manager();
-  auto pending_outputs_inserted_elem =
-      CaptureCurrentFileNumberInPendingOutputs();
-  ReadOptions ro;
-  ro.total_order_seek = true;
-  Arena arena;
-  Status s;
-  TableProperties table_properties;
-  {
-    ScopedArenaIterator iter(mem->NewIterator(ro, &arena));
-    __SE_LOG(DEBUG, "[%s] [WriteLevel0TableForRecovery]: started", cfd->GetName().c_str());
-
-    // Get the latest mutable cf options while the mutex is still locked
-    const MutableCFOptions mutable_cf_options =
-        *cfd->GetLatestMutableCFOptions();
-    bool paranoid_file_checks =
-        cfd->GetLatestMutableCFOptions()->paranoid_file_checks;
-    {
-      mutex_.Unlock();
-
-      SequenceNumber earliest_write_conflict_snapshot;
-      std::vector<SequenceNumber> snapshot_seqs =
-          GetAll(&earliest_write_conflict_snapshot);
-
-      EnvOptions optimized_env_options = env_->OptimizeForCompactionTableWrite(
-          env_options_, immutable_db_options_);
-      s = BuildTable(
-          dbname_, env_, *cfd->ioptions(), mutable_cf_options,
-          optimized_env_options, cfd->table_cache(), iter.get(),
-          std::unique_ptr<InternalIterator>(mem->NewRangeTombstoneIterator(ro)),
-          &mtables, cfd->internal_comparator(),
-          cfd->int_tbl_prop_collector_factories(), cfd->GetID(), cfd->GetName(),
-          snapshot_seqs, earliest_write_conflict_snapshot,
-          GetCompressionFlush(*cfd->ioptions(), mutable_cf_options, 0),
-          cfd->ioptions()->compression_opts, paranoid_file_checks,
-          cfd->internal_stats(), TableFileCreationReason::kRecovery, job_id);
-      // LogFlush(immutable_db_options_.info_log);
-      if (s.ok()) {
-        for (auto& meta : mtables.metas) bytes_written += meta.fd.GetFileSize();
-        __SE_LOG(INFO,
-                      "[%s] [WriteLevel0TableForRecovery]"
-                      " to %" PRIu64
-                      " mini tables, "
-                      "totally %" PRIu64 " bytes: %s",
-                      cfd->GetName().c_str(), mtables.metas.size(),
-                      bytes_written, s.ToString().c_str());
-      } else {
-        __SE_LOG(INFO, "[%s] [WriteLevel0TableForRecovery]: failed", cfd->GetName().c_str());
-      }
-
-      mutex_.Lock();
-    }
-  }
-  ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
-
-  // Note that if file_size is zero, the file has been deleted and
-  // should not be added to the manifest.
-  int level = 0;
-  if (s.ok()) {
-    // record the change meta
-    //s = change_info.add(static_cast<int32_t>(cfd->GetID()), 0, mtables);
-  }
-  InternalStats::CompactionStats stats(1);
-  stats.micros = env_->NowMicros() - start_micros;
-  stats.bytes_written = bytes_written;
-  stats.num_output_files = mtables.metas.size();
-  cfd->internal_stats()->AddCompactionStats(level, stats);
-  cfd->internal_stats()->AddCFStats(InternalStats::BYTES_FLUSHED,
-                                    bytes_written);
-  return s;
-}
-*/
-
-Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
+Status DB::Open(const Options &options,
+                const std::string &dbname,
+                std::vector<ColumnFamilyHandle *> *handles,
+                DB **dbptr)
+{
   DBOptions db_options(options);
   ColumnFamilyOptions cf_options(options);
-  std::vector<ColumnFamilyDescriptor> column_families;
-  column_families.push_back(
-      ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
-  std::vector<ColumnFamilyHandle*> handles;
-  Status s = DB::Open(db_options, dbname, column_families, &handles, dbptr);
-  if (s.ok()) {
-    assert(handles.size() == 1);
-    // i can delete the handle since DBImpl is always holding a reference to
-    // default column family
-//    delete handles[0];
-    MOD_DELETE_OBJECT(ColumnFamilyHandle, handles[0]);
-  }
-  return s;
-}
 
-Status DB::Open(const DBOptions& db_options, const std::string& dbname,
-                const std::vector<ColumnFamilyDescriptor>& column_families,
-                std::vector<ColumnFamilyHandle*>* handles, DB** dbptr) {
-  Status s = SanitizeOptionsByTable(db_options, column_families);
+  Status s = SanitizeOptionsByTable(db_options, cf_options);
   if (!s.ok()) {
     return s;
   }
 
-  s = ValidateOptions(db_options, dbname, column_families);
+  s = ValidateOptions(db_options, cf_options);
   if (!s.ok()) {
     return s;
   }
@@ -1591,13 +1295,6 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
   *dbptr = nullptr;
   handles->clear();
 
-  size_t max_write_buffer_size = 0;
-  for (auto cf : column_families) {
-    max_write_buffer_size =
-        std::max(max_write_buffer_size, cf.options.write_buffer_size);
-  }
-
-//  DBImpl* impl = new DBImpl(db_options, dbname);
   DBImpl *impl = MOD_NEW_OBJECT(ModId::kDBImpl, DBImpl, db_options, dbname);
   s = impl->env_->CreateDirIfMissing(impl->immutable_db_options_.wal_dir);
   if (s.ok()) {
@@ -1610,7 +1307,6 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
   }
 
   if (!s.ok()) {
-//    delete impl;
     MOD_DELETE_OBJECT(DBImpl, impl);
     return s;
   }
@@ -1628,8 +1324,6 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
 
   int64_t ret = Status::kOk;
   char *tmp_buf = nullptr;
-  ColumnFamilyOptions cf_options = column_families.back().options;
-  Options options(db_options, cf_options);
   GlobalContext *gctx = nullptr;
   if (nullptr != cf_options.table_factory) {
     cache::Cache *block_cache =
@@ -1685,22 +1379,18 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
     return s;
   }
 
-  s = impl->CreateArchivalDirectory();
   if (!s.ok()) {
-//    delete impl;
     MOD_DELETE_OBJECT(DBImpl, impl);
     return s;
   }
   impl->mutex_.Lock();
-  // Handles create_if_missing, error_if_exists
-  s = impl->Recover(column_families, cf_options);
+  s = impl->Recover(cf_options);
   if (s.ok()) {
     SubTable* sub_table = nullptr;
     for (auto iter :
          impl->versions_->get_global_ctx()->all_sub_table_->sub_table_map_) {
       handles->push_back(
           MOD_NEW_OBJECT(ModId::kColumnFamilySet, ColumnFamilyHandleImpl, iter.second, impl, &impl->mutex_));
-//          new ColumnFamilyHandleImpl(iter.second, impl, &impl->mutex_));
       sub_table = iter.second;
       impl->NewThreadStatusCfInfo(sub_table);
       // no compaction schedule in recovery
@@ -1708,9 +1398,6 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
           MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion), &impl->mutex_,
           *sub_table->GetLatestMutableCFOptions());
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
-//      delete sub_table->InstallSuperVersion(
-//          new SuperVersion(), &impl->mutex_,
-//          *sub_table->GetLatestMutableCFOptions());
     }
     impl->alive_log_files_.push_back(
         DBImpl::LogFileNumberSize(impl->logfile_number_));
@@ -1764,56 +1451,19 @@ Status DB::Open(const DBOptions& db_options, const std::string& dbname,
     impl->opened_successfully_ = true;
     impl->MaybeScheduleFlushOrCompaction();
     impl->schedule_master_thread();
-//    if (FAILED(impl->init_cache_purge_timer())) {
-//      s = Status(ret);
-//      SE_LOG(WARN, "failed init cache purge timer", K(ret));
-//    }
   }
   impl->mutex_.Unlock();
   assert(impl->versions_->LastSequence() ==
          impl->versions_->LastAllocatedSequence());
 
-#ifndef ROCKSDB_LITE
-  auto sfm = static_cast<SstFileManagerImpl*>(
-      impl->immutable_db_options_.sst_file_manager.get());
-  if (s.ok() && sfm) {
-    // Notify SstFileManager about all sst files that already exist in
-    // db_paths[0] when the DB is opened.
-    auto& db_path = impl->immutable_db_options_.db_paths[0];
-    std::vector<std::string> existing_files;
-    impl->immutable_db_options_.env->GetChildren(db_path.path, &existing_files);
-    for (auto& file_name : existing_files) {
-      uint64_t file_number;
-      FileType file_type;
-      std::string file_path = db_path.path + "/" + file_name;
-      if (ParseFileName(file_name, &file_number, &file_type) &&
-          file_type == kTableFile) {
-        sfm->OnAddFile(file_path);
-      }
-    }
-  }
-#endif  // !ROCKSDB_LITE
-
   if (s.ok()) {
     __SE_LOG(INFO, "DB pointer %p", impl);
-    // LogFlush(impl->immutable_db_options_.info_log);
-    //if (!persist_options_status.ok()) {
-    //  if (db_options.fail_if_options_file_error) {
-    //    s = Status::IOError(
-    //        "DB::Open() failed --- Unable to persist Options file",
-    //        persist_options_status.ToString());
-    //  }
-    //  __SE_LOG(WARN, "Unable to persist options in DB::Open() -- %s",
-    //                persist_options_status.ToString().c_str());
-    //}
   }
   if (!s.ok()) {
     for (auto* h : *handles) {
-//      delete h;
       MOD_DELETE_OBJECT(ColumnFamilyHandle, h);
     }
     handles->clear();
-//    delete impl;
     MOD_DELETE_OBJECT(DBImpl, impl);
     *dbptr = nullptr;
   }

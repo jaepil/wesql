@@ -187,17 +187,6 @@ class Transaction {
   virtual common::Status Get(const common::ReadOptions& options,
                              const common::Slice& key, std::string* value) = 0;
 
-  virtual std::vector<common::Status> MultiGet(
-      const common::ReadOptions& options,
-      const std::vector<db::ColumnFamilyHandle*>& column_family,
-      const std::vector<common::Slice>& keys,
-      std::vector<std::string>* values) = 0;
-
-  virtual std::vector<common::Status> MultiGet(
-      const common::ReadOptions& options,
-      const std::vector<common::Slice>& keys,
-      std::vector<std::string>* values) = 0;
-
   // Read this key and ensure that this transaction will only
   // be able to be committed if this key is not written outside this
   // transaction after it has first been read (or after the snapshot if a

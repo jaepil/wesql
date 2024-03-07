@@ -80,11 +80,11 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc) {
   options1.db_write_buffer_size = 2 * 4096 * 4096;
   options1.dump_memtable_limit_size = 200;
   options1.allow_2pc = true;
-  options1.create_if_missing = true;
   options1.parallel_wal_recovery = true;
 
-  TransactionDB* db;
-  ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
+  TransactionDB* db = nullptr;
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
   common::WriteOptions write_options;
   Transaction* txn = db->BeginTransaction(write_options);
   ASSERT_NE(nullptr, txn);
@@ -139,61 +139,63 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc) {
   ASSERT_OK(txn->Prepare());
   ReadOptions read_options;
   std::string value;
-  ASSERT_OK(db->Get(read_options, "foo00", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(), "foo00", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options, "foo01", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo01", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options, "foo10", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo10", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options, "foo11", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo11", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options, "foo20", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo20", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo21", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo30", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo31", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo40", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo41", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo21", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo30", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo31", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo40", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo41", &value).code());
   delete txn;
   delete db;
   db = nullptr;
-  ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
   ReadOptions read_options1;
-  ASSERT_OK(db->Get(read_options1, "foo00", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo00", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options1, "foo01", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo01", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options1, "foo10", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo10", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options1, "foo11", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo11", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options1, "foo20", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo20", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo21", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo30", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo31", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo40", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo41", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo21", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo30", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo31", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo40", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo41", &value).code());
   delete db;
   db = nullptr;
   SyncPoint::GetInstance()->DisableProcessing();
-  ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
   ReadOptions read_options2;
-  ASSERT_OK(db->Get(read_options2, "foo00", &value));
+  ASSERT_OK(db->Get(read_options2, db->DefaultColumnFamily(),  "foo00", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options2, "foo01", &value));
+  ASSERT_OK(db->Get(read_options2, db->DefaultColumnFamily(),  "foo01", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options2, "foo10", &value));
+  ASSERT_OK(db->Get(read_options2, db->DefaultColumnFamily(),  "foo10", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options2, "foo11", &value));
+  ASSERT_OK(db->Get(read_options2, db->DefaultColumnFamily(),  "foo11", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options2, "foo20", &value));
+  ASSERT_OK(db->Get(read_options2, db->DefaultColumnFamily(),  "foo20", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, "foo21", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, "foo30", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, "foo31", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, "foo40", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, "foo41", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, db->DefaultColumnFamily(),  "foo21", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, db->DefaultColumnFamily(),  "foo30", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, db->DefaultColumnFamily(),  "foo31", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, db->DefaultColumnFamily(),  "foo40", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options2, db->DefaultColumnFamily(),  "foo41", &value).code());
   delete db;
   DestroyDB(dbname, options);
   SyncPoint::GetInstance()->ClearAllCallBacks();
@@ -211,11 +213,11 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc_batch) {
   options1.db_write_buffer_size = 2 * 4096 * 4096;
   options1.dump_memtable_limit_size = 200;
   options1.allow_2pc = true;
-  options1.create_if_missing = true;
   options1.parallel_wal_recovery = true;
 
   TransactionDB *db;
-  ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
 
   port::Mutex mutex(false);
   bool signaled = false;
@@ -265,9 +267,9 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc_batch) {
     std::string key = key_stream.str();
     std::string value;
     if (i % 4 == 0) {
-      ASSERT_EQ(Status::kNotFound, db->Get(read_options, key, &value).code());
+      ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  key, &value).code());
     } else {
-      ASSERT_OK(db->Get(read_options, key, &value));
+      ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  key, &value));
       ASSERT_EQ(key, value);
     }
   }
@@ -287,7 +289,8 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc_batch) {
         }
       });
   SyncPoint::GetInstance()->EnableProcessing();
-  ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
   ReadOptions read_options1;
   for (int i = 0; i < 20; ++i) {
     std::stringstream key_stream;
@@ -295,9 +298,9 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc_batch) {
     std::string key = key_stream.str();
     std::string value;
     if (i % 4 == 0) {
-      ASSERT_EQ(Status::kNotFound, db->Get(read_options1, key, &value).code());
+      ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  key, &value).code());
     } else {
-      ASSERT_OK(db->Get(read_options1, key, &value));
+      ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  key, &value));
       ASSERT_EQ(key, value);
     }
   }
@@ -312,9 +315,9 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc_batch) {
   options2.db_write_buffer_size = 2 * 4096 * 4096;
   options2.dump_memtable_limit_size = 200;
   options2.allow_2pc = true;
-  options2.create_if_missing = true;
   options2.parallel_wal_recovery = false;
-  ASSERT_OK(TransactionDB::Open(options2, TransactionDBOptions(), dbname, &db));
+  ASSERT_OK(test_open_trans_db(options2, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options2, TransactionDBOptions(), dbname, &db));
   ReadOptions read_options2;
   for (int i = 0; i < 20; ++i) {
     std::stringstream key_stream;
@@ -322,9 +325,9 @@ TEST_F(Parallel2PCRecoveryTest, parallel_replay_2pc_batch) {
     std::string key = key_stream.str();
     std::string value;
     if (i % 4 == 0) {
-      ASSERT_EQ(Status::kNotFound, db->Get(read_options2, key, &value).code());
+      ASSERT_EQ(Status::kNotFound, db->Get(read_options2, db->DefaultColumnFamily(),  key, &value).code());
     } else {
-      ASSERT_OK(db->Get(read_options2, key, &value));
+      ASSERT_OK(db->Get(read_options2, db->DefaultColumnFamily(),  key, &value));
       ASSERT_EQ(key, value);
     }
   }
@@ -341,11 +344,11 @@ TEST_F(Parallel2PCRecoveryTest, serial_replay_2pc) {
   DestroyDB(dbname, options);
   Options options1;
   options1.allow_2pc = true;
-  options1.create_if_missing = true;
   options1.parallel_wal_recovery = false;
 
-  TransactionDB* db;
-  ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
+  TransactionDB* db = nullptr;
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
   common::WriteOptions write_options;
   Transaction* txn = db->BeginTransaction(write_options);
   ASSERT_NE(nullptr, txn);
@@ -391,40 +394,41 @@ TEST_F(Parallel2PCRecoveryTest, serial_replay_2pc) {
   ASSERT_NE(nullptr, txn);
   ReadOptions read_options;
   std::string value;
-  ASSERT_OK(db->Get(read_options, "foo00", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo00", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options, "foo01", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo01", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options, "foo10", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo10", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options, "foo11", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo11", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options, "foo20", &value));
+  ASSERT_OK(db->Get(read_options, db->DefaultColumnFamily(),  "foo20", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo21", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo30", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo31", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo40", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options, "foo41", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo21", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo30", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo31", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo40", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options, db->DefaultColumnFamily(),  "foo41", &value).code());
   delete db;
   db = nullptr;
-  ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), dbname, &db));
+  //ASSERT_OK(TransactionDB::Open(options1, TransactionDBOptions(), dbname, &db));
   ReadOptions read_options1;
-  ASSERT_OK(db->Get(read_options1, "foo00", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo00", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options1, "foo01", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo01", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options1, "foo10", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo10", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_OK(db->Get(read_options1, "foo11", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo11", &value));
   ASSERT_EQ(value, "v1");
-  ASSERT_OK(db->Get(read_options1, "foo20", &value));
+  ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(),  "foo20", &value));
   ASSERT_EQ(value, "v0");
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo21", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo30", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo31", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo40", &value).code());
-  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, "foo41", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo21", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo30", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo31", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo40", &value).code());
+  ASSERT_EQ(Status::kNotFound, db->Get(read_options1, db->DefaultColumnFamily(),  "foo41", &value).code());
   delete db;
   DestroyDB(dbname, options);
 }

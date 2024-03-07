@@ -38,7 +38,6 @@ TEST(StorageLoggerBufferTest, assign_and_append)
   int ret = Status::kOk;
   const char *DB_DIR = "./log_test_zds/";
   common::Options options;
-  options.create_if_missing = true;
   //TODO:yuanfeng
   //ret = CreateLoggerFromOptions(DB_DIR, options, &options.info_log).code();
   ASSERT_EQ(common::Status::kOk, ret);

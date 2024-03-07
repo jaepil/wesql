@@ -50,13 +50,6 @@
 typedef SSIZE_T ssize_t;
 #endif
 
-// size_t printf formatting named in the manner of C99 standard formatting
-// strings such as PRIu64
-// in fact, we could use that one
-#ifndef ROCKSDB_PRIszt
-#define ROCKSDB_PRIszt "Iu"
-#endif
-
 #ifdef _MSC_VER
 #define __attribute__(A)
 

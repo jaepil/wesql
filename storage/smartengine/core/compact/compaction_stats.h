@@ -111,9 +111,6 @@ struct CompactPerfStats {
   DECLARE_SERIALIZATION();
   DECLARE_TO_STRING();
 
-  // Following counters are only populated if
-  // options.report_bg_io_stats = true;
-
   int64_t check_intersect_extent;
   int64_t check_intersect_datablock;
 

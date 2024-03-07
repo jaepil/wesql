@@ -36,15 +36,10 @@ struct OptimisticTransactionOptions {
 class OptimisticTransactionDB {
  public:
   // Open an OptimisticTransactionDB similar to DB::Open().
-  static common::Status Open(const common::Options& options,
-                             const std::string& dbname,
-                             OptimisticTransactionDB** dbptr);
-
-  static common::Status Open(
-      const common::DBOptions& db_options, const std::string& dbname,
-      const std::vector<db::ColumnFamilyDescriptor>& column_families,
-      std::vector<db::ColumnFamilyHandle*>* handles,
-      OptimisticTransactionDB** dbptr);
+  static common::Status Open(const common::Options &options,
+                             const std::string &db_name,
+                             std::vector<db::ColumnFamilyHandle *> *handles,
+                             OptimisticTransactionDB **db);
 
   virtual ~OptimisticTransactionDB() {}
 

@@ -40,14 +40,13 @@ using namespace common;
 namespace db {
 
 class TableFactory;
+//TODO(Zhao Dongsheng): This function is inproper.
 // TODO: Overload the following functions so it's not necessary to change all
 //   the occurrences of BuildTable right now. We can remove the original ones
 //   after they are all switched.
 table::TableBuilder* NewTableBuilder(
     const ImmutableCFOptions& ioptions,
     const InternalKeyComparator& internal_comparator,
-    const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-        int_tbl_prop_collector_factories,
     uint32_t column_family_id,
     const std::string& column_family_name,
     MiniTables* mtables,
@@ -57,15 +56,19 @@ table::TableBuilder* NewTableBuilder(
     const std::string* compression_dict,
     const bool skip_filters,
     const bool is_flush) {
-  assert((column_family_id !=
-          TablePropertiesCollectorFactory::Context::kUnknownColumnFamily) /*==
-         column_family_name.empty()*/);
+
   return ioptions.table_factory->NewTableBuilderExt(
-      TableBuilderOptions(ioptions, internal_comparator,
-                          int_tbl_prop_collector_factories, compression_type,
-                          compression_opts, compression_dict, skip_filters,
-                          column_family_name, output_position, is_flush),
-      column_family_id, mtables);
+      TableBuilderOptions(ioptions,
+                          internal_comparator,
+                          compression_type,
+                          compression_opts,
+                          compression_dict,
+                          skip_filters,
+                          column_family_name,
+                          output_position,
+                          is_flush),
+      column_family_id,
+      mtables);
 }
 
 int BuildTable(
@@ -74,24 +77,18 @@ int BuildTable(
     InternalIterator* iter,
     MiniTables* mtables,
     const InternalKeyComparator& internal_comparator,
-    const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-        int_tbl_prop_collector_factories,
     uint32_t column_family_id,
     const std::string& column_family_name,
     std::vector<SequenceNumber> snapshots,
     SequenceNumber earliest_write_conflict_snapshot,
     const CompressionType compression,
     const CompressionOptions& compression_opts,
-    bool paranoid_file_checks,
     InternalStats* internal_stats,
     const LayerPosition &output_layer_position,
     const Env::IOPriority io_priority,
     const std::atomic<int64_t> *cancel_type,
     const bool is_flush) {
   int ret = Status::kOk;
-  // check column_family_name.empty()
-  assert((column_family_id !=
-          TablePropertiesCollectorFactory::Context::kUnknownColumnFamily));
   // Reports the IOStats for flush for every following bytes.
   const size_t kReportFlushIOStatsEvery = 1048576;
   iter->SeekToFirst();
@@ -100,9 +97,17 @@ int BuildTable(
     mtables->io_priority = io_priority;
 
     TableBuilder* builder = NewTableBuilder(
-        ioptions, internal_comparator, int_tbl_prop_collector_factories,
-        column_family_id, column_family_name, mtables, compression,
-        compression_opts, output_layer_position, nullptr, false, is_flush);
+        ioptions,
+        internal_comparator,
+        column_family_id,
+        column_family_name,
+        mtables,
+        compression,
+        compression_opts,
+        output_layer_position,
+        nullptr,
+        false,
+        is_flush);
     storage::ChangeInfo change_info;
     memory::ArenaAllocator arena;
     CompactionIterator comp_iter(iter,

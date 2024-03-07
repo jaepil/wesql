@@ -22,7 +22,6 @@
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
-#include "table/table_properties_internal.h"
 #include "table/table_reader.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
@@ -516,7 +515,6 @@ struct ExtentBasedTable::Rep {
   // existence of
   // another member ("allocation").
   std::unique_ptr<BlockContents, memory::ptr_destruct<BlockContents>> compression_dict_block; // no use?
-  BlockBasedTableOptions::IndexType index_type;
   bool hash_index_allow_collision;
   bool whole_key_filtering;
 

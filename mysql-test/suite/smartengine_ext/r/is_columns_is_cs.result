@@ -386,16 +386,6 @@ def	information_schema	SMARTENGINE_DEBUG_INFO	INFO_6	10		NO	varchar	341	1024	NUL
 def	information_schema	SMARTENGINE_GLOBAL_INFO	TYPE	1		NO	varchar	171	513	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(513)			select			NULL
 def	information_schema	SMARTENGINE_GLOBAL_INFO	NAME	2		NO	varchar	171	513	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(513)			select			NULL
 def	information_schema	SMARTENGINE_GLOBAL_INFO	VALUE	3		NO	varchar	171	513	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(513)			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	SUBTABLE_ID	1		NO	int	NULL	NULL	NULL	NULL	NULL	NULL	NULL	int unsigned			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	INDEX_NUMBER	2		NO	int	NULL	NULL	NULL	NULL	NULL	NULL	NULL	int unsigned			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	SST_NAME	3		NO	varchar	64	193	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(193)			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	NUM_ROWS	4		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint unsigned			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	DATA_SIZE	5		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint unsigned			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_DELETES	6		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint unsigned			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_SINGLEDELETES	7		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_MERGES	8		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint unsigned			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_OTHERS	9		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint unsigned			select			NULL
-def	information_schema	SMARTENGINE_INDEX_FILE_MAP	DISTINCT_KEYS_PREFIX	10		NO	varchar	133	400	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(400)			select			NULL
 def	information_schema	SMARTENGINE_LOCKS	SUBTABLE_ID	1		NO	int	NULL	NULL	NULL	NULL	NULL	NULL	NULL	int unsigned			select			NULL
 def	information_schema	SMARTENGINE_LOCKS	TRANSACTION_ID	2		NO	int	NULL	NULL	NULL	NULL	NULL	NULL	NULL	int unsigned			select			NULL
 def	information_schema	SMARTENGINE_LOCKS	KEY	3		NO	varchar	171	513	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(513)			select			NULL
@@ -641,7 +631,6 @@ COL_CML	DATA_TYPE	CHARACTER_SET_NAME	COLLATION_NAME
 3.0000	set	utf8mb3	utf8mb3_general_ci
 3.0000	varchar	utf8mb3	utf8mb3_general_ci
 3.0029	varchar	utf8mb3	utf8mb3_general_ci
-3.0075	varchar	utf8mb3	utf8mb3_general_ci
 3.0103	varchar	utf8mb3	utf8mb3_general_ci
 3.0118	varchar	utf8mb3	utf8mb3_general_ci
 3.0156	varchar	utf8mb3	utf8mb3_general_ci
@@ -1070,16 +1059,6 @@ NULL	information_schema	SMARTENGINE_DEBUG_INFO	TIMESTAMP	bigint	NULL	NULL	NULL	N
 3.0000	information_schema	SMARTENGINE_GLOBAL_INFO	TYPE	varchar	171	513	utf8mb3	utf8mb3_general_ci	varchar(513)
 3.0000	information_schema	SMARTENGINE_GLOBAL_INFO	NAME	varchar	171	513	utf8mb3	utf8mb3_general_ci	varchar(513)
 3.0000	information_schema	SMARTENGINE_GLOBAL_INFO	VALUE	varchar	171	513	utf8mb3	utf8mb3_general_ci	varchar(513)
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	SUBTABLE_ID	int	NULL	NULL	NULL	NULL	int unsigned
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	INDEX_NUMBER	int	NULL	NULL	NULL	NULL	int unsigned
-3.0156	information_schema	SMARTENGINE_INDEX_FILE_MAP	SST_NAME	varchar	64	193	utf8mb3	utf8mb3_general_ci	varchar(193)
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	NUM_ROWS	bigint	NULL	NULL	NULL	NULL	bigint unsigned
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	DATA_SIZE	bigint	NULL	NULL	NULL	NULL	bigint unsigned
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_DELETES	bigint	NULL	NULL	NULL	NULL	bigint unsigned
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_SINGLEDELETES	bigint	NULL	NULL	NULL	NULL	bigint
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_MERGES	bigint	NULL	NULL	NULL	NULL	bigint unsigned
-NULL	information_schema	SMARTENGINE_INDEX_FILE_MAP	ENTRY_OTHERS	bigint	NULL	NULL	NULL	NULL	bigint unsigned
-3.0075	information_schema	SMARTENGINE_INDEX_FILE_MAP	DISTINCT_KEYS_PREFIX	varchar	133	400	utf8mb3	utf8mb3_general_ci	varchar(400)
 NULL	information_schema	SMARTENGINE_LOCKS	SUBTABLE_ID	int	NULL	NULL	NULL	NULL	int unsigned
 NULL	information_schema	SMARTENGINE_LOCKS	TRANSACTION_ID	int	NULL	NULL	NULL	NULL	int unsigned
 3.0000	information_schema	SMARTENGINE_LOCKS	KEY	varchar	171	513	utf8mb3	utf8mb3_general_ci	varchar(513)

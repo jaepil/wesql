@@ -22,62 +22,30 @@ struct ImmutableDBOptions {
 
   void Dump() const;
 
-  bool create_if_missing;
-  bool create_missing_column_families;
-  bool error_if_exists;
-  bool paranoid_checks;
   util::Env* env;
   std::shared_ptr<util::RateLimiter> rate_limiter;
-  std::shared_ptr<util::SstFileManager> sst_file_manager;
-  util::InfoLogLevel info_log_level;
-  int max_open_files;
-  int max_file_opening_threads;
   std::shared_ptr<monitor::Statistics> statistics;
-  bool use_fsync;
   std::vector<DbPath> db_paths;
-  std::string db_log_dir;
   std::string wal_dir;
   int max_background_flushes;
-  size_t max_log_file_size;
-  size_t log_file_time_to_roll;
-  size_t keep_log_file_num;
-  size_t recycle_log_file_num;
-  uint64_t max_manifest_file_size;
   int table_cache_numshardbits;
-  uint64_t wal_ttl_seconds;
-  uint64_t wal_size_limit_mb;
-  size_t manifest_preallocation_size;
-  bool allow_mmap_reads;
-  bool allow_mmap_writes;
   bool use_direct_reads;
-  bool use_direct_io_for_flush_and_compaction;
-  bool allow_fallocate;
-  bool is_fd_close_on_exec;
-  bool advise_random_on_open;
   size_t db_write_buffer_size;
   size_t db_total_write_buffer_size;
   std::shared_ptr<db::WriteBufferManager> write_buffer_manager;
-  DBOptions::AccessHint access_hint_on_compaction_start;
-  bool new_table_reader_for_compaction_inputs;
-  size_t compaction_readahead_size;
-  size_t random_access_max_buffer_size;
+  //TODO(Zhao Dongsheng), useless?
   size_t writable_file_max_buffer_size;
-  bool use_adaptive_mutex;
   uint64_t bytes_per_sync;
   uint64_t wal_bytes_per_sync;
   bool enable_thread_tracking;
   bool allow_concurrent_memtable_write;
-  bool enable_write_thread_adaptive_yield;
-  uint64_t write_thread_max_yield_usec;
-  uint64_t write_thread_slow_yield_usec;
-  bool skip_stats_update_on_db_open;
   WALRecoveryMode wal_recovery_mode;
   bool enable_aio_wal_reader;
   bool parallel_wal_recovery;
   uint32_t parallel_recovery_thread_num;
   bool allow_2pc;
+  //TODO(Zhao Dongsheng), Putting the member variable "row cache" here is not appropriate.
   std::shared_ptr<cache::RowCache> row_cache;
-  bool fail_if_options_file_error;
   bool avoid_flush_during_recovery;
   uint64_t table_cache_size;
 };
@@ -94,12 +62,9 @@ struct MutableDBOptions {
   int32_t filter_building_threads;
   int32_t filter_queue_stripes;
   bool avoid_flush_during_shutdown;
-  uint64_t delayed_write_rate;
   uint64_t max_total_wal_size;
   uint64_t delete_obsolete_files_period_micros;
   unsigned int stats_dump_period_sec;
-  bool dump_malloc_stats;
-
   uint64_t batch_group_slot_array_size;
   uint64_t batch_group_max_group_size;
   uint64_t batch_group_max_leader_wait_time_us;
@@ -107,8 +72,6 @@ struct MutableDBOptions {
   uint64_t concurrent_writable_file_single_buffer_size;
   uint64_t concurrent_writable_file_buffer_switch_limit;
   bool use_direct_write_for_wal;
-  bool query_trace_enable_count;
-  bool query_trace_print_stats;
   uint64_t mutex_backtrace_threshold_ns;
   int max_background_dumps;
   uint64_t dump_memtable_limit_size; // close incremental checkpoint func when set 0

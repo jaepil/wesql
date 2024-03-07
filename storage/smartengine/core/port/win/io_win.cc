@@ -702,12 +702,11 @@ inline WinRandomAccessImpl::WinRandomAccessImpl(WinFileData* file_base,
                                                 const EnvOptions& options)
     : file_base_(file_base),
       read_ahead_(false),
-      compaction_readahead_size_(options.compaction_readahead_size),
-      random_access_max_buffer_size_(options.random_access_max_buffer_size),
+      compaction_readahead_size_(0),
+      //random_access_max_buffer_size_(options.random_access_max_buffer_size),
+      random_access_max_buffer_size_(1024 * 1024),
       buffer_(),
       buffered_start_(0) {
-  assert(!options.use_mmap_reads);
-
   // Do not allocate the buffer either until the first request or
   // until there is a call to allocate a read-ahead buffer
   buffer_.Alignment(alignment);
@@ -1027,8 +1026,8 @@ WinWritableFile::WinWritableFile(const std::string& fname, HANDLE hFile,
                                  size_t alignment, size_t /* capacity */,
                                  const EnvOptions& options)
     : WinFileData(fname, hFile, options.use_direct_writes),
-      WinWritableImpl(this, alignment) {
-  assert(!options.use_mmap_writes);
+      WinWritableImpl(this, alignment)
+{
 }
 
 WinWritableFile::~WinWritableFile() {}

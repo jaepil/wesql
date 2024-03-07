@@ -95,20 +95,11 @@ struct TestArgs {
     options_->table_factory.reset(NewExtentBasedTableFactory(table_options_));
     options_->disable_auto_compactions = true;
     options_->compression = compression_;
-    options_->create_if_missing = true;
-    options_->fail_if_options_file_error = true;
-    options_->create_missing_column_families = true;
     options_->env = util::Env::Default();
     int db_write_buffer_size = 64 * 1024 * 1024;
     options_->db_write_buffer_size = db_write_buffer_size;
     int write_buffer_size = db_write_buffer_size;
     options_->write_buffer_size = write_buffer_size;
-    // Arena will assert kBlockSize in 4096 to (2u << 30)
-    options_->arena_block_size = 4096 * 2;
-    options_->memtable_huge_page_size = 4096 * 2;
-
-    int file_size = db_write_buffer_size * 1024;
-    options_->target_file_size_base = file_size;
 
     if (options_->db_paths.size() == 0) {
       options_->db_paths.emplace_back(db_path_, std::numeric_limits<uint64_t>::max());
@@ -208,7 +199,6 @@ protected:
   // extent budiler
   storage::ChangeInfo change_info_;
   db::InternalKeyComparator internal_comparator_;
-  std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>> props_;
   std::string compression_dict_;
   storage::ColumnFamilyDesc cf_desc_;
   db::MiniTables mini_tables_;
@@ -235,7 +225,6 @@ void InternalIteratorTestBase::reset()
 {
   env_ = nullptr;
   db_dir_.reset();
-  props_.clear();
   mini_tables_.metas.clear();
   mini_tables_.props.clear();
   //if (mini_tables_.schema == nullptr) {
@@ -295,14 +284,12 @@ void InternalIteratorTestBase::init(const TestArgs &args)
   global_ctx_ = new db::GlobalContext(dbname_, *context_->options_);
   space_manager_ = new storage::ExtentSpaceManager(env_, global_ctx_->env_options_, context_->db_options_);
   write_buffer_manager_ = new db::WriteBufferManager(0);
-  db::WriteController *write_controller = nullptr; // new db::WriteController();
   storage_logger_ = new storage::StorageLogger();
   version_set_ = new db::VersionSet(dbname_,
                                     &context_->idb_options_,
                                     context_->env_options_,
                                     reinterpret_cast<cache::Cache*>(table_cache_.get()),
-                                    write_buffer_manager_,
-                                    write_controller);
+                                    write_buffer_manager_);
   table_cache_.reset(new db::TableCache(context_->icf_options_,
                                         context_->env_options_,
                                         clock_cache_.get(),
@@ -328,14 +315,10 @@ void InternalIteratorTestBase::init(const TestArgs &args)
   uint64_t file_number = 1;
   common::Status s;
   std::string manifest_filename = util::DescriptorFileName(dbname_, file_number);
-//  std::unique_ptr<util::WritableFile> descriptor_file;
   util::WritableFile *descriptor_file = nullptr;
   util::EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(context_->env_options_);
   s = NewWritableFile(env_, manifest_filename, descriptor_file, opt_env_opts);
   assert(s.ok());
-  descriptor_file->SetPreallocationBlockSize(context_->db_options_.manifest_preallocation_size);
-//  unique_ptr<util::ConcurrentDirectFileWriter> file_writer(
-//      new util::ConcurrentDirectFileWriter(descriptor_file, descriptor_file));
   util::ConcurrentDirectFileWriter *file_writer = MOD_NEW_OBJECT(memory::ModId::kDefaultMod,
       util::ConcurrentDirectFileWriter, descriptor_file, opt_env_opts);
   s = file_writer->init_multi_buffer();
@@ -350,16 +333,7 @@ void InternalIteratorTestBase::init(const TestArgs &args)
 
   // storage manager
   db::CreateSubTableArgs subtable_args;
-  //subtable_args.create_paxos_index_ = 1;
   subtable_args.index_id_ = 1;
-  //subtable_args.index_no_ = 1;
-  //subtable_args.wal_log_file_id_ = 1;
-  //memory::ArenaAllocator *allocator = new memory::ArenaAllocator();
-  //db::ColumnFamilyData *sub_table = new db::ColumnFamilyData(global_ctx_->options_);
-  //PartitionKey p_key(1, 1, 0);
-  //sub_table->init(subtable_args, p_key, allocator, global_ctx_);
-  //sub_table->init(subtable_args, global_ctx_);
-  //storage_manager_.reset(new storage::StorageManager(context_->db_options_, ColumnFamilyOptions(*context_->options_), sub_table));
   storage_manager_.reset(new storage::StorageManager(context_->env_options_, context_->icf_options_, context_->mutable_cf_options_));
   storage_manager_->init(env_, space_manager_, clock_cache_.get());
 
@@ -384,7 +358,6 @@ void InternalIteratorTestBase::open_extent_builder()
   storage::LayerPosition output_layer_position(level_, 0);
   extent_builder_.reset(NewTableBuilder(context_->icf_options_,
                                         internal_comparator_,
-                                        &props_,
                                         cf_desc_.column_family_id_,
                                         cf_desc_.column_family_name_,
                                         &mini_tables_,

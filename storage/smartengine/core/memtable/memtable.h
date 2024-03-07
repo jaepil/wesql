@@ -55,8 +55,6 @@ struct MemTableOptions {
   int flush_delete_percent;
   int flush_delete_percent_trigger;
   int flush_delete_record_trigger;
-  size_t arena_block_size;
-  size_t memtable_huge_page_size;
   monitor::Statistics* statistics;
 };
 
@@ -369,8 +367,9 @@ class MemTable {
 
  private:
   enum FlushStateEnum { FLUSH_NOT_REQUESTED, FLUSH_REQUESTED, FLUSH_SCHEDULED };
+  static const int64_t MEMTABLE_ARENA_BLOCK_SIZE = 32 * 1024;
 
-  //TODO: Zhao Dongsheng, remove after prefix_extractor decapreted
+  //TODO(Zhao Dongsheng): friend class should remove
   friend class MemTableIterator;
   friend class MemTableList;
 

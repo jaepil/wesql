@@ -62,13 +62,10 @@ void createSST(MiniTables& mtables,
   unique_ptr<TableBuilder> tb;
 
   opts.table_factory = tf;
-  std::vector<std::unique_ptr<IntTblPropCollectorFactory> >
-      int_tbl_prop_collector_factories;
-  
   std::string column_family_name;
   int unknown_level = -1;
   tb.reset(opts.table_factory->NewTableBuilderExt(
-      TableBuilderOptions(imoptions, ikc, &int_tbl_prop_collector_factories,
+      TableBuilderOptions(imoptions, ikc,
                           CompressionType::kNoCompression, CompressionOptions(),
                           nullptr /* compression_dict */,
                           false /* skip_filters */, column_family_name,

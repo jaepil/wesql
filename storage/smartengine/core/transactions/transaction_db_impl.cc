@@ -78,18 +78,9 @@ TransactionDBImpl::~TransactionDBImpl() {
   cached_txn_ = nullptr;
 }
 
-Status TransactionDBImpl::Initialize(
-    const std::vector<size_t>& compaction_enabled_cf_indices,
-    const std::vector<ColumnFamilyHandle*>& handles) {
-  // Re-enable compaction for the column families that initially had
-  // compaction enabled.
-  std::vector<ColumnFamilyHandle*> compaction_enabled_cf_handles;
-  compaction_enabled_cf_handles.reserve(compaction_enabled_cf_indices.size());
-  for (auto index : compaction_enabled_cf_indices) {
-    compaction_enabled_cf_handles.push_back(handles[index]);
-  }
-
-  Status s = EnableAutoCompaction(compaction_enabled_cf_handles);
+Status TransactionDBImpl::Initialize()
+{
+  Status s;
 
   // create 'real' transactions from recovered shell transactions
   auto dbimpl = reinterpret_cast<DBImpl*>(GetRootDB());
@@ -151,82 +142,30 @@ TransactionDBOptions TransactionDBImpl::ValidateTxnDBOptions(
   return validated;
 }
 
-Status TransactionDB::Open(const Options& options,
-                           const TransactionDBOptions& txn_db_options,
-                           const std::string& dbname, TransactionDB** dbptr) {
-  DBOptions db_options(options);
-  ColumnFamilyOptions cf_options(options);
-  std::vector<ColumnFamilyDescriptor> column_families;
-  column_families.push_back(
-      ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
-  std::vector<ColumnFamilyHandle*> handles;
-  Status s = TransactionDB::Open(db_options, txn_db_options, dbname,
-                                 column_families, &handles, dbptr);
-  if (s.ok()) {
-    assert(handles.size() == 1);
-    // i can delete the handle since DBImpl is always holding a reference to
-    // default column family
-    MOD_DELETE_OBJECT(ColumnFamilyHandle, handles[0]);
+Status TransactionDB::Open(const Options &options,
+                           const TransactionDBOptions &trans_db_options,
+                           const std::string &db_name,
+                           std::vector<ColumnFamilyHandle *> *handles,
+                           TransactionDB **trans_db)
+{
+  int ret = Status::kOk;
+  DB *db_ptr = nullptr;
+  TransactionDBImpl *trans_db_impl = nullptr;
+
+  if (FAILED(DB::Open(options, db_name, handles, &db_ptr).code())) {
+    SE_LOG(WARN, "Fail to open db", K(ret));
+  } else if (IS_NULL(trans_db_impl = new TransactionDBImpl(
+          db_ptr,
+          TransactionDBImpl::ValidateTxnDBOptions(trans_db_options)))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "Fail to allocate memory for TransactionDBImpl", K(ret));
+  } else if (FAILED(trans_db_impl->Initialize().code())) {
+    SE_LOG(WARN, "Fail to initialize TransactionDBImpl", K(ret));
+  } else {
+    *trans_db = trans_db_impl;
   }
 
-  return s;
-}
-
-Status TransactionDB::Open(
-    const DBOptions& db_options, const TransactionDBOptions& txn_db_options,
-    const std::string& dbname,
-    const std::vector<ColumnFamilyDescriptor>& column_families,
-    std::vector<ColumnFamilyHandle*>* handles, TransactionDB** dbptr) {
-  Status s;
-  DB* db;
-
-  std::vector<ColumnFamilyDescriptor> column_families_copy = column_families;
-  std::vector<size_t> compaction_enabled_cf_indices;
-  DBOptions db_options_2pc = db_options;
-  PrepareWrap(&db_options_2pc, &column_families_copy,
-              &compaction_enabled_cf_indices);
-  s = DB::Open(db_options_2pc, dbname, column_families_copy, handles, &db);
-  if (s.ok()) {
-    s = WrapDB(db, txn_db_options, compaction_enabled_cf_indices, *handles,
-               dbptr);
-  }
-  return s;
-}
-
-void TransactionDB::PrepareWrap(
-    DBOptions* db_options, std::vector<ColumnFamilyDescriptor>* column_families,
-    std::vector<size_t>* compaction_enabled_cf_indices) {
-  compaction_enabled_cf_indices->clear();
-
-  // Enable MemTable History if not already enabled
-  for (size_t i = 0; i < column_families->size(); i++) {
-    ColumnFamilyOptions* cf_options = &(*column_families)[i].options;
-/*
-    if (cf_options->max_write_buffer_number_to_maintain == 0) {
-      // Setting to -1 will set the History size to max_write_buffer_number.
-      cf_options->max_write_buffer_number_to_maintain = -1;
-    }
-*/
-    if (!cf_options->disable_auto_compactions) {
-      // Disable compactions momentarily to prevent race with DB::Open
-      cf_options->disable_auto_compactions = true;
-      compaction_enabled_cf_indices->push_back(i);
-    }
-  }
-  db_options->allow_2pc = true;
-}
-
-Status TransactionDB::WrapDB(
-    // make sure this db is already opened with memtable history enabled,
-    // auto compaction distabled and 2 phase commit enabled
-    DB* db, const TransactionDBOptions& txn_db_options,
-    const std::vector<size_t>& compaction_enabled_cf_indices,
-    const std::vector<ColumnFamilyHandle*>& handles, TransactionDB** dbptr) {
-  TransactionDBImpl* txn_db = new TransactionDBImpl(
-      db, TransactionDBImpl::ValidateTxnDBOptions(txn_db_options));
-  *dbptr = txn_db;
-  Status s = txn_db->Initialize(compaction_enabled_cf_indices, handles);
-  return s;
+  return Status(ret);
 }
 
 Status TransactionDB::WrapStackableDB(
@@ -239,7 +178,7 @@ Status TransactionDB::WrapStackableDB(
   TransactionDBImpl* txn_db = new TransactionDBImpl(
       db, TransactionDBImpl::ValidateTxnDBOptions(txn_db_options));
   *dbptr = txn_db;
-  Status s = txn_db->Initialize(compaction_enabled_cf_indices, handles);
+  Status s = txn_db->Initialize();
   return s;
 }
 
@@ -447,12 +386,6 @@ int TransactionDBImpl::do_manual_checkpoint(int32_t &manifest_file_num) {
   return db_impl_->do_manual_checkpoint(manifest_file_num);
 }
 
-int TransactionDBImpl::stream_log_extents(
-                       std::function<int(const char*, int, int64_t, int)> *stream_extent,
-                       int64_t start, int64_t end, int dest_fd) {
-  return db_impl_->stream_log_extents(stream_extent, start, end, dest_fd);
-}
-
 int TransactionDBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
                                               int32_t &last_manifest_file_num,
                                               uint64_t &last_manifest_file_size,
@@ -475,14 +408,6 @@ int TransactionDBImpl::record_incremental_extent_ids(const int32_t first_manifes
   return db_impl_->record_incremental_extent_ids(first_manifest_file_num,
                                                  last_manifest_file_num,
                                                  last_manifest_file_size);
-}
-
-int64_t TransactionDBImpl::get_last_wal_file_size() const {
-  return db_impl_->get_last_wal_file_size();
-}
-
-int64_t TransactionDBImpl::backup_manifest_file_size() const {
-  return db_impl_->backup_manifest_file_size();
 }
 
 TransactionLockMgr::LockStatusData TransactionDBImpl::GetLockStatusData() {

@@ -200,8 +200,6 @@ BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
   BlockBasedTableOptions opt;
   opt.cache_index_and_filter_blocks = rnd->Uniform(2);
   opt.pin_l0_filter_and_index_blocks_in_cache = rnd->Uniform(2);
-  opt.index_type = rnd->Uniform(2) ? BlockBasedTableOptions::kBinarySearch
-                                   : BlockBasedTableOptions::kHashSearch;
   opt.hash_index_allow_collision = rnd->Uniform(2);
   opt.checksum = static_cast<ChecksumType>(rnd->Uniform(3));
   opt.block_size = rnd->Uniform(10000000);
@@ -215,51 +213,26 @@ BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
 
 void RandomInitDBOptions(DBOptions* db_opt, Random* rnd) {
   // boolean options
-  db_opt->advise_random_on_open = rnd->Uniform(2);
-  db_opt->allow_mmap_reads = rnd->Uniform(2);
-  db_opt->allow_mmap_writes = rnd->Uniform(2);
   db_opt->use_direct_reads = rnd->Uniform(2);
-  db_opt->use_direct_io_for_flush_and_compaction = rnd->Uniform(2);
-  db_opt->create_if_missing = rnd->Uniform(2);
-  db_opt->create_missing_column_families = rnd->Uniform(2);
   db_opt->enable_thread_tracking = rnd->Uniform(2);
-  db_opt->error_if_exists = rnd->Uniform(2);
-  db_opt->is_fd_close_on_exec = rnd->Uniform(2);
-  db_opt->paranoid_checks = rnd->Uniform(2);
-  db_opt->skip_log_error_on_recovery = rnd->Uniform(2);
-  db_opt->skip_stats_update_on_db_open = rnd->Uniform(2);
-  db_opt->use_adaptive_mutex = rnd->Uniform(2);
-  db_opt->use_fsync = rnd->Uniform(2);
-  db_opt->recycle_log_file_num = rnd->Uniform(2);
   db_opt->avoid_flush_during_recovery = rnd->Uniform(2);
   db_opt->avoid_flush_during_shutdown = rnd->Uniform(2);
 
   // int options
   db_opt->max_background_compactions = rnd->Uniform(100);
   db_opt->max_background_flushes = rnd->Uniform(100);
-  db_opt->max_file_opening_threads = rnd->Uniform(100);
-  db_opt->max_open_files = rnd->Uniform(100);
   db_opt->table_cache_numshardbits = rnd->Uniform(100);
 
   // size_t options
   db_opt->db_write_buffer_size = rnd->Uniform(10000);
-  db_opt->keep_log_file_num = rnd->Uniform(10000);
-  db_opt->log_file_time_to_roll = rnd->Uniform(10000);
-  db_opt->manifest_preallocation_size = rnd->Uniform(10000);
-  db_opt->max_log_file_size = rnd->Uniform(10000);
 
   // std::string options
-  db_opt->db_log_dir = "path/to/db_log_dir";
   db_opt->wal_dir = "path/to/wal_dir";
 
   // uint64_t options
   static const uint64_t uint_max = static_cast<uint64_t>(UINT_MAX);
-  db_opt->WAL_size_limit_MB = uint_max + rnd->Uniform(100000);
-  db_opt->WAL_ttl_seconds = uint_max + rnd->Uniform(100000);
   db_opt->bytes_per_sync = uint_max + rnd->Uniform(100000);
-  db_opt->delayed_write_rate = uint_max + rnd->Uniform(100000);
   db_opt->delete_obsolete_files_period_micros = uint_max + rnd->Uniform(100000);
-  db_opt->max_manifest_file_size = uint_max + rnd->Uniform(100000);
   db_opt->max_total_wal_size = uint_max + rnd->Uniform(100000);
   db_opt->wal_bytes_per_sync = uint_max + rnd->Uniform(100000);
 
@@ -269,47 +242,24 @@ void RandomInitDBOptions(DBOptions* db_opt, Random* rnd) {
 
 void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
   // boolean options
-  cf_opt->report_bg_io_stats = rnd->Uniform(2);
   cf_opt->disable_auto_compactions = rnd->Uniform(2);
   cf_opt->level_compaction_dynamic_level_bytes = rnd->Uniform(2);
-  cf_opt->optimize_filters_for_hits = rnd->Uniform(2);
-  cf_opt->paranoid_file_checks = rnd->Uniform(2);
-  cf_opt->purge_redundant_kvs_while_flush = rnd->Uniform(2);
-  cf_opt->force_consistency_checks = rnd->Uniform(2);
 
   // double options
-  cf_opt->hard_rate_limit = static_cast<double>(rnd->Uniform(10000)) / 13;
-  cf_opt->soft_rate_limit = static_cast<double>(rnd->Uniform(10000)) / 13;
 
   // int options
   cf_opt->level0_file_num_compaction_trigger = rnd->Uniform(100);
   cf_opt->level0_layer_num_compaction_trigger = rnd->Uniform(100);
   cf_opt->level1_extents_major_compaction_trigger = rnd->Uniform(100);
   cf_opt->level2_usage_percent = rnd->Uniform(100);
-  cf_opt->max_bytes_for_level_multiplier = rnd->Uniform(100);
-  cf_opt->max_write_buffer_number = rnd->Uniform(100);
   cf_opt->max_write_buffer_number_to_maintain = rnd->Uniform(100);
   cf_opt->min_write_buffer_number_to_merge = rnd->Uniform(100);
-  cf_opt->target_file_size_multiplier = rnd->Uniform(100);
 
   // size_t options
-  cf_opt->arena_block_size = rnd->Uniform(10000);
-  cf_opt->memtable_huge_page_size = rnd->Uniform(10000);
   cf_opt->write_buffer_size = rnd->Uniform(10000);
-
-  // uint32_t options
-  cf_opt->bloom_locality = rnd->Uniform(10000);
-  cf_opt->max_bytes_for_level_base = rnd->Uniform(10000);
 
   // uint64_t options
   static const uint64_t uint_max = static_cast<uint64_t>(UINT_MAX);
-  cf_opt->max_sequential_skip_in_iterations = uint_max + rnd->Uniform(10000);
-  cf_opt->target_file_size_base = uint_max + rnd->Uniform(10000);
-  cf_opt->max_compaction_bytes =
-      cf_opt->target_file_size_base * rnd->Uniform(100);
-
-  // unsigned int options
-  cf_opt->rate_limit_delay_max_milliseconds = rnd->Uniform(10000);
 
   // custom typed options
   cf_opt->compression = RandomCompressionType(rnd);

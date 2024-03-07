@@ -65,7 +65,7 @@ int64_t CompactionTasksPicker::get_level1_file_num_compaction_trigger(
   int64_t level1_file_trigger = mcf_options_.level1_extents_major_compaction_trigger;
   if (dynamic_trigger_adjust_) {
     level1_file_trigger = std::min(
-        (l0_num + l1_num + l2_num ) / (mcf_options_.target_file_size_multiplier + 1),
+        (l0_num + l1_num + l2_num ) / (LEVEL_SIZE_FACTOR + 1),
         level1_file_trigger);
     level1_file_trigger = std::max(level1_file_trigger, (int64_t)mcf_options_.level0_file_num_compaction_trigger);
   }
@@ -78,9 +78,8 @@ int64_t CompactionTasksPicker::get_level0_file_num_compaction_trigger(
     const int64_t l2_num) const {
   int64_t level0_file_trigger = mcf_options_.level0_file_num_compaction_trigger;
   if (dynamic_trigger_adjust_) {
-    int64_t multiplier = mcf_options_.target_file_size_multiplier > 0 ? mcf_options_.target_file_size_multiplier : 10;
     level0_file_trigger = std::min(
-        get_level1_file_num_compaction_trigger(l0_num, l1_num, l2_num) / (mcf_options_.target_file_size_multiplier),
+        get_level1_file_num_compaction_trigger(l0_num, l1_num, l2_num) / (LEVEL_SIZE_FACTOR),
         level0_file_trigger);
     level0_file_trigger = std::max(level0_file_trigger, (int64_t)mcf_options_.level0_file_num_compaction_trigger / 5);
   }

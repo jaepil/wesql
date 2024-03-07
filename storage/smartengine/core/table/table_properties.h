@@ -19,6 +19,7 @@ class BlockStats;
 }
 
 namespace table {
+class InternalIterator;
 
 // -- Table Properties
 // Other than basic table properties, each table may also have the user
@@ -69,97 +70,6 @@ enum EntryType {
   kEntryOther,
 };
 
-// `TablePropertiesCollector` provides the mechanism for users to collect
-// their own properties that they are interested in. This class is essentially
-// a collection of callback functions that will be invoked during table
-// building. It is construced with TablePropertiesCollectorFactory. The methods
-// don't need to be thread-safe, as we will create exactly one
-// TablePropertiesCollector object per table and then call it sequentially
-class TablePropertiesCollector {
- public:
-  virtual ~TablePropertiesCollector() {}
-
-  // DEPRECATE User defined collector should implement AddUserKey(), though
-  //           this old function still works for backward compatible reason.
-  // Add() will be called when a new key/value pair is inserted into the table.
-  // @params key    the user key that is inserted into the table.
-  // @params value  the value that is inserted into the table.
-  virtual common::Status Add(const common::Slice& /*key*/,
-                             const common::Slice& /*value*/) {
-    return common::Status::InvalidArgument(
-        "TablePropertiesCollector::Add() deprecated.");
-  }
-
-  // AddUserKey() will be called when a new key/value pair is inserted into the
-  // table.
-  // @params key    the user key that is inserted into the table.
-  // @params value  the value that is inserted into the table.
-  virtual common::Status AddUserKey(const common::Slice& key,
-                                    const common::Slice& value,
-                                    EntryType /*type*/,
-                                    common::SequenceNumber /*seq*/,
-                                    uint64_t /*file_size*/) {
-    // For backwards-compatibility.
-    return Add(key, value);
-  }
-
-  virtual bool SupportAddBlock() const { return false; }
-
-  virtual common::Status AddBlock(const db::BlockStats& block_stats) {
-    return common::Status::OK();
-  }
-
-  // Finish() will be called when a table has already been built and is ready
-  // for writing the properties block.
-  // @params properties  User will add their collected statistics to
-  // `properties`.
-  virtual common::Status Finish(UserCollectedProperties* properties) = 0;
-
-  // Return the human-readable properties, where the key is property name and
-  // the value is the human-readable form of value.
-  virtual UserCollectedProperties GetReadableProperties() const = 0;
-
-  // The name of the properties collector can be used for debugging purpose.
-  virtual const char* Name() const = 0;
-
-  // EXPERIMENTAL Return whether the output file should be further compacted
-  virtual bool NeedCompact() const { return false; }
-
-  // add_extent will be called when add a extent
-  virtual common::Status add_extent(bool add_flag,
-                                    const common::Slice& smallest_key,
-                                    const common::Slice& largest_key,
-                                    int64_t file_size, int64_t num_entries,
-                                    int64_t num_deletes) {
-    return common::Status::OK();
-  }
-
-  virtual common::Status del_extent(const common::Slice& smallest_key,
-                                    const common::Slice& largest_key,
-                                    int64_t file_size, int64_t num_entries,
-                                    int64_t num_deletes) {
-    return common::Status::OK();
-  }
-};
-
-// Constructs TablePropertiesCollector. Internals create a new
-// TablePropertiesCollector for each new table
-class TablePropertiesCollectorFactory {
- public:
-  struct Context {
-    uint32_t column_family_id;
-    static const uint32_t kUnknownColumnFamily;
-  };
-
-  virtual ~TablePropertiesCollectorFactory() {}
-  // has to be thread-safe
-  virtual TablePropertiesCollector* CreateTablePropertiesCollector(
-      TablePropertiesCollectorFactory::Context context) = 0;
-
-  // The name of the properties collector can be used for debugging purpose.
-  virtual const char* Name() const = 0;
-};
-
 // TableProperties contains a bunch of read-only properties of its associated
 // table.
 struct TableProperties {
@@ -186,8 +96,7 @@ struct TableProperties {
   uint64_t fixed_key_len = 0;
   // ID of column family for this SST file, corresponding to the CF identified
   // by column_family_name.
-  uint64_t column_family_id =
-      TablePropertiesCollectorFactory::Context::kUnknownColumnFamily;
+  uint64_t column_family_id = 0;
 
   // Name of the column family with which this SST file is associated.
   // If column family is unknown, `column_family_name` will be an empty string.
@@ -216,10 +125,6 @@ struct TableProperties {
   // The compression algo used to compress the SST files.
   std::string compression_name;
 
-  // user collected properties
-  UserCollectedProperties user_collected_properties;
-  UserCollectedProperties readable_properties;
-
   // The offset of the value of each property in the file.
   std::map<std::string, uint64_t> properties_offsets;
 
@@ -232,16 +137,18 @@ struct TableProperties {
   // TableProperties.
   void Add(const TableProperties& tp);
 };
+
+// Seek to the properties block.
+// If it successfully seeks to the properties block, "is_found" will be
+// set to true.
+common::Status SeekToPropertiesBlock(InternalIterator* meta_iter,
+                                     bool* is_found);
+
+// Seek to the compression dictionary block.
+// If it successfully seeks to the properties block, "is_found" will be
+// set to true.
+common::Status SeekToCompressionDictBlock(InternalIterator* meta_iter,
+                                          bool* is_found);
+
 }  // namespace table
-
-namespace db {
-// Extra properties
-// Below is a list of non-basic properties that are collected by database
-// itself. Especially some properties regarding to the internal keys (which
-// is unknown to `table`).
-extern uint64_t GetDeletedKeys(const table::UserCollectedProperties& props);
-extern uint64_t GetMergeOperands(const table::UserCollectedProperties& props,
-                                 bool* property_present);
-}
-
 }  // namespace smartengine

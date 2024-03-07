@@ -850,143 +850,6 @@ void StorageLogger::TEST_reset() {
 }
 #endif
 
-int StorageLogger::stream_log_extents(
-  std::function<int(const char*, int, int64_t, int)> *stream_extent,
-                         int32_t start_file, int64_t start_pos,
-                         int32_t end_file, int64_t end_pos, int dest_fd)
-{
-  int ret = Status::kOk;
-  Slice record;
-  std::string scrath;
-  log::Reader *reader = nullptr;
-  LogHeader log_header;
-  StorageLoggerBuffer log_buffer;
-  char *log_buf = nullptr;
-  ManifestLogEntryHeader log_entry_header;
-  char *log_data = nullptr;
-  int64_t log_len = 0;
-  std::unordered_set<int64_t> commited_trans_ids;
-  int64_t pos = 0;
-  std::string manifest_name;
-  int64_t log_file_number = 0;
-
-  SE_LOG(INFO, "begin to replay after checkpoint");
-  if (!is_inited_) {
-    ret = Status::kNotInit;
-    SE_LOG(WARN, "StorageLogger should been inited first", K(ret));
-  } else if (FAILED(get_commited_trans(commited_trans_ids))) {
-    SE_LOG(WARN, "fail to get commited trans", K(ret));
-  } else if (FAILED(parse_current_file(manifest_name))) {
-    SE_LOG(WARN, "fail to parse current file", K(ret));
-  } else {
-    std::unordered_map<int32_t, int32_t> fds_map; // all opened fds
-    std::unordered_map<int32_t, int32_t>::iterator fd_iter;
-    int fd = -1;
-    int flags = O_RDONLY;
-    int32_t file_number = -1;
-    std::string fname;
-    log_file_number = log_file_number_;
-    assert(log_file_number >= start_file);
-    manifest_name = DescriptorFileName(db_name_, log_file_number);
-    memory::ArenaAllocator arena(8 * 1024, memory::ModId::kStorageLogger);
-    while (Status::kOk == (env_->FileExists(manifest_name).code())) {
-      SE_LOG(INFO, "replay manifest file", K(log_file_number));
-      if (FAILED(create_log_reader(manifest_name, reader, arena, (log_file_number == start_file ? start_pos : 0)))) {
-        SE_LOG(WARN, "fail to create log reader", K(ret));
-      } else {
-        while (Status::kOk == ret && reader->ReadRecord(&record, &scrath)) {
-          // end file
-          if (log_file_number == end_file && reader->LastRecordOffset() >= static_cast<uint64_t>(end_pos)) {
-            break;
-          }
-          pos = 0;
-          log_buf = const_cast<char *>(record.data());
-          if (FAILED(log_header.deserialize(log_buf, record.size(), pos))) {
-            SE_LOG(WARN, "fail to deserialize log header", K(ret));
-          } else {
-            log_buffer.assign(log_buf + pos, log_header.log_length_);
-            while(Status::kOk == ret &&
-              Status::kOk == (ret = log_buffer.read_log(log_entry_header, log_data, log_len))) {
-              if (commited_trans_ids.end() == commited_trans_ids.find(log_entry_header.trans_id_)) {
-                SE_LOG(WARN, "this log not commited, ignore it", K(ret), K(log_entry_header));
-              } else {
-                if (is_trans_log(log_entry_header.log_entry_type_)) {
-                  //trans log, not need replay
-                  SE_LOG(INFO, "trans log", K(log_entry_header));
-                } else if (is_partition_log(log_entry_header.log_entry_type_)) {
-                  SE_LOG(INFO, "Ignore not extent log\n");
-                } else if (is_extent_log(log_entry_header.log_entry_type_)) {
-                  ModifyExtentMetaLogEntry log_entry;
-                  pos = 0;
-                  if (nullptr == log_data || log_len < 0) {
-                    ret = Status::kInvalidArgument;
-                    SE_LOG(WARN, "invalid argument", K(ret), K(log_len));
-                    break;
-                  } else if ((ret = log_entry.deserialize(log_data, log_len, pos))
-                          != Status::kOk) {
-                    SE_LOG(WARN, "fail to deserialize log entry", K(ret), K(log_len));
-                    break;
-                  } else {
-                    file_number = log_entry.extent_meta_.extent_id_.file_number;
-                    fd_iter = fds_map.find(file_number);
-                    // open the file to stream
-                    if (fd_iter == fds_map.end()) {
-                      fname = MakeTableFileName(db_name_, file_number);
-                      do {
-                        fd = open(fname.c_str(), flags, 0644);
-                      } while (fd < 0 && errno == EINTR);
-                      if (fd < 0) {
-                        SE_LOG(WARN, "Open the sst file to stream failed errno", K(errno));
-                        continue;
-                      }
-                      fds_map[file_number] = fd;
-                      fd_iter = fds_map.find(file_number);
-                    }
-                    assert(fd_iter != fds_map.end());
-                    fname = MakeTableFileName("", file_number);
-                    ret = (*stream_extent)(fname.c_str() + 1 /* remove the begin '/' */ ,
-                    fd_iter->second,
-                    MAX_EXTENT_SIZE * log_entry.extent_meta_.extent_id_.offset, dest_fd);
-                    if (ret != Status::kOk) {
-                      SE_LOG(WARN, "Stream extent for backup failed",
-                              K(file_number), K(log_entry.extent_meta_.extent_id_.offset));
-                      break;
-                    }
-                  }
-                } else {
-                  ret = Status::kNotSupported;
-                  SE_LOG(WARN, "not support log type", K(ret), K(log_entry_header));
-                }
-              }
-            }
-            if (Status::kIterEnd != ret) {
-              SE_LOG(WARN, "fail to read log", K(ret));
-            } else {
-              ret = Status::kOk;
-            }
-          }
-        }
-
-      }
-      destroy_log_reader(reader, &arena);
-      ++log_file_number;
-      if (log_file_number > end_file) {
-        break;
-      }
-      manifest_name = DescriptorFileName(db_name_, log_file_number);
-    }
-    // close the files
-    for (auto &file : fds_map) {
-      close(file.second);
-    }
-    log_file_number_ = log_file_number - 1;
-  }
-
-  SE_LOG(INFO, "success to replay after checkpoint", K_(log_file_number));
-
-  return ret;
-}
-
 int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
 {
   int ret = Status::kOk;
@@ -1082,7 +945,6 @@ int StorageLogger::internal_write_checkpoint()
   std::string checkpoint_path = checkpoint_name(db_name_, checkpoint_file_number);
   char buf[MAX_FILE_PATH_SIZE];
   EnvOptions opt_env_opts = env_options_;
-  opt_env_opts.use_mmap_writes = false;
   opt_env_opts.use_direct_writes = true;
 
   char *header_buffer = nullptr;
@@ -1267,9 +1129,7 @@ int StorageLogger::manifest_file_in_current(std::string &manifest_name)
 int StorageLogger::create_log_writer(int64_t manifest_file_number, db::log::Writer *&writer)
 {
   int ret = Status::kOk;
-//  unique_ptr<WritableFile> manifest_file;
   WritableFile *manifest_file = nullptr;
-//  util::ConcurrentDirectFileWriter *file_writer_tmp = nullptr;
   util::ConcurrentDirectFileWriter *file_writer;
   char *buf = nullptr;
   std::string manifest_log_path = manifest_log_name(manifest_file_number);
@@ -1278,16 +1138,11 @@ int StorageLogger::create_log_writer(int64_t manifest_file_number, db::log::Writ
   if (FAILED(NewWritableFile(env_, manifest_log_path, manifest_file, opt_env_opts).code())) {
     SE_LOG(WARN, "fail ro create writable file", K(ret));
   } else {
-    manifest_file->SetPreallocationBlockSize(db_options_.manifest_preallocation_size);
-    //why use new ? because this memory contol by unique_ptr,and unique_ptr use default delete to destruct and free memory, so use new to match delete
-    //why not define a deletor to unique_ptr? because this unique ptr will move to another object Writer(Writer's param use unique_ptr with default delete), and Reader used many other code
-//    if (nullptr == (file_writer = new util::ConcurrentDirectFileWriter(manifest_file, opt_env_opts))) {
     if (IS_NULL(file_writer = MOD_NEW_OBJECT(memory::ModId::kStorageLogger,
         util::ConcurrentDirectFileWriter, manifest_file, opt_env_opts))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for ConcurrentDirectFileWriter", K(ret));
     } else {
-//      file_writer.reset(file_writer_tmp);
       if (FAILED(file_writer->init_multi_buffer().code())) {
         SE_LOG(WARN, "fail to init multi buffer", K(ret));
       } else if (nullptr == (writer = MOD_NEW_OBJECT(ModId::kStorageLogger,
@@ -1313,7 +1168,6 @@ int StorageLogger::create_log_reader(const std::string &manifest_name,
   char *buf = nullptr;
   util::SequentialFileReader *file_reader = nullptr;
   SequentialFile *manifest_file = nullptr;
-  //std::unique_ptr<SequentialFileReader, memory::ptr_destruct_delete<SequentialFileReader>> manifest_file_reader;
   SequentialFileReader *manifest_file_reader = nullptr;
 
   reader = nullptr;
@@ -1582,7 +1436,6 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
 //      std::unique_ptr<WritableFile> extent_ids_writer;
       WritableFile *extent_ids_writer = nullptr;
       EnvOptions opt_env_opts = env_options_;
-      opt_env_opts.use_mmap_writes = false;
       opt_env_opts.use_direct_writes = false;
       if (FAILED(NewWritableFile(env_, extent_ids_path, extent_ids_writer, opt_env_opts).code())) {
         SE_LOG(WARN, "Failed to create extent ids writer", K(ret), K(extent_ids_path));

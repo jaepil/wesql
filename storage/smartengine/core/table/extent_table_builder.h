@@ -22,8 +22,10 @@
 #include "table/meta_blocks.h"
 #include "table/table_builder.h"
 
-namespace smartengine {
-namespace common {
+namespace smartengine
+{
+namespace common
+{
 class ImmutableCFOptions;
 enum CompressionType;
 class CompressionOptions;
@@ -31,7 +33,8 @@ class Slice;
 class Status;
 }
 
-namespace db {
+namespace db
+{
 class InternalKeyComparator;
 class IntTblPropCollectorFactory;
 struct MiniTables;
@@ -39,11 +42,18 @@ enum ValueType;
 struct BlockStats;
 }
 
-namespace util {
+namespace storage
+{
+struct ExtentMeta;
+}
+
+namespace util
+{
 class WritableBuffer;
 }
 
-namespace table {
+namespace table
+{
 class BlockBasedTableOptions;
 class FlushBlockPolicy;
 class TableProperties;
@@ -64,8 +74,6 @@ class ExtentBasedTableBuilder : public TableBuilder {
       const common::ImmutableCFOptions& ioptions,
       const BlockBasedTableOptions& table_options,
       const db::InternalKeyComparator& internal_comparator,
-      const std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>>*
-          int_tbl_prop_collector_factories,
       uint32_t column_family_id,
       db::MiniTables* mtables,
       const common::CompressionType compression_type,
@@ -86,7 +94,6 @@ class ExtentBasedTableBuilder : public TableBuilder {
                               const common::Slice& value,
                               const common::ImmutableCFOptions &ioption);
   int set_in_cache_flag() override;
-  bool SupportAddBlock() const override;
 
   int AddBlock(const common::Slice& block_contents,
                const common::Slice& block_stats,
@@ -114,8 +121,6 @@ class ExtentBasedTableBuilder : public TableBuilder {
   // Size of the file generated so far.  If invoked after a successful
   // Finish() call, returns the size of the final generated file.
   uint64_t FileSize() const override;
-
-  bool NeedCompact() const override;
 
   // Get table properties
   TableProperties GetTableProperties() const override;
@@ -202,8 +207,6 @@ class ExtentBasedTableBuilder : public TableBuilder {
   const common::ImmutableCFOptions ioptions_;
   const BlockBasedTableOptions table_options_;
   const db::InternalKeyComparator& internal_comparator_;
-  const std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>>*
-      int_tbl_prop_collector_factories_;
   uint32_t column_family_id_;
   db::MiniTables* mtables_;
   const common::CompressionType compression_type_;
@@ -243,9 +246,7 @@ struct ExtentBasedTableBuilder::Rep {
 
   db::FileMetaData meta;
   TableProperties props;
-  std::vector<std::unique_ptr<db::IntTblPropCollector>> table_properties_collectors;
   std::string last_key;
-  bool collectors_support_add_block = true;
   BlockHandle pending_handle;  // Handle to add to index block
 
   storage::WritableExtent extent_;
@@ -257,7 +258,6 @@ struct ExtentBasedTableBuilder::Rep {
   Rep(const common::ImmutableCFOptions& ioptions,
       const BlockBasedTableOptions& table_options,
       const db::InternalKeyComparator& icomparator,
-      const std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>>* int_tbl_prop_collector_factories,
       uint32_t column_family_id,
       util::WritableBuffer* block_buf,
       util::WritableBuffer* index_buf);

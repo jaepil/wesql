@@ -88,17 +88,11 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   opt.table_factory.reset(NewExtentBasedTableFactory(table_options));
   opt.disable_auto_compactions = true;
   opt.compression = args.compression;
-  opt.create_if_missing = true;
-  opt.fail_if_options_file_error = true;
-  opt.create_missing_column_families = true;
   opt.env = Env::Default();
   int db_write_buffer_size = 64 * 1024 * 1024;
   opt.db_write_buffer_size = db_write_buffer_size;
   int write_buffer_size = db_write_buffer_size;
   opt.write_buffer_size = write_buffer_size;
-
-  int file_size = db_write_buffer_size * 1024;
-  opt.target_file_size_base = file_size;
 
   std::string db_path_ = test::TmpDir() + "/parallel_read_test";
   if (opt.db_paths.size() == 0) {
@@ -226,7 +220,6 @@ public:
   ColumnFamilyDesc cf_desc_;
   InternalKeyComparator internal_comparator_;
   std::string compression_dict_;
-  std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>> props_;
 
   std::shared_ptr<Cache> cache_;
   TableCache *table_cache_;
@@ -284,7 +277,6 @@ void ParallelReadTest::init(const TestArgs args) {
   GlobalContext *global_ctx = ALLOC_OBJECT(GlobalContext, alloc_, dbname_, *(const_cast<Options*>(context_->options_)));
 
   WriteBufferManager *write_buffer_manager = ALLOC_OBJECT(WriteBufferManager, alloc_, 0);
-  WriteController *write_controller = ALLOC_OBJECT(WriteController, alloc_);
 
   storage_logger_ = ALLOC_OBJECT(StorageLogger, alloc_);
 
@@ -292,7 +284,7 @@ void ParallelReadTest::init(const TestArgs args) {
  
   table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, context_->env_options_, cache_.get(), space_manager_);
 
-  version_set_ = ALLOC_OBJECT(VersionSet, alloc_, dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager, write_controller);
+  version_set_ = ALLOC_OBJECT(VersionSet, alloc_, dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager);
 
   global_ctx->env_ = env_;
   global_ctx->cache_ = cache_.get();
@@ -317,9 +309,6 @@ void ParallelReadTest::init(const TestArgs args) {
       env_->OptimizeForManifestWrite(context_->env_options_);
   s = NewWritableFile(env_, manifest_filename, descriptor_file, opt_env_opts);
   if (s.ok()) {
-    descriptor_file->SetPreallocationBlockSize(
-        context_->db_options_.manifest_preallocation_size);
-
     util::ConcurrentDirectFileWriter *file_writer =
         MOD_NEW_OBJECT(memory::ModId::kTestMod, util::ConcurrentDirectFileWriter,
                        descriptor_file, opt_env_opts);
@@ -363,7 +352,6 @@ void ParallelReadTest::reset() {
   space_manager_ = nullptr;
 
   db_dir_ = nullptr;
-  props_.clear();
 
   mini_tables_.metas.clear();
   mini_tables_.props.clear();
@@ -413,7 +401,7 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
   mini_tables_.space_manager = space_manager_;
   mini_tables_.table_space_id_ = 0;
   extent_builder_.reset(NewTableBuilder(
-      context_->icf_options_, internal_comparator_, &props_,
+      context_->icf_options_, internal_comparator_,
       cf_desc_.column_family_id_, cf_desc_.column_family_name_, &mini_tables_,
       get_compression_type(context_->icf_options_,
                            context_->mutable_cf_options_,

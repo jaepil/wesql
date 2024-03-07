@@ -15,7 +15,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "db/table_properties_collector.h"
 #include "options/cf_options.h"
 #include "storage/storage_common.h"
 #include "util/file_reader_writer.h"
@@ -67,8 +66,6 @@ struct TableBuilderOptions {
   TableBuilderOptions(
       const common::ImmutableCFOptions& _ioptions,
       const db::InternalKeyComparator& _internal_comparator,
-      const std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>>*
-          _int_tbl_prop_collector_factories,
       common::CompressionType _compression_type,
       const common::CompressionOptions& _compression_opts,
       const std::string* _compression_dict, bool _skip_filters,
@@ -76,7 +73,6 @@ struct TableBuilderOptions {
       bool _is_flush = false)
       : ioptions(_ioptions),
         internal_comparator(_internal_comparator),
-        int_tbl_prop_collector_factories(_int_tbl_prop_collector_factories),
         compression_type(_compression_type),
         compression_opts(_compression_opts),
         compression_dict(_compression_dict),
@@ -86,8 +82,6 @@ struct TableBuilderOptions {
         is_flush(_is_flush) {}
   const common::ImmutableCFOptions& ioptions;
   const db::InternalKeyComparator& internal_comparator;
-  const std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>>*
-      int_tbl_prop_collector_factories;
   common::CompressionType compression_type;
   const common::CompressionOptions& compression_opts;
   // Data for presetting the compression library's dictionary, or nullptr.
@@ -115,7 +109,6 @@ class TableBuilder {
   // REQUIRES: Finish(), Abandon() have not been called
   virtual int Add(const common::Slice& key, const common::Slice& value) = 0;
   virtual int set_in_cache_flag() { return 0; }
-  virtual bool SupportAddBlock() const { return false; }
 
   virtual int AddBlock(const common::Slice& block_content,
                                   const common::Slice& block_stats,

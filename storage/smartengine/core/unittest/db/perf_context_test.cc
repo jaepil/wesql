@@ -58,17 +58,18 @@ uint64_t TestGetThreadCosts(monitor::TracePoint point) {
 }
 
 DB* OpenDb() {
-  DB* db;
+  DB* db = nullptr;
   Options options;
-  options.create_if_missing = true;
-  options.max_open_files = -1;
   options.write_buffer_size = FLAGS_write_buffer_size;
-  options.max_write_buffer_number = FLAGS_max_write_buffer_number;
   options.min_write_buffer_number_to_merge =
       FLAGS_min_write_buffer_number_to_merge;
 
   Status s;
-  s = DB::Open(options, kDbName, &db);
+  std::vector<ColumnFamilyHandle *> handles;
+  s = DB::Open(options, kDbName, &handles, &db);
+  for (auto cf_handle : handles) {
+    MOD_DELETE_OBJECT(ColumnFamilyHandle, cf_handle);
+  }
   EXPECT_OK(s);
   return db;
 }
@@ -276,13 +277,13 @@ TEST_F(PerfContextTest, GetPerfTest) {
   std::string key = "kkkkkkkkkkkkkkkkkkkkkkk";
   std::string value = "vvvvvvvvvvvvvvvvvvvvvvvv";
   std::string get_value;
-  db->Put(write_options, key, value);
-  db->Get(read_options, key, &get_value);
+  db->Put(write_options, db->DefaultColumnFamily(), key, value);
+  db->Get(read_options, db->DefaultColumnFamily(), key, &get_value);
   EXPECT_EQ(value, get_value);
   FlushOptions fo;
   fo.wait = true;
   ASSERT_OK(db->Flush(fo));
-  db->Get(read_options, key, &get_value);
+  db->Get(read_options, db->DefaultColumnFamily(), key, &get_value);
   EXPECT_EQ(value, get_value);
   const char *data = nullptr;
   int64_t size = 0;
@@ -305,7 +306,7 @@ TEST_F(PerfContextTest, ScanPerfTest) {
   for (; i < total_keys; ++i) {
     std::string key = "k" + ToString(i);
     std::string value = "v" + ToString(i);
-    db->Put(write_options, key, value);
+    db->Put(write_options, db->DefaultColumnFamily(), key, value);
   }
 
   FlushOptions fo;
@@ -315,15 +316,15 @@ TEST_F(PerfContextTest, ScanPerfTest) {
   for (; i < total_keys * 2; ++i) {
     std::string key = "k" + ToString(i);
     std::string value = "v" + ToString(i);
-    db->Put(write_options, key, value);
+    db->Put(write_options, db->DefaultColumnFamily(), key, value);
   }
   for (i = 0; i != total_keys * 2; ++i) {
     std::string key = "k" + ToString(i);
     std::string value = "v" + ToString(i);
-    db->Get(read_options, key, &get_value);
+    db->Get(read_options, db->DefaultColumnFamily(), key, &get_value);
     EXPECT_EQ(value, get_value);
   }
-  std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter {db->NewIterator(read_options)};
+  std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter {db->NewIterator(read_options, db->DefaultColumnFamily())};
   i = 0;
   for (iter->SeekToFirst(); iter->Valid(); iter->Next(), ++i);
   const char *data = nullptr;
@@ -343,12 +344,12 @@ TEST_F(PerfContextTest, SeekIntoDeletion) {
     std::string key = "k" + ToString(i);
     std::string value = "v" + ToString(i);
 
-    db->Put(write_options, key, value);
+    db->Put(write_options, db->DefaultColumnFamily(), key, value);
   }
 
   for (int i = 0; i < FLAGS_total_keys - 1; ++i) {
     std::string key = "k" + ToString(i);
-    db->Delete(write_options, key);
+    db->Delete(write_options, db->DefaultColumnFamily(), key);
   }
 
   HistogramImpl hist_get;
@@ -360,7 +361,7 @@ TEST_F(PerfContextTest, SeekIntoDeletion) {
     QUERY_TRACE_RESET();
     StopWatchNano timer(Env::Default());
     timer.Start();
-    auto status = db->Get(read_options, key, &value);
+    auto status = db->Get(read_options, db->DefaultColumnFamily(), key, &value);
     auto elapsed_nanos = timer.ElapsedNanos();
     ASSERT_TRUE(status.IsNotFound());
     hist_get.Add(TestGetThreadCount(CountPoint::USER_KEY_COMPARE));
@@ -375,7 +376,7 @@ TEST_F(PerfContextTest, SeekIntoDeletion) {
 
   {
     HistogramImpl hist_seek_to_first;
-    std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options));
+    std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options, db->DefaultColumnFamily()));
 
     QUERY_TRACE_RESET();
     StopWatchNano timer(Env::Default(), true);
@@ -397,7 +398,7 @@ TEST_F(PerfContextTest, SeekIntoDeletion) {
 
   HistogramImpl hist_seek;
   for (int i = 0; i < FLAGS_total_keys; ++i) {
-    std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options));
+    std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options, db->DefaultColumnFamily()));
     std::string key = "k" + ToString(i);
 
     QUERY_TRACE_RESET();
@@ -513,7 +514,7 @@ TEST_F(PerfContextTest, SeekKeyComparison) {
 
     QUERY_TRACE_RESET();
     timer.Start();
-    db->Put(write_options, key, value);
+    db->Put(write_options, db->DefaultColumnFamily(), key, value);
     auto put_time = timer.ElapsedNanos();
     hist_put_time.Add(put_time);
     uint64_t time = TestGetThreadCosts(TracePoint::TIME_PER_LOG_WRITE);
@@ -535,7 +536,7 @@ TEST_F(PerfContextTest, SeekKeyComparison) {
     std::string key = "k" + ToString(i);
     std::string value = "v" + ToString(i);
 
-    std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options));
+    std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options, db->DefaultColumnFamily()));
     QUERY_TRACE_RESET();
     iter->Seek(key);
     ASSERT_TRUE(iter->Valid());
@@ -543,7 +544,7 @@ TEST_F(PerfContextTest, SeekKeyComparison) {
     hist_seek.Add(TestGetThreadCount(TracePoint::DB_ITER_SEEK));
   }
 
-  std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options));
+  std::unique_ptr<Iterator, memory::ptr_destruct_delete<Iterator>> iter(db->NewIterator(read_options, db->DefaultColumnFamily()));
   for (iter->SeekToFirst(); iter->Valid();) {
     QUERY_TRACE_RESET();
     iter->Next();
@@ -567,7 +568,7 @@ TEST_F(PerfContextTest, DBMutexLockCounter) {
     port::Thread child_thread([&] {
       QUERY_TRACE_RESET();
       ASSERT_EQ(TestGetThreadCosts(TracePoint::WRITE_RUN_IN_MUTEX), 0);
-      db->Put(write_options, "some_key", "some_val");
+      db->Put(write_options, db->DefaultColumnFamily(), "some_key", "some_val");
       // increment the counter only when it's a DB Mutex
       ASSERT_GT(TestGetThreadCosts(TracePoint::WRITE_RUN_IN_MUTEX), 0);
     });

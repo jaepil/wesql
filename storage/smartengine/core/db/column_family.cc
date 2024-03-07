@@ -27,9 +27,7 @@
 #include "db/db_impl.h"
 #include "db/internal_stats.h"
 #include "db/job_context.h"
-#include "db/table_properties_collector.h"
 #include "db/version_set.h"
-#include "db/write_controller.h"
 #include "monitoring/thread_status_util.h"
 #include "options/options_helper.h"
 #include "storage/extent_space_manager.h"
@@ -42,7 +40,7 @@
 #include "util/compression.h"
 #include "util/sync_point.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace monitor;
@@ -51,7 +49,6 @@ using namespace cache;
 using namespace table;
 using namespace storage;
 
-namespace smartengine {
 
 namespace db {
 
@@ -95,22 +92,6 @@ const Comparator* ColumnFamilyHandleImpl::GetComparator() const {
   return cfd()->user_comparator();
 }
 
-void GetIntTblPropCollectorFactory(
-    const ImmutableCFOptions& ioptions,
-    std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-        int_tbl_prop_collector_factories) {
-  auto& collector_factories = ioptions.table_properties_collector_factories;
-  for (size_t i = 0; i < ioptions.table_properties_collector_factories.size();
-       ++i) {
-    assert(collector_factories[i]);
-    int_tbl_prop_collector_factories->emplace_back(
-        new UserKeyTablePropertiesCollectorFactory(collector_factories[i]));
-  }
-  // Add collector to collect internal key statistics
-  int_tbl_prop_collector_factories->emplace_back(
-      new InternalKeyPropertiesCollectorFactory);
-}
-
 Status CheckCompressionSupported(const ColumnFamilyOptions& cf_options) {
   if (!cf_options.compression_per_level.empty()) {
     for (size_t level = 0; level < cf_options.compression_per_level.size();
@@ -148,16 +129,7 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
       sizeof(size_t) == 4, std::integral_constant<size_t, 0xffffffff>,
       std::integral_constant<uint64_t, 64ull << 30>>::type::value;
   ClipToRange(&result.write_buffer_size, ((size_t)64) << 10, clamp_max);
-  // if user sets arena_block_size, we trust user to use this value. Otherwise,
-  // calculate a proper value from writer_buffer_size;
-  if (result.arena_block_size <= 0) {
-    result.arena_block_size = result.write_buffer_size / 8;
 
-    // Align up to 4k
-    const size_t align = 4 * 1024;
-    result.arena_block_size =
-        ((result.arena_block_size + align - 1) / align) * align;
-  }
   if (result.flush_delete_percent <= 0 || result.flush_delete_percent >= 100) {
     result.flush_delete_percent = 100;
   }
@@ -175,22 +147,12 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
     result.flush_delete_record_trigger = (1 << 30);
   }
 
-  result.min_write_buffer_number_to_merge =
-      std::min(result.min_write_buffer_number_to_merge,
-               result.max_write_buffer_number - 1);
   if (result.min_write_buffer_number_to_merge < 1) {
     result.min_write_buffer_number_to_merge = 1;
   }
 
-  if (result.max_write_buffer_number < 2) {
-    result.max_write_buffer_number = 2;
-  }
   if (result.max_write_buffer_number_to_maintain < 0) {
     result.max_write_buffer_number_to_maintain = 0;
-  }
-
-  if (result.max_bytes_for_level_multiplier <= 0) {
-    result.max_bytes_for_level_multiplier = 1;
   }
 
   if (result.level0_file_num_compaction_trigger == 0) {
@@ -201,20 +163,6 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
   if (result.level0_layer_num_compaction_trigger <= 0) {
     __SE_LOG(WARN, "level0_layer_num_compaction_trigger cannot be 0");
     result.level0_layer_num_compaction_trigger = std::numeric_limits<int>::max();
-  }
-
-  if (result.soft_pending_compaction_bytes_limit == 0) {
-    result.soft_pending_compaction_bytes_limit =
-        result.hard_pending_compaction_bytes_limit;
-  } else if (result.hard_pending_compaction_bytes_limit > 0 &&
-             result.soft_pending_compaction_bytes_limit >
-                 result.hard_pending_compaction_bytes_limit) {
-    result.soft_pending_compaction_bytes_limit =
-        result.hard_pending_compaction_bytes_limit;
-  }
-
-  if (result.max_compaction_bytes == 0) {
-    result.max_compaction_bytes = result.target_file_size_base * 25;
   }
 
   return result;
@@ -294,7 +242,6 @@ ColumnFamilyData::ColumnFamilyData(Options &options)
       ioptions_(ImmutableDBOptions(DBOptions(options)), initial_cf_options_),
       env_options_(),
       mutable_cf_options_(initial_cf_options_),
-      is_delete_range_supported_(false),
       write_buffer_manager_(nullptr),
       mem_(nullptr),
       imm_(ioptions_.min_write_buffer_number_to_merge, ioptions_.max_write_buffer_number_to_maintain),
@@ -303,19 +250,16 @@ ColumnFamilyData::ColumnFamilyData(Options &options)
       local_sv_(nullptr),
       next_(nullptr),
       prev_(nullptr),
-      log_number_(0),
       column_family_set_(nullptr),
       pending_flush_(false),
       pending_compaction_(false),
       pending_dump_(false),
       pending_shrink_(false),
       compaction_priority_(CompactionPriority::LOW),
-      prev_compaction_needed_bytes_(0),
       allow_2pc_(options.allow_2pc),
       meta_snapshots_(),
       extent_space_manager_(nullptr),
       storage_manager_(env_options_, ioptions_, mutable_cf_options_),
-      bg_recycled_version_(0),
       imm_largest_seq_(0),
       allocator_(nullptr),
       subtable_structure_mutex_(),
@@ -329,25 +273,6 @@ ColumnFamilyData::ColumnFamilyData(Options &options)
       range_start_(0),
       range_end_(0) {
   Ref();
-  // Convert user defined table properties collector factories to internal ones.
-  GetIntTblPropCollectorFactory(ioptions_, &int_tbl_prop_collector_factories_);
-  /*
-  // if _dummy_versions is nullptr, then this is a dummy column family.
-  if (_dummy_versions != nullptr) {
-    internal_stats_.reset(
-        new InternalStats(ioptions_.num_levels, db_options.env, this));
-    table_cache_.reset(new TableCache(ioptions_, env_options, _table_cache,
-                                      extent_space_manager_));
-
-    if (column_family_set_->NumberOfColumnFamilies() < 10) {
-      __SE_LOG(INFO, "--------------- Options for column family [%s]:",
-                    name.c_str());
-      initial_cf_options_.Dump();
-    } else {
-      __SE_LOG(INFO, "\t(skipping printing options)\n");
-    }
-  }
-  */
 }
 
 int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global_ctx, ColumnFamilySet *column_family_set)
@@ -377,7 +302,6 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
   } else if (FAILED(storage_manager_.init(global_ctx->env_, global_ctx->extent_space_mgr_, global_ctx->cache_))) {
     SE_LOG(WARN, "fail to init storage manager", K(ret));
   } else {
-    //GetIntTblPropCollectorFactory(ioptions_, &int_tbl_prop_collector_factories_);
     sub_table_meta_.index_id_ = args.index_id_;
     sub_table_meta_.table_space_id_ = args.table_space_id_;
     task_picker_.set_cf_id(sub_table_meta_.index_id_);
@@ -485,8 +409,6 @@ ColumnFamilyData::~ColumnFamilyData()
 void ColumnFamilyData::SetDropped() {
   // can't drop default CF
   dropped_ = true;
-  write_controller_token_.reset();
-
   // remove from column_family_set
   column_family_set_->RemoveColumnFamily(this);
   //TODO:yuanfeng adapt to AllSubTableMap
@@ -543,11 +465,6 @@ uint64_t ColumnFamilyData::OldestLogMemToKeep() {
   return min_lognumber;
 }
 
-const double kIncSlowdownRatio = 0.8;
-const double kDecSlowdownRatio = 1 / kIncSlowdownRatio;
-const double kNearStopSlowdownRatio = 0.6;
-const double kDelayRecoverSlowdownRatio = 1.4;
-
 const EnvOptions* ColumnFamilyData::soptions() const {
   //TODO:yuanfeng
   return &(column_family_set_->global_ctx_->env_options_);
@@ -555,9 +472,7 @@ const EnvOptions* ColumnFamilyData::soptions() const {
 
 MemTable* ColumnFamilyData::ConstructNewMemtable(
     const MutableCFOptions& mutable_cf_options, SequenceNumber earliest_seq) {
-//  return new MemTable(internal_comparator_, ioptions_, mutable_cf_options,
-//                      write_buffer_manager_, earliest_seq);
-  // todo maybe use objectpool
+  // TODO(Zhao Dongsheng) maybe use objectpool
   return MOD_NEW_OBJECT(memory::ModId::kMemtable, MemTable, internal_comparator_, ioptions_,
       mutable_cf_options, write_buffer_manager_, earliest_seq);
 }
@@ -565,7 +480,6 @@ MemTable* ColumnFamilyData::ConstructNewMemtable(
 void ColumnFamilyData::CreateNewMemtable(
     const MutableCFOptions& mutable_cf_options, SequenceNumber earliest_seq) {
   if (mem_ != nullptr) {
-//    delete mem_->Unref();
     auto ptr = mem_->Unref();
     MOD_DELETE_OBJECT(MemTable, ptr);
   }
@@ -620,42 +534,6 @@ bool ColumnFamilyData::need_compaction_v1(CompactionTasksPicker::TaskInfo &task_
   compaction_priority_ = compaction_priority;
   return TaskType::MAX_TYPE_TASK != task_info.task_type_;
 }
-
-int64_t ColumnFamilyData::get_level1_extent_num(const Snapshot* snapshot) const {
-  return static_cast<const SnapshotImpl*>(snapshot)->get_extent_layer_version(1)->get_total_normal_extent_count();
-}
-
-// If level_compaction_dynamic_level_bytes is set, we would adjust level 1
-// trigger dynamic between [level0_file_trigger, total_count / (multiplier + 1)];
-// Level0 trigger is too small to adjust.
-int64_t ColumnFamilyData::get_level1_file_num_compaction_trigger(
-    const Snapshot* snapshot) const {
-  int64_t level1_file_trigger =
-    mutable_cf_options_.level1_extents_major_compaction_trigger;
-  if (ioptions_.level_compaction_dynamic_level_bytes &&
-      snapshot != nullptr &&
-      static_cast<const SnapshotImpl*>(snapshot)->get_extent_layer_version(0) != nullptr) {
-    level1_file_trigger = std::min(
-        (snapshot->get_extent_layer_version(0)->get_total_normal_extent_count() +
-         static_cast<const SnapshotImpl*>(snapshot)->get_extent_layer_version(1)->get_total_normal_extent_count() +
-         static_cast<const SnapshotImpl*>(snapshot)->get_extent_layer_version(2)->get_total_normal_extent_count()) /
-        (mutable_cf_options_.target_file_size_multiplier + 1),
-        level1_file_trigger);
-    if (mutable_cf_options_.level1_extents_major_compaction_trigger >
-        mutable_cf_options_.level0_file_num_compaction_trigger) {
-      level1_file_trigger = std::max(level1_file_trigger,
-          (int64_t)mutable_cf_options_.level0_file_num_compaction_trigger);
-    } else {
-      // handle corner case when level1 trigger is smaller than level0 trigger
-      level1_file_trigger = std::max(1,
-              mutable_cf_options_.level1_extents_major_compaction_trigger);
-    }
-  }
-  return level1_file_trigger;
-}
-
-const int ColumnFamilyData::kCompactAllLevels = -1;
-const int ColumnFamilyData::kCompactToBaseLevel = -2;
 
 SuperVersion* ColumnFamilyData::GetReferencedSuperVersion(
     InstrumentedMutex* db_mutex) {

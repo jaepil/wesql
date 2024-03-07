@@ -178,10 +178,8 @@ private:
   int update_current_meta_snapshot(ExtentLayerVersion **new_extent_layer_versions);
   const db::SnapshotImpl *acquire_meta_snapshot_unsafe();
   void release_meta_snapshot_unsafe(const db::SnapshotImpl *meta_snapshot);
-  bool is_filter_skipped(int32_t level)
-  {
-    return (immutable_cfoptions_.optimize_filters_for_hits && (level > 0));
-  }
+  //TODO(Zhao Dongsheng): The filter logic need reconstructure.
+  bool is_filter_skipped(int32_t level) { return level > 0; }
   int recycle_unsafe(bool recovery);
   int recycle_extent_layer_version(ExtentLayerVersion *extent_layer_version, bool for_recovery);
   int recycle_extent_layer(ExtentLayer *extent_layer, bool for_recovery);

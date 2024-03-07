@@ -134,8 +134,6 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   opt.disable_auto_compactions = true;
   opt.compression = args.compression;
   opt.create_if_missing = true;
-  opt.fail_if_options_file_error = true;
-  opt.create_missing_column_families = true;
   opt.env = Env::Default();
   int db_write_buffer_size = 64 * 1024 * 1024;
   opt.db_write_buffer_size = db_write_buffer_size;
@@ -236,9 +234,6 @@ class MinorCompactionTest : public testing::Test {
     s = NewWritableFile(env_, manifest_filename, &descriptor_file,
                         opt_env_opts);
     if (s.ok()) {
-      descriptor_file->SetPreallocationBlockSize(
-          context_->db_options_.manifest_preallocation_size);
-
       unique_ptr<util::ConcurrentDirectFileWriter> file_writer(
           new util::ConcurrentDirectFileWriter(std::move(descriptor_file),
                                                opt_env_opts));

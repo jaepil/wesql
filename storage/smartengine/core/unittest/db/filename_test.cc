@@ -54,23 +54,16 @@ TEST_F(FileNameTest, Parse) {
       {"MANIFEST-7", 7, kDescriptorFile, kAllMode},
       {"METADB-2", 2, kMetaDatabase, kAllMode},
       {"METADB-7", 7, kMetaDatabase, kAllMode},
-      {"LOG", 0, kInfoLogFile, kDefautInfoLogDir},
-      {"LOG.old", 0, kInfoLogFile, kDefautInfoLogDir},
-      {"LOG.old.6688", 6688, kInfoLogFile, kDefautInfoLogDir},
-      {"rocksdb_dir_LOG", 0, kInfoLogFile, kDifferentInfoLogDir},
-      {"rocksdb_dir_LOG.old", 0, kInfoLogFile, kDifferentInfoLogDir},
-      {"rocksdb_dir_LOG.old.6688", 6688, kInfoLogFile, kDifferentInfoLogDir},
       {"18446744073709551615.wal", 18446744073709551615ull, kLogFile, kAllMode},
   };
   for (char mode : {kDifferentInfoLogDir, kDefautInfoLogDir, kNoCheckLogDir}) {
     for (unsigned int i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
-      InfoLogPrefix info_log_prefix(mode != kDefautInfoLogDir, "/rocksdb/dir");
       if (cases[i].mode & mode) {
         std::string f = cases[i].fname;
         if (mode == kNoCheckLogDir) {
           ASSERT_TRUE(ParseFileName(f, &number, &type)) << f;
         } else {
-          ASSERT_TRUE(ParseFileName(f, &number, info_log_prefix.prefix, &type))
+          ASSERT_TRUE(ParseFileName(f, &number, &type))
               << f;
         }
         ASSERT_EQ(cases[i].type, type) << f;
@@ -111,22 +104,6 @@ TEST_F(FileNameTest, Parse) {
     std::string f = errors[i];
     ASSERT_TRUE(!ParseFileName(f, &number, &type)) << f;
   };
-}
-
-TEST_F(FileNameTest, InfoLogFileName) {
-  std::string dbname = ("/data/rocksdb");
-  std::string db_absolute_path;
-  Env::Default()->GetAbsolutePath(dbname, &db_absolute_path);
-
-  ASSERT_EQ("/data/rocksdb/LOG", InfoLogFileName(dbname, db_absolute_path, ""));
-  ASSERT_EQ("/data/rocksdb/LOG.old.666",
-            OldInfoLogFileName(dbname, 666u, db_absolute_path, ""));
-
-  ASSERT_EQ("/data/rocksdb_log/data_rocksdb_LOG",
-            InfoLogFileName(dbname, db_absolute_path, "/data/rocksdb_log"));
-  ASSERT_EQ(
-      "/data/rocksdb_log/data_rocksdb_LOG.old.666",
-      OldInfoLogFileName(dbname, 666u, db_absolute_path, "/data/rocksdb_log"));
 }
 
 TEST_F(FileNameTest, Construction) {

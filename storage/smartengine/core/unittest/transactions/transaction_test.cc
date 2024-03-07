@@ -50,8 +50,6 @@ class TransactionTest : public ::testing::TestWithParam<bool> {
   TransactionDBOptions txn_db_options;
 
   TransactionTest() {
-    options.create_if_missing = true;
-    options.max_write_buffer_number = 2;
     options.write_buffer_size = 4 * 1024;
     options.level0_file_num_compaction_trigger = 2;
     options.merge_operator = MergeOperators::CreateFromStringId("stringappend");

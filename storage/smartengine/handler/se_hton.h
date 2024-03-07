@@ -68,8 +68,6 @@ extern SeSubtableManager cf_manager;
 
 extern SeDdlLogManager ddl_log_manager;
 
-extern std::shared_ptr<SeTablePropertyCollectorFactory> properties_collector_factory;
-
 extern SeSubtableOptions se_cf_options_map;
 
 extern SeDictionaryManager dict_manager;

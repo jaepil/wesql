@@ -169,7 +169,7 @@ int BackupSnapshotImpl::acquire_snapshots(DB *db)
                                  last_manifest_file_src,
                                  last_manifest_file_dest,
                                  last_manifest_file_size_,
-                                 db->GetDBOptions().use_fsync).code())) { // copy last MANIFEST file
+                                 false /**use_fsync*/).code())) { // copy last MANIFEST file
         SE_LOG(WARN, "Failed to copy last manifest file", K(ret));
       } else {
         SE_LOG(INFO, "Success to copy last MANIFEST file and acquire snapshots",

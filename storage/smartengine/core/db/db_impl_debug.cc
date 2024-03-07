@@ -47,10 +47,6 @@ void DBImpl::TEST_GetFilesMetaData(
     std::vector<std::vector<FileMetaData>>* metadata) {
 }
 
-uint64_t DBImpl::TEST_Current_Manifest_FileNo() {
-  return versions_->manifest_file_number();
-}
-
 Status DBImpl::TEST_FlushMemTable(bool wait, ColumnFamilyHandle* cfh) {
   FlushOptions fo;
   fo.wait = wait;
@@ -99,18 +95,6 @@ void DBImpl::TEST_wait_for_filter_build() {
 void DBImpl::TEST_LockMutex() { mutex_.Lock(); }
 
 void DBImpl::TEST_UnlockMutex() { mutex_.Unlock(); }
-
-void* DBImpl::TEST_BeginWrite() {
-  auto w = new WriteThread::Writer();
-  write_thread_.EnterUnbatched(w, &mutex_);
-  return reinterpret_cast<void*>(w);
-}
-
-void DBImpl::TEST_EndWrite(void* w) {
-  auto writer = reinterpret_cast<WriteThread::Writer*>(w);
-  write_thread_.ExitUnbatched(writer);
-  delete writer;
-}
 
 size_t DBImpl::TEST_LogsToFreeSize() {
   InstrumentedMutexLock l(&mutex_);

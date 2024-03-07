@@ -70,8 +70,6 @@ MemTableOptions::MemTableOptions(const ImmutableCFOptions& ioptions,
       flush_delete_percent(mutable_cf_options.flush_delete_percent),
       flush_delete_percent_trigger(mutable_cf_options.flush_delete_percent_trigger),
       flush_delete_record_trigger(mutable_cf_options.flush_delete_record_trigger),
-      arena_block_size(mutable_cf_options.arena_block_size),
-      memtable_huge_page_size(mutable_cf_options.memtable_huge_page_size),
       statistics(ioptions.statistics)
 {}
 
@@ -83,10 +81,8 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
     : comparator_(cmp),
       moptions_(ioptions, mutable_cf_options),
       refs_(0),
-      kArenaBlockSize(OptimizeBlockSize(moptions_.arena_block_size)),
-      arena_(moptions_.arena_block_size,
-             mutable_cf_options.memtable_huge_page_size,
-             memory::ModId::kMemtable),
+      kArenaBlockSize(OptimizeBlockSize(MEMTABLE_ARENA_BLOCK_SIZE)),
+      arena_(MEMTABLE_ARENA_BLOCK_SIZE, 0 /**huge_page_size*/, memory::ModId::kMemtable),
       allocator_(&arena_, write_buffer_manager),
       table_(ioptions.memtable_factory->CreateMemTableRep(comparator_, &allocator_)),
       data_size_(0),
@@ -109,7 +105,8 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       flush_state_(FLUSH_NOT_REQUESTED),
       env_(ioptions.env),
       no_flush_(false),
-      dump_seq_(0) {
+      dump_seq_(0)
+{
   UpdateFlushState();
   // something went wrong if we need to flush before inserting anything
   assert(!ShouldScheduleFlush());

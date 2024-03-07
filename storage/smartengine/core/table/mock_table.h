@@ -19,6 +19,7 @@
 #include "port/port.h"
 #include "table/internal_iterator.h"
 #include "table/table_builder.h"
+#include "table/table_properties.h"
 #include "table/table_reader.h"
 #include "util/kv_map.h"
 #include "util/mutexlock.h"

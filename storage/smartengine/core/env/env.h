@@ -69,23 +69,11 @@ struct EnvOptions {
   // construct from Options
   explicit EnvOptions(const common::DBOptions& options);
 
-  // If true, then use mmap to read data
-  bool use_mmap_reads = false;
-
-  // If true, then use mmap to write data
-  bool use_mmap_writes = true;
-
   // If true, then use O_DIRECT for reading data
   bool use_direct_reads = false;
 
   // If true, then use O_DIRECT for writing data
   bool use_direct_writes = false;
-
-  // If false, fallocate() calls are bypassed
-  bool allow_fallocate = true;
-
-  // If true, set the FD_CLOEXEC on open fd.
-  bool set_fd_cloexec = true;
 
   // Allows OS to incrementally sync files to disk while they are being
   // written, in the background. Issue one request for every bytes_per_sync
@@ -100,12 +88,6 @@ struct EnvOptions {
   // write. By default, we set it to true for MANIFEST writes and false for
   // WAL writes
   bool fallocate_with_keep_size = true;
-
-  // See DBOPtions doc
-  size_t compaction_readahead_size;
-
-  // See DBOPtions doc
-  size_t random_access_max_buffer_size;
 
   // See DBOptions doc
   size_t writable_file_max_buffer_size = 2 * 1024 * 1024;
@@ -190,12 +172,6 @@ class Env {
     common::Status s;
     return s;
   }
-
-  // Reuse an existing file by renaming it and opening it as writable.
-  virtual common::Status ReuseWritableFile(const std::string& fname,
-                                           const std::string& old_fname,
-                                           WritableFile *&result,
-                                           const EnvOptions& options);
 
   // Open `fname` for random read and write, if file dont exist the file
   // will be created.  On success, stores a pointer to the new file in
@@ -398,22 +374,6 @@ class Env {
   // files. Default implementation returns the copy of the same object.
   virtual EnvOptions OptimizeForManifestWrite(
       const EnvOptions& env_options) const;
-
-  // OptimizeForCompactionTableWrite will create a new EnvOptions object that is
-  // a copy
-  // of the EnvOptions in the parameters, but is optimized for writing table
-  // files. Default implementation returns the copy of the same object.
-  virtual EnvOptions OptimizeForCompactionTableWrite(
-      const EnvOptions& env_options,
-      const common::ImmutableDBOptions& db_options) const;
-
-  // OptimizeForCompactionTableWrite will create a new EnvOptions object that is
-  // a copy
-  // of the EnvOptions in the parameters, but is optimized for reading table
-  // files. Default implementation returns the copy of the same object.
-  virtual EnvOptions OptimizeForCompactionTableRead(
-      const EnvOptions& env_options,
-      const common::ImmutableDBOptions& db_options) const;
 
   // Returns the status of all threads that belong to the current Env.
   virtual common::Status GetThreadList(std::vector<ThreadStatus>* thread_list) {
@@ -811,16 +771,6 @@ class Directory {
   virtual common::Status Fsync() = 0;
 };
 
-enum InfoLogLevel : unsigned char {
-  DEBUG_LEVEL = 0,
-  INFO_LEVEL,
-  WARN_LEVEL,
-  ERROR_LEVEL,
-  FATAL_LEVEL,
-  HEADER_LEVEL,
-  NUM_INFO_LOG_LEVELS,
-};
-
 // Identifies a locked file.
 class FileLock {
  public:
@@ -832,63 +782,6 @@ class FileLock {
   FileLock(const FileLock&);
   void operator=(const FileLock&);
 };
-
-#if 0  // GCOV
-extern void LogFlush(const shared_ptr<Logger>& info_log);
-
-extern void Log(const InfoLogLevel log_level,
-                const shared_ptr<Logger>& info_log, const char* format, ...);
-
-extern void log_v2(const InfoLogLevel log_level,
-                   const shared_ptr<Logger>& info_log,
-                   const char *file_name,
-                   const char *function_name,
-                   const int32_t line_num,
-                   const char *format,
-                   ...);
-// a set of log functions with different log levels.
-extern void Header(const shared_ptr<Logger>& info_log, const char* format, ...);
-extern void Debug(const shared_ptr<Logger>& info_log, const char* format, ...);
-extern void Info(const shared_ptr<Logger>& info_log, const char* format, ...);
-extern void Warn(const shared_ptr<Logger>& info_log, const char* format, ...);
-extern void Error(const shared_ptr<Logger>& info_log, const char* format, ...);
-extern void Fatal(const shared_ptr<Logger>& info_log, const char* format, ...);
-
-// Log the specified data to *info_log if info_log is non-nullptr.
-// The default info log level is InfoLogLevel::INFO_LEVEL.
-extern void Log(const shared_ptr<Logger>& info_log, const char* format, ...)
-#if defined(__GNUC__) || defined(__clang__)
-    __attribute__((__format__(__printf__, 2, 3)))
-#endif
-    ;
-
-extern void LogFlush(Logger* info_log);
-
-extern void Log(const InfoLogLevel log_level, Logger* info_log,
-                const char* format, ...);
-
-extern void log_v2(const InfoLogLevel log_level,
-                   Logger *info_log,
-                   const char *file_name,
-                   const char *function_name,
-                   const int32_t line_num,
-                   const char *format,
-                   ...);
-// The default info log level is InfoLogLevel::INFO_LEVEL.
-extern void Log(Logger* info_log, const char* format, ...)
-#if defined(__GNUC__) || defined(__clang__)
-    __attribute__((__format__(__printf__, 2, 3)))
-#endif
-    ;
-
-// a set of log functions with different log levels.
-extern void Header(Logger* info_log, const char* format, ...);
-extern void Debug(Logger* info_log, const char* format, ...);
-extern void Info(Logger* info_log, const char* format, ...);
-extern void Warn(Logger* info_log, const char* format, ...);
-extern void Error(Logger* info_log, const char* format, ...);
-extern void Fatal(Logger* info_log, const char* format, ...);
-#endif  // GCOV
 
 // A utility routine: write "data" to the named file.
 extern common::Status WriteStringToFile(Env* env, const common::Slice& data,
@@ -931,12 +824,6 @@ class EnvWrapper : public Env {
                                     WritableFile *&result,
                                     const EnvOptions& options) override {
     return target_->ReopenWritableFile(fname, result, options);
-  }
-  common::Status ReuseWritableFile(const std::string& fname,
-                                   const std::string& old_fname,
-                                   WritableFile *&r,
-                                   const EnvOptions& options) override {
-    return target_->ReuseWritableFile(fname, old_fname, r, options);
   }
   common::Status NewRandomRWFile(const std::string& fname,
                                  RandomRWFile *&result,

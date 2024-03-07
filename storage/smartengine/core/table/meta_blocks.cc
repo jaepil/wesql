@@ -9,11 +9,9 @@
 #include <map>
 #include <string>
 
-#include "db/table_properties_collector.h"
 #include "table/block.h"
 #include "table/format.h"
 #include "table/internal_iterator.h"
-#include "table/table_properties_internal.h"
 #include "util/coding.h"
 #include "util/serialization.h"
 
@@ -115,63 +113,6 @@ Slice PropertyBlockBuilder::Finish() {
   }
 
   return properties_block_->Finish();
-}
-
-void LogPropertiesCollectionError(const std::string& method,
-                                  const std::string& name) {
-  // AddBlock, Add, Finish
-  // assert(method == "Add" || method == "Finish");
-
-  __SE_LOG(ERROR, "Encountered error when calling TablePropertiesCollector::"
-                       "%s() with collector name: %s",
-                method.c_str(), name.c_str());
-}
-
-bool NotifyCollectTableCollectorsOnAdd(
-    const BlockStats& block_stats, uint64_t file_size,
-    const std::vector<std::unique_ptr<IntTblPropCollector>>& collectors) {
-  bool all_succeeded = true;
-  for (auto& collector : collectors) {
-    Status s = collector->InternalAddBlock(block_stats, file_size);
-    all_succeeded = all_succeeded && s.ok();
-    if (!s.ok()) {
-      LogPropertiesCollectionError("AddBlock" /* method */, collector->Name());
-    }
-  }
-  return all_succeeded;
-}
-
-bool NotifyCollectTableCollectorsOnAdd(
-    const Slice& key, const Slice& value, uint64_t file_size,
-    const std::vector<std::unique_ptr<IntTblPropCollector>>& collectors) {
-  bool all_succeeded = true;
-  for (auto& collector : collectors) {
-    Status s = collector->InternalAdd(key, value, file_size);
-    all_succeeded = all_succeeded && s.ok();
-    if (!s.ok()) {
-      LogPropertiesCollectionError("Add" /* method */, collector->Name());
-    }
-  }
-  return all_succeeded;
-}
-
-bool NotifyCollectTableCollectorsOnFinish(
-    const std::vector<std::unique_ptr<IntTblPropCollector>>& collectors,
-    PropertyBlockBuilder* builder) {
-  bool all_succeeded = true;
-  for (auto& collector : collectors) {
-    UserCollectedProperties user_collected_properties;
-    Status s = collector->Finish(&user_collected_properties);
-
-    all_succeeded = all_succeeded && s.ok();
-    if (!s.ok()) {
-      LogPropertiesCollectionError("Finish" /* method */, collector->Name());
-    } else {
-      builder->Add(user_collected_properties);
-    }
-  }
-
-  return all_succeeded;
 }
 
 Status ReadProperties(const Slice& handle_value, RandomAccessFileReader* file,
@@ -277,8 +218,6 @@ Status ReadProperties(const Slice& handle_value, RandomAccessFileReader* file,
       new_table_properties->compression_name = raw_val.ToString();
     } else {
       // handle user-collected properties
-      new_table_properties->user_collected_properties.insert(
-          {key, raw_val.ToString()});
     }
   }
   if (s.ok()) {

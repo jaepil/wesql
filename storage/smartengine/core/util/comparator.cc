@@ -41,6 +41,8 @@ class BytewiseComparatorImpl : public Comparator {
   }
 
   virtual bool Equal(const Slice& a, const Slice& b) const override {
+    //TODO(Zhao Dongsheng): The naive operator "==" works by comparing memory address.
+    //se_assert(false);
     return a == b;
   }
 

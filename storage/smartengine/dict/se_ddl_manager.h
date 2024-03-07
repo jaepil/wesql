@@ -27,7 +27,6 @@
 #include <vector>
 #include <arpa/inet.h>
 #include "dict/se_index.h"
-#include "dict/se_properties_collector.h"
 #include "util/se_buff.h"
 #include "util/se_utils.h"
 

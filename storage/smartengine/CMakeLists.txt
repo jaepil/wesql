@@ -108,8 +108,8 @@ SET(SE_SOURCES
   dict/se_log_ddl.h
   dict/se_sst_info.cc 
   dict/se_sst_info.h
-  dict/se_properties_collector.cc 
-  dict/se_properties_collector.h
+  dict/se_index_stats.cc 
+  dict/se_index_stats.h
   index/se_index_merge.cc 
   index/se_index_merge.h
   index/se_parallel_ddl_ctx.cc

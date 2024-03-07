@@ -1303,50 +1303,6 @@ private:
   }
 };
 
-// This function can only be called in these conditions:
-// 1) During Recovery()
-// 2) During Write(), in a single-threaded write thread
-// 3) During Write(), in a concurrent context where memtables has been cloned
-// The reason is that it calls memtables->Seek(), which has a stateful cache
-common::Status WriteBatchInternal::InsertInto(
-    const autovector<WriteThread::Writer*>& writers, SequenceNumber sequence,
-    ColumnFamilyMemTables* memtables, FlushScheduler* flush_scheduler,
-    bool ignore_missing_column_families, uint64_t recovery_log_number, DB* db,
-    bool concurrent_memtable_writes) {
-  MemTableInserter inserter(sequence, memtables, flush_scheduler,
-                            ignore_missing_column_families, recovery_log_number,
-                            db, concurrent_memtable_writes);
-  for (size_t i = 0; i < writers.size(); i++) {
-    auto w = writers[i];
-    if (!w->ShouldWriteToMemtable()) {
-      continue;
-    }
-    inserter.set_log_number_ref(w->log_ref);
-    w->status = w->batch->Iterate(&inserter);
-    if (!w->status.ok()) {
-      return w->status;
-    }
-  }
-  return common::Status::OK();
-}
-
-common::Status WriteBatchInternal::InsertInto(
-    WriteThread::Writer* writer, ColumnFamilyMemTables* memtables,
-    FlushScheduler* flush_scheduler, bool ignore_missing_column_families,
-    uint64_t log_number, DB* db, bool concurrent_memtable_writes) {
-  MemTableInserter inserter(WriteBatchInternal::Sequence(writer->batch),
-                            memtables, flush_scheduler,
-                            ignore_missing_column_families, log_number, db,
-                            concurrent_memtable_writes);
-  assert(writer->ShouldWriteToMemtable());
-  inserter.set_log_number_ref(writer->log_ref);
-  common::Status s = writer->batch->Iterate(&inserter);
-  if (concurrent_memtable_writes) {
-    inserter.PostProcess();
-  }
-  return s;
-}
-
 common::Status WriteBatchInternal::InsertInto(
     db::WriteRequest* writer, SequenceNumber sequence,
     ColumnFamilyMemTables* memtables, FlushScheduler* flush_scheduler,

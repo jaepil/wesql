@@ -41,11 +41,6 @@ class MockEnv : public EnvWrapper {
                                          RandomRWFile *&result,
                                          const EnvOptions& options) override;
 
-  virtual common::Status ReuseWritableFile(const std::string& fname,
-                                           const std::string& old_fname,
-                                           WritableFile *&result,
-                                           const EnvOptions& options) override;
-
   virtual common::Status NewWritableFile(
       const std::string& fname, WritableFile *&result,
       const EnvOptions& env_options) override;

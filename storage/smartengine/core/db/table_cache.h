@@ -147,13 +147,16 @@ class TableCache {
 
  private:
   // Build a table reader
-  common::Status GetTableReader(
-      const util::EnvOptions& env_options,
-      const InternalKeyComparator& internal_comparator,
-      const FileDescriptor& fd, bool sequential_mode, size_t readahead,
-      bool record_read_stats, monitor::HistogramImpl* file_read_hist,
-      table::TableReader *&table_reader, bool skip_filters = false,
-      int level = -1, bool prefetch_index_and_filter_in_cache = true);
+  common::Status GetTableReader(const util::EnvOptions& env_options,
+                                const InternalKeyComparator& internal_comparator,
+                                const FileDescriptor& fd,
+                                bool sequential_mode,
+                                bool record_read_stats,
+                                monitor::HistogramImpl* file_read_hist,
+                                table::TableReader *&table_reader,
+                                bool skip_filters = false,
+                                int level = -1,
+                                bool prefetch_index_and_filter_in_cache = true);
 
   const common::ImmutableCFOptions& ioptions_;
   const util::EnvOptions& env_options_;

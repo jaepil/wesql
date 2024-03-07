@@ -72,7 +72,6 @@ Status DBImpl::EnableFileDeletions(bool force) {
     PurgeObsoleteFiles(job_context);
   }
   job_context.Clean();
-  // LogFlush(immutable_db_options_.info_log);
   return Status::OK();
 }
 
@@ -80,82 +79,6 @@ int DBImpl::IsFileDeletionsEnabled() const {
   return disable_delete_obsolete_files_;
 }
 
-Status DBImpl::GetLiveFiles(std::vector<std::string>& ret,
-                            uint64_t* manifest_file_size, bool flush_memtable) {
-  abort();
-  //TODO:yuanfeng
-  /*
-  *manifest_file_size = 0;
-
-  mutex_.Lock();
-
-  if (flush_memtable) {
-    // flush all dirty data to disk.
-    Status status;
-    for (auto cfd : *versions_->GetColumnFamilySet()) {
-      if (cfd->IsDropped()) {
-        continue;
-      }
-      cfd->Ref();
-      mutex_.Unlock();
-      status = FlushMemTable(cfd, FlushOptions());
-      TEST_SYNC_POINT("DBImpl::GetLiveFiles:1");
-      TEST_SYNC_POINT("DBImpl::GetLiveFiles:2");
-      mutex_.Lock();
-      cfd->Unref();
-      if (!status.ok()) {
-        break;
-      }
-    }
-    versions_->GetColumnFamilySet()->FreeDeadColumnFamilies();
-
-    if (!status.ok()) {
-      mutex_.Unlock();
-      __SE_LOG(ERROR, "Cannot Flush data %s\n", status.ToString().c_str());
-      return status;
-    }
-    return Status::kOk;
-  }
-  */
-
-  // Make a set of all of the live *.sst files
-  std::vector<FileDescriptor> live;
-/* now the function seems useless
-  for (auto cfd : *versions_->GetColumnFamilySet()) {
-    if (cfd->IsDropped()) {
-      continue;
-    }
-  }
-*/
-  ret.clear();
-  ret.reserve(live.size() + 3);  // *.sst + CURRENT + MANIFEST + OPTIONS
-
-  // create names of the live files. The names are not absolute
-  // paths, instead they are relative to dbname_;
-  for (auto live_file : live) {
-    ret.push_back(MakeTableFileName("", live_file.GetNumber()));
-  }
-
-  ret.push_back(CurrentFileName(""));
-  ret.push_back(DescriptorFileName("", versions_->manifest_file_number()));
-#if 0
-  uint64_t checkpoint = storage_manager_->current_checkpoint_log_number();
-  if (checkpoint > 0) {
-    ret.push_back(storage_manager_->checkpoint_name("", checkpoint));
-  }
-#endif
-  //ret.push_back(OptionsFileName("", versions_->options_file_number()));
-
-  // find length of manifest file while holding the mutex lock
-  *manifest_file_size = versions_->manifest_file_size();
-
-  mutex_.Unlock();
-  return Status::OK();
-}
-
-Status DBImpl::GetSortedWalFiles(VectorLogPtr& files) {
-  return wal_manager_.GetSortedWalFiles(files);
-}
 }
 }
 

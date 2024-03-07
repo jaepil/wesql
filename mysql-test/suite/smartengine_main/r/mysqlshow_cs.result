@@ -150,7 +150,6 @@ Database: information_schema
 | SMARTENGINE_DDL                       |
 | SMARTENGINE_DEBUG_INFO                |
 | SMARTENGINE_GLOBAL_INFO               |
-| SMARTENGINE_INDEX_FILE_MAP            |
 | SMARTENGINE_LOCKS                     |
 | SMARTENGINE_MEM_ALLOC                 |
 | SMARTENGINE_PERF_CONTEXT              |
@@ -253,7 +252,6 @@ Database: INFORMATION_SCHEMA
 | SMARTENGINE_DDL                       |
 | SMARTENGINE_DEBUG_INFO                |
 | SMARTENGINE_GLOBAL_INFO               |
-| SMARTENGINE_INDEX_FILE_MAP            |
 | SMARTENGINE_LOCKS                     |
 | SMARTENGINE_MEM_ALLOC                 |
 | SMARTENGINE_PERF_CONTEXT              |

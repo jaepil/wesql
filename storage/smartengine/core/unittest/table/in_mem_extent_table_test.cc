@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "db/table_properties_collector.h"
 #include "db/version_set.h"
 #include "options/cf_options.h"
 #include "storage/extent_space_manager.h"
@@ -88,8 +87,6 @@ TEST(InMemExtent, sim) {
   MiniTables mtables;
   mtables.change_info_ = &change_info;
   unique_ptr<TableBuilder> builder;
-  std::vector<std::unique_ptr<IntTblPropCollectorFactory>>
-      int_tbl_prop_collector_factories;
   std::string column_family_name;
   storage::LayerPosition output_layer_position;
   BlockBasedTableOptions table_options;
@@ -110,7 +107,7 @@ TEST(InMemExtent, sim) {
   StorageLogger *storage_logger = new StorageLogger();
   ImmutableDBOptions doption;
   VersionSet *vs = nullptr;
-  vs = new VersionSet(dbname, &doption, soptions, nullptr, nullptr, nullptr);
+  vs = new VersionSet(dbname, &doption, soptions, nullptr, nullptr);
 
   storage_logger->init(env, dbname, soptions, doption, vs, space_manager.get(), 1 * 1024 * 1024 * 1024);
   space_manager->init(storage_logger);
@@ -122,11 +119,11 @@ TEST(InMemExtent, sim) {
   storage_logger->begin(storage::SeEvent::FLUSH);
   builder.reset(ioptions.table_factory->NewTableBuilderExt(
       TableBuilderOptions(
-          ioptions, internal_comparator, &int_tbl_prop_collector_factories,
+          ioptions, internal_comparator,
           options.compression, CompressionOptions(),
           nullptr /* compression_dict */, false /* skip_filters */,
           column_family_name, output_layer_position),
-      TablePropertiesCollectorFactory::Context::kUnknownColumnFamily,
+      0,
       &mtables));
 
   // create an table/extent with one record

@@ -30,54 +30,20 @@ Transaction* OptimisticTransactionDBImpl::BeginTransaction(
   }
 }
 
-Status OptimisticTransactionDB::Open(const Options& options,
-                                     const std::string& dbname,
-                                     OptimisticTransactionDB** dbptr) {
-  DBOptions db_options(options);
-  ColumnFamilyOptions cf_options(options);
-  std::vector<ColumnFamilyDescriptor> column_families;
-  column_families.push_back(
-      ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
-  std::vector<ColumnFamilyHandle*> handles;
-  Status s = Open(db_options, dbname, column_families, &handles, dbptr);
-  if (s.ok()) {
-    assert(handles.size() == 1);
-    // i can delete the handle since DBImpl is always holding a reference to
-    // default column family
-    delete handles[0];
+Status OptimisticTransactionDB::Open(const Options &options,
+                                     const std::string &db_name,
+                                     std::vector<ColumnFamilyHandle *> *handles,
+                                     OptimisticTransactionDB **db)
+{
+  Status status;
+  DB *db_ptr = nullptr;
+
+  status = DB::Open(options, db_name, handles, &db_ptr);
+  if (status.ok()) {
+    *db = new OptimisticTransactionDBImpl(db_ptr);
   }
 
-  return s;
-}
-
-Status OptimisticTransactionDB::Open(
-    const DBOptions& db_options, const std::string& dbname,
-    const std::vector<ColumnFamilyDescriptor>& column_families,
-    std::vector<ColumnFamilyHandle*>* handles,
-    OptimisticTransactionDB** dbptr) {
-  Status s;
-  DB* db;
-
-  std::vector<ColumnFamilyDescriptor> column_families_copy = column_families;
-
-  // Enable MemTable History if not already enabled
-  for (auto& column_family : column_families_copy) {
-    ColumnFamilyOptions* options = &column_family.options;
-/*
-    if (options->max_write_buffer_number_to_maintain == 0) {
-      // Setting to -1 will set the History size to max_write_buffer_number.
-      options->max_write_buffer_number_to_maintain = -1;
-    }
-*/
-  }
-
-  s = DB::Open(db_options, dbname, column_families_copy, handles, &db);
-
-  if (s.ok()) {
-    *dbptr = new OptimisticTransactionDBImpl(db);
-  }
-
-  return s;
+  return status;
 }
 
 void OptimisticTransactionDBImpl::ReinitializeTransaction(

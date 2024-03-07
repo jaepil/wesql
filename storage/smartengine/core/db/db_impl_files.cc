@@ -15,14 +15,12 @@
 #endif
 #include <inttypes.h>
 #include "util/file_util.h"
-#include "util/sst_file_manager_impl.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace monitor;
 
-namespace smartengine {
 namespace db {
 uint64_t DBImpl::FindMinPrepLogReferencedByMemTable() {
   if (!allow_2pc()) {
@@ -241,32 +239,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
     }
   }
 
-  // don't delete files that might be currently written to from compaction
-  // threads
-  // Since job_context->min_pending_output is set, until file scan finishes,
-  // mutex_ cannot be released. Otherwise, we might see no min_pending_output
-  // here but later find newer generated unfinalized files while scannint.
-  if (!pending_outputs_.empty()) {
-    job_context->min_pending_output = *pending_outputs_.begin();
-  } else {
-    // delete all of them
-    job_context->min_pending_output = std::numeric_limits<uint64_t>::max();
-  }
-
-  // Get obsolete files.  This function will also update the list of
-  // pending files in VersionSet().
-  versions_->GetObsoleteFiles(&job_context->sst_delete_files,
-                              &job_context->manifest_delete_files,
-                              job_context->min_pending_output);
-
-  // store the current filenum, lognum, etc
-  //job_context->manifest_file_number = versions_->purge_manifest_file_number();
-  //job_context->pending_manifest_file_number =
-  //    versions_->pending_manifest_file_number();
   job_context->log_number = MinLogNumberToKeep();
-
-  //job_context->prev_log_number = versions_->prev_log_number();
-  //job_context->checkpoint_file_number_ = versions_->purge_checkpoint_file_number(); 
 
   if (doing_the_full_scan) {
     for (size_t path_id = 0; path_id < immutable_db_options_.db_paths.size();
@@ -292,16 +265,6 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
         job_context->full_scan_candidate_files.emplace_back(log_file, 0);
       }
     }
-    // Add info log files in db_log_dir
-    if (!immutable_db_options_.db_log_dir.empty() &&
-        immutable_db_options_.db_log_dir != dbname_) {
-      std::vector<std::string> info_log_files;
-      // Ignore errors
-      env_->GetChildren(immutable_db_options_.db_log_dir, &info_log_files);
-      for (std::string log_file : info_log_files) {
-        job_context->full_scan_candidate_files.emplace_back(log_file, 0);
-      }
-    }
   }
 
   // logs_ is empty when called during recovery, in which case there can't yet
@@ -312,13 +275,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
     // find newly obsoleted log files
     while (!alive_log_files_.empty() && alive_log_files_.begin()->number < min_log_number) {
       auto& earliest = *alive_log_files_.begin();
-      if (immutable_db_options_.recycle_log_file_num >
-          log_recycle_files.size()) {
-        __SE_LOG(INFO, "adding log %" PRIu64 " to recycle list\n", earliest.number);
-        log_recycle_files.push_back(earliest.number);
-      } else {
-        job_context->log_delete_files.push_back(earliest.number);
-      }
+      job_context->log_delete_files.push_back(earliest.number);
       if (job_context->size_log_to_delete == 0) {
         job_context->prev_total_log_size = total_log_size_;
         job_context->num_alive_log_files = num_alive_log_files;
@@ -347,8 +304,6 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   // We're just cleaning up for DB::Write().
   assert(job_context->logs_to_free.empty());
   job_context->logs_to_free = logs_to_free_;
-  job_context->log_recycle_files.assign(log_recycle_files.begin(),
-                                        log_recycle_files.end());
   logs_to_free_.clear();
 }
 
@@ -389,45 +344,15 @@ void DBImpl::DeleteObsoleteFileImpl(Status file_deletion_status, int job_id,
 void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
   // we'd better have sth to delete
   assert(state.HaveSomethingToDelete());
-
-  //manifest file not managed by there now
-
-  // this checks if FindObsoleteFiles() was run before. If not, don't do
-  // PurgeObsoleteFiles(). If FindObsoleteFiles() was run, we need to also
-  // run PurgeObsoleteFiles(), even if disable_delete_obsolete_files_ is true
-//  if (state.manifest_file_number == 0) {
-//    return;
-//  }
-
-  // Now, convert live list to an unordered map, WITHOUT mutex held;
-  // set is slow.
-  std::unordered_map<uint64_t, const FileDescriptor*> sst_live_map;
-  for (const FileDescriptor& fd : state.sst_live) {
-    sst_live_map[fd.GetNumber()] = &fd;
-  }
-  std::unordered_set<uint64_t> log_recycle_files_set(
-      state.log_recycle_files.begin(), state.log_recycle_files.end());
-
   auto candidate_files = state.full_scan_candidate_files;
-  candidate_files.reserve(
-      candidate_files.size() + state.sst_delete_files.size() +
-      state.log_delete_files.size() + state.manifest_delete_files.size());
+  candidate_files.reserve(candidate_files.size() + state.log_delete_files.size());
   // We may ignore the dbname when generating the file names.
   const char* kDumbDbName = "";
-  for (auto file : state.sst_delete_files) {
-    candidate_files.emplace_back(
-        MakeTableFileName(kDumbDbName, file->fd.GetNumber()),
-        file->fd.GetPathId());
-    delete file;
-  }
 
   for (auto file_num : state.log_delete_files) {
     if (file_num > 0) {
       candidate_files.emplace_back(LogFileName(kDumbDbName, file_num), 0);
     }
-  }
-  for (const auto& filename : state.manifest_delete_files) {
-    candidate_files.emplace_back(filename, 0);
   }
 
   // dedup state.candidate_files so we don't try to delete the same
@@ -440,31 +365,25 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
 
   if (state.prev_total_log_size > 0) {
     __SE_LOG(INFO,"[JOB %d] Try to delete WAL files size %" PRIu64 ", prev total WAL file size %" PRIu64
-        ", number of live WAL files %" ROCKSDB_PRIszt ".\n",
+        ", number of live WAL files %ld.\n",
         state.job_id, state.size_log_to_delete,
         state.prev_total_log_size, state.num_alive_log_files);
   }
 
-  std::vector<std::string> old_info_log_files;
-  InfoLogPrefix info_log_prefix(!immutable_db_options_.db_log_dir.empty(),
-                                dbname_);
   for (const auto& candidate_file : candidate_files) {
     std::string to_delete = candidate_file.file_name;
     uint32_t path_id = candidate_file.path_id;
     uint64_t number;
     FileType type;
     // Ignore file if we cannot recognize it.
-    if (!ParseFileName(to_delete, &number, info_log_prefix.prefix, &type)) {
+    if (!ParseFileName(to_delete, &number, &type)) {
       continue;
     }
 
     bool keep = true;
     switch (type) {
       case kLogFile:
-        keep = ((number >= state.log_number) ||
-                (number == state.prev_log_number) ||
-                (log_recycle_files_set.find(number) !=
-                 log_recycle_files_set.end()));
+        keep = ((number >= state.log_number) || (number == state.prev_log_number));
         break;
       case kDescriptorFile:
         // Keep my manifest file, and any newer incarnations'
@@ -473,7 +392,6 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
         keep = true; // for problem check
         break;
       case kCheckpointFile:
-        //keep = (number >= state.checkpoint_file_number_);
         keep = true; // for problem check
         break;
       case kTempFile:
@@ -485,15 +403,7 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
         //
         // TODO(yhchiang): carefully modify the third condition to safely
         //                 remove the temp options files.
-        keep = (sst_live_map.find(number) != sst_live_map.end()) ||
-               (number == state.pending_manifest_file_number) ||
-               (to_delete.find(kOptionsFileNamePrefix) != std::string::npos);
-        break;
-      case kInfoLogFile:
-        keep = true;
-        if (number != 0) {
-          old_info_log_files.push_back(to_delete);
-        }
+        keep = (to_delete.find(kOptionsFileNamePrefix) != std::string::npos);
         break;
       case kCurrentFile:
       case kDBLockFile:
@@ -505,6 +415,8 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
       case kCurrentCheckpointFile:
         keep = true;
         break;
+      default:
+        SE_LOG(WARN, "invalid file type", K(to_delete));
     }
 
     if (keep) {
@@ -521,14 +433,6 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
               "/" + to_delete;
     }
 
-#ifndef ROCKSDB_LITE
-    if (type == kLogFile && (immutable_db_options_.wal_ttl_seconds > 0 ||
-                             immutable_db_options_.wal_size_limit_mb > 0)) {
-      wal_manager_.ArchiveWALFile(fname, number);
-      continue;
-    }
-#endif  // !ROCKSDB_LITE
-
     Status file_deletion_status;
     if (schedule_only) {
       InstrumentedMutexLock guard_lock(&mutex_);
@@ -539,37 +443,9 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
     }
   }
 
-  // Delete old info log files.
-  size_t old_info_log_file_count = old_info_log_files.size();
-  if (old_info_log_file_count != 0 &&
-      old_info_log_file_count >= immutable_db_options_.keep_log_file_num) {
-    std::sort(old_info_log_files.begin(), old_info_log_files.end());
-    size_t end =
-        old_info_log_file_count - immutable_db_options_.keep_log_file_num;
-    for (unsigned int i = 0; i <= end; i++) {
-      std::string& to_delete = old_info_log_files.at(i);
-      std::string full_path_to_delete =
-          (immutable_db_options_.db_log_dir.empty()
-               ? dbname_
-               : immutable_db_options_.db_log_dir) +
-          "/" + to_delete;
-      __SE_LOG(INFO, "[JOB %d] Delete info log file %s\n", state.job_id, full_path_to_delete.c_str());
-      Status s = env_->DeleteFile(full_path_to_delete);
-      if (!s.ok()) {
-        if (env_->FileExists(full_path_to_delete).IsNotFound()) {
-          __SE_LOG(INFO, "[JOB %d] Tried to delete non-existing info log file %s FAILED " "-- %s\n",
-              state.job_id, to_delete.c_str(), s.ToString().c_str());
-        } else {
-          __SE_LOG(ERROR, "[JOB %d] Delete info log file %s FAILED -- %s\n",
-              state.job_id, to_delete.c_str(), s.ToString().c_str());
-        }
-      }
-    }
-  }
 #ifndef ROCKSDB_LITE
   wal_manager_.PurgeObsoleteWALFiles();
 #endif  // ROCKSDB_LITE
-  // LogFlush(immutable_db_options_.info_log);
 }
 
 void DBImpl::DeleteObsoleteFiles() {

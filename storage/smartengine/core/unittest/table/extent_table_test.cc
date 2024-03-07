@@ -357,12 +357,8 @@ class ExtentTableConstructor : public Constructor {
 
     unique_ptr<TableBuilder> builder;
 
-    std::vector<std::unique_ptr<IntTblPropCollectorFactory>>
-        int_tbl_prop_collector_factories;
-
     builder.reset(ioptions.table_factory->NewTableBuilderExt(
         TableBuilderOptions(ioptions, internal_comparator,
-                            &int_tbl_prop_collector_factories,
                             options.compression, CompressionOptions(),
                             nullptr /* compression_dict */,
                             false /* skip_filters */, cf_name_, -1),
@@ -397,13 +393,11 @@ class ExtentTableConstructor : public Constructor {
     Reset();
     soptions_.use_mmap_reads = ioptions.allow_mmap_reads;
     unique_ptr<TableBuilder> builder;
-    std::vector<std::unique_ptr<IntTblPropCollectorFactory>>
-        int_tbl_prop_collector_factories;
     std::string column_family_name;
     int unknown_level = -1;
     builder.reset(ioptions.table_factory->NewTableBuilderExt(
         TableBuilderOptions(
-            ioptions, internal_comparator, &int_tbl_prop_collector_factories,
+            ioptions, internal_comparator,
             options.compression, CompressionOptions(),
             nullptr /* compression_dict */, false /* skip_filters */,
             column_family_name, unknown_level),
@@ -641,7 +635,6 @@ class DBConstructor : public Constructor {
     Status status = DestroyDB(name, options);
     ASSERT_TRUE(status.ok()) << status.ToString();
 
-    options.create_if_missing = true;
     options.error_if_exists = true;
     options.write_buffer_size = 10000;  // Something small to force merging
     status = DB::Open(options, name, &db_);
@@ -2071,7 +2064,6 @@ class BlockCachePropertiesSnapshot {
 // use block cache to store them).
 TEST_F(BlockBasedTableTest, BlockCacheDisabledTest) {
   Options options;
-  options.create_if_missing = true;
   options.statistics = CreateDBStatistics();
   BlockBasedTableOptions table_options;
   table_options.block_cache = NewLRUCache(1024, 4);
@@ -2612,7 +2604,6 @@ TEST_F(PrefixTest, PrefixAndWholeKeyTest) {
   rocksdb::Options options;
   options.compaction_style = rocksdb::kCompactionStyleUniversal;
   options.num_levels = 20;
-  options.create_if_missing = true;
   options.optimize_filters_for_hits = false;
   options.target_file_size_base = 268435456;
   options.prefix_extractor = std::make_shared<TestPrefixExtractor>();

@@ -565,35 +565,12 @@ int SSTDumpTool::Run(int argc, char** argv) {
                   "------------------------------\n"
                   "  %s",
                   table_properties->ToString("\n  ", ": ").c_str());
-          fprintf(stdout, "# deleted keys: %" PRIu64 "\n",
-                  GetDeletedKeys(table_properties->user_collected_properties));
-
-          bool property_present;
-          uint64_t merge_operands = GetMergeOperands(
-              table_properties->user_collected_properties, &property_present);
-          if (property_present) {
-            fprintf(stdout, "  # merge operands: %" PRIu64 "\n",
-                    merge_operands);
-          } else {
-            fprintf(stdout, "  # merge operands: UNKNOWN\n");
-          }
         }
         total_num_files += 1;
         total_num_data_blocks += table_properties->num_data_blocks;
         total_data_block_size += table_properties->data_size;
         total_index_block_size += table_properties->index_size;
         total_filter_block_size += table_properties->filter_size;
-      }
-      if (show_properties) {
-        fprintf(stdout,
-                "Raw user collected properties\n"
-                "------------------------------\n");
-        for (const auto& kv : table_properties->user_collected_properties) {
-          std::string prop_name = kv.first;
-          std::string prop_val = Slice(kv.second).ToString(true);
-          fprintf(stdout, "  # %s: 0x%s\n", prop_name.c_str(),
-                  prop_val.c_str());
-        }
       }
     }
   }

@@ -50,8 +50,6 @@ std::shared_ptr<util::RateLimiter> se_rate_limiter;
 
 SeDdlManager ddl_manager;
 
-std::shared_ptr<SeTablePropertyCollectorFactory> properties_collector_factory;
-
 SeSubtableOptions se_cf_options_map;
 
 SeDictionaryManager dict_manager;
@@ -193,10 +191,6 @@ void init_se_psi_keys()
 common::DBOptions se_init_se_db_options()
 {
   common::DBOptions o;
-
-  o.create_if_missing = true;
-  o.info_log_level = util::InfoLogLevel::INFO_LEVEL;
-
   return o;
 }
 

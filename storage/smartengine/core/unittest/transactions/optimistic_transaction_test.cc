@@ -35,8 +35,6 @@ class OptimisticTransactionTest : public testing::Test {
   Options options;
 
   OptimisticTransactionTest() {
-    options.create_if_missing = true;
-    options.max_write_buffer_number = 2;
     dbname = test::TmpDir() + "/optimistic_transaction_testdb";
 
     DestroyDB(dbname, options);

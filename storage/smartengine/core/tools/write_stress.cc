@@ -102,9 +102,6 @@ DEFINE_double(sync_probability, 0.01, "How often are we syncing writes");
 DEFINE_bool(delete_obsolete_files_with_fullscan, false,
             "If true, we delete obsolete files after each compaction/flush "
             "using GetChildren() API");
-DEFINE_bool(low_open_files_mode, false,
-            "If true, we set max_open_files to 20, so that every file access "
-            "needs to reopen it");
 
 using namespace smartengine;
 using namespace common;
@@ -139,21 +136,17 @@ class WriteStress {
 
     // make the LSM tree deep, so that we have many concurrent flushes and
     // compactions
-    options.create_if_missing = true;
     options.write_buffer_size = 256 * 1024;              // 256k
-    options.max_bytes_for_level_base = 1 * 1024 * 1204;  // 1MB
-    options.target_file_size_base = 100 * 1204;          // 100k
-    options.max_write_buffer_number = 16;
     options.max_background_compactions = 16;
     options.max_background_flushes = 16;
-    options.max_open_files = FLAGS_low_open_files_mode ? 20 : -1;
     if (FLAGS_delete_obsolete_files_with_fullscan) {
       options.delete_obsolete_files_period_micros = 0;
     }
 
     // open DB
-    DB* db;
-    Status s = DB::Open(options, FLAGS_db, &db);
+    DB* db = nullptr;
+    //Status s = DB::Open(options, FLAGS_db, &db);
+    Status s;
     if (!s.ok()) {
       fprintf(stderr, "Can't open database: %s\n", s.ToString().c_str());
       std::abort();
@@ -184,7 +177,7 @@ class WriteStress {
       auto value = random_string(rng, FLAGS_value_size);
       WriteOptions woptions;
       woptions.sync = dist(rng) < FLAGS_sync_probability;
-      auto s = db_->Put(woptions, key, value);
+      auto s = db_->Put(woptions, db_->DefaultColumnFamily(), key, value);
       if (!s.ok()) {
         fprintf(stderr, "Write to DB failed: %s\n", s.ToString().c_str());
         std::abort();
@@ -194,7 +187,7 @@ class WriteStress {
 
   void IteratorHoldThread() {
     while (!stop_.load(std::memory_order_relaxed)) {
-      std::unique_ptr<Iterator> iterator(db_->NewIterator(ReadOptions()));
+      std::unique_ptr<Iterator> iterator(db_->NewIterator(ReadOptions(), db_->DefaultColumnFamily()));
       Env::Default()->SleepForMicroseconds(FLAGS_iterator_hold_sec * 1000 *
                                            1000LL);
       for (iterator->SeekToFirst(); iterator->Valid(); iterator->Next()) {

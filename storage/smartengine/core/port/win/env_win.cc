@@ -121,7 +121,7 @@ Status WinEnvIO::NewSequentialFile(const std::string& fname,
 
   DWORD fileFlags = FILE_ATTRIBUTE_READONLY;
 
-  if (options.use_direct_reads && !options.use_mmap_reads) {
+  if (options.use_direct_reads) {
     fileFlags |= FILE_FLAG_NO_BUFFERING;
   }
 
@@ -154,7 +154,7 @@ Status WinEnvIO::NewRandomAccessFile(const std::string& fname,
   // Random access is to disable read-ahead as the system reads too much data
   DWORD fileFlags = FILE_ATTRIBUTE_READONLY;
 
-  if (options.use_direct_reads && !options.use_mmap_reads) {
+  if (options.use_direct_reads) {
     fileFlags |= FILE_FLAG_NO_BUFFERING;
   } else {
     fileFlags |= FILE_FLAG_RANDOM_ACCESS;
@@ -178,58 +178,9 @@ Status WinEnvIO::NewRandomAccessFile(const std::string& fname,
 
   UniqueCloseHandlePtr fileGuard(hFile, CloseHandleFunc);
 
-  // CAUTION! This will map the entire file into the process address space
-  if (options.use_mmap_reads && sizeof(void*) >= 8) {
-    // Use mmap when virtual address-space is plentiful.
-    uint64_t fileSize;
+  result->reset(new WinRandomAccessFile(fname, hFile, page_size_, options));
+  fileGuard.release();
 
-    s = GetFileSize(fname, &fileSize);
-
-    if (s.ok()) {
-      // Will not map empty files
-      if (fileSize == 0) {
-        return IOError("NewRandomAccessFile failed to map empty file: " + fname,
-                       EINVAL);
-      }
-
-      HANDLE hMap = CreateFileMappingA(hFile, NULL, PAGE_READONLY,
-                                       0,  // Whole file at its present length
-                                       0,
-                                       NULL);  // Mapping name
-
-      if (!hMap) {
-        auto lastError = GetLastError();
-        return IOErrorFromWindowsError(
-            "Failed to create file mapping for NewRandomAccessFile: " + fname,
-            lastError);
-      }
-
-      UniqueCloseHandlePtr mapGuard(hMap, CloseHandleFunc);
-
-      const void* mapped_region =
-          MapViewOfFileEx(hMap, FILE_MAP_READ,
-                          0,  // High DWORD of access start
-                          0,  // Low DWORD
-                          fileSize,
-                          NULL);  // Let the OS choose the mapping
-
-      if (!mapped_region) {
-        auto lastError = GetLastError();
-        return IOErrorFromWindowsError(
-            "Failed to MapViewOfFile for NewRandomAccessFile: " + fname,
-            lastError);
-      }
-
-      result->reset(
-          new WinMmapReadableFile(fname, hFile, hMap, mapped_region, fileSize));
-
-      mapGuard.release();
-      fileGuard.release();
-    }
-  } else {
-    result->reset(new WinRandomAccessFile(fname, hFile, page_size_, options));
-    fileGuard.release();
-  }
   return s;
 }
 
@@ -245,7 +196,7 @@ Status WinEnvIO::NewWritableFile(const std::string& fname,
 
   DWORD fileFlags = FILE_ATTRIBUTE_NORMAL;
 
-  if (local_options.use_direct_writes && !local_options.use_mmap_writes) {
+  if (local_options.use_direct_writes) {
     fileFlags = FILE_FLAG_NO_BUFFERING;
   }
 
@@ -257,13 +208,9 @@ Status WinEnvIO::NewWritableFile(const std::string& fname,
   DWORD desired_access = GENERIC_WRITE;
   DWORD shared_mode = FILE_SHARE_READ;
 
-  if (local_options.use_mmap_writes) {
-    desired_access |= GENERIC_READ;
-  } else {
-    // Adding this solely for tests to pass (fault_injection_test,
-    // wal_manager_test).
-    shared_mode |= (FILE_SHARE_WRITE | FILE_SHARE_DELETE);
-  }
+  // Adding this solely for tests to pass (fault_injection_test,
+  // wal_manager_test).
+  shared_mode |= (FILE_SHARE_WRITE | FILE_SHARE_DELETE);
 
   HANDLE hFile = 0;
   {
@@ -284,17 +231,9 @@ Status WinEnvIO::NewWritableFile(const std::string& fname,
         "Failed to create a NewWriteableFile: " + fname, lastError);
   }
 
-  if (options.use_mmap_writes) {
-    // We usually do not use mmmapping on SSD and thus we pass memory
-    // page_size
-    result->reset(new WinMmapFile(fname, hFile, page_size_,
-                                  allocation_granularity_, local_options));
-  } else {
-    // Here we want the buffer allocation to be aligned by the SSD page size
-    // and to be a multiple of it
-    result->reset(new WinWritableFile(fname, hFile, page_size_,
-                                      c_BufferCapacity, local_options));
-  }
+  // Here we want the buffer allocation to be aligned by the SSD page size
+  // and to be a multiple of it
+  result->reset(new WinWritableFile(fname, hFile, page_size_, c_BufferCapacity, local_options));
   return s;
 }
 
@@ -740,7 +679,6 @@ EnvOptions WinEnvIO::OptimizeForLogWrite(const EnvOptions& env_options,
                                          const DBOptions& db_options) const {
   EnvOptions optimized = env_options;
   optimized.bytes_per_sync = db_options.wal_bytes_per_sync;
-  optimized.use_mmap_writes = false;
   // This is because we flush only whole pages on unbuffered io and
   // the last records are not guaranteed to be flushed.
   optimized.use_direct_writes = false;
@@ -754,7 +692,6 @@ EnvOptions WinEnvIO::OptimizeForLogWrite(const EnvOptions& env_options,
 EnvOptions WinEnvIO::OptimizeForManifestWrite(
     const EnvOptions& env_options) const {
   EnvOptions optimized = env_options;
-  optimized.use_mmap_writes = false;
   optimized.use_direct_writes = false;
   optimized.fallocate_with_keep_size = true;
   return optimized;

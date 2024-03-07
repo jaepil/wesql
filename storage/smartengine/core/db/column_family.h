@@ -20,8 +20,6 @@
 #include "db/db.h"
 #include "db/snapshot_impl.h"  // SnapshotList
 #include "db/table_cache.h"
-#include "db/table_properties_collector.h"
-#include "db/write_controller.h"
 #include "env/env.h"
 #include "logger/log_module.h"
 #include "memory/page_arena.h"
@@ -32,36 +30,30 @@
 #include "util/misc_utility.h"
 #include "write_batch/write_batch_internal.h"
 
-namespace smartengine {
-
-namespace storage {
+namespace smartengine
+{
+namespace storage
+{
 class ExtentSpaceManager;
 class StorageLogger;
 }
 
-namespace util {
-class LogBuffer;
-}
-
-namespace monitor {
+namespace monitor
+{
 class InstrumentedMutex;
-class InstrumentedMutexLock;
 }
 
-namespace db {
-
+namespace db
+{
 class VersionSet;
 class MemTable;
 class MemTableListVersion;
-class Compaction;
-class InternalKey;
 class InternalStats;
 class ColumnFamilyData;
+class ColumnFamilySet;
+struct DumpCfd;
 class DBImpl;
 struct GlobalContext;
-struct LogFileNumberSize;
-
-extern const double kIncSlowdownRatio;
 
 // ColumnFamilyHandleImpl is the class that clients use to access different
 // column families. It has non-trivial destructor, which gets called when client
@@ -161,6 +153,7 @@ struct SuperVersion {
   util::autovector<MemTable*> to_delete;
 };
 
+//TODO(Zhao Dongsheng) move to util directory.
 extern common::Status CheckCompressionSupported(
     const common::ColumnFamilyOptions& cf_options);
 
@@ -170,40 +163,13 @@ extern common::Status CheckConcurrentWritesSupported(
 extern common::ColumnFamilyOptions SanitizeOptions(
     const common::ImmutableDBOptions& db_options,
     const common::ColumnFamilyOptions& src);
-// Wrap user defined table proproties collector factories `from cf_options`
-// into internal ones in int_tbl_prop_collector_factories. Add a system internal
-// one too.
-extern void GetIntTblPropCollectorFactory(
-    const common::ImmutableCFOptions& ioptions,
-    std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-        int_tbl_prop_collector_factories);
-
-class ColumnFamilySet;
-
-//enum CompactionPriority {
-//  LOW = 0,
-//  HIGH = 1,
-//  ALL = 2
-//};
-
-struct DumpCfd;
 
 // This class keeps all the data that a column family needs.
 // Most methods require DB mutex held, unless otherwise noted
 class ColumnFamilyData {
- public:
-  const static uint64_t MAJOR_SELF_CHECK_TIME = 900000000; // 15 minute
+public:
   static const int64_t COLUMN_FAMILY_DATA_VERSION = 1;
-  enum CompactionState {
-    MINOR = 0,
-    MAJOR = 1,
-    MAJOR_DELETE = 2,
-    MAJOR_SELF = 3,
-    AUTO_MAJOR_SELF = 4,
-    MANUAL_MINOR = 5,
-    MANUAL_MAJOR = 6,
-    DELETE_MAJOR_SELF = 7
-  };
+
   ColumnFamilyData(common::Options &options);
   ~ColumnFamilyData();
 
@@ -215,6 +181,7 @@ class ColumnFamilyData {
   uint32_t GetID() const { return sub_table_meta_.index_id_; }
   int64_t get_table_space_id() const { return sub_table_meta_.table_space_id_; }
   // thread-safe
+  // TODO(Zhao Dongsheng), deprecated?
   const std::string& GetName() const { return name_; }
 
   // Ref() can only be called from a context where the caller can guarantee
@@ -309,8 +276,6 @@ class ColumnFamilyData {
   // options.
   common::ColumnFamilyOptions GetLatestCFOptions() const;
 
-  bool is_delete_range_supported() { return is_delete_range_supported_; }
-
 #ifndef ROCKSDB_LITE
   // REQUIRES: DB mutex held
   common::Status SetOptions(
@@ -341,15 +306,6 @@ class ColumnFamilyData {
   bool need_compaction_v1(CompactionTasksPicker::TaskInfo &task_info,
                           const CompactionScheduleType type);
   bool need_flush(db::TaskType &task_type);
-  int64_t get_level1_extent_num(const Snapshot* snapshot) const;
-  int64_t get_level1_file_num_compaction_trigger(
-      const Snapshot* snapshot) const;
-
-  // A flag to tell a manual compaction is to compact all levels together
-  // instad of for specific level.
-  static const int kCompactAllLevels;
-  // A flag to tell a manual compaction's output is base level.
-  static const int kCompactToBaseLevel;
 
   // thread-safe
   const util::Comparator* user_comparator() const {
@@ -358,11 +314,6 @@ class ColumnFamilyData {
   // thread-safe
   const InternalKeyComparator& internal_comparator() const {
     return internal_comparator_;
-  }
-
-  const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-  int_tbl_prop_collector_factories() const {
-    return &int_tbl_prop_collector_factories_;
   }
 
   SuperVersion* GetSuperVersion() { return super_version_; }
@@ -436,23 +387,19 @@ class ColumnFamilyData {
         monitor::InstrumentedMutex* db_mutex = nullptr);
   void release_meta_snapshot(const Snapshot* snapshot,
         monitor::InstrumentedMutex* db_mutex = nullptr);
+  //TODO(Zhao Dongsheng), this function is inproper here.
   storage::ExtentSpaceManager* get_extent_space_manager() const {
     return extent_space_manager_;
   }
+
+  //TODO(Zhao Dongsheng), this function is inproper.
   storage::StorageManager* get_storage_manager()
   {
     return &storage_manager_;
   }
 
-  void set_bg_recycled_version(common::SequenceNumber seq) {
-    bg_recycled_version_ = seq;
-  }
-
   common::SequenceNumber get_imm_largest_seq() const {
     return imm_largest_seq_;
-  }
-  common::SequenceNumber get_bg_recycled_version() const {
-    return bg_recycled_version_;
   }
 
   std::atomic<int64_t>* cancel_task_type() { return &cancel_task_type_; }
@@ -540,9 +487,7 @@ class ColumnFamilyData {
   template <typename type>
   void delete_object(type *&obj)
   {
-//    delete obj;
     MOD_DELETE_OBJECT(type, obj);
-//    obj = nullptr;
   }
 
   bool is_inited_;
@@ -554,16 +499,12 @@ class ColumnFamilyData {
   // true if client stopped all the BackGround flush, compaction and recyle
   std::atomic<bool> bg_stopped_;
   const InternalKeyComparator internal_comparator_;
-  std::vector<std::unique_ptr<IntTblPropCollectorFactory>>
-      int_tbl_prop_collector_factories_;
 
   const common::ColumnFamilyOptions initial_cf_options_;
   const common::ImmutableCFOptions ioptions_;
   //TODO:yuanfeng init env options
   util::EnvOptions env_options_;
   common::MutableCFOptions mutable_cf_options_;
-
-  const bool is_delete_range_supported_;
 
   std::unique_ptr<TableCache, memory::ptr_destruct_delete<TableCache>> table_cache_;
 
@@ -590,14 +531,7 @@ class ColumnFamilyData {
   ColumnFamilyData* next_;
   ColumnFamilyData* prev_;
 
-  // This is the earliest log file number that contains data from this
-  // Column Family. All earlier log files must be ignored and not
-  // recovered from
-  uint64_t log_number_;
-
   ColumnFamilySet* column_family_set_;
-
-  std::unique_ptr<WriteControllerToken> write_controller_token_;
 
   // If true --> this ColumnFamily is currently present in DBImpl::flush_queue_
   bool pending_flush_;
@@ -617,8 +551,6 @@ class ColumnFamilyData {
   // b) delete triggered compaction is high priority.
   CompactionPriority compaction_priority_;
 
-  uint64_t prev_compaction_needed_bytes_;
-
   // if the database was opened with 2pc enabled
   bool allow_2pc_;
 
@@ -629,7 +561,6 @@ class ColumnFamilyData {
   // one storage manager for one column family
   storage::StorageManager storage_manager_;
   // before it the meta is recycled
-  common::SequenceNumber bg_recycled_version_;
   common::SequenceNumber imm_largest_seq_;
   memory::SimpleAllocator *allocator_;
   mutable std::mutex subtable_structure_mutex_;

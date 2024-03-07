@@ -17,5 +17,5 @@ Tables_in_information_schema (SMARTENGINE%)
 include/assert_grep.inc [Found SMARTENGINE human-made error]
 include/assert_grep.inc [Found SMARTENGINE init failed]
 include/assert_grep.inc [Found SMARTENGINE register failed]
-include/assert_grep.inc [Found SMARTENGINE information_schema table ERROR log for 19 times.]
-include/assert_grep.inc [Found SMARTENGINE information_schema table plugin register failed log for 19 times.]
+include/assert_grep.inc [Found SMARTENGINE information_schema table ERROR log for 18 times.]
+include/assert_grep.inc [Found SMARTENGINE information_schema table plugin register failed log for 18 times.]

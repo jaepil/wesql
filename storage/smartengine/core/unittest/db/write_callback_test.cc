@@ -126,7 +126,6 @@ TEST_F(WriteCallbackTest, WriteWithCallbackTest) {
       for (auto& enable_WAL : {true, false}) {
         for (auto& write_group : write_scenarios) {
           Options options;
-          options.create_if_missing = true;
           options.allow_concurrent_memtable_write = allow_parallel;
 
           ReadOptions read_options;
@@ -295,7 +294,6 @@ TEST_F(WriteCallbackTest, WriteCallBackTest) {
 
   DestroyDB(dbname, options);
 
-  options.create_if_missing = true;
   Status s = DB::Open(options, dbname, &db);
   ASSERT_OK(s);
 

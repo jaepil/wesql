@@ -166,7 +166,6 @@ void SeBackgroundThread::run()
 
     // Flush the WAL.
     if (se_db && se_flush_log_at_trx_commit == 2) {
-      assert(!se_db_options.allow_mmap_writes);
       const common::Status s = se_db->SyncWAL();
       if (!s.ok()) {
         se_handle_io_error(s, SE_IO_ERROR_BG_THREAD);

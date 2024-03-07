@@ -73,7 +73,6 @@ const std::string LDBCommand::ARG_BLOCK_SIZE = "block_size";
 const std::string LDBCommand::ARG_AUTO_COMPACTION = "auto_compaction";
 const std::string LDBCommand::ARG_DB_WRITE_BUFFER_SIZE = "db_write_buffer_size";
 const std::string LDBCommand::ARG_WRITE_BUFFER_SIZE = "write_buffer_size";
-const std::string LDBCommand::ARG_FILE_SIZE = "file_size";
 const std::string LDBCommand::ARG_CREATE_IF_MISSING = "create_if_missing";
 const std::string LDBCommand::ARG_NO_VALUE = "no_value";
 
@@ -263,7 +262,6 @@ void LDBCommand::OpenDB() {
   if (column_families_.empty()) {
     // Try to figure out column family lists
     std::vector<std::string> cf_list;
-    st = DB::ListColumnFamilies(DBOptions(), db_path_, &cf_list);
     // There is possible the DB doesn't exist yet, for "create if not
     // "existing case". The failure is ignored here. We rely on DB::Open()
     // to give us the correct error message for problem with opening
@@ -276,9 +274,9 @@ void LDBCommand::OpenDB() {
     }
   }
   if (column_families_.empty()) {
-    st = DB::Open(opt, db_path_, &db_);
+    //st = DB::Open(opt, db_path_, &db_);
   } else {
-    st = DB::Open(opt, db_path_, column_families_, &handles_opened, &db_);
+    st = DB::Open(opt, db_path_, &handles_opened, &db_);
   }
   
   if (!st.ok()) {
@@ -343,7 +341,6 @@ std::vector<std::string> LDBCommand::BuildCmdLineOptions(
                                   ARG_COMPRESSION_TYPE,
                                   ARG_COMPRESSION_MAX_DICT_BYTES,
                                   ARG_WRITE_BUFFER_SIZE,
-                                  ARG_FILE_SIZE,
                                   ARG_CF_NAME};
   ret.insert(ret.end(), options.begin(), options.end());
   return ret;
@@ -399,7 +396,6 @@ bool LDBCommand::ParseStringOption(
 
 Options LDBCommand::PrepareOptionsForOpenDB() {
   Options opt = options_;
-  opt.create_if_missing = false;
 
   std::map<std::string, std::string>::const_iterator itr;
 
@@ -486,16 +482,6 @@ Options LDBCommand::PrepareOptionsForOpenDB() {
     } else {
       exec_state_ = LDBCommandExecuteResult::Failed(ARG_WRITE_BUFFER_SIZE +
                                                     " must be > 0.");
-    }
-  }
-
-  int file_size;
-  if (ParseIntOption(option_map_, ARG_FILE_SIZE, file_size, exec_state_)) {
-    if (file_size > 0) {
-      opt.target_file_size_base = file_size;
-    } else {
-      exec_state_ =
-          LDBCommandExecuteResult::Failed(ARG_FILE_SIZE + " must be > 0.");
     }
   }
 
@@ -1436,22 +1422,16 @@ ListColumnFamiliesCommand::ListColumnFamiliesCommand(
 
 void ListColumnFamiliesCommand::DoCommand() {
   std::vector<std::string> column_families;
-  Status s = DB::ListColumnFamilies(DBOptions(), dbname_, &column_families);
-  if (!s.ok()) {
-    printf("Error in processing db %s %s\n", dbname_.c_str(),
-           s.ToString().c_str());
-  } else {
-    printf("Column families in %s: \n{", dbname_.c_str());
-    bool first = true;
-    for (auto cf : column_families) {
-      if (!first) {
-        printf(", ");
-      }
-      first = false;
-      printf("%s", cf.c_str());
+  printf("Column families in %s: \n{", dbname_.c_str());
+  bool first = true;
+  for (auto cf : column_families) {
+    if (!first) {
+      printf(", ");
     }
-    printf("}\n");
+    first = false;
+    printf("%s", cf.c_str());
   }
+  printf("}\n");
 }
 
 void CreateColumnFamilyCommand::Help(std::string& ret) {
@@ -1839,7 +1819,6 @@ void BatchPutCommand::DoCommand() {
 
 Options BatchPutCommand::PrepareOptionsForOpenDB() {
   Options opt = LDBCommand::PrepareOptionsForOpenDB();
-  opt.create_if_missing = IsFlagPresent(flags_, ARG_CREATE_IF_MISSING);
   return opt;
 }
 
@@ -1926,7 +1905,6 @@ void PutCommand::DoCommand() {
 
 Options PutCommand::PrepareOptionsForOpenDB() {
   Options opt = LDBCommand::PrepareOptionsForOpenDB();
-  opt.create_if_missing = IsFlagPresent(flags_, ARG_CREATE_IF_MISSING);
   return opt;
 }
 

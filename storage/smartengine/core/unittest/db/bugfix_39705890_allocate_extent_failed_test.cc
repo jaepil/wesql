@@ -39,7 +39,6 @@ class AllocateExtentFailedTest : public DBTestBase {
 TEST_F(AllocateExtentFailedTest, recycle_io_info_hang) {
   int ret = Status::kOk;
   Options options;
-  options.create_if_missing = true;
   options.env = env_;
   options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
   options.parallel_wal_recovery = false;

@@ -102,26 +102,6 @@ extern std::string LockFileName(const std::string& dbname);
 // The result will be prefixed with "dbname".
 extern std::string TempFileName(const std::string& dbname, uint64_t number);
 
-// A helper structure for prefix of info log names.
-struct InfoLogPrefix {
-  char buf[260];
-  common::Slice prefix;
-  // Prefix with DB absolute path encoded
-  explicit InfoLogPrefix(bool has_log_dir, const std::string& db_absolute_path);
-  // Default Prefix
-  explicit InfoLogPrefix();
-};
-
-// Return the name of the info log file for "dbname".
-extern std::string InfoLogFileName(const std::string& dbname,
-                                   const std::string& db_path = "",
-                                   const std::string& log_dir = "");
-
-// Return the name of the old info log file for "dbname".
-extern std::string OldInfoLogFileName(const std::string& dbname, uint64_t ts,
-                                      const std::string& db_path = "",
-                                      const std::string& log_dir = "");
-
 static const std::string kOptionsFileNamePrefix = "OPTIONS-";
 static const std::string kTempFileNameSuffix = "dbtmp";
 
@@ -147,32 +127,13 @@ extern std::string IdentityFileName(const std::string& dbname);
 // If filename is a rocksdb file, store the type of the file in *type.
 // The number encoded in the filename is stored in *number.  If the
 // filename was successfully parsed, returns true.  Else return false.
-// info_log_name_prefix is the path of info logs.
-extern bool ParseFileName(const std::string& filename, uint64_t* number,
-                          const common::Slice& info_log_name_prefix,
-                          FileType* type, db::WalFileType* log_type = nullptr);
-// Same as previous function, but skip info log files.
-extern bool ParseFileName(const std::string& filename, uint64_t* number,
-                          FileType* type, db::WalFileType* log_type = nullptr);
-
-// Make the CURRENT file point to the descriptor file with the
-// specified number.
-extern common::Status SetCurrentFile(Env* env, const std::string& dbname,
-                                     uint64_t descriptor_number,
-                                     Directory* directory_to_fsync,
-                                     uint64_t checkpoint_file_number = 0,
-                                     uint64_t meta_log_number = 0);
+extern bool ParseFileName(const std::string& filename,
+                          uint64_t* number,
+                          FileType* type,
+                          db::WalFileType* log_type = nullptr);
 
 // Make the IDENTITY file for the db
 extern common::Status SetIdentityFile(Env* env, const std::string& dbname);
-
-// Sync manifest file `file`.
-extern common::Status SyncManifest(Env* env,
-                                   const common::ImmutableDBOptions* db_options,
-                                   WritableFileWriter* file);
-extern common::Status SyncManifest(Env* env,
-                                   const common::ImmutableDBOptions* db_options,
-                                   util::ConcurrentDirectFileWriter* file);
 
 }  // namespace util
 }  // namespace smartengine

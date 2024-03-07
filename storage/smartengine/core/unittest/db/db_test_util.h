@@ -32,6 +32,7 @@
 #include "options/options.h"
 #include "table/mock_table.h"
 #include "table/scoped_arena_iterator.h"
+#include "transactions/transaction_db.h"
 #include "util/compression.h"
 #include "util/filename.h"
 #include "util/mutexlock.h"
@@ -99,9 +100,6 @@ struct OptionsOverride {
   // These will be used only if filter_policy is set
   bool partition_filters = false;
   uint64_t metadata_block_size = 1024;
-  table::BlockBasedTableOptions::IndexType index_type =
-      table::BlockBasedTableOptions::IndexType::kBinarySearch;
-
   // Used as a bit mask of individual enums in which to skip an XF test point
   int skip_policy = 0;
 };
@@ -354,7 +352,6 @@ class SpecialEnv : public util::EnvWrapper {
     util::EnvOptions optimized = soptions;
     if (strstr(f.c_str(), "MANIFEST") != nullptr ||
         strstr(f.c_str(), "log") != nullptr) {
-      optimized.use_mmap_writes = false;
       optimized.use_direct_writes = false;
     }
 
@@ -585,7 +582,7 @@ class DBTestBase : public testing::Test {
  public:
   std::string dbname_;
   std::string alternative_wal_dir_;
-  std::string alternative_db_log_dir_;
+  //std::string alternative_db_log_dir_;
   util::MockEnv* mem_env_;
   SpecialEnv* env_;
   DB* db_;
@@ -788,5 +785,12 @@ inline uint64_t TestGetThreadCosts(monitor::TracePoint point) {
 inline uint64_t TestGetGlobalCount(monitor::CountPoint point) {
   return monitor::get_tls_query_perf_context()->get_global_count(point);
 }
+
+int test_open_db(const common::Options &options, const std::string &db_name, db::DB **db);
+
+int test_open_trans_db(const common::Options &options,
+                       const util::TransactionDBOptions &trans_db_options,
+                       const std::string &db_name,
+                       util::TransactionDB **trans_db);
 }
 }  // namespace smartengine

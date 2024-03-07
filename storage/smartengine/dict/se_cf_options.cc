@@ -29,20 +29,14 @@ namespace smartengine
 SePrimaryKeyComparator SeSubtableOptions::s_pk_comparator;
 SePrimaryKeyReverseComparator SeSubtableOptions::s_rev_pk_comparator;
 
-bool SeSubtableOptions::init(
-    const table::BlockBasedTableOptions &table_options,
-    std::shared_ptr<table::TablePropertiesCollectorFactory> prop_coll_factory,
-    const common::ColumnFamilyOptions& default_cf_options)
+bool SeSubtableOptions::init(const table::BlockBasedTableOptions &table_options,
+                             const common::ColumnFamilyOptions& default_cf_options)
 {
   // ToDo: validate default_cf_options
   m_default_cf_opts = default_cf_options;
   m_default_cf_opts.comparator = &s_pk_comparator;
 
   m_default_cf_opts.table_factory.reset(table::NewExtentBasedTableFactory(table_options));
-
-  if (prop_coll_factory) {
-    m_default_cf_opts.table_properties_collector_factories.push_back(prop_coll_factory);
-  }
 
   return true;
 }

@@ -62,7 +62,6 @@ void LDBCommandRunner::PrintHelp(const LDBOptions& ldb_options,
              "=<int,e.g.:16777216>\n");
   ret.append("  --" + LDBCommand::ARG_WRITE_BUFFER_SIZE +
              "=<int,e.g.:4194304>\n");
-  ret.append("  --" + LDBCommand::ARG_FILE_SIZE + "=<int,e.g.:2097152>\n");
 
   ret.append("\n\n");
   ret.append("Data Access Commands:\n");

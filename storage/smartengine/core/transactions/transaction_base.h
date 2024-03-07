@@ -64,21 +64,6 @@ class TransactionBaseImpl : public util::Transaction {
                         exclusive);
   }
 
-  std::vector<common::Status> MultiGet(
-      const common::ReadOptions& options,
-      const std::vector<db::ColumnFamilyHandle*>& column_family,
-      const std::vector<common::Slice>& keys,
-      std::vector<std::string>* values) override;
-
-  std::vector<common::Status> MultiGet(
-      const common::ReadOptions& options,
-      const std::vector<common::Slice>& keys,
-      std::vector<std::string>* values) override {
-    return MultiGet(options, std::vector<db::ColumnFamilyHandle*>(
-                                 keys.size(), db_->DefaultColumnFamily()),
-                    keys, values);
-  }
-
   std::vector<common::Status> MultiGetForUpdate(
       const common::ReadOptions& options,
       const std::vector<db::ColumnFamilyHandle*>& column_family,

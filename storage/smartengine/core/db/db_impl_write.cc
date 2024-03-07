@@ -19,12 +19,11 @@
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
 
-using namespace smartengine;
+namespace smartengine {
 using namespace common;
 using namespace util;
 using namespace monitor;
 
-namespace smartengine {
 namespace db {
 
 using smartengine::db::WriteState;
@@ -237,7 +236,7 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
   if (error) {  // failed we should clean up the pipline
     mutex_.Lock();
     this->wait_all_active_thread_exit();
-    if (immutable_db_options_.paranoid_checks && bg_error_.ok()) {
+    if (bg_error_.ok()) {
       bg_error_ = status;  // stop compaction & fail any further writes
 
       SE_LOG(WARN, "failed during WriteImplAsync", K((int)bg_error_.code()));
@@ -805,20 +804,6 @@ uint64_t DBImpl::get_active_thread_num(std::memory_order order) {
   return this->active_thread_num_.load(order);
 }
 
-void DBImpl::UpdateBackgroundError(const Status& memtable_insert_status) {
-  // A non-OK status here indicates that the state implied by the
-  // WAL has diverged from the in-memory state.  This could be
-  // because of a corrupt write_batch (very bad), or because the
-  // client specified an invalid column family and didn't specify
-  // ignore_missing_column_families.
-  if (!memtable_insert_status.ok()) {
-    mutex_.Lock();
-    assert(bg_error_.ok());
-    bg_error_ = memtable_insert_status;
-    mutex_.Unlock();
-  }
-}
-
 Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
                                bool need_log_sync, bool* logs_getting_synced,
                                WriteContext* write_context) {
@@ -868,78 +853,6 @@ Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
     status = ScheduleFlushes(write_context);
   }
 
-  return status;
-}
-
-Status DBImpl::WriteToWAL(const autovector<WriteThread::Writer*>& write_group,
-                          log::Writer* log_writer, bool need_log_sync,
-                          bool need_log_dir_sync, SequenceNumber sequence) {
-  Status status;
-
-  WriteBatch* merged_batch = nullptr;
-  size_t write_with_wal = 0;
-  if (write_group.size() == 1 && write_group[0]->ShouldWriteToWAL() &&
-      write_group[0]->batch->GetWalTerminationPoint().is_cleared()) {
-    // we simply write the first WriteBatch to WAL if the group only
-    // contains one batch, that batch should be written to the WAL,
-    // and the batch is not wanting to be truncated
-    merged_batch = write_group[0]->batch;
-    write_group[0]->log_used = logfile_number_;
-    write_with_wal = 1;
-  } else {
-    // WAL needs all of the batches flattened into a single batch.
-    // We could avoid copying here with an iov-like AddRecord
-    // interface
-    merged_batch = &tmp_batch_;
-    for (auto writer : write_group) {
-      if (writer->ShouldWriteToWAL()) {
-        WriteBatchInternal::Append(merged_batch, writer->batch,
-                                   /*WAL_only*/ true);
-        write_with_wal++;
-      }
-      writer->log_used = logfile_number_;
-    }
-  }
-
-  WriteBatchInternal::SetSequence(merged_batch, sequence);
-
-  Slice log_entry = WriteBatchInternal::Contents(merged_batch);
-  status = log_writer->AddRecord(log_entry);
-  total_log_size_ += log_entry.size();
-  alive_log_files_.back().AddSize(log_entry.size());
-  log_empty_ = false;
-  uint64_t log_size = log_entry.size();
-
-  if (status.ok() && need_log_sync) {
-    QUERY_TRACE_SCOPE(TracePoint::WAL_FILE_SYNC);
-    // It's safe to access logs_ with unlocked mutex_ here because:
-    //  - we've set getting_synced=true for all logs,
-    //    so other threads won't pop from logs_ while we're here,
-    //  - only writer thread can push to logs_, and we're in
-    //    writer thread, so no one will push to logs_,
-    //  - as long as other threads don't modify it, it's safe to read
-    //    from std::deque from multiple threads concurrently.
-    for (auto& log : logs_) {
-      status = log.writer->file()->sync(immutable_db_options_.use_fsync);
-      if (!status.ok()) {
-        break;
-      }
-    }
-    if (status.ok() && need_log_dir_sync) {
-      // We only sync WAL directory the first time WAL syncing is
-      // requested, so that in case users never turn on WAL sync,
-      // we can avoid the disk I/O in the write code path.
-      status = directories_.GetWalDir()->Fsync();
-    }
-  }
-
-  if (merged_batch == &tmp_batch_) {
-    tmp_batch_.Clear();
-  }
-  if (status.ok()) {    
-    QUERY_COUNT_ADD(CountPoint::WAL_FILE_BYTES, log_size);
-    QUERY_COUNT_ADD(CountPoint::WRITE_WITH_WAL, write_with_wal);
-  }
   return status;
 }
 
@@ -1472,41 +1385,8 @@ Status DBImpl::HandleWriteBufferFull(WriteContext* write_context) {
 }
 
 uint64_t DBImpl::GetMaxTotalWalSize() const {
-//  mutex_.AssertHeld();
-  return mutable_db_options_.max_total_wal_size == 0
-             ? 4 * max_total_in_memory_state_
-             : mutable_db_options_.max_total_wal_size;
-}
-
-// REQUIRES: mutex_ is held
-// REQUIRES: this thread is currently at the front of the writer queue
-Status DBImpl::DelayWrite(uint64_t num_bytes,
-                          const WriteOptions& write_options) {
-  uint64_t time_delayed = 0;
-#ifndef NDEBUG
-  bool delayed = false;
-#endif
-  uint64_t delay = write_controller_.GetDelay(env_, num_bytes);
-  if (delay > 0) {
-    if (write_options.no_slowdown) {
-      return Status::Incomplete();
-    }
-    TEST_SYNC_POINT("DBImpl::DelayWrite:Sleep");
-  }
-
-  while (bg_error_.ok() && write_controller_.IsStopped()) {
-    if (write_options.no_slowdown) {
-      return Status::Incomplete();
-    }
-#ifndef NDEBUG
-    delayed = true;
-#endif
-    TEST_SYNC_POINT("DBImpl::DelayWrite:Wait");
-    bg_cv_.Wait();
-  }
-  assert(!delayed || !write_options.no_slowdown);
-
-  return bg_error_;
+  se_assert(mutable_db_options_.max_total_wal_size > 0);
+  return mutable_db_options_.max_total_wal_size;
 }
 
 Status DBImpl::ScheduleFlushes(WriteContext* context) {
@@ -1586,14 +1466,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd,
   cfd->mem()->set_recovery_point(recovery_point);
   // Attempt to switch to a new memtable and trigger flush of old.
   // Do this without holding the dbmutex lock.
-  assert(versions_->prev_log_number() == 0);
   bool creating_new_log = !log_empty_ || force_create_new_log;
-  uint64_t recycle_log_number = 0;
-  if (creating_new_log && immutable_db_options_.recycle_log_file_num &&
-      !log_recycle_files.empty()) {
-    recycle_log_number = log_recycle_files.front();
-    log_recycle_files.pop_front();
-  }
   uint64_t new_log_number =
       creating_new_log ? versions_->NewFileNumber() : logfile_number_;
   SuperVersion* new_superversion = nullptr;
@@ -1610,17 +1483,9 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd,
     if (creating_new_log) {
       EnvOptions opt_env_opt =
           env_->OptimizeForLogWrite(env_options_, db_options);
-      if (recycle_log_number) {
-        __SE_LOG(INFO, "reusing log %" PRIu64 " from recycle list\n", recycle_log_number);
-        s = env_->ReuseWritableFile(
-            LogFileName(immutable_db_options_.wal_dir, new_log_number),
-            LogFileName(immutable_db_options_.wal_dir, recycle_log_number),
-            lfile, opt_env_opt);
-      } else {
-        s = NewWritableFile(
-            env_, LogFileName(immutable_db_options_.wal_dir, new_log_number),
-            lfile, opt_env_opt);
-      }
+      s = NewWritableFile(
+          env_, LogFileName(immutable_db_options_.wal_dir, new_log_number),
+          lfile, opt_env_opt);
       if (s.ok()) {
         // Our final size should be less than write_buffer_size
         // (compression, etc) but err on the side of caution.
@@ -1632,8 +1497,11 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd,
             ConcurrentDirectFileWriter, lfile, opt_env_opt);
         s = file_writer->init_multi_buffer();
         if (s.ok()) {
-          new_log = MOD_NEW_OBJECT(memory::ModId::kDBImpl, log::Writer, file_writer,
-              new_log_number, immutable_db_options_.recycle_log_file_num > 0);
+          new_log = MOD_NEW_OBJECT(memory::ModId::kDBImpl,
+                                  log::Writer,
+                                  file_writer,
+                                  new_log_number,
+                                  false /**recycle_log_files*/);
         } else {
           SE_LOG(ERROR, "init multi log buffer failed! when switchMemtable");
           return s;
@@ -1644,7 +1512,6 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd,
     if (s.ok()) {
       new_mem = cfd->ConstructNewMemtable(mutable_cf_options, seq);
       new_superversion = MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-//      new_superversion = new SuperVersion();
     }
   }
 

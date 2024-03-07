@@ -763,19 +763,6 @@ static void se_set_collation_exception_list(THD *const thd,
   *static_cast<const char **>(var_ptr) = val;
 }
 
-static void se_set_dump_malloc_stats(
-    THD *thd, struct SYS_VAR *const var, void *const var_ptr,
-    const void *const save) {
-  assert(save != nullptr);
-  const bool dump_malloc_stats = *static_cast<const bool*>(save);
-  SE_MUTEX_LOCK_CHECK(se_sysvars_mutex);
-  se_db->SetDBOptions({{
-      "dump_malloc_stats",
-      dump_malloc_stats ? "true" : "false"}});
-  se_db_options.dump_malloc_stats = dump_malloc_stats;
-  SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
-}
-
 static void se_set_query_trace_sum(
     THD *const thd, struct SYS_VAR *const var, void *const var_ptr,
      const void *save) {
@@ -1018,14 +1005,6 @@ static MYSQL_SYSVAR_ULONG(
     100L << 30, 0L, LONG_MAX, 0);
 
 static MYSQL_SYSVAR_INT(
-    max_write_buffer_number,
-    se_default_cf_options.max_write_buffer_number,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-    "CFOptions::max_write_buffer_number for SE",
-    nullptr, nullptr,
-    1000, 2, INT_MAX, 0);
-
-static MYSQL_SYSVAR_INT(
     max_write_buffer_number_to_maintain,
     se_default_cf_options.max_write_buffer_number_to_maintain,
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
@@ -1057,7 +1036,7 @@ static MYSQL_SYSVAR_ULONG(
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "DBOptions::max_total_wal_size for SE",
     nullptr, nullptr,
-    100L << 30, 0L, LONG_MAX, 0);
+    100L << 30, 8L << 20, LONG_MAX, 0);
 
 static MYSQL_SYSVAR_UINT(
     wal_recovery_mode,
@@ -1107,14 +1086,6 @@ static MYSQL_SYSVAR_ULONG(
     "DBOptions::concurrent_writable_file_buffer_switch_limit for SE",
     nullptr, nullptr,
     DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_SWITCH_LIMIT, 1, LONG_MAX, 0);
-
-static MYSQL_SYSVAR_ULONG(
-    max_manifest_file_size,
-    se_db_options.max_manifest_file_size,
-    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-    "DBOptions::max_manifest_file_size for SE",
-    nullptr, nullptr,
-    se_db_options.max_manifest_file_size, 0L, ULONG_MAX, 0);
 
 static MYSQL_THDVAR_ULONG(
     bulk_load_size, PLUGIN_VAR_RQCMDARG,
@@ -1428,14 +1399,6 @@ static MYSQL_SYSVAR_STR(
     "from the case sensitive collation enforcement",
     nullptr, se_set_collation_exception_list, "");
 
-static MYSQL_SYSVAR_BOOL(
-    dump_malloc_stats,
-    se_db_options.dump_malloc_stats,
-    PLUGIN_VAR_RQCMDARG,
-    "DBOptions::dump_malloc_stats for se",
-    nullptr, se_set_dump_malloc_stats,
-    se_db_options.dump_malloc_stats);
-
 static const char *query_trace_sum_ops[] = {"OFF", "ON", "RESET",  NullS};
 static TYPELIB query_trace_sum_ops_typelib = {array_elements(query_trace_sum_ops) - 1,
                                      "query_trace_sum_ops_typelib", query_trace_sum_ops,
@@ -1548,7 +1511,6 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(write_buffer_size),
     MYSQL_SYSVAR(db_write_buffer_size),
     MYSQL_SYSVAR(db_total_write_buffer_size),
-    MYSQL_SYSVAR(max_write_buffer_number),
     MYSQL_SYSVAR(max_write_buffer_number_to_maintain),
     MYSQL_SYSVAR(min_write_buffer_number_to_merge),
     MYSQL_SYSVAR(write_disable_wal),
@@ -1560,7 +1522,6 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(concurrent_writable_file_buffer_num),
     MYSQL_SYSVAR(concurrent_writable_file_single_buffer_size),
     MYSQL_SYSVAR(concurrent_writable_file_buffer_switch_limit),
-    MYSQL_SYSVAR(max_manifest_file_size),
     MYSQL_SYSVAR(bulk_load_size),
     MYSQL_SYSVAR(pause_background_work),
     MYSQL_SYSVAR(max_background_dumps),
@@ -1601,7 +1562,6 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(auto_shrink_schedule_interval),
     MYSQL_SYSVAR(strict_collation_check),
     MYSQL_SYSVAR(strict_collation_exceptions),
-    MYSQL_SYSVAR(dump_malloc_stats),
     MYSQL_SYSVAR(query_trace_sum),
     MYSQL_SYSVAR(query_trace_print_slow),
     MYSQL_SYSVAR(query_trace_threshold_time),

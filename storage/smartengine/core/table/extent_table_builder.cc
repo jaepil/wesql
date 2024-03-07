@@ -55,8 +55,6 @@ using namespace memory;
 
 namespace table {
 
-typedef BlockBasedTableOptions::IndexType IndexType;
-
 namespace {
 
 bool good_compression_ratio(size_t compressed_size, size_t raw_size) {
@@ -170,31 +168,18 @@ ExtentBasedTableBuilder::Rep::Rep(
     const ImmutableCFOptions& ioptions,
     const BlockBasedTableOptions& table_options,
     const InternalKeyComparator& icomparator,
-    const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>*
-    int_tbl_prop_collector_factories,
     uint32_t column_family_id,
     WritableBuffer* block_buf,
     WritableBuffer* index_buf)
     : data_block(table_options.block_restart_interval,
                  table_options.use_delta_encoding, block_buf),
       index_builder(IndexBuilder::CreateIndexBuilder(
-                    table_options.index_type,
                     &icomparator,
                     table_options,
                     index_buf)),
       flush_block_policy(
           table_options.flush_block_policy_factory->NewFlushBlockPolicy(table_options, data_block))
 {
-  for (auto& collector_factories : *int_tbl_prop_collector_factories) {
-    table_properties_collectors.emplace_back(
-        collector_factories->CreateIntTblPropCollector(column_family_id));
-  }
-  for (auto& properties_collector : table_properties_collectors) {
-    if (!properties_collector->SupportAddBlock()) {
-      collectors_support_add_block = false;
-      break;
-    }
-  }
 }
 
 int ExtentBasedTableBuilder::init_one_sst() {
@@ -221,7 +206,6 @@ int ExtentBasedTableBuilder::init_one_sst() {
                         ioptions_,
                         table_options_,
                         internal_comparator_,
-                        int_tbl_prop_collector_factories_,
                         column_family_id_,
                         block_buf,
                         &index_buf_);
@@ -266,8 +250,6 @@ ExtentBasedTableBuilder::ExtentBasedTableBuilder(
     const ImmutableCFOptions &ioptions,
     const BlockBasedTableOptions &table_options,
     const InternalKeyComparator &internal_comparator,
-    const std::vector<std::unique_ptr<IntTblPropCollectorFactory>>
-        *int_tbl_prop_collector_factories,
     uint32_t column_family_id, MiniTables *mtables,
     const CompressionType compression_type,
     const CompressionOptions &compression_opts,
@@ -280,7 +262,6 @@ ExtentBasedTableBuilder::ExtentBasedTableBuilder(
       ioptions_(ioptions),
       table_options_(table_options),
       internal_comparator_(internal_comparator),
-      int_tbl_prop_collector_factories_(int_tbl_prop_collector_factories),
       column_family_id_(column_family_id),
       mtables_(mtables),
       compression_type_(compression_type),
@@ -300,8 +281,6 @@ ExtentBasedTableBuilder::ExtentBasedTableBuilder(
       flushed_lob_extent_ids_(),
       is_flush_(is_flush) {
   assert(table_options_.format_version == 3);
-  assert(table_options_.index_type !=
-         BlockBasedTableOptions::kTwoLevelIndexSearch);
 #ifndef NDEBUG
   test_ignore_flush_data_ = false;
 #endif
@@ -379,10 +358,6 @@ int ExtentBasedTableBuilder::AddBlock(const Slice& block_contents,
     return Status::kNotInit;
   }
 
-  if (!SupportAddBlock()) {
-    __SE_LOG(WARN, "ExtentBasedTableBuilder does not support AddBlock. Mybay HashIndex is used");
-    return Status::kNotSupported;
-  }
   TEST_SYNC_POINT_CALLBACK("ExtentBasedTableBuilder::AddBlock:0", nullptr);
   int ret = Status::kOk;
 
@@ -479,11 +454,6 @@ int ExtentBasedTableBuilder::AddBlock(const Slice& block_contents,
 
   TEST_SYNC_POINT_CALLBACK("ExtentBasedTableBuilder::AddBlock:1", nullptr);
   return Status::kOk;
-}
-
-bool ExtentBasedTableBuilder::SupportAddBlock() const {
-  return rep_->collectors_support_add_block &&
-         rep_->index_builder->SupportAddBlock();
 }
 
 int ExtentBasedTableBuilder::sst_meta_size() const {
@@ -981,25 +951,9 @@ int ExtentBasedTableBuilder::BuildPropertyBlock(PropertyBlockBuilder& builder) {
   props.compression_name = CompressionTypeToString(compression_type_);
   props.prefix_extractor_name = "nullptr";
 
-  std::string property_collectors_names = "[";
-  property_collectors_names = "[";
-  for (size_t i = 0; i < ioptions_.table_properties_collector_factories.size();
-       ++i) {
-    if (i != 0) {
-      property_collectors_names += ",";
-    }
-    property_collectors_names +=
-        ioptions_.table_properties_collector_factories[i]->Name();
-  }
-  property_collectors_names += "]";
-  props.property_collectors_names = property_collectors_names;
-
   // Add basic properties
   builder.AddTableProperty(props);
 
-  // Add use collected properties
-  NotifyCollectTableCollectorsOnFinish(rep_->table_properties_collectors,
-                                       &builder);
   return Status::kOk;
 }
 
@@ -1383,25 +1337,7 @@ uint64_t ExtentBasedTableBuilder::FileSize() const {
   return offset_ + rep_->offset;
 }
 
-bool ExtentBasedTableBuilder::NeedCompact() const {
-  for (const auto& collector : rep_->table_properties_collectors) {
-    if (collector->NeedCompact()) {
-      return true;
-    }
-  }
-  return false;
-}
-
-TableProperties ExtentBasedTableBuilder::GetTableProperties() const {
-  TableProperties ret = rep_->props;
-  for (const auto& collector : rep_->table_properties_collectors) {
-    for (const auto& prop : collector->GetReadableProperties()) {
-      ret.readable_properties.insert(prop);
-    }
-    collector->Finish(&ret.user_collected_properties);
-  }
-  return ret;
-}
+TableProperties ExtentBasedTableBuilder::GetTableProperties() const { return rep_->props; }
 
 int ExtentBasedTableBuilder::build_large_object_extent_meta(const common::Slice &lob_key,
                                                             const storage::ExtentId &extent_id,

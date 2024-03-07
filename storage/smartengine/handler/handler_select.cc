@@ -3256,17 +3256,6 @@ int ha_smartengine::calculate_stats(const TABLE *const table_arg,
     }
   }
 
-  // get se table properties for these ranges
-  db::TablePropertiesCollection props;
-  for (auto it : ranges) {
-    const auto old_size MY_ATTRIBUTE((__unused__)) = props.size();
-    const auto status = se_db->GetPropertiesOfTablesInRange(
-        it.first, &it.second[0], it.second.size(), &props);
-    assert(props.size() >= old_size);
-    if (!status.ok())
-      DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
-  }
-
   int num_sst = 0;
   // group stats per index id
   std::unordered_map<GL_INDEX_ID, SeIndexStats> stats;

@@ -383,11 +383,8 @@ set(SOURCES
         db/recovery_point.cc
         db/snapshot_impl.cc
         db/table_cache.cc
-        db/table_properties_collector.cc
         db/version_set.cc
         db/wal_manager.cc
-        db/write_controller.cc
-        db/write_thread.cc
         db/batch_group.cc
         db/pipline_queue_manager.cc
         db/replay_task.cc
@@ -421,7 +418,6 @@ set(SOURCES
         options/db_options.cc
         options/options.cc
         options/options_helper.cc
-        options/options_sanity_check.cc
         port/stack_trace.cc
         storage/change_info.cc
         storage/data_file.cc
@@ -471,9 +467,7 @@ set(SOURCES
         util/comparator.cc
         util/concurrent_arena.cc
         util/crc32c.cc
-        util/delete_scheduler.cc
         util/dynamic_bloom.cc
-        util/event_logger.cc
         util/ebr.cc
         util/file_reader_writer.cc
         util/concurrent_direct_file_writer.cc
@@ -481,13 +475,10 @@ set(SOURCES
         util/filename.cc
         util/filter_policy.cc
         util/hash.cc
-        #util/logger_v2.cc
-        util/log_buffer.cc
         util/murmurhash.cc
         util/random.cc
         util/rate_limiter.cc
         util/slice.cc
-        util/sst_file_manager_impl.cc
         util/status.cc
         util/status_message.cc
         util/string_util.cc
@@ -643,7 +634,6 @@ set(TESTS
         unittest/util/coding_test.cc
         unittest/util/crc32c_test.cc
         unittest/util/defer_test.cc
-        unittest/util/delete_scheduler_test.cc
         unittest/util/dynamic_bloom_test.cc
         unittest/util/increment_number_allocator_test.cc
         #unittest/util/event_logger_test.cc
@@ -713,7 +703,6 @@ set(TESTS
         unittest/db/shrink_job_test.cc
         unittest/db/wal_manager_test.cc
         #db/write_callback_test.cc
-        unittest/db/write_controller_test.cc
         #db/end_key_pushdown_test.cc
         unittest/db/parallel_recovery_test.cc
         unittest/db/2pc_parallel_recovery_test.cc

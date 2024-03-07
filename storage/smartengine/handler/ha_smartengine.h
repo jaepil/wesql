@@ -831,8 +831,6 @@ private:
 
   int check_parallel(THD *const thd, HA_CHECK_OPT *const check_opt);
 
-  void remove_rows(SeTableDef *const tbl);
-
   /** mark ddl transaction modified se */
   void mark_ddl_trx_read_write();
 

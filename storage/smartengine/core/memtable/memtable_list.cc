@@ -20,7 +20,6 @@
 #include "storage/extent_space_manager.h"
 #include "table/merging_iterator.h"
 #include "util/coding.h"
-#include "util/log_buffer.h"
 #include "util/sync_point.h"
 
 namespace smartengine {

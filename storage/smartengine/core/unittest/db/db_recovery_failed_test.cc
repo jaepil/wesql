@@ -44,7 +44,6 @@ public:
   void SetUp() override
   {
     db_name_ = test::TmpDir() + TEST_CASE_NAME;
-    options_.create_if_missing = true;
     options_.env = env_;
     options_.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
     options_.parallel_wal_recovery = false;

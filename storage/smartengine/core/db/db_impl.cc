@@ -54,7 +54,6 @@
 #include "db/log_writer.h"
 #include "db/table_cache.h"
 #include "db/table_cache.h"
-#include "db/table_properties_collector.h"
 #include "db/version_set.h"
 #include "db/write_callback.h"
 #include "logger/log_module.h"
@@ -86,11 +85,9 @@
 #include "util/file_reader_writer.h"
 #include "util/file_util.h"
 #include "util/filename.h"
-#include "util/log_buffer.h"
 #include "util/memory_stat.h"
 #include "util/memory_stat.h"
 #include "util/mutexlock.h"
-#include "util/sst_file_manager_impl.h"
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
@@ -187,7 +184,7 @@ GlobalContext::GlobalContext()
   all_sub_table_->all_sub_table_mutex_ = &all_sub_table_mutex_;
 }
 
-GlobalContext::GlobalContext(const std::string &db_name, common::Options &options)
+GlobalContext::GlobalContext(const std::string &db_name, const common::Options &options)
     : db_name_(db_name),
       options_(options),
       env_options_(),
@@ -329,8 +326,7 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
       bg_recycle_scheduled_(0),
       master_thread_running_(false),
       db_lock_(nullptr),
-      mutex_(&mutable_db_options_.mutex_backtrace_threshold_ns, env_,
-              immutable_db_options_.use_adaptive_mutex),
+      mutex_(&mutable_db_options_.mutex_backtrace_threshold_ns, env_),
       shutting_down_(false),
       bg_cv_(&mutex_),
       logfile_number_(0),
@@ -345,16 +341,10 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
       max_log_file_number_during_recovery_(0),
       log_sync_cv_(&mutex_),
       total_log_size_(0),
-      max_total_in_memory_state_(0),
       is_snapshot_supported_(true),
       write_buffer_manager_(immutable_db_options_.write_buffer_manager.get()),
       trim_mem_flush_waited_(kFlushDone), next_trim_time_(0),
       storage_write_buffer_manager_(nullptr),
-      write_thread_(immutable_db_options_.enable_write_thread_adaptive_yield
-                        ? immutable_db_options_.write_thread_max_yield_usec
-                        : 0,
-                    immutable_db_options_.write_thread_slow_yield_usec),
-      write_controller_(mutable_db_options_.delayed_write_rate),
       pipline_manager_(100 * 1024),
       pipline_parallel_worker_num_(0),
       pipline_copy_log_busy_flag_(false),
@@ -395,7 +385,6 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
       has_unpersisted_data_(false),
       unable_to_flush_oldest_log_(false),
       env_options_(BuildDBOptions(immutable_db_options_, mutable_db_options_)),
-      num_running_ingest_file_(0),
 #ifndef ROCKSDB_LITE
       wal_manager_(immutable_db_options_, env_options_),
 #endif  // ROCKSDB_LITE
@@ -415,15 +404,14 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
     table_cache_.get()->set_mod_id(ModId::kTableCache);
   }
   VersionSet *vs_ptr = MOD_NEW_OBJECT(ModId::kDBImpl, VersionSet, dbname_, &immutable_db_options_,
-      env_options_, table_cache_.get(), write_buffer_manager_, &write_controller_);
+      env_options_, table_cache_.get(), write_buffer_manager_);
   versions_.reset(vs_ptr);
 
+  //TODO(Zhao Dongsheng. opt_enable_count and opt_print_stats should be configurable)
   QueryPerfContext *ctx = get_tls_query_perf_context();
-  ctx->opt_enable_count_ = mutable_db_options_.query_trace_enable_count;
-  ctx->opt_print_stats_ = mutable_db_options_.query_trace_print_stats;
+  ctx->opt_enable_count_ = true;
+  ctx->opt_print_stats_ = false;
 
-//  timer_service_ = MOD_NEW_OBJECT(ModId::kDefaultMod, TimerService);
-  //timer_service_ = PLACEMENT_NEW(TimerService, impl_alloc_);
   DumpSmartEngineBuildVersion();
   DumpDBFileSummary(immutable_db_options_, dbname_);
   immutable_db_options_.Dump();
@@ -518,8 +506,6 @@ DBImpl::~DBImpl() {
     FindObsoleteFiles(&job_context, true);
 
     mutex_.Unlock();
-    // manifest number starting from 2
-    job_context.manifest_file_number = 1;
     if (job_context.HaveSomethingToDelete()) {
       PurgeObsoleteFiles(job_context);
     }
@@ -591,7 +577,6 @@ DBImpl::~DBImpl() {
     MOD_DELETE_OBJECT(GlobalContext, global_ctx);
   }
   __SE_LOG(INFO, "Shutdown complete");
-  // LogFlush(immutable_db_options_.info_log);
 }
 
 void DBImpl::schedule_master_thread() {
@@ -745,50 +730,6 @@ void DBImpl::bg_master_thread_func() {
   SE_LOG(WARN, "smartengine Master Thread go offline", K(ret), K((int)bg_error_.code()));
 }
 
-void DBImpl::MaybeIgnoreError(Status* s) const {
-  if (s->ok() || immutable_db_options_.paranoid_checks) {
-    // No change needed
-  } else {
-    __SE_LOG(WARN, "Ignoring error %s",
-                   s->ToString().c_str());
-    *s = Status::OK();
-  }
-}
-
-const Status DBImpl::CreateArchivalDirectory() {
-  if (immutable_db_options_.wal_ttl_seconds > 0 ||
-      immutable_db_options_.wal_size_limit_mb > 0) {
-    std::string archivalPath = ArchivalDirectory(immutable_db_options_.wal_dir);
-    return env_->CreateDirIfMissing(archivalPath);
-  }
-  return Status::OK();
-}
-
-Status DBImpl::prepare_create_storage_manager(const DBOptions& db_options,
-                                      const ColumnFamilyOptions& cf_options) {
-  //TODO:yuanfeng unused
-  /*
-  extent_space_manager_.rnew storage::ExtentSpaceManager(
-      db_options, versions_->get_file_number_generator()));
-  if (nullptr == extent_space_manager_) {
-    __SE_LOG(ERROR,
-                    "Create extent space manager failed %d\n",
-                    Status::kMemoryLimit);
-    return Status(Status::kMemoryLimit);
-  }
-  */
-
-  return Status::OK();
-}
-
-void DBImpl::PrintStatistics() {
-  auto dbstats = immutable_db_options_.statistics.get();
-  if (dbstats) {
-    __SE_LOG(INFO, "\nSTATISTICS:\n %s",
-                   dbstats->ToString().c_str());
-  }
-}
-
 void DBImpl::ScheduleBgLogWriterClose(JobContext* job_context) {
   if (!job_context->logs_to_free.empty()) {
     for (auto l : job_context->logs_to_free) {
@@ -898,7 +839,6 @@ Status DBImpl::SetOptions(
 
   MutableCFOptions new_options;
   Status s;
-  WriteThread::Writer w;
   {
     InstrumentedMutexLock l(&mutex_);
     s = cfd->SetOptions(options_map);
@@ -928,7 +868,6 @@ Status DBImpl::SetOptions(
   oss << "} " << (s.ok() ? "succeeded" : "failed");
   __SE_LOG(INFO, "SetOptions() on sub table [ID=%u] %s",
                 cfd->GetID(), oss.str().c_str());
-  // LogFlush(immutable_db_options_.info_log);
   return s;
 #endif  // ROCKSDB_LITE
 }
@@ -946,7 +885,6 @@ Status DBImpl::SetDBOptions(
 
   MutableDBOptions new_options;
   Status s;
-  WriteThread::Writer w;
   WriteContext write_context;
   {
     InstrumentedMutexLock l(&mutex_);
@@ -959,9 +897,6 @@ Status DBImpl::SetDBOptions(
             new_options.max_background_compactions, Env::Priority::LOW);
         MaybeScheduleFlushOrCompaction();
       }
-
-      write_controller_.set_max_delayed_write_rate(
-          new_options.delayed_write_rate);
 
       mutable_db_options_ = new_options;
       stats_dump_period_sec_.store(mutable_db_options_.stats_dump_period_sec);
@@ -988,7 +923,6 @@ Status DBImpl::SetDBOptions(
   } else {
     __SE_LOG(WARN, "SetDBOptions failed");
   }
-  // LogFlush(immutable_db_options_.info_log);
   return s;
 #endif  // ROCKSDB_LITE
 }
@@ -1015,10 +949,7 @@ Status DBImpl::SyncWAL() {
          it != logs_.end() && it->number <= current_log_number; ++it) {
       if (!it->writer->file()->writable_file()->IsSyncThreadSafe()) {
         return Status::NotSupported(
-            "SyncWAL() is not supported for this implementation of WAL file",
-            immutable_db_options_.allow_mmap_writes
-                ? "try setting Options::allow_mmap_writes to false"
-                : Slice());
+            "SyncWAL() is not supported for this implementation of WAL file", Slice());
       }
     }
     for (auto it = logs_.begin();
@@ -1035,7 +966,7 @@ Status DBImpl::SyncWAL() {
   QUERY_COUNT(CountPoint::WAL_FILE_SYNCED);
   Status status;
   for (log::Writer* log : logs_to_sync) {
-    status = log->file()->sync(immutable_db_options_.use_fsync);
+    status = log->file()->sync(false /**use_fsync*/);
     if (!status.ok()) {
       break;
     }
@@ -1129,26 +1060,6 @@ void DBImpl::BackgroundCallPurge() {
   mutex_.Unlock();
 }
 
-//int DBImpl::init_cache_purge_timer() {
-//  int ret = Status::kOk;
-//  if (nullptr != immutable_db_options_.row_cache.get()) {
-//    std::function<void(void)> row_cache_purge = std::bind(
-//            &RowCache::schedule_cache_purge, immutable_db_options_.row_cache.get(), env_);
-//    uint64_t period = 3000; // 3s
-//    cache_purge_timer_ = MOD_NEW_OBJECT(ModId::kRowCache, Timer, timer_service_, period /* ms */,
-//                                    Timer::Repeatable, row_cache_purge);
-//    if (nullptr == cache_purge_timer_) {
-//      ret = Status::kMemoryLimit;
-//      SE_LOG(ERROR, "register dump stats timer error", K(ret));
-//      assert(false);
-//    } else {
-//      cache_purge_timer_->start();
-//    }
-//  }
-//  return ret;
-//}
-
-
 namespace {
 struct IterState {
   IterState(DBImpl* _db, InstrumentedMutex* _mu, SuperVersion* _super_version,
@@ -1184,7 +1095,6 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
     state->mu->Unlock();
 
     MOD_DELETE_OBJECT(SuperVersion, state->super_version);
-//    delete state->super_version;
     if (job_context.HaveSomethingToDelete()) {
       if (state->background_purge) {
         // PurgeObsoleteFiles here does not delete files. Instead, it adds the
@@ -1447,131 +1357,6 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
   return s;
 }
 
-std::vector<Status> DBImpl::MultiGet(
-    const ReadOptions& read_options,
-    const std::vector<ColumnFamilyHandle*>& column_family,
-    const std::vector<Slice>& keys, std::vector<std::string>* values) {
-  SequenceNumber snapshot;
-
-  struct MultiGetColumnFamilyData {
-    ColumnFamilyData* cfd;
-    SuperVersion* super_version;
-  };
-  ArenaAllocator alloc(8 * 1024);
-  std::unordered_map<uint32_t, MultiGetColumnFamilyData*> multiget_cf_data;
-  // fill up and allocate outside of mutex
-  for (auto cf : column_family) {
-    auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(cf);
-    auto cfd = cfh->cfd();
-    if (multiget_cf_data.find(cfd->GetID()) == multiget_cf_data.end()) {
-//      auto mgcfd = new MultiGetColumnFamilyData();
-      auto mgcfd = ALLOC_OBJECT(MultiGetColumnFamilyData, alloc);
-      mgcfd->cfd = cfd;
-      multiget_cf_data.insert({cfd->GetID(), mgcfd});
-    }
-  }
-
-  mutex_.Lock();
-  if (read_options.snapshot != nullptr) {
-    snapshot =
-        reinterpret_cast<const SnapshotImpl*>(read_options.snapshot)->number_;
-  } else {
-    snapshot = versions_->LastSequence();
-  }
-  for (auto mgd_iter : multiget_cf_data) {
-    mgd_iter.second->super_version =
-        mgd_iter.second->cfd->GetSuperVersion()->Ref();
-  }
-  mutex_.Unlock();
-
-  // Note: this always resizes the values array
-  size_t num_keys = keys.size();
-  std::vector<Status> stat_list(num_keys);
-  values->resize(num_keys);
-
-  // Keep track of bytes that we read for statistics-recording later
-  uint64_t bytes_read = 0;
-
-  // For each of the given keys, apply the entire "get" process as follows:
-  // First look in the memtable, then in the immutable memtable (if any).
-  // s is both in/out. When in, s could either be OK or MergeInProgress.
-  // merge_operands will contain the sequence of merges in the latter case.
-  for (size_t i = 0; i < num_keys; ++i) {
-    Status& s = stat_list[i];
-    int ret = Status::kOk;
-    std::string* value = &(*values)[i];
-
-    LookupKey lkey(keys[i], snapshot);
-    auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family[i]);
-    auto mgd_iter = multiget_cf_data.find(cfh->cfd()->GetID());
-    assert(mgd_iter != multiget_cf_data.end());
-    auto mgd = mgd_iter->second;
-    auto super_version = mgd->super_version;
-    bool skip_memtable =
-        (read_options.read_tier == kPersistedTier &&
-         has_unpersisted_data_.load(std::memory_order_relaxed));
-    bool done = false;
-    if (!skip_memtable) {
-      if (super_version->mem->Get(lkey, value, &s, read_options)) {
-        done = true;
-        // TODO(?): QUERY_COUNT(stats_, MEMTABLE_HIT)?
-      } else if (super_version->imm->Get(lkey, value, &s, read_options)) {
-        done = true;
-        // TODO(?): QUERY_COUNT(stats_, MEMTABLE_HIT)?
-      }
-    }
-    if (!done) {
-      PinnableSlice pinnable_val;
-      if (FAILED(mgd->cfd->get_from_storage_manager(read_options,
-                                                    *super_version->current_meta_,
-                                                    lkey,
-                                                    pinnable_val,
-                                                    done))) {
-        s = Status(ret);
-        if (Status::kNotFound != ret) {
-          SE_LOG(WARN, "fail to get from storage_manager", K(ret));
-        } else {
-          //TODO:yuanfeng
-          ret = Status::kOk;
-        }
-      }
-
-      value->assign(pinnable_val.data(), pinnable_val.size());
-      // TODO(?): QUERY_COUNT(stats_, MEMTABLE_MISS)?
-    }
-
-    if (s.ok()) {
-      bytes_read += value->size();
-    }
-  }
-
-  // Post processing (decrement reference counts and record statistics)
-  autovector<SuperVersion*> superversions_to_delete;
-
-  // TODO(icanadi) do we need lock here or just around Cleanup()?
-  mutex_.Lock();
-  for (auto mgd_iter : multiget_cf_data) {
-    auto mgd = mgd_iter.second;
-    if (mgd->super_version->Unref()) {
-      mgd->cfd->release_meta_snapshot(mgd->super_version->current_meta_,
-                                      &mutex_);
-      mgd->super_version->Cleanup();
-      superversions_to_delete.push_back(mgd->super_version);
-    }
-  }
-  mutex_.Unlock();
-
-  for (auto td : superversions_to_delete) {
-    delete td;
-  }
-  for (auto mgd : multiget_cf_data) {
-//    delete mgd.second;
-    FREE_OBJECT(MultiGetColumnFamilyData, alloc, mgd.second);
-  }
-
-  return stat_list;
-}
-
 Status DBImpl::CreateColumnFamily(CreateSubTableArgs &args, ColumnFamilyHandle **handle)
 {
   int ret = Status::kOk;
@@ -1661,170 +1446,6 @@ Status DBImpl::DropColumnFamily(ColumnFamilyHandle *column_family)
 
   return ret;
 }
-/*
-Status DBImpl::CreateColumnFamily(const ColumnFamilyOptions& cf_options,
-                                  const std::string& column_family_name,
-                                  ColumnFamilyHandle** handle) {
-  Status s;
-  *handle = nullptr;
-
-  s = CheckCompressionSupported(cf_options);
-  if (s.ok() && immutable_db_options_.allow_concurrent_memtable_write) {
-    s = CheckConcurrentWritesSupported(cf_options);
-  }
-  if (!s.ok()) {
-    return s;
-  }
-
-  {
-    InstrumentedMutexLock l(&mutex_);
-
-    if (versions_->GetColumnFamilySet()->GetColumnFamily(column_family_name) !=
-        nullptr) {
-      return Status::InvalidArgument("sub table already exists");
-    }
-    //VersionEdit edit;
-    //edit.AddColumnFamily(column_family_name);
-    //uint32_t new_id = versions_->GetColumnFamilySet()->GetNextColumnFamilyID();
-    //edit.SetColumnFamily(new_id);
-    //edit.SetLogNumber(logfile_number_);
-    //edit.SetComparatorName(cf_options.comparator->Name());
-
-    // LogAndApply will both write the creation in MANIFEST and create
-    // ColumnFamilyData object
-    {  // write thread
-      this->wait_all_active_thread_exit();
-      // LogAndApply will both write the creation in MANIFEST and create
-      // ColumnFamilyData object
-      //s = versions_->LogAndApply(nullptr, MutableCFOptions(cf_options), &edit,
-      //                           &mutex_, directories_.GetDbDir(), false,
-      //                           &cf_options);
-    }
-    if (s.ok()) {
-      single_column_family_mode_ = false;
-      auto* cfd =
-          versions_->GetColumnFamilySet()->GetColumnFamily(column_family_name);
-      assert(cfd != nullptr);
-      delete InstallSuperVersionAndScheduleWork(
-          cfd, nullptr, *cfd->GetLatestMutableCFOptions());
-
-      if (!cfd->mem()->IsSnapshotSupported()) {
-        is_snapshot_supported_ = false;
-      }
-      auto* table_factory = dynamic_cast<table::ExtentBasedTableFactory*>(
-          cfd->ioptions()->table_factory);
-      if (table_factory != nullptr) {
-        BlockBasedTableOptions table_opts = table_factory->table_options();
-        cfd->ioptions()->filter_manager->start_build_thread(
-            cfd, this, &mutex_, &(versions_->env_options()), env_,
-            table_opts.filter_policy, table_opts.block_cache,
-            table_opts.whole_key_filtering,
-            table_opts.cache_index_and_filter_blocks_with_high_priority,
-            mutable_db_options_.filter_queue_stripes,
-            mutable_db_options_.filter_building_threads,
-            &filter_build_quota_);
-        block_cache_ = table_opts.block_cache;
-      }
-
-      *handle = new ColumnFamilyHandleImpl(cfd, this, &mutex_);
-      __SE_LOG(INFO,
-                     "Created sub table [%s] (ID %u)",
-                     column_family_name.c_str(), (unsigned)cfd->GetID());
-    } else {
-      __SE_LOG(ERROR,
-                      "Creating sub table [%s] FAILED -- %s",
-                      column_family_name.c_str(), s.ToString().c_str());
-    }
-  }  // InstrumentedMutexLock l(&mutex_)
-
-  // this is outside the mutex
-  if (s.ok()) {
-    NewThreadStatusCfInfo(
-        reinterpret_cast<ColumnFamilyHandleImpl*>(*handle)->cfd());
-  }
-  return s;
-}
-*/
-
-/*
-Status DBImpl::DropColumnFamily(ColumnFamilyHandle* column_family) {
-  auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  auto cfd = cfh->cfd();
-  if (cfd->GetID() == 0) {
-    return Status::InvalidArgument("Can't drop default sub table");
-  }
-
-  bool cf_support_snapshot = cfd->mem()->IsSnapshotSupported();
-
-  //VersionEdit edit;
-  //edit.DropColumnFamily();
-  //edit.SetColumnFamily(cfd->GetID());
-
-  Status s;
-  {
-    InstrumentedMutexLock l(&mutex_);
-    if (cfd->IsDropped()) {
-      s = Status::InvalidArgument("sub table already dropped!\n");
-    }
-    if (s.ok()) {
-      // we drop sub table from a single write thread
-      this->wait_all_active_thread_exit();
-      //s = versions_->LogAndApply(cfd, *cfd->GetLatestMutableCFOptions(), &edit,
-      //                           &mutex_);
-    }
-
-    if (!cf_support_snapshot) {
-      // Dropped Column Family doesn't support snapshot. Need to recalculate
-      // is_snapshot_supported_.
-      bool new_is_snapshot_supported = true;
-      for (auto c : *versions_->GetColumnFamilySet()) {
-        if (!c->IsDropped() && !c->mem()->IsSnapshotSupported()) {
-          new_is_snapshot_supported = false;
-          break;
-        }
-      }
-      is_snapshot_supported_ = new_is_snapshot_supported;
-    }
-  }
-
-  if (s.ok()) {
-    // Note that here we erase the associated cf_info of the to-be-dropped
-    // cfd before its ref-count goes to zero to avoid having to erase cf_info
-    // later inside db_mutex.
-    EraseThreadStatusCfInfo(cfd);
-    assert(cfd->IsDropped());
-    auto* mutable_cf_options = cfd->GetLatestMutableCFOptions();
-    max_total_in_memory_state_ -= mutable_cf_options->write_buffer_size *
-                                  mutable_cf_options->max_write_buffer_number;
-    __SE_LOG(INFO,
-                   "Dropped sub table with id %u\n", cfd->GetID());
-  } else {
-    __SE_LOG(ERROR, "Dropping sub table with id %u FAILED -- %s\n", cfd->GetID(), s.ToString().c_str());
-  }
-
-  return s;
-}
-*/
-
-bool DBImpl::KeyMayExist(const ReadOptions& read_options,
-                         ColumnFamilyHandle* column_family, const Slice& key,
-                         std::string* value, bool* value_found) {
-  assert(value != nullptr);
-  if (value_found != nullptr) {
-    // falsify later if key-may-exist but can't fetch value
-    *value_found = true;
-  }
-  ReadOptions roptions = read_options;
-  roptions.read_tier = kBlockCacheTier;  // read from block cache only
-  PinnableSlice pinnable_val;
-  auto s = GetImpl(roptions, column_family, key, &pinnable_val, value_found);
-  value->assign(pinnable_val.data(), pinnable_val.size());
-
-  // If block_cache is enabled and the index block of the table didn't
-  // not present in block_cache, the return value will be Status::Incomplete.
-  // In this case, key may still exist in the table.
-  return s.ok() || s.IsIncomplete();
-}
 
 Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
                               ColumnFamilyHandle* column_family) {
@@ -1889,9 +1510,12 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
   // likely that any iterator pointer is close to the iterator it points to so
   // that they are likely to be in the same cache line and/or page.
   ArenaWrappedDBIter* db_iter = NewArenaWrappedDbIterator(
-      env_, read_options, *cfd->ioptions(), cfd->user_comparator(), snapshot,
-      sv->mutable_cf_options.max_sequential_skip_in_iterations,
-      sv->version_number, extent_space_manager_);
+      env_,
+      read_options,
+      *cfd->ioptions(),
+      cfd->user_comparator(),
+      snapshot,
+      extent_space_manager_);
   QUERY_TRACE_END();
 
   InternalIterator* internal_iter =
@@ -1939,23 +1563,6 @@ const Snapshot* DBImpl::GetSnapshotForWriteConflictBoundary() {
  * 2. For Release Snapshot, only one thread can be do Delete, granted above
  *
  */
-#if 0
-const Snapshot* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary) {
-  int64_t unix_time = 0;
-  env_->GetCurrentTime(&unix_time);  // Ignore error
-  SnapshotImpl* s = new SnapshotImpl;
-
-  InstrumentedMutexLock l(&mutex_);
-  // returns null if the underlying memtable does not support snapshot.
-  if (!is_snapshot_supported_) {
-    delete s;
-    return nullptr;
-  }
-  return snapshots_.New(s, versions_->LastSequence(), unix_time,
-                        is_write_conflict_boundary);
-}
-#endif
-
 const Snapshot* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary) {
   int64_t unix_time = 0;
   env_->GetCurrentTime(&unix_time);  // Ignore error
@@ -2006,17 +1613,6 @@ const Snapshot* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary) {
   return ns;
 }
 
-#if 0
-void DBImpl::ReleaseSnapshot(const Snapshot* s) {
-  const SnapshotImpl* casted_s = reinterpret_cast<const SnapshotImpl*>(s);
-  {
-    InstrumentedMutexLock l(&mutex_);
-    snapshots_.Delete(casted_s);
-  }
-  delete casted_s;
-}
-#endif
-
 void DBImpl::ReleaseSnapshot(const Snapshot* s) {
   bool to_del = 0;
   int64_t n_ref = 0;
@@ -2040,72 +1636,14 @@ void DBImpl::ReleaseSnapshot(const Snapshot* s) {
     assert(n_ref > 1);
   }
 
-//  if (to_del) delete casted_s;
   if (to_del) {
     MOD_DELETE_OBJECT(SnapshotImpl, casted_s);
   }
 }
 
-#ifndef ROCKSDB_LITE
-Status DBImpl::GetPropertiesOfAllTables(ColumnFamilyHandle* column_family,
-                                        TablePropertiesCollection* props) {
-  Status s;
-  auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  auto cfd = cfh->cfd();
-
-  /*
-  // Increment the ref count
-  mutex_.Lock();
-  auto version = cfd->current();
-  version->Ref();
-  mutex_.Unlock();
-
-  auto s = version->GetPropertiesOfAllTables(props);
-
-  // Decrement the ref count
-  mutex_.Lock();
-  version->Unref();
-  mutex_.Unlock();
-  */
-  return s;
-}
-
-Status DBImpl::GetPropertiesOfTablesInRange(ColumnFamilyHandle* column_family,
-                                            const Range* range, std::size_t n,
-                                            TablePropertiesCollection* props) {
-  Status s;
-  auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  auto cfd = cfh->cfd();
-
-  /*
-  // Increment the ref count
-  mutex_.Lock();
-  auto version = cfd->current();
-  version->Ref();
-  mutex_.Unlock();
-
-  auto s = version->GetPropertiesOfTablesInRange(range, n, props);
-
-  // Decrement the ref count
-  mutex_.Lock();
-  version->Unref();
-  mutex_.Unlock();
-  */
-  return s;
-}
-
-#endif  // ROCKSDB_LITE
-
 const std::string& DBImpl::GetName() const { return dbname_; }
 
 Env* DBImpl::GetEnv() const { return env_; }
-
-Options DBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
-  InstrumentedMutexLock l(&mutex_);
-  auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  return Options(BuildDBOptions(immutable_db_options_, mutable_db_options_),
-                 cfh->cfd()->GetLatestCFOptions());
-}
 
 DBOptions DBImpl::GetDBOptions() const {
   InstrumentedMutexLock l(&mutex_);
@@ -2198,43 +1736,6 @@ bool DBImpl::GetIntPropertyInternal(ColumnFamilyData* cfd,
     return true;
   }
 }
-
-#ifndef ROCKSDB_LITE
-Status DBImpl::ResetStats() {
-  InstrumentedMutexLock l(&mutex_);
-  int ret = Status::kOk;
-  int tmp_ret = Status::kOk;
-  GlobalContext *global_ctx = nullptr;
-  AllSubTable *all_sub_table = nullptr;
-  SubTable *sub_table = nullptr;
-  if (nullptr == (global_ctx = versions_->get_global_ctx())) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, global ctx must not nullptr", K(ret));
-  } else if (FAILED(global_ctx->acquire_thread_local_all_sub_table(all_sub_table))) {
-    SE_LOG(WARN, "fail to acquire all sub table", K(ret));
-  } else if (nullptr == all_sub_table) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, all sub table must not nullptr", K(ret));
-  } else {
-    SubTableMap &all_sub_tables = all_sub_table->sub_table_map_;
-    for (auto iter = all_sub_tables.begin(); Status::kOk == ret && iter != all_sub_tables.end(); ++iter) {
-      if (nullptr == (sub_table = iter->second)) {
-        ret = Status::kCorruption;
-        SE_LOG(WARN, "subtable must not nullptr", K(ret));
-      } else {
-        sub_table->internal_stats()->Clear();
-      }
-    }
-  }
-
-  //there will cover the error code, by design
-  tmp_ret = ret;
-  if (nullptr != global_ctx && FAILED(global_ctx->release_thread_local_all_sub_table(all_sub_table))) {
-    SE_LOG(WARN, "fail to release all sub table", K(ret), K(tmp_ret));
-  }
-  return Status(ret);
-}
-#endif  // ROCKSDB_LITE
 
 bool DBImpl::GetAggregatedIntProperty(const Slice& property,
                                       uint64_t* aggregated_value) {
@@ -2481,22 +1982,6 @@ void DBImpl::GetApproximateSizes(ColumnFamilyHandle* column_family,
   ReturnAndCleanupSuperVersion(cfd, sv);
 }
 
-std::list<uint64_t>::iterator
-DBImpl::CaptureCurrentFileNumberInPendingOutputs() {
-  // We need to remember the iterator of our insert, because after the
-  // background job is done, we need to remove that element from
-  // pending_outputs_.
-  //pending_outputs_.push_back(versions_->current_next_file_number());
-  auto pending_outputs_inserted_elem = pending_outputs_.end();
-  --pending_outputs_inserted_elem;
-  return pending_outputs_inserted_elem;
-}
-
-void DBImpl::ReleaseFileNumberFromPendingOutputs(
-    std::list<uint64_t>::iterator v) {
-  pending_outputs_.erase(v);
-}
-
 #ifndef ROCKSDB_LITE
 Status DBImpl::GetUpdatesSince(
     SequenceNumber seq, unique_ptr<TransactionLogIterator>* iter,
@@ -2508,287 +1993,7 @@ Status DBImpl::GetUpdatesSince(
   return wal_manager_.GetUpdatesSince(seq, iter, read_options, versions_.get());
 }
 
-Status DBImpl::DeleteFile(std::string name) {
-  assert(false);
-  uint64_t number;
-  FileType type;
-  WalFileType log_type;
-  if (!ParseFileName(name, &number, &type, &log_type) ||
-      (type != kTableFile && type != kLogFile)) {
-    __SE_LOG(ERROR, "DeleteFile %s failed.\n",
-                    name.c_str());
-    return Status::InvalidArgument("Invalid file name");
-  }
-
-  Status status;
-  if (type == kLogFile) {
-    // Only allow deleting archived log files
-    if (log_type != kArchivedLogFile) {
-      __SE_LOG(ERROR,
-                      "DeleteFile %s failed - not archived log.\n",
-                      name.c_str());
-      return Status::NotSupported("Delete only supported for archived logs");
-    }
-    status =
-        env_->DeleteFile(immutable_db_options_.wal_dir + "/" + name.c_str());
-    if (!status.ok()) {
-      __SE_LOG(ERROR,
-                      "DeleteFile %s failed -- %s.\n", name.c_str(),
-                      status.ToString().c_str());
-    }
-    return status;
-  }
-
-  int level;
-  FileMetaData* metadata;
-  ColumnFamilyData* cfd;
-  //VersionEdit edit;
-  JobContext job_context(next_job_id_.fetch_add(1), storage_logger_, true);
-
-  // LogFlush(immutable_db_options_.info_log);
-  // remove files outside the db-lock
-  if (job_context.HaveSomethingToDelete()) {
-    // Call PurgeObsoleteFiles() without holding mutex.
-    PurgeObsoleteFiles(job_context);
-  }
-  job_context.Clean();
-  return status;
-}
-
-Status DBImpl::DeleteFilesInRange(ColumnFamilyHandle* column_family,
-                                  const Slice* begin, const Slice* end) {
-  Status status;
-  /*
-  auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  ColumnFamilyData* cfd = cfh->cfd();
-
-  Arena arena;
-  //std::vector<MetaEntry> chosen;
-  //ChangeInfo info;
-  char *buf = nullptr;
-  SuperVersion *old = nullptr;
-
-  // delete all the extents of one index
-  // by delete the data between index_id and index_id + 1
-  // Eg: delete 0001  - 0002
-  Slice start_key = Slice(StorageManager::MIN_USER_KEY);
-  if (begin != nullptr && begin->size() > 0) {
-    // change to internal key
-    buf = arena.AllocateAligned(begin->size() + StorageManager::SEQUENCE_TYPE_LEN);
-    if (nullptr == buf) {
-      __SE_LOG(ERROR, 
-                  "Allocate buffer failed for delete index %d.", 
-                  Status::kMemoryLimit);
-      return Status::MemoryLimit();
-    }
-    memcpy(buf, begin->data(), begin->size());
-    EncodeFixed64(buf + begin->size(), 
-                  PackSequenceAndType(kMaxSequenceNumber, kTypeValue));
-    start_key = Slice(buf, begin->size() + StorageManager::SEQUENCE_TYPE_LEN);
-  }
-
-  Slice end_key = Slice(StorageManager::MAX_USER_KEY);
-  if (end != nullptr && end->size() > 0) {
-    // change to internal key
-    buf = arena.AllocateAligned(end->size() + StorageManager::SEQUENCE_TYPE_LEN);
-    if (nullptr == buf) {
-      __SE_LOG(ERROR,
-                  "Allocate buffer failed for delete index %d.",
-                  Status::kMemoryLimit);
-      return Status::MemoryLimit();
-    }
-    memcpy(buf, end->data(), end->size());
-    EncodeFixed64(buf + end->size(),
-                  PackSequenceAndType(kMaxSequenceNumber, kTypeValue));
-    end_key = Slice(buf, end->size() + StorageManager::SEQUENCE_TYPE_LEN);
-  }
-    
-  mutex_.Lock();
-  // can't delete the extents compacted
-  if (cfd->pending_compaction()) {
-    mutex_.Unlock();
-    SE_LOG(INFO, "Can't drop cf when compact", K(cfd->GetName().c_str()));
-    return Status::TryAgain();
-  }
-  cfd->set_pending_compaction(true); 
-  const Snapshot *sn = cfd->get_meta_snapshot(&mutex_);    
-  mutex_.Unlock();
-
-  ReadOptions ro;
-  std::unique_ptr<InternalIterator, ptr_destruct<InternalIterator>> iter;
-  Level0LayerIterator *level0_iter = nullptr;
-  MetaKey meta_key;
-  MetaValue meta_value;
-  int ret = Status::kOk;
-  int64_t pos = 0;
-  //info.batch_.Clear();
-
-  if (sn->get_level0() != nullptr) {
-    for (int32_t layer = 0; layer < sn->get_level0()->size(); layer++) { // level0
-      level0_iter =  
-      (Level0LayerIterator *)sn->get_level0()->layers()[layer]->create_iterator(ro, &arena,
-                                                                      cfd->GetID());
-      if (nullptr == level0_iter) {
-        continue;
-      }
-
-      level0_iter->Seek2(start_key);
-      while (level0_iter->Valid()) {
-        pos = 0;
-        ret = meta_key.deserialize(level0_iter->key().data(),
-                                   level0_iter->key().size(), pos);
-        if (Status::kOk == ret) {
-          if (end != nullptr && cfd->internal_comparator().user_comparator()->Compare(
-                                      ExtractUserKey(meta_key.largest_key_), *end) > 0) {
-            break;
-          }
-          pos = 0;
-          ret = meta_value.deserialize(level0_iter->value().data(), 
-                                     level0_iter->value().size(), pos);
-          if (Status::kOk == ret) {
-            if (begin == nullptr || cfd->internal_comparator().user_comparator()->Compare(
-                      ExtractUserKey(meta_value.smallest_key_), *begin) >= 0) {
-              //info.batch_.Delete(level0_iter->key());
-            } 
-          }
-        }
-        level0_iter->Next();
-      }
-    } 
-  } 
-  for (int32_t level = 1; level < StorageManager::MAX_LEVEL; level++) { // level1/2
-    iter.reset(cfd->get_storage_manager()->get_single_level_iterator(ro, &arena,
-                                                                 sn, level));
-    if (nullptr == iter) {
-      continue;
-    }
-
-    iter->Seek(start_key);
-    while (iter->Valid()) {
-      if (end != nullptr && cfd->internal_comparator().user_comparator()->Compare(
-                                    ExtractUserKey(iter->key()), *end) > 0) {
-        // outer the bigger bound
-        break;
-      }
-      pos = 0;
-      ret = meta_value.deserialize(iter->value().data(), 
-                                   iter->value().size(), pos);
-      if (Status::kOk == ret) {
-        if (begin == nullptr || cfd->internal_comparator().user_comparator()->Compare(
-                  ExtractUserKey(meta_value.smallest_key_), *begin) >= 0) {
-          // include by the smaller bound 
-          //info.batch_.Delete(Slice(iter->key().data() - 2 * StorageManager::SEQUENCE_TYPE_LEN, 
-          //                         iter->key().size() + 2 * StorageManager::SEQUENCE_TYPE_LEN));
-        } 
-      }
-      iter->Next();
-    } 
-  }
-
-  cfd->get_storage_manager()->fill_drop_large_objects(start_key, end_key, info);
-
-  mutex_.Lock();
-  //status = versions_->log_and_apply(cfd, &mutex_, info);
-  if (!status.ok()) {
-    __SE_LOG(ERROR, 
-                    "Delete meta for drop index failed %d.", status.code());
-    cfd->set_pending_compaction(false);
-    cfd->release_meta_snapshot(sn, &mutex_);
-    mutex_.Unlock();
-    return status;
-  }
-  // update super version, so delete extent not seen by compaction 
-  old = cfd->InstallSuperVersion(new SuperVersion(), &mutex_,
-                                 *cfd->GetLatestMutableCFOptions()); 
-  cfd->set_pending_compaction(false);
-  cfd->release_meta_snapshot(sn, &mutex_);
-  mutex_.Unlock();
-  if (old) {
-    delete old;
-  }
-  // recycle all the cfd extents here, 
-  // it's safe here because no concurrent delete one cfd
-  status = cfd->get_storage_manager()->recycle_meta_value(kMaxSequenceNumber, arena);
-  if (!status.ok()) {
-    __SE_LOG(ERROR, "Recycle extents failed cfd id %d, error %d",
-                  cfd->GetID(), status.code());
-  }
-
-  ret = cfd->get_storage_manager()->recycle_large_object(kMaxSequenceNumber, arena);
-  if (ret != Status::kOk) {
-    status = ret;
-    __SE_LOG(ERROR, "Recycle large object failed, cfd id %d, error %d",
-                  cfd->GetID(), ret);
-  }
-  */
-
-  return status;
-}
-
 #endif  // ROCKSDB_LITE
-
-Status DBImpl::GetDbIdentity(std::string& identity) const {
-  std::string idfilename = IdentityFileName(dbname_);
-  const EnvOptions soptions;
-  unique_ptr<SequentialFileReader, ptr_destruct_delete<SequentialFileReader>> id_file_reader_ptr;
-  unique_ptr<SequentialFile, ptr_destruct_delete<SequentialFile>> idfile_ptr;
-  SequentialFileReader *id_file_reader = nullptr;
-  Status s;
-  {
-    SequentialFile *idfile = nullptr;
-    s = env_->NewSequentialFile(idfilename, idfile, soptions);
-    idfile_ptr.reset(idfile);
-    if (!s.ok()) {
-      return s;
-    }
-    id_file_reader = MOD_NEW_OBJECT(ModId::kEnv, SequentialFileReader, idfile);
-    id_file_reader_ptr.reset(id_file_reader);
-  }
-
-  uint64_t file_size;
-  s = env_->GetFileSize(idfilename, &file_size);
-  if (!s.ok()) {
-    return s;
-  }
-  char* buffer = reinterpret_cast<char*>(alloca(file_size));
-  Slice id;
-  s = id_file_reader->Read(static_cast<size_t>(file_size), &id, buffer);
-  if (!s.ok()) {
-    return s;
-  }
-  identity.assign(id.ToString());
-  // If last character is '\n' remove it from identity
-  if (identity.size() > 0 && identity.back() == '\n') {
-    identity.pop_back();
-  }
-  return s;
-}
-
-// Default implementation -- returns not supported status
-Status DB::CreateColumnFamily(CreateSubTableArgs &args,
-                              ColumnFamilyHandle** handle) {
-  return Status::NotSupported("");
-}
-Status DB::DropColumnFamily(ColumnFamilyHandle* column_family) {
-  return Status::NotSupported("");
-}
-Status DB::DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) {
-//  delete column_family;
-  MOD_DELETE_OBJECT(ColumnFamilyHandle, column_family);
-  return Status::OK();
-}
-
-DB::~DB() {}
-
-Status DB::ListColumnFamilies(const DBOptions& db_options,
-                              const std::string& name,
-                              std::vector<std::string>* column_families) {
-  //TODO:yuanfeng
-  //return VersionSet::ListColumnFamilies(column_families, name, db_options.env);
-  return Status::kOk;
-}
-
-Snapshot::~Snapshot() {}
 
 Status DestroyDB(const std::string& dbname, const Options& options) {
   const ImmutableDBOptions soptions(SanitizeOptions(dbname, options));
@@ -2804,9 +2009,8 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
   if (result.ok()) {
     uint64_t number;
     FileType type;
-    InfoLogPrefix info_log_prefix(!soptions.db_log_dir.empty(), dbname);
     for (size_t i = 0; i < filenames.size(); i++) {
-      if (ParseFileName(filenames[i], &number, info_log_prefix.prefix, &type) &&
+      if (ParseFileName(filenames[i], &number, &type) &&
           type != kDBLockFile) {  // Lock file will be deleted at end
         Status del;
         std::string path_to_delete = dbname + "/" + filenames[i];
@@ -2882,71 +2086,6 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
   return result;
 }
 
-
-#ifndef ROCKSDB_LITE
-namespace {
-void DeleteOptionsFilesHelper(const std::map<uint64_t, std::string>& filenames,
-                              const size_t num_files_to_keep, Env* env) {
-  if (filenames.size() <= num_files_to_keep) {
-    return;
-  }
-  for (auto iter = std::next(filenames.begin(), num_files_to_keep);
-       iter != filenames.end(); ++iter) {
-    if (!env->DeleteFile(iter->second).ok()) {
-      __SE_LOG(WARN, "Unable to delete options file %s",
-                     iter->second.c_str());
-    }
-  }
-}
-}  // namespace
-#endif  // !ROCKSDB_LITE
-
-Status DBImpl::DeleteObsoleteOptionsFiles() {
-#ifndef ROCKSDB_LITE
-  std::vector<std::string> filenames;
-  // use ordered map to store keep the filenames sorted from the newest
-  // to the oldest.
-  std::map<uint64_t, std::string> options_filenames;
-  Status s;
-  s = GetEnv()->GetChildren(GetName(), &filenames);
-  if (!s.ok()) {
-    return s;
-  }
-  for (auto& filename : filenames) {
-    uint64_t file_number;
-    FileType type;
-    if (ParseFileName(filename, &file_number, &type) && type == kOptionsFile) {
-      options_filenames.insert(
-          {std::numeric_limits<uint64_t>::max() - file_number,
-           GetName() + "/" + filename});
-    }
-  }
-
-  // Keeps the latest 2 Options file
-  const size_t kNumOptionsFilesKept = 2;
-  DeleteOptionsFilesHelper(options_filenames, kNumOptionsFilesKept, GetEnv());
-  return Status::OK();
-#else
-  return Status::OK();
-#endif  // !ROCKSDB_LITE
-}
-
-Status DBImpl::RenameTempFileToOptionsFile(const std::string& file_name) {
-#ifndef ROCKSDB_LITE
-  Status s;
-
-  versions_->options_file_number_ = versions_->NewFileNumber();
-  std::string options_file_name =
-      OptionsFileName(GetName(), versions_->options_file_number_);
-  // Retry if the file name happen to conflict with an existing one.
-  s = GetEnv()->RenameFile(file_name, options_file_name);
-
-  DeleteObsoleteOptionsFiles();
-  return s;
-#else
-  return Status::OK();
-#endif  // !ROCKSDB_LITE
-}
 
 #ifdef ROCKSDB_USING_THREAD_STATUS
 
@@ -3128,25 +2267,6 @@ int DBImpl::get_latest_seq_for_uk(ColumnFamilyHandle *column_family,
   return ret;
 }
 
-void DBImpl::WaitForIngestFile() {
-  mutex_.AssertHeld();
-  while (num_running_ingest_file_ > 0) {
-    bg_cv_.Wait();
-  }
-}
-
-/*
-Status DBImpl::install_flush_result(ColumnFamilyData* cfd,
-                                    const ChangeInfo& change_info,
-                                    bool update_current_file) {
-  int ret = versions_->log_and_apply(cfd, &mutex_, change_info, update_current_file);
-  if (Status::kOk == ret) {
-    schedule_background_recycle();
-  }
-  return Status(static_cast<Status::Code>(ret));
-}
-*/
-
 
 Status DBImpl::InstallSstExternal(ColumnFamilyHandle* column_family,
                                   MiniTables* mtables) {
@@ -3281,15 +2401,6 @@ int DBImpl::do_manual_checkpoint(int32_t &start_manifest_file_num) {
   return ret;
 }
 
-// for hot backup
-int DBImpl::stream_log_extents(std::function<int(const char*, int, int64_t, int)>
-                               *stream_extent, int64_t start, int64_t end, int dest_fd) {
-  int ret = Status::kOk;
-  FAIL_RETURN_MSG_NEW(versions_->stream_log_extents(stream_extent, start, end, dest_fd),
-                      "Stream the incremental extents failed", ret);
-  return ret;
-}
-
 int DBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
                                    int32_t &last_manifest_file_num,
                                    uint64_t &last_manifest_file_size,
@@ -3363,168 +2474,6 @@ int DBImpl::release_backup_snapshot(MetaSnapshotMap &meta_snapshot)
   meta_snapshot.clear();
   SE_LOG(INFO, "Release the backup snapshot", K(ret));
   return ret;
-}
-
-int DBImpl::clear_all_compaction_jobs() {
-  int ret = Status::kOk;
-  STFlushJob *flush_job = nullptr;
-  STDumpJob *dump_job = nullptr;
-  CFCompactionJob *compaction_job = nullptr;
-
-  while (SUCCED(ret) && !flush_queue_.empty()) {
-    if (IS_NULL(flush_job = PopFirstFromFlushQueue())) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "unexpected error, flush job in the queue must not nullptr", K(ret));
-    } else if (IS_NULL(flush_job->sub_table_)) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "unexpected error, subtable must not nullptr", K(ret));
-    } else {
-      flush_job->sub_table_->set_pending_flush(false);
-      remove_flush_job(flush_job, false);
-    }
-  }
-
-  while (SUCCED(ret) && !dump_queue_.empty()) {
-    if (IS_NULL(dump_job = pop_front_dump_job())) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "unexpected error, dump job in the queue must not nullptr", K(ret));
-    } else if (IS_NULL(dump_job->sub_table_)) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "unexpected error, subtable must not nullptr", K(ret));
-    } else {
-      dump_job->sub_table_->set_pending_dump(false);
-      remove_dump_job(dump_job);
-    }
-  }
-
-  for (int32_t i = 0; SUCCED(ret) && i < CompactionPriority::ALL; ++i) {
-    while (SUCCED(ret) && !compaction_queue_[i].empty()) {
-      if (IS_NULL(compaction_job = pop_front_compaction_job())) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, compaction job in the queue must not nullptr", K(ret));
-      } else if (IS_NULL(compaction_job->cfd_)) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, subtable must not nullptr", K(ret));
-      } else {
-        compaction_job->cfd_->set_pending_compaction(false);
-        remove_compaction_job(compaction_job, false);
-      }
-    }
-  }
-  SE_LOG(INFO, "clear all the compaction job", K(ret));
-
-  return ret;
-}
-
-int DBImpl::clear_all_jobs_and_set_pending()
-{
-  int ret = Status::kOk;
-  InstrumentedMutexLock guard_lock(&mutex_);
-  if (FAILED(clear_all_compaction_jobs())) {
-    SE_LOG(WARN, "fail to clear all jobs", K(ret));
-  } else {
-    set_all_pending_compaction();
-  }
-  return ret;
-}
-
-int DBImpl::check_no_jobs_and_reset_pending()
-{
-  int ret = Status::kOk;
-  InstrumentedMutexLock guard_lock(&mutex_);
-  if (!flush_queue_.empty()) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(ERROR, "unexpected error, flush queue not empty", K(ret), "size", flush_queue_.size());
-  }
-  if (!dump_queue_.empty()) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(ERROR, "unexpected error, dump queue not empty", K(ret), "size", dump_queue_.size());
-  }
-  
-  for (int32_t i = 0; i < CompactionPriority::ALL; ++i) {
-    if (!compaction_queue_[i].empty()) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(ERROR, "unexpected error, compaction queue not empty", K(ret), K(i), "size", compaction_queue_[i].size());
-    }
-  }
-
-  if (SUCCED(ret)) {
-    //if failed above, we not reset the pending flag, because the data may corruption
-    reset_all_pending_compaction();
-  }
-  return ret;
-}
-
-#if 0  //now not called by others
-int DBImpl::get_all_level0_cfs(std::vector<db::ColumnFamilyData*> &level0_cfs) {
-  int ret = Status::kOk;
-  InstrumentedMutexLock guard_lock(&mutex_);
-  for (ColumnFamilyData *cfd : *versions_->GetColumnFamilySet()) {
-    // the dropped cfd may be exist in set for a while  
-    if (cfd->IsDropped()) {
-      continue;
-    }
-    //TODO:yuanfeng
-    /*
-    const SnapshotImpl* current_version = reinterpret_cast<const SnapshotImpl*>(
-      cfd->get_storage_manager()->get_current_version());
-    if (current_version->level0_ && current_version->level0_->size() > 0) { 
-      SE_LOG(INFO, "Cfd has level0", K(cfd->GetID()));
-      level0_cfs.push_back(cfd);  
-    }
-    */
-  }
-
-  return ret;
-}
-#endif
-
-// no cfcompaction job will be added
-void DBImpl::set_all_pending_compaction() {
-  int ret = Status::kOk;
-  SubTable *sub_table = nullptr;
-
-  AllSubTableGuard all_subtable_guard(versions_->get_global_ctx());
-  const SubTableMap &all_sub_tables = all_subtable_guard.get_subtable_map();
-  for (auto iter = all_sub_tables.begin(); Status::kOk == ret && iter != all_sub_tables.end(); ++iter) {
-    if (nullptr == (sub_table = iter->second)) {
-      ret = Status::kCorruption;
-      SE_LOG(WARN, "subtable must not nullptr", K(ret), K(iter->first));
-    } else if (sub_table->IsDropped()) {
-      //do nothing
-      SE_LOG(INFO, "subtable has been dropped", "index_id", iter->first);
-    } else {
-      assert(!sub_table->pending_compaction());
-      sub_table->set_pending_dump(true);
-      sub_table->set_pending_flush(true);
-      sub_table->set_pending_compaction(true);
-      SE_LOG(INFO, "set cf pending compaction", K(sub_table->GetID()));
-    }
-  }
-}
-
-void DBImpl::reset_all_pending_compaction() {
-  int ret = Status::kOk;
-  GlobalContext *global_ctx = nullptr;
-  SubTable *sub_table = nullptr;
-
-  AllSubTableGuard all_subtable_guard(versions_->get_global_ctx());
-  const SubTableMap &all_sub_tables = all_subtable_guard.get_subtable_map();
-  for (auto iter = all_sub_tables.begin(); Status::kOk == ret && iter != all_sub_tables.end(); ++iter) {
-    if (nullptr == (sub_table = iter->second)) {
-      ret = Status::kCorruption;
-      SE_LOG(WARN, "subtable must not nullptr", K(ret), K(iter->first));
-    } else if (sub_table->IsDropped()) {
-      //do nothing
-      SE_LOG(INFO, "subtable has been dropped", "index_id", iter->first);
-    } else {
-      assert(sub_table->pending_compaction());
-      sub_table->set_pending_dump(false);
-      sub_table->set_pending_flush(false);
-      sub_table->set_pending_compaction(false);
-      SE_LOG(INFO, "reset cf pending compaction", K(sub_table->GetID()));
-    }
-  }
 }
 
 int DBImpl::shrink_table_space(int32_t table_space_id) {

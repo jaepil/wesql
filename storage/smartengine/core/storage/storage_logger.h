@@ -134,8 +134,6 @@ public:
   int replay(memory::ArenaAllocator &arena);
   void set_log_writer(db::log::Writer* writer) { log_writer_ = writer; }
   // for hotbackup
-  int stream_log_extents(std::function<int(const char*, int, int64_t, int)> *stream_extent,
-                         int32_t start_file, int64_t start_pos, int32_t end_file, int64_t end_pos, int dest_fd);
   int manifest_file_in_current(std::string &manifest_file);
   int manifest_file_range(int32_t &begin, int32_t &end, int64_t &end_pos);
   int32_t current_manifest_file_number() const { return current_manifest_file_number_; }

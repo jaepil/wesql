@@ -36,7 +36,7 @@ class Snapshot {
   virtual storage::ExtentLayer *get_extent_layer(const storage::LayerPosition &layer_position) const = 0;
   virtual int64_t get_total_extent_count() const = 0;
  protected:
-  virtual ~Snapshot();
+  virtual ~Snapshot() {}
 };
 
 // Simple RAII wrapper class for Snapshot.

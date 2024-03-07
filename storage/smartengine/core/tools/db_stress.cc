@@ -110,8 +110,6 @@ DEFINE_int32(ttl, -1,
 DEFINE_int32(value_size_mult, 8,
              "Size of value will be this number times rand_int(1,3) bytes");
 
-DEFINE_int32(compaction_readahead_size, 0, "Compaction readahead size");
-
 DEFINE_bool(verify_before_write, false, "Verify before write");
 
 DEFINE_bool(histogram, false, "Print histogram of operation timings");
@@ -130,10 +128,6 @@ DEFINE_uint64(db_write_buffer_size, Options().db_write_buffer_size,
 DEFINE_int32(write_buffer_size,
              static_cast<int32_t>(Options().write_buffer_size),
              "Number of bytes to buffer in memtable before compacting");
-
-DEFINE_int32(max_write_buffer_number, Options().max_write_buffer_number,
-             "The number of in-memory memtables. "
-             "Each memtable is of size FLAGS_write_buffer_size.");
 
 DEFINE_int32(min_write_buffer_number_to_merge,
              Options().min_write_buffer_number_to_merge,
@@ -159,10 +153,6 @@ DEFINE_int32(max_write_buffer_number_to_maintain,
              "value to 0 will cause write buffers to be freed immediately "
              "after they are flushed.  If this value is set to -1, "
              "'max_write_buffer_number' will be used.");
-
-DEFINE_int32(open_files, Options().max_open_files,
-             "Maximum number of files to keep open at the same time "
-             "(use default if == 0)");
 
 DEFINE_int64(compressed_cache_size, -1,
              "Number of bytes to use as a cache of compressed data."
@@ -220,9 +210,6 @@ DEFINE_bool(use_clock_cache, false,
 DEFINE_bool(allow_concurrent_memtable_write, true,
             "Allow multi-writers to update mem tables in parallel.");
 
-DEFINE_bool(enable_write_thread_adaptive_yield, true,
-            "Use a yielding spin loop for brief writer thread waits.");
-
 static bool ValidateInt32Positive(const char* flagname, int32_t value) {
   if (value < 0) {
     fprintf(stderr, "Invalid value for --%s: %d, must be >=0\n", flagname,
@@ -248,18 +235,8 @@ DEFINE_string(db, "", "Use the db with the following name.");
 DEFINE_bool(verify_checksum, false,
             "Verify checksum for every block read from storage");
 
-DEFINE_bool(mmap_read, Options().allow_mmap_reads,
-            "Allow reads to occur via mmap-ing files");
-
-DEFINE_bool(mmap_write, Options().allow_mmap_writes,
-            "Allow writes to occur via mmap-ing files");
-
 DEFINE_bool(use_direct_reads, Options().use_direct_reads,
             "Use O_DIRECT for reading data");
-
-DEFINE_bool(use_direct_io_for_flush_and_compaction,
-            Options().use_direct_io_for_flush_and_compaction,
-            "Use O_DIRECT for writing data");
 
 // Database statistics
 static std::shared_ptr<Statistics> dbstats;
@@ -267,7 +244,6 @@ DEFINE_bool(statistics, false, "Create database statistics");
 
 DEFINE_bool(sync, false, "Sync all writes to disk");
 
-DEFINE_bool(use_fsync, false, "If true, issue fsync instead of fdatasync");
 
 DEFINE_int32(kill_random_test, 0,
              "If non-zero, kill at various points in source code with "
@@ -282,17 +258,6 @@ DEFINE_string(kill_prefix_blacklist, "",
 extern std::vector<std::string> rocksdb_kill_prefix_blacklist;
 
 DEFINE_bool(disable_wal, false, "If true, do not write WAL for write.");
-
-DEFINE_int32(target_file_size_base, 64 * KB,
-             "Target level-1 file size for compaction");
-
-DEFINE_int32(target_file_size_multiplier, 1,
-             "A multiplier to compute target level-N file size (N >= 2)");
-
-DEFINE_uint64(max_bytes_for_level_base, 256 * KB, "Max bytes for level-1");
-
-DEFINE_double(max_bytes_for_level_multiplier, 2,
-              "A multiplier to compute max bytes for level-N (N >= 2)");
 
 static bool ValidateInt32Percent(const char* flagname, int32_t value) {
   if (value < 0 || value > 100) {
@@ -602,7 +567,7 @@ class Stats {
             "", bytes_mb, rate, (100 * writes_) / done_, done_);
     fprintf(stdout, "%-12s: Wrote %ld times\n", "", writes_);
     fprintf(stdout, "%-12s: Deleted %ld times\n", "", deletes_);
-    fprintf(stdout, "%-12s: Single deleted %" ROCKSDB_PRIszt " times\n", "",
+    fprintf(stdout, "%-12s: Single deleted %ld times\n", "",
             single_deletes_);
     fprintf(stdout, "%-12s: %ld read and %ld found the key\n", "", gets_,
             founds_);
@@ -886,23 +851,11 @@ class StressTest {
          {ToString(FLAGS_write_buffer_size),
           ToString(FLAGS_write_buffer_size * 2),
           ToString(FLAGS_write_buffer_size * 4)}},
-        {"max_write_buffer_number",
-         {ToString(FLAGS_max_write_buffer_number),
-          ToString(FLAGS_max_write_buffer_number * 2),
-          ToString(FLAGS_max_write_buffer_number * 4)}},
-        {"arena_block_size",
-         {
-             ToString(Options().arena_block_size),
-             ToString(FLAGS_write_buffer_size / 4),
-             ToString(FLAGS_write_buffer_size / 8),
-         }},
         {"memtable_prefix_bloom_bits", {"0", "8", "10"}},
         {"memtable_prefix_bloom_probes", {"4", "5", "6"}},
-        {"memtable_huge_page_size", {"0", ToString(2 * 1024 * 1024)}},
         // TODO(ljin): enable test for this option
         // {"disable_auto_compactions", {"100", "200", "300"}},
         {"soft_rate_limit", {"0", "0.5", "0.9"}},
-        {"hard_rate_limit", {"0", "1.1", "2.0"}},
         {"level0_file_num_compaction_trigger",
          {
              ToString(FLAGS_level0_file_num_compaction_trigger),
@@ -929,33 +882,6 @@ class StressTest {
              ToString(FLAGS_level2_usage_percent + 10),
          }
         },
-        {"max_compaction_bytes",
-         {
-             ToString(FLAGS_target_file_size_base * 5),
-             ToString(FLAGS_target_file_size_base * 15),
-             ToString(FLAGS_target_file_size_base * 100),
-         }},
-        {"target_file_size_base",
-         {
-             ToString(FLAGS_target_file_size_base),
-             ToString(FLAGS_target_file_size_base * 2),
-             ToString(FLAGS_target_file_size_base * 4),
-         }},
-        {"target_file_size_multiplier",
-         {
-             ToString(FLAGS_target_file_size_multiplier), "1", "2",
-         }},
-        {"max_bytes_for_level_base",
-         {
-             ToString(FLAGS_max_bytes_for_level_base / 2),
-             ToString(FLAGS_max_bytes_for_level_base),
-             ToString(FLAGS_max_bytes_for_level_base * 2),
-         }},
-        {"max_bytes_for_level_multiplier",
-         {
-             ToString(FLAGS_max_bytes_for_level_multiplier), "1", "2",
-         }},
-        {"max_sequential_skip_in_iterations", {"4", "8", "12"}},
     };
 
     options_table_ = std::move(options_tbl);
@@ -1476,7 +1402,7 @@ class StressTest {
             thread->stats.AddErrors(1);
           }
         } else {
-          MultiGet(thread, read_opts, column_family, key, &from_db);
+          //MultiGet(thread, read_opts, column_family, key, &from_db);
         }
       } else if ((int)FLAGS_readpercent <= prob_op && prob_op < prefixBound) {
         // OPERATION prefix scan
@@ -1721,7 +1647,7 @@ class StressTest {
     if (!FLAGS_verbose) {
       return;
     }
-    fprintf(stdout, "[CF %d] %" PRIi64 " == > (%" ROCKSDB_PRIszt ") ", cf, key,
+    fprintf(stdout, "[CF %d] %" PRIi64 " == > (%ld) ", cf, key,
             sz);
     for (size_t i = 0; i < sz; i++) {
       fprintf(stdout, "%X", value[i]);
@@ -1815,37 +1741,20 @@ class StressTest {
     block_based_options.filter_policy = filter_policy_;
     options_.db_write_buffer_size = FLAGS_db_write_buffer_size;
     options_.write_buffer_size = FLAGS_write_buffer_size;
-    options_.max_write_buffer_number = FLAGS_max_write_buffer_number;
     options_.min_write_buffer_number_to_merge =
         FLAGS_min_write_buffer_number_to_merge;
     options_.max_write_buffer_number_to_maintain =
         FLAGS_max_write_buffer_number_to_maintain;
     options_.max_background_compactions = FLAGS_max_background_compactions;
     options_.max_background_flushes = FLAGS_max_background_flushes;
-    options_.max_open_files = FLAGS_open_files;
     options_.statistics = dbstats;
     options_.env = FLAGS_env;
-    options_.use_fsync = FLAGS_use_fsync;
-    options_.compaction_readahead_size = FLAGS_compaction_readahead_size;
-    options_.allow_mmap_reads = FLAGS_mmap_read;
-    options_.allow_mmap_writes = FLAGS_mmap_write;
     options_.use_direct_reads = FLAGS_use_direct_reads;
-    options_.use_direct_io_for_flush_and_compaction =
-        FLAGS_use_direct_io_for_flush_and_compaction;
-    options_.target_file_size_base = FLAGS_target_file_size_base;
-    options_.target_file_size_multiplier = FLAGS_target_file_size_multiplier;
-    options_.max_bytes_for_level_base = FLAGS_max_bytes_for_level_base;
-    options_.max_bytes_for_level_multiplier =
-        FLAGS_max_bytes_for_level_multiplier;
     options_.level0_file_num_compaction_trigger =
         FLAGS_level0_file_num_compaction_trigger;
     options_.compression = FLAGS_compression_type_e;
-    options_.create_if_missing = true;
-    options_.max_manifest_file_size = 10 * 1024;
     options_.allow_concurrent_memtable_write =
         FLAGS_allow_concurrent_memtable_write;
-    options_.enable_write_thread_adaptive_yield =
-        FLAGS_enable_write_thread_adaptive_yield;
 
     if (FLAGS_prefix_size == 0 && FLAGS_rep_factory == kHashSkipList) {
       fprintf(stderr,
@@ -1872,8 +1781,6 @@ class StressTest {
     Status s;
     if (FLAGS_ttl == -1) {
       std::vector<std::string> existing_column_families;
-      s = DB::ListColumnFamilies(DBOptions(options_), FLAGS_db,
-                                 &existing_column_families);  // ignore errors
       if (!s.ok()) {
         // DB doesn't exist
         assert(existing_column_families.empty());
@@ -1919,9 +1826,7 @@ class StressTest {
         cf_descriptors.emplace_back(name, ColumnFamilyOptions(options_));
         column_family_names_.push_back(name);
       }
-      options_.create_missing_column_families = true;
-      s = DB::Open(DBOptions(options_), FLAGS_db, cf_descriptors,
-                   &column_families_, &db_);
+      s = DB::Open(options_, FLAGS_db, &column_families_, &db_);
       assert(!s.ok() ||
              column_families_.size() ==
                  static_cast<size_t>(FLAGS_column_families));

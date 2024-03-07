@@ -113,18 +113,6 @@ class Iterator : public common::Cleanable {
   // satisfied without doing some IO, then this returns Status::Incomplete().
   virtual common::Status status() const = 0;
 
-  // Property "smartengine.iterator.is-key-pinned":
-  //   If returning "1", this means that the Slice returned by key() is valid
-  //   as long as the iterator is not deleted.
-  //   It is guaranteed to always return "1" if
-  //      - Iterator created with ReadOptions::pin_data = true
-  //      - DB tables were created with
-  //        BlockBasedTableOptions::use_delta_encoding = false.
-  // Property "smartengine.iterator.super-version-number":
-  //   LSM version used by the iterator. The same format as DB Property
-  //   kCurrentSuperVersionNumber. See its comment for more information.
-  virtual common::Status GetProperty(std::string prop_name, std::string* prop);
-
   virtual int set_end_key(const common::Slice& end_key_slice)
   {
     return common::Status::kNotSupported;

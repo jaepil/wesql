@@ -184,53 +184,22 @@ class DB {
   // OK on success.
   // Stores nullptr in *dbptr and returns a non-OK status on error.
   // Caller should delete *dbptr when it is no longer needed.
-  static common::Status Open(const common::Options& options,
-                             const std::string& name, DB** dbptr);
-
-  // Open DB with column families.
-  // db_options specify database specific options
-  // column_families is the vector of all column families in the database,
-  // containing column family name and options. You need to open ALL column
-  // families in the database. To get the list of column families, you can use
-  // ListColumnFamilies(). Also, you can open only a subset of column families
-  // for read-only access.
-  // The default column family name is 'default' and it's stored
-  // in smartengine::db::kDefaultColumnFamilyName.
-  // If everything is OK, handles will on return be the same size
-  // as column_families --- handles[i] will be a handle that you
-  // will use to operate on column family column_family[i].
-  // Before delete DB, you have to close All column families by calling
-  // DestroyColumnFamilyHandle() with all the handles.
-  static common::Status Open(
-      const common::DBOptions& db_options, const std::string& name,
-      const std::vector<ColumnFamilyDescriptor>& column_families,
-      std::vector<ColumnFamilyHandle*>* handles, DB** dbptr);
-
-  // ListColumnFamilies will open the DB specified by argument name
-  // and return the list of all column families in that DB
-  // through column_families argument. The ordering of
-  // column families in column_families is unspecified.
-  static common::Status ListColumnFamilies(
-      const common::DBOptions& db_options, const std::string& name,
-      std::vector<std::string>* column_families);
+  static common::Status Open(const common::Options &options,
+                             const std::string &db_name,
+                             std::vector<ColumnFamilyHandle*> *handles,
+                             DB** dbptr);
 
   DB() {}
-  virtual ~DB();
+  virtual ~DB() {}
 
   // Create a column_family and return the handle of column family
   // through the argument handle.
-  virtual common::Status CreateColumnFamily(CreateSubTableArgs &args, ColumnFamilyHandle** handle);
+  virtual common::Status CreateColumnFamily(CreateSubTableArgs &args, ColumnFamilyHandle** handle) = 0;
 
   // Drop a column family specified by column_family handle. This call
   // only records a drop record in the manifest and prevents the column
   // family from flushing and compacting.
-  virtual common::Status DropColumnFamily(ColumnFamilyHandle* column_family);
-  // Close a column family specified by column_family handle and destroy
-  // the column family handle specified to avoid double deletion. This call
-  // deletes the column family handle by default. Use this method to
-  // close column family instead of deleting column family handle directly
-  virtual common::Status DestroyColumnFamilyHandle(
-      ColumnFamilyHandle* column_family);
+  virtual common::Status DropColumnFamily(ColumnFamilyHandle* column_family) = 0;
 
   // Set the database entry for "key" to "value".
   // If "key" already exists, it will be overwritten.
@@ -240,11 +209,6 @@ class DB {
                              ColumnFamilyHandle* column_family,
                              const common::Slice& key,
                              const common::Slice& value) = 0;
-  virtual common::Status Put(const common::WriteOptions& options,
-                             const common::Slice& key,
-                             const common::Slice& value) {
-    return Put(options, DefaultColumnFamily(), key, value);
-  }
 
   // Remove the database entry (if any) for "key".  Returns OK on
   // success, and a non-OK status on error.  It is not an error if "key"
@@ -253,10 +217,6 @@ class DB {
   virtual common::Status Delete(const common::WriteOptions& options,
                                 ColumnFamilyHandle* column_family,
                                 const common::Slice& key) = 0;
-  virtual common::Status Delete(const common::WriteOptions& options,
-                                const common::Slice& key) {
-    return Delete(options, DefaultColumnFamily(), key);
-  }
 
   // Remove the database entry for "key". Requires that the key exists
   // and was not overwritten. Returns OK on success, and a non-OK status
@@ -276,10 +236,6 @@ class DB {
   virtual common::Status SingleDelete(const common::WriteOptions& options,
                                       ColumnFamilyHandle* column_family,
                                       const common::Slice& key) = 0;
-  virtual common::Status SingleDelete(const common::WriteOptions& options,
-                                      const common::Slice& key) {
-    return SingleDelete(options, DefaultColumnFamily(), key);
-  }
 
   // Apply the specified updates to the database.
   // If `updates` contains no update, WAL will still be synced if
@@ -319,57 +275,6 @@ class DB {
                              ColumnFamilyHandle* column_family,
                              const common::Slice& key,
                              common::PinnableSlice* value) = 0;
-  virtual common::Status Get(const common::ReadOptions& options,
-                             const common::Slice& key, std::string* value) {
-    return Get(options, DefaultColumnFamily(), key, value);
-  }
-
-  // If keys[i] does not exist in the database, then the i'th returned
-  // status will be one for which common::Status::IsNotFound() is true, and
-  // (*values)[i] will be set to some arbitrary value (often ""). Otherwise,
-  // the i'th returned status will have common::Status::ok() true, and
-  // (*values)[i]
-  // will store the value associated with keys[i].
-  //
-  // (*values) will always be resized to be the same size as (keys).
-  // Similarly, the number of returned statuses will be the number of keys.
-  // Note: keys will not be "de-duplicated". Duplicate keys will return
-  // duplicate values in order.
-  virtual std::vector<common::Status> MultiGet(
-      const common::ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_family,
-      const std::vector<common::Slice>& keys,
-      std::vector<std::string>* values) = 0;
-  virtual std::vector<common::Status> MultiGet(
-      const common::ReadOptions& options,
-      const std::vector<common::Slice>& keys,
-      std::vector<std::string>* values) {
-    return MultiGet(options, std::vector<ColumnFamilyHandle*>(
-                                 keys.size(), DefaultColumnFamily()),
-                    keys, values);
-  }
-
-  // If the key definitely does not exist in the database, then this method
-  // returns false, else true. If the caller wants to obtain value when the key
-  // is found in memory, a bool for 'value_found' must be passed. 'value_found'
-  // will be true on return if value has been set properly.
-  // This check is potentially lighter-weight than invoking DB::Get(). One way
-  // to make this lighter weight is to avoid doing any IOs.
-  // Default implementation here returns true and sets 'value_found' to false
-  virtual bool KeyMayExist(const common::ReadOptions& /*options*/,
-                           ColumnFamilyHandle* /*column_family*/,
-                           const common::Slice& /*key*/, std::string* /*value*/,
-                           bool* value_found = nullptr) {
-    if (value_found != nullptr) {
-      *value_found = false;
-    }
-    return true;
-  }
-  virtual bool KeyMayExist(const common::ReadOptions& options,
-                           const common::Slice& key, std::string* value,
-                           bool* value_found = nullptr) {
-    return KeyMayExist(options, DefaultColumnFamily(), key, value, value_found);
-  }
 
   // Return a heap-allocated iterator over the contents of the database.
   // The result of NewIterator() is initially invalid (caller must
@@ -379,9 +284,6 @@ class DB {
   // The returned iterator should be deleted before this db is deleted.
   virtual Iterator* NewIterator(const common::ReadOptions& options,
                                 ColumnFamilyHandle* column_family) = 0;
-  virtual Iterator* NewIterator(const common::ReadOptions& options) {
-    return NewIterator(options, DefaultColumnFamily());
-  }
 
   // Return a handle to the current DB state.  Iterators created with
   // this handle will all observe a stable snapshot of the current DB
@@ -670,13 +572,6 @@ class DB {
     return GetIntProperty(DefaultColumnFamily(), property, value);
   }
 
-  // Reset internal stats for DB and all column families.
-  // Note this doesn't reset options.statistics as it is not owned by
-  // DB.
-  virtual common::Status ResetStats() {
-    return common::Status::NotSupported("Not implemented");
-  }
-
   // Same as GetIntProperty(), but this one returns the aggregated int
   // property from all column families.
   virtual bool GetAggregatedIntProperty(const common::Slice& property,
@@ -787,16 +682,6 @@ class DB {
   // Get Env object from the DB
   virtual util::Env* GetEnv() const = 0;
 
-  // Get DB Options that we use.  During the process of opening the
-  // column family, the options provided when calling DB::Open() or
-  // DB::CreateColumnFamily() will have been "sanitized" and transformed
-  // in an implementation-defined manner.
-  virtual common::Options GetOptions(
-      ColumnFamilyHandle* column_family) const = 0;
-  virtual common::Options GetOptions() const {
-    return GetOptions(DefaultColumnFamily());
-  }
-
   virtual common::DBOptions GetDBOptions() const = 0;
 
   // Flush all mem-table data.
@@ -809,7 +694,6 @@ class DB {
   // Sync the wal. Note that Write() followed by SyncWAL() is not exactly the
   // same as Write() with sync=true: in the latter case the changes won't be
   // visible until the sync is done.
-  // Currently only works if allow_mmap_writes = false in Options.
   virtual common::Status SyncWAL() = 0;
 
   // The sequence number of the most recent transaction.
@@ -833,29 +717,6 @@ class DB {
   // threads call EnableFileDeletions()
   virtual common::Status EnableFileDeletions(bool force = true) = 0;
 
-  // GetLiveFiles followed by GetSortedWalFiles can generate a lossless backup
-
-  // Retrieve the list of all files in the database. The files are
-  // relative to the dbname and are not absolute paths. The valid size of the
-  // manifest file is returned in manifest_file_size. The manifest file is an
-  // ever growing file, but only the portion specified by manifest_file_size is
-  // valid for this snapshot.
-  // Setting flush_memtable to true does Flush before recording the live files.
-  // Setting flush_memtable to false is useful when we don't want to wait for
-  // flush which may have to wait for compaction to complete taking an
-  // indeterminate time.
-  //
-  // In case you have multiple column families, even if flush_memtable is true,
-  // you still need to call GetSortedWalFiles after GetLiveFiles to compensate
-  // for new data that arrived to already-flushed column families while other
-  // column families were flushing
-  virtual common::Status GetLiveFiles(std::vector<std::string>&,
-                                      uint64_t* manifest_file_size,
-                                      bool flush_memtable = true) = 0;
-
-  // Retrieve the sorted list of all wal files with earliest file first
-  virtual common::Status GetSortedWalFiles(VectorLogPtr& files) = 0;
-
   // for hotbackup
   virtual int create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
                                      int32_t &last_manifest_file_num,
@@ -871,14 +732,10 @@ class DB {
     return common::Status::kNotSupported;
   }
 
-  virtual int64_t get_last_wal_file_size() const { return -1; }
-
   virtual int release_backup_snapshot(MetaSnapshotMap &meta_snapshot)
   {
     return common::Status::kNotSupported;
   }
-
-  virtual int64_t backup_manifest_file_size() const { return -1; }
 
   virtual int shrink_table_space(int32_t table_space_id) = 0;
 
@@ -911,13 +768,6 @@ class DB {
       const TransactionLogIterator::ReadOptions& read_options =
           TransactionLogIterator::ReadOptions()) = 0;
 
-// Windows API macro interference
-#undef DeleteFile
-  // Delete the file name from the db directory and update the internal state to
-  // reflect that. Supports deletion of sst and log files only. 'name' must be
-  // path relative to the db directory. eg. 000001.sst, /archive/000003.log
-  virtual common::Status DeleteFile(std::string name) = 0;
-
   /*
    * for bulkload
    */
@@ -931,26 +781,8 @@ class DB {
 
 #endif  // ROCKSDB_LITE
 
-  // Sets the globally unique ID created at database creation time by invoking
-  // Env::GenerateUniqueId(), in identity. Returns common::Status::OK if
-  // identity could
-  // be set properly
-  virtual common::Status GetDbIdentity(std::string& identity) const = 0;
-
   // Returns default column family handle
   virtual ColumnFamilyHandle* DefaultColumnFamily() const = 0;
-
-#ifndef ROCKSDB_LITE
-  virtual common::Status GetPropertiesOfAllTables(
-      ColumnFamilyHandle* column_family, TablePropertiesCollection* props) = 0;
-  virtual common::Status GetPropertiesOfAllTables(
-      TablePropertiesCollection* props) {
-    return GetPropertiesOfAllTables(DefaultColumnFamily(), props);
-  }
-  virtual common::Status GetPropertiesOfTablesInRange(
-      ColumnFamilyHandle* column_family, const Range* range, std::size_t n,
-      TablePropertiesCollection* props) = 0;
-#endif  // ROCKSDB_LITE
 
   // Needed for StackableDB
   virtual DB* GetRootDB() { return this; }
@@ -974,11 +806,6 @@ class DB {
   virtual int do_manual_checkpoint(int32_t &manifest_file_num)
   {
     return common::Status::kNotSupported;
-  }
-  virtual int stream_log_extents(
-              std::function<int(const char*, int, int64_t, int)> *stream_extent,
-              int64_t start, int64_t end, int dest_fd) {
-    return 0;
   }
 
   virtual bool get_columnfamily_stats(ColumnFamilyHandle* column_family, int64_t &data_size,

@@ -143,7 +143,6 @@ class InternalStats {
       : db_stats_{},
         cf_stats_value_{},
         cf_stats_count_{},
-//        file_read_latency_(num_levels),
         bg_error_count_(0),
         env_(env),
         cfd_(cfd),
@@ -492,8 +491,6 @@ class InternalStats {
   bool HandleEstimateTableReadersMem(uint64_t* value, DBImpl* db);
   bool HandleEstimateLiveDataSize(uint64_t* value, DBImpl* db);
   bool HandleMinLogNumberToKeep(uint64_t* value, DBImpl* db);
-  bool HandleActualDelayedWriteRate(uint64_t* value, DBImpl* db);
-  bool HandleIsWriteStopped(uint64_t* value, DBImpl* db);
 
   bool HandleDBMemoryStats(std::string* value, common::Slice suffix,
                            DBImpl* db);
@@ -556,7 +553,7 @@ class InternalStats {
     INTERNAL_DB_STATS_ENUM_MAX,
   };
 
-  InternalStats(int num_levels, util::Env* env, ColumnFamilyData* cfd) {}
+  InternalStats(util::Env* env, ColumnFamilyData* cfd) {}
 
   struct CompactionStats {
     uint64_t micros;

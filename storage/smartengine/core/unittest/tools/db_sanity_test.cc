@@ -38,7 +38,6 @@ class SanityTest {
 
   Status Create() {
     Options options = GetOptions();
-    options.create_if_missing = true;
     std::string dbname = path_ + Name();
     DestroyDB(dbname, options);
     DB* db = nullptr;
@@ -90,7 +89,6 @@ class SanityTestBasic : public SanityTest {
   explicit SanityTestBasic(const std::string& path) : SanityTest(path) {}
   virtual Options GetOptions() const override {
     Options options;
-    options.create_if_missing = true;
     return options;
   }
   virtual std::string Name() const override { return "Basic"; }

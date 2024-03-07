@@ -42,7 +42,6 @@ public:
   SeSubtableOptions() = default;
 
   bool init(const table::BlockBasedTableOptions &table_options,
-            std::shared_ptr<table::TablePropertiesCollectorFactory> prop_coll_factory,
             const common::ColumnFamilyOptions& default_cf_options);
 
   const common::ColumnFamilyOptions &get_defaults() const { return m_default_cf_opts; }

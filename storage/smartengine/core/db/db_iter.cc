@@ -44,243 +44,234 @@ namespace db {
 // representation into a single entry while accounting for sequence
 // numbers, deletion markers, overwrites, etc.
 class DBIter : public Iterator {
- public:
-  // The following is grossly complicated. TODO: clean it up
-  // Which direction is the iterator currently moving?
-  // (1) When moving forward, the internal iterator is positioned at
-  //     the exact entry that yields this->key(), this->value()
-  // (2) When moving backwards, the internal iterator is positioned
-  //     just before all entries whose user key == this->key().
-  enum Direction { kForward, kReverse };
+public:
+ // The following is grossly complicated. TODO: clean it up
+ // Which direction is the iterator currently moving?
+ // (1) When moving forward, the internal iterator is positioned at
+ //     the exact entry that yields this->key(), this->value()
+ // (2) When moving backwards, the internal iterator is positioned
+ //     just before all entries whose user key == this->key().
+ enum Direction { kForward, kReverse };
 
-  DBIter(Env* env, const ReadOptions& read_options,
-         const ImmutableCFOptions& cf_options, const Comparator* cmp,
-         InternalIterator* iter, SequenceNumber s, bool arena_mode,
-         uint64_t max_sequential_skip_in_iterations, uint64_t version_number,
-         storage::ExtentSpaceManager* space_manager = nullptr)
-      : arena_mode_(arena_mode),
-        env_(env),
-        user_comparator_(cmp),
-        iter_(iter),
-        sequence_(s),
-        oob_aligned_buf_(nullptr, memory::base_memalign_free),
-        oob_aligned_size_(0),
-        oob_unzip_buf_(nullptr),
-        oob_unzip_size_(0),
-        direction_(kForward),
-        valid_(false),
-        statistics_(cf_options.statistics),
-        version_number_(version_number),
-        iterate_upper_bound_(read_options.iterate_upper_bound),
-        pin_thru_lifetime_(read_options.pin_data),
-        space_manager_(space_manager),
-        key_sequence_(kMaxSequenceNumber),
-        skip_del_(read_options.skip_del_),
-        is_art_based_memtable_(std::string(cf_options.memtable_factory->Name()) == "ARTFactory") {
-    max_skip_ = max_sequential_skip_in_iterations;
-    max_skippable_internal_keys_ = read_options.max_skippable_internal_keys;
-    if (pin_thru_lifetime_) {
-      pinned_iters_mgr_.StartPinning();
-    }
-    if (iter_) {
-      iter_->SetPinnedItersMgr(&pinned_iters_mgr_);
-    }
-  }
-  virtual ~DBIter() {
-    // Release pinned data if any
-    if (pinned_iters_mgr_.PinningEnabled()) {
-      pinned_iters_mgr_.ReleasePinnedData();
-    }
-    if (!arena_mode_) {
-//      delete iter_;
-      MOD_DELETE_OBJECT(InternalIterator, iter_);
-    } else {
-      iter_->~InternalIterator();
-    }
-  }
-  virtual void SetIter(InternalIterator* iter) {
-    assert(iter_ == nullptr);
-    iter_ = iter;
-    iter_->SetPinnedItersMgr(&pinned_iters_mgr_);
-  }
+ DBIter(Env* env,
+        const ReadOptions& read_options,
+        const ImmutableCFOptions& cf_options,
+        const Comparator* cmp,
+        InternalIterator* iter,
+        SequenceNumber s,
+        bool arena_mode,
+        uint64_t max_sequential_skip_in_iterations,
+        storage::ExtentSpaceManager* space_manager)
+     : arena_mode_(arena_mode),
+       env_(env),
+       user_comparator_(cmp),
+       iter_(iter),
+       sequence_(s),
+       oob_aligned_buf_(nullptr, memory::base_memalign_free),
+       oob_aligned_size_(0),
+       oob_unzip_buf_(nullptr),
+       oob_unzip_size_(0),
+       direction_(kForward),
+       valid_(false),
+       statistics_(cf_options.statistics),
+       iterate_upper_bound_(read_options.iterate_upper_bound),
+       pin_thru_lifetime_(read_options.pin_data),
+       space_manager_(space_manager),
+       key_sequence_(kMaxSequenceNumber),
+       skip_del_(read_options.skip_del_),
+       is_art_based_memtable_(std::string(cf_options.memtable_factory->Name()) == "ARTFactory") {
+   max_skip_ = max_sequential_skip_in_iterations;
+   max_skippable_internal_keys_ = read_options.max_skippable_internal_keys;
+   if (pin_thru_lifetime_) {
+     pinned_iters_mgr_.StartPinning();
+   }
+   if (iter_) {
+     iter_->SetPinnedItersMgr(&pinned_iters_mgr_);
+   }
+ }
+ virtual ~DBIter() {
+   // Release pinned data if any
+   if (pinned_iters_mgr_.PinningEnabled()) {
+     pinned_iters_mgr_.ReleasePinnedData();
+   }
+   if (!arena_mode_) {
+     MOD_DELETE_OBJECT(InternalIterator, iter_);
+   } else {
+     iter_->~InternalIterator();
+   }
+ }
+ virtual void SetIter(InternalIterator* iter) {
+   assert(iter_ == nullptr);
+   iter_ = iter;
+   iter_->SetPinnedItersMgr(&pinned_iters_mgr_);
+ }
 
-  virtual bool Valid() const override { return valid_; }
-  virtual Slice key() const override {
-    assert(valid_);
-    return saved_key_.GetUserKeyFromUserKey();
-  }
-  virtual Slice value() const override {
-    assert(valid_);
-    Slice plain_value;
-    ValueType type = kTypeValue;
-    if (direction_ == kReverse) {
-      plain_value = pinned_value_;
-      type = pinned_key_type_;
-    } else {
-      plain_value = iter_->value();
-      type = ExtractValueType(iter_->key());
-    }
-    if (LIKELY(type != kTypeValueLarge)) {
-      return plain_value;
-    }
+ virtual bool Valid() const override { return valid_; }
+ virtual Slice key() const override {
+   assert(valid_);
+   return saved_key_.GetUserKeyFromUserKey();
+ }
+ virtual Slice value() const override {
+   assert(valid_);
+   Slice plain_value;
+   ValueType type = kTypeValue;
+   if (direction_ == kReverse) {
+     plain_value = pinned_value_;
+     type = pinned_key_type_;
+   } else {
+     plain_value = iter_->value();
+     type = ExtractValueType(iter_->key());
+   }
+   if (LIKELY(type != kTypeValueLarge)) {
+     return plain_value;
+   }
 
-    // retrieve data from off page extents for large object
-    Slice result;
-    LargeValue large_value;
-    int ret = Status::kOk;
-    if (Status::kOk != (ret = get_oob_large_value(plain_value, space_manager_,
-            large_value, oob_aligned_buf_, oob_aligned_size_))) {
-      __SE_LOG(ERROR, "fail to get content of large value\n");
-      return Slice();
-    } else if (kNoCompression == large_value.compression_type_) {
-      result.data_ = oob_aligned_buf_.get();
-      result.size_ = large_value.size_;
-    } else if (Status::kOk != (ret = unzip_data(oob_aligned_buf_.get(),
-            large_value.size_, LargeValue::COMPRESSION_FORMAT_VERSION,
-            static_cast<CompressionType>(large_value.compression_type_),
-            oob_unzip_buf_, oob_unzip_size_))) {
-      __SE_LOG(ERROR, "fail to unzip large value\n");
-      return Slice();
-    } else {
-      result.data_ = oob_unzip_buf_.get();
-      result.size_ = oob_unzip_size_;
-    }
-    return result;
-  }
+   // retrieve data from off page extents for large object
+   Slice result;
+   LargeValue large_value;
+   int ret = Status::kOk;
+   if (Status::kOk != (ret = get_oob_large_value(plain_value, space_manager_,
+           large_value, oob_aligned_buf_, oob_aligned_size_))) {
+     __SE_LOG(ERROR, "fail to get content of large value\n");
+     return Slice();
+   } else if (kNoCompression == large_value.compression_type_) {
+     result.data_ = oob_aligned_buf_.get();
+     result.size_ = large_value.size_;
+   } else if (Status::kOk != (ret = unzip_data(oob_aligned_buf_.get(),
+           large_value.size_, LargeValue::COMPRESSION_FORMAT_VERSION,
+           static_cast<CompressionType>(large_value.compression_type_),
+           oob_unzip_buf_, oob_unzip_size_))) {
+     __SE_LOG(ERROR, "fail to unzip large value\n");
+     return Slice();
+   } else {
+     result.data_ = oob_unzip_buf_.get();
+     result.size_ = oob_unzip_size_;
+   }
+   return result;
+ }
 
-  virtual Status status() const override {
-    if (status_.ok()) {
-      return iter_->status();
-    } else {
-      return status_;
-    }
-  }
+ virtual Status status() const override {
+   if (status_.ok()) {
+     return iter_->status();
+   } else {
+     return status_;
+   }
+ }
 
-  virtual Status GetProperty(std::string prop_name,
-                             std::string* prop) override {
-    if (prop == nullptr) {
-      return Status::InvalidArgument("prop is nullptr");
-    }
-    if (prop_name == "rocksdb.iterator.super-version-number") {
-      // First try to pass the value returned from inner iterator.
-      if (!iter_->GetProperty(prop_name, prop).ok()) {
-        *prop = ToString(version_number_);
-      }
-      return Status::OK();
-    } else if (prop_name == "rocksdb.iterator.is-key-pinned") {
-      if (valid_) {
-        *prop = (pin_thru_lifetime_ && saved_key_.IsKeyPinned()) ? "1" : "0";
-      } else {
-        *prop = "Iterator is not valid.";
-      }
-      return Status::OK();
-    }
-    return Status::InvalidArgument("Undentified property.");
-  }
+ virtual void Next() override;
+ virtual void Prev() override;
+ virtual void Seek(const Slice& target) override;
+ virtual void SeekForPrev(const Slice& target) override;
+ virtual void SeekToFirst() override;
+ virtual void SeekToLast() override;
+ virtual int set_end_key(const Slice& end_key_slice) override;
+ virtual SequenceNumber key_seq() const override
+ {
+   return key_sequence_;
+ }
 
-  virtual void Next() override;
-  virtual void Prev() override;
-  virtual void Seek(const Slice& target) override;
-  virtual void SeekForPrev(const Slice& target) override;
-  virtual void SeekToFirst() override;
-  virtual void SeekToLast() override;
-  virtual int set_end_key(const Slice& end_key_slice) override;
-  virtual SequenceNumber key_seq() const override
-  {
-    return key_sequence_;
-  }
+protected:
+ void ReverseToForward();
+ void ReverseToBackward();
+ void PrevInternal();
+ void FindParseableKey(ParsedInternalKey* ikey, Direction direction);
+ bool FindValueForCurrentKey();
+ bool FindValueForCurrentKeyUsingSeek();
+ void FindPrevUserKey();
+ void FindNextUserKey();
+ inline void FindNextUserEntry(bool skipping);
+ void FindNextUserEntryInternal(bool skipping, bool uniq_check, bool &deleted);
+ bool ParseKey(ParsedInternalKey* key);
+ bool TooManyInternalKeysSkipped(bool increment = true);
 
- protected:
-  void ReverseToForward();
-  void ReverseToBackward();
-  void PrevInternal();
-  void FindParseableKey(ParsedInternalKey* ikey, Direction direction);
-  bool FindValueForCurrentKey();
-  bool FindValueForCurrentKeyUsingSeek();
-  void FindPrevUserKey();
-  void FindNextUserKey();
-  inline void FindNextUserEntry(bool skipping);
-  void FindNextUserEntryInternal(bool skipping, bool uniq_check, bool &deleted);
-  bool ParseKey(ParsedInternalKey* key);
-  bool TooManyInternalKeysSkipped(bool increment = true);
+ // Temporarily pin the blocks that we encounter until ReleaseTempPinnedData()
+ // is called
+ void TempPinData() {
+   if (!pin_thru_lifetime_) {
+     pinned_iters_mgr_.StartPinning();
+   }
+ }
 
-  // Temporarily pin the blocks that we encounter until ReleaseTempPinnedData()
-  // is called
-  void TempPinData() {
-    if (!pin_thru_lifetime_) {
-      pinned_iters_mgr_.StartPinning();
-    }
-  }
+ // Release blocks pinned by TempPinData()
+ void ReleaseTempPinnedData() {
+   if (!pin_thru_lifetime_ && pinned_iters_mgr_.PinningEnabled()) {
+     pinned_iters_mgr_.ReleasePinnedData();
+   }
+ }
 
-  // Release blocks pinned by TempPinData()
-  void ReleaseTempPinnedData() {
-    if (!pin_thru_lifetime_ && pinned_iters_mgr_.PinningEnabled()) {
-      pinned_iters_mgr_.ReleasePinnedData();
-    }
-  }
+ inline void ClearSavedValue() {
+   if (saved_value_.capacity() > 1048576) {
+     std::string empty;
+     swap(empty, saved_value_);
+   } else {
+     saved_value_.clear();
+   }
+ }
 
-  inline void ClearSavedValue() {
-    if (saved_value_.capacity() > 1048576) {
-      std::string empty;
-      swap(empty, saved_value_);
-    } else {
-      saved_value_.clear();
-    }
-  }
+ inline void ResetInternalKeysSkippedCounter() {
+   num_internal_keys_skipped_ = 0;
+ }
 
-  inline void ResetInternalKeysSkippedCounter() {
-    num_internal_keys_skipped_ = 0;
-  }
+protected:
+ bool arena_mode_;
+ Env* const env_;
+ const Comparator* const user_comparator_;
+ InternalIterator* iter_;
+ SequenceNumber const sequence_;
 
-  bool arena_mode_;
-  Env* const env_;
-  const Comparator* const user_comparator_;
-  InternalIterator* iter_;
-  SequenceNumber const sequence_;
+ Status status_;
+ IterKey saved_key_;
+ IterKey saved_end_key_;
+ std::string saved_value_;
+ mutable std::unique_ptr<char[], void(&)(void *)> oob_aligned_buf_;
+ mutable size_t oob_aligned_size_;
+ mutable std::unique_ptr<char[], memory::ptr_delete<char>> oob_unzip_buf_;
+ mutable size_t oob_unzip_size_;
+ Slice pinned_value_;
+ ValueType pinned_key_type_;  // key type of pinned_value_
+ Direction direction_;
+ bool valid_;
+ // for prefix seek mode to support prev()
+ Statistics* statistics_;
+ uint64_t max_skip_;
+ uint64_t max_skippable_internal_keys_;
+ uint64_t num_internal_keys_skipped_;
+ const Slice* iterate_upper_bound_;
+ // Means that we will pin all data blocks we read as long the Iterator
+ // is not deleted, will be true if ReadOptions::pin_data is true
+ const bool pin_thru_lifetime_;
+ PinnedIteratorsManager pinned_iters_mgr_;
+ storage::ExtentSpaceManager* space_manager_;
+ SequenceNumber key_sequence_;
+ const bool skip_del_;
+ bool is_art_based_memtable_;
 
-  Status status_;
-  IterKey saved_key_;
-  IterKey saved_end_key_;
-  std::string saved_value_;
-  mutable std::unique_ptr<char[], void(&)(void *)> oob_aligned_buf_;
-  mutable size_t oob_aligned_size_;
-  mutable std::unique_ptr<char[], memory::ptr_delete<char>> oob_unzip_buf_;
-  mutable size_t oob_unzip_size_;
-  Slice pinned_value_;
-  ValueType pinned_key_type_;  // key type of pinned_value_
-  Direction direction_;
-  bool valid_;
-  // for prefix seek mode to support prev()
-  Statistics* statistics_;
-  uint64_t max_skip_;
-  uint64_t max_skippable_internal_keys_;
-  uint64_t num_internal_keys_skipped_;
-  uint64_t version_number_;
-  const Slice* iterate_upper_bound_;
-  // Means that we will pin all data blocks we read as long the Iterator
-  // is not deleted, will be true if ReadOptions::pin_data is true
-  const bool pin_thru_lifetime_;
-  PinnedIteratorsManager pinned_iters_mgr_;
-  storage::ExtentSpaceManager* space_manager_;
-  SequenceNumber key_sequence_;
-  const bool skip_del_;
-  bool is_art_based_memtable_;
-
-  // No copying allowed
-  DBIter(const DBIter&);
-  void operator=(const DBIter&);
+private:
+ // No copying allowed
+ DBIter(const DBIter&);
+ void operator=(const DBIter&);
 };
 
 class UniqueCheckDBIterator : public DBIter {
 public:
-  UniqueCheckDBIterator(Env* env, const ReadOptions& read_options,
+  UniqueCheckDBIterator(Env* env,
+                        const ReadOptions& read_options,
                         const ImmutableCFOptions& cf_options,
-                        const Comparator* cmp, InternalIterator* iter,
-                        SequenceNumber s, bool arena_mode,
-                        uint64_t max_sequential_skip, uint64_t version_number,
-                        storage::ExtentSpaceManager* space_manager = nullptr)
-      : DBIter(env, read_options, cf_options, cmp, nullptr, s, arena_mode,
-               max_sequential_skip, version_number, space_manager)
+                        const Comparator* cmp,
+                        InternalIterator* iter,
+                        SequenceNumber s,
+                        bool arena_mode,
+                        uint64_t max_sequential_skip,
+                        storage::ExtentSpaceManager* space_manager)
+      : DBIter(env,
+               read_options,
+               cf_options,
+               cmp,
+               nullptr,
+               s,
+               arena_mode,
+               max_sequential_skip,
+               space_manager)
   {
     assert(!read_options.skip_del_);
   }
@@ -910,49 +901,81 @@ void DBIter::SeekToLast() {
   }
 }
 
-Iterator* NewDBIterator(Env* env, const ReadOptions& read_options,
+Iterator* NewDBIterator(Env* env,
+                        const ReadOptions& read_options,
                         const ImmutableCFOptions& cf_options,
                         const Comparator* user_key_comparator,
                         InternalIterator* internal_iter,
                         const SequenceNumber& sequence,
-                        uint64_t max_sequential_skip_in_iterations,
-                        uint64_t version_number, Arena* arena,
-                        ExtentSpaceManager* space_manager) {
+                        uint64_t max_sequential_skip,
+                        Arena* arena,
+                        ExtentSpaceManager* space_manager)
+{
   DBIter* db_iter = nullptr;
   if (nullptr != arena) {
-    db_iter = PLACEMENT_NEW(DBIter, *arena, env, read_options, cf_options,
-                            user_key_comparator, internal_iter, sequence, false,
-                            max_sequential_skip_in_iterations, version_number,
+    db_iter = PLACEMENT_NEW(DBIter,
+                            *arena,
+                            env,
+                            read_options,
+                            cf_options,
+                            user_key_comparator,
+                            internal_iter,
+                            sequence,
+                            false,
+                            max_sequential_skip,
                             space_manager);
   } else {
-    db_iter = MOD_NEW_OBJECT(memory::ModId::kDbIter, DBIter,
-                             env, read_options, cf_options, user_key_comparator,
-                             internal_iter, sequence, false,
-                             max_sequential_skip_in_iterations, version_number,
+    db_iter = MOD_NEW_OBJECT(memory::ModId::kDbIter,
+                             DBIter,
+                             env,
+                             read_options,
+                             cf_options,
+                             user_key_comparator,
+                             internal_iter,
+                             sequence,
+                             false,
+                             max_sequential_skip,
                              space_manager);
   }
   return db_iter;
 }
 
-Iterator* NewDBIterator(Env* env, const ReadOptions& read_options,
+Iterator* NewDBIterator(Env* env,
+                        const ReadOptions& read_options,
                         const ImmutableCFOptions& cf_options,
                         const Comparator* user_key_comparator,
                         InternalIterator* internal_iter,
-                        const SequenceNumber& sequence, bool use_arena,
-                        uint64_t max_sequential_skip_in_iterations,
-                        uint64_t version_number, Arena* arena,
-                        ExtentSpaceManager* space_manager) {
+                        const SequenceNumber& sequence,
+                        bool use_arena,
+                        uint64_t max_sequential_skip,
+                        Arena* arena,
+                        ExtentSpaceManager* space_manager)
+{
   DBIter* db_iter = nullptr;
   if (nullptr != arena) {
-    db_iter = PLACEMENT_NEW(DBIter, *arena, env, read_options, cf_options,
-                            user_key_comparator, internal_iter, sequence, use_arena,
-                            max_sequential_skip_in_iterations, version_number,
+    db_iter = PLACEMENT_NEW(DBIter,
+                            *arena,
+                            env,
+                            read_options,
+                            cf_options,
+                            user_key_comparator,
+                            internal_iter,
+                            sequence,
+                            use_arena,
+                            max_sequential_skip,
                             space_manager);
   } else {
-    db_iter = MOD_NEW_OBJECT(memory::ModId::kDbIter, DBIter,
-                             env, read_options, cf_options, user_key_comparator,
-                             internal_iter, sequence, false,
-                             max_sequential_skip_in_iterations, version_number );
+    db_iter = MOD_NEW_OBJECT(memory::ModId::kDbIter,
+                            DBIter,
+                             env,
+                             read_options,
+                             cf_options,
+                             user_key_comparator,
+                             internal_iter,
+                             sequence,
+                             false /**use_arena*/,
+                             max_sequential_skip,
+                             space_manager);
   }
   return db_iter;
 }
@@ -987,10 +1010,6 @@ inline void ArenaWrappedDBIter::Prev() { db_iter_->Prev(); }
 inline Slice ArenaWrappedDBIter::key() const { return db_iter_->key(); }
 inline Slice ArenaWrappedDBIter::value() const { return db_iter_->value(); }
 inline Status ArenaWrappedDBIter::status() const { return db_iter_->status(); }
-inline Status ArenaWrappedDBIter::GetProperty(std::string prop_name,
-                                              std::string* prop) {
-  return db_iter_->GetProperty(prop_name, prop);
-}
 void ArenaWrappedDBIter::RegisterCleanup(CleanupFunction function, void* arg1,
                                          void* arg2) {
   db_iter_->RegisterCleanup(function, arg1, arg2);
@@ -1018,34 +1037,48 @@ bool ArenaWrappedDBIter::for_unique_check() const {
 }
 
 ArenaWrappedDBIter* NewArenaWrappedDbIterator(
-    Env* env, const ReadOptions& read_options,
-    const ImmutableCFOptions& cf_options, const Comparator* user_key_comparator,
-    const SequenceNumber& sequence, uint64_t max_sequential_skip_in_iterations,
-    uint64_t version_number, ExtentSpaceManager* space_manager) {
-//  ArenaWrappedDBIter* iter = new ArenaWrappedDBIter();
+    Env* env,
+    const ReadOptions& read_options,
+    const ImmutableCFOptions& cf_options,
+    const Comparator* user_key_comparator,
+    const SequenceNumber& sequence,
+    ExtentSpaceManager* space_manager)
+{
+  const uint64_t MAX_SEQUENTIAL_SKIP = 100;
   ArenaWrappedDBIter* iter = MOD_NEW_OBJECT(memory::ModId::kDbIter, ArenaWrappedDBIter);
   Arena* arena = iter->GetArena();
 
   DBIter* db_iter = nullptr;
   if (!read_options.unique_check_) {
     auto mem = arena->AllocateAligned(sizeof(DBIter));
-    db_iter = new(mem)
-        DBIter(env, read_options, cf_options, user_key_comparator, nullptr,
-               sequence, true, max_sequential_skip_in_iterations, version_number,
-               space_manager);
+    db_iter = new (mem) DBIter(env,
+                               read_options,
+                               cf_options,
+                               user_key_comparator,
+                               nullptr,
+                               sequence,
+                               true,
+                               MAX_SEQUENTIAL_SKIP,
+                               space_manager);
   } else {
     ReadOptions ro = read_options;
     ro.skip_del_ = false;
     auto mem = arena->AllocateAligned(sizeof(UniqueCheckDBIterator));
-    db_iter = new(mem)
-        UniqueCheckDBIterator(env, ro, cf_options, user_key_comparator, nullptr,
-                            sequence, true, max_sequential_skip_in_iterations,
-                            version_number, space_manager);
+    db_iter = new (mem) UniqueCheckDBIterator(env,
+                                              ro,
+                                              cf_options,
+                                              user_key_comparator,
+                                              nullptr,
+                                              sequence,
+                                              true,
+                                              MAX_SEQUENTIAL_SKIP,
+                                              space_manager);
   }
 
   iter->SetDBIter(db_iter);
 
   return iter;
 }
+
 }
 }  // namespace smartengine

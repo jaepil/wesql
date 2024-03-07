@@ -92,16 +92,6 @@ void Cleanable::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
 }  // namespace common
 
 namespace db {
-common::Status Iterator::GetProperty(std::string prop_name, std::string* prop) {
-  if (prop == nullptr) {
-    return common::Status::InvalidArgument("prop is nullptr");
-  }
-  if (prop_name == "rocksdb.iterator.is-key-pinned") {
-    *prop = "0";
-    return common::Status::OK();
-  }
-  return common::Status::InvalidArgument("Undentified property.");
-}
 common::SequenceNumber Iterator::key_seq() const
 {
   return kMaxSequenceNumber;

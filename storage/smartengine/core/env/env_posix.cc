@@ -144,8 +144,8 @@ class PosixEnv : public Env {
     }
   }
 
-  void SetFD_CLOEXEC(int fd, const EnvOptions* options) {
-    if ((options == nullptr || options->set_fd_cloexec) && fd > 0) {
+  void SetFD_CLOEXEC(int fd) {
+    if (fd > 0) {
       fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
     }
   }
@@ -153,12 +153,11 @@ class PosixEnv : public Env {
   virtual Status NewSequentialFile(const std::string& fname,
                                    SequentialFile *&result,
                                    const EnvOptions& options) override {
-//    result->reset();
     int fd = -1;
     int flags = O_RDONLY;
     FILE* file = nullptr;
 
-    if (options.use_direct_reads && !options.use_mmap_reads) {
+    if (options.use_direct_reads) {
 #ifdef ROCKSDB_LITE
       return Status::IOError(fname, "Direct I/O not supported in RocksDB lite");
 #endif  // !ROCKSDB_LITE
@@ -175,9 +174,9 @@ class PosixEnv : public Env {
       return IOError(fname, errno);
     }
 
-    SetFD_CLOEXEC(fd, &options);
+    SetFD_CLOEXEC(fd);
 
-    if (options.use_direct_reads && !options.use_mmap_reads) {
+    if (options.use_direct_reads) {
 #ifdef OS_MACOSX
       if (fcntl(fd, F_NOCACHE, 1) == -1) {
         close(fd);
@@ -199,7 +198,6 @@ class PosixEnv : public Env {
     } else {
       result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixSequentialFile, fname, file, fd, options);
     }
-//    result->reset(new PosixSequentialFile(fname, file, fd, options));
     return Status::OK();
   }
 
@@ -210,7 +208,7 @@ class PosixEnv : public Env {
     Status s;
     int fd;
     int flags = O_RDONLY;
-    if (options.use_direct_reads && !options.use_mmap_reads) {
+    if (options.use_direct_reads) {
 #ifdef ROCKSDB_LITE
       return Status::IOError(fname, "Direct I/O not supported in RocksDB lite");
 #endif  // !ROCKSDB_LITE
@@ -227,57 +225,34 @@ class PosixEnv : public Env {
     if (fd < 0) {
       return IOError(fname, errno);
     }
-    SetFD_CLOEXEC(fd, &options);
+    SetFD_CLOEXEC(fd);
 
-    if (options.use_mmap_reads && sizeof(void*) >= 8) {
-      // Use of mmap for random reads has been removed because it
-      // kills performance when storage is fast.
-      // Use mmap when virtual address-space is plentiful.
-      uint64_t size;
-      s = GetFileSize(fname, &size);
-      if (s.ok()) {
-        void* base = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
-        if (base != MAP_FAILED) {
-//          result->reset(
-//              new PosixMmapReadableFile(fd, fname, base, size, options));
-          if (nullptr != options.arena) {
-            result = ALLOC_OBJECT(PosixMmapReadableFile, *options.arena, fd, fname, base, size, options);
-          } else {
-            result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixMmapReadableFile, fd, fname, base, size, options);
-          }
-        } else {
-          s = IOError(fname, errno);
-        }
-      }
-      close(fd);
-    } else {
-      if (options.use_direct_reads && !options.use_mmap_reads) {
+    if (options.use_direct_reads) {
 #ifdef OS_MACOSX
-        if (fcntl(fd, F_NOCACHE, 1) == -1) {
-          close(fd);
-          return IOError(fname, errno);
-        }
+      if (fcntl(fd, F_NOCACHE, 1) == -1) {
+        close(fd);
+        return IOError(fname, errno);
+      }
 #endif
-      }
-      if (nullptr != options.arena) {
-        result = ALLOC_OBJECT(PosixRandomAccessFile, *options.arena, fname, fd, options);
-      } else {
-        result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixRandomAccessFile, fname, fd, options);
-      }
-//      result->reset(new PosixRandomAccessFile(fname, fd, options));
     }
+
+    if (nullptr != options.arena) {
+      result = ALLOC_OBJECT(PosixRandomAccessFile, *options.arena, fname, fd, options);
+    } else {
+      result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixRandomAccessFile, fname, fd, options);
+    }
+
     return s;
   }
 
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile *&result,
                                  const EnvOptions& options) override {
-//    result->reset();
     Status s;
     int fd = -1;
     int flags = O_CREAT | O_TRUNC;
     // Direct IO mode with O_DIRECT flag or F_NOCAHCE (MAC OSX)
-    if (options.use_direct_writes && !options.use_mmap_writes) {
+    if (options.use_direct_writes) {
 // Note: we should avoid O_APPEND here due to ta the following bug:
 // POSIX requires that opening a file with the O_APPEND flag should
 // have no affect on the location at which pwrite() writes data.
@@ -293,9 +268,6 @@ class PosixEnv : public Env {
       flags |= O_DIRECT;
 #endif
       TEST_SYNC_POINT_CALLBACK("NewWritableFile:O_DIRECT", &flags);
-    } else if (options.use_mmap_writes) {
-      // non-direct I/O
-      flags |= O_RDWR;
     } else {
       flags |= O_WRONLY;
     }
@@ -309,26 +281,9 @@ class PosixEnv : public Env {
       s = IOError(fname, errno);
       return s;
     }
-    SetFD_CLOEXEC(fd, &options);
+    SetFD_CLOEXEC(fd);
 
-    if (options.use_mmap_writes) {
-      if (!checkedDiskForMmap_) {
-        // this will be executed once in the program's lifetime.
-        // do not use mmapWrite on non ext-3/xfs/tmpfs systems.
-        if (!SupportsFastAllocate(fname)) {
-          forceMmapOff_ = true;
-        }
-        checkedDiskForMmap_ = true;
-      }
-    }
-    if (options.use_mmap_writes && !forceMmapOff_) {
-//      result->reset(new PosixMmapFile(fname, fd, page_size_, options));
-      if (nullptr != options.arena) {
-        result = ALLOC_OBJECT(PosixMmapFile, *options.arena, fname, fd, page_size_, options);
-      } else {
-        result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixMmapFile, fname, fd, page_size_, options);
-      }
-    } else if (options.use_direct_writes && !options.use_mmap_writes) {
+    if (options.use_direct_writes) {
 #ifdef OS_MACOSX
       if (fcntl(fd, F_NOCACHE, 1) == -1) {
         close(fd);
@@ -336,111 +291,20 @@ class PosixEnv : public Env {
         return s;
       }
 #endif
-//      result->reset(new PosixWritableFile(fname, fd, options));
       if (nullptr != options.arena) {
         result = ALLOC_OBJECT(PosixWritableFile, *options.arena, fname, fd, options);
       } else {
         result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixWritableFile, fname, fd, options);
       }
     } else {
-      // disable mmap writes
       EnvOptions no_mmap_writes_options = options;
-      no_mmap_writes_options.use_mmap_writes = false;
-//      result->reset(new PosixWritableFile(fname, fd, no_mmap_writes_options));
       if (nullptr != options.arena) {
         result = ALLOC_OBJECT(PosixWritableFile, *options.arena, fname, fd, no_mmap_writes_options);
       } else {
         result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixWritableFile, fname, fd, no_mmap_writes_options);
       }
     }
-    return s;
-  }
 
-  virtual Status ReuseWritableFile(const std::string& fname,
-                                   const std::string& old_fname,
-                                   WritableFile *&result,
-                                   const EnvOptions& options) override {
-//    result->reset();
-    Status s;
-    int fd = -1;
-
-    int flags = 0;
-    // Direct IO mode with O_DIRECT flag or F_NOCAHCE (MAC OSX)
-    if (options.use_direct_writes && !options.use_mmap_writes) {
-#ifdef ROCKSDB_LITE
-      return Status::IOError(fname, "Direct I/O not supported in RocksDB lite");
-#endif  // !ROCKSDB_LITE
-      flags |= O_WRONLY;
-#if !defined(OS_MACOSX) && !defined(OS_OPENBSD)
-      flags |= O_DIRECT;
-#endif
-      TEST_SYNC_POINT_CALLBACK("NewWritableFile:O_DIRECT", &flags);
-    } else if (options.use_mmap_writes) {
-      // mmap needs O_RDWR mode
-      flags |= O_RDWR;
-    } else {
-      flags |= O_WRONLY;
-    }
-
-    do {
-      IOSTATS_TIMER_GUARD(open_nanos);
-      fd = open(old_fname.c_str(), flags, 0644);
-    } while (fd < 0 && errno == EINTR);
-    if (fd < 0) {
-      s = IOError(fname, errno);
-      return s;
-    }
-
-    SetFD_CLOEXEC(fd, &options);
-    // rename into place
-    if (rename(old_fname.c_str(), fname.c_str()) != 0) {
-      s = IOError(old_fname, errno);
-      close(fd);
-      return s;
-    }
-
-    if (options.use_mmap_writes) {
-      if (!checkedDiskForMmap_) {
-        // this will be executed once in the program's lifetime.
-        // do not use mmapWrite on non ext-3/xfs/tmpfs systems.
-        if (!SupportsFastAllocate(fname)) {
-          forceMmapOff_ = true;
-        }
-        checkedDiskForMmap_ = true;
-      }
-    }
-    if (options.use_mmap_writes && !forceMmapOff_) {
-//      result->reset(new PosixMmapFile(fname, fd, page_size_, options));
-      if (nullptr != options.arena) {
-        result = ALLOC_OBJECT(PosixMmapFile, *options.arena, fname, fd, page_size_, options);
-      } else {
-        result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixMmapFile, fname, fd, page_size_, options);
-      }
-    } else if (options.use_direct_writes && !options.use_mmap_writes) {
-#ifdef OS_MACOSX
-      if (fcntl(fd, F_NOCACHE, 1) == -1) {
-        close(fd);
-        s = IOError(fname, errno);
-        return s;
-      }
-#endif
-//      result->reset(new PosixWritableFile(fname, fd, options));
-      if (nullptr != options.arena) {
-        result = ALLOC_OBJECT(PosixWritableFile, *options.arena, fname, fd, options);
-      } else {
-        result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixWritableFile, fname, fd, options);
-      }
-    } else {
-      // disable mmap writes
-      EnvOptions no_mmap_writes_options = options;
-      no_mmap_writes_options.use_mmap_writes = false;
-//      result->reset(new PosixWritableFile(fname, fd, no_mmap_writes_options));
-      if (nullptr != options.arena) {
-        result = ALLOC_OBJECT(PosixWritableFile, *options.arena, fname, fd, no_mmap_writes_options);
-      } else {
-        result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixWritableFile, fname, fd, no_mmap_writes_options);
-      }
-    }
     return s;
   }
 
@@ -461,8 +325,7 @@ class PosixEnv : public Env {
       }
     }
 
-    SetFD_CLOEXEC(fd, &options);
-//    result->reset(new PosixRandomRWFile(fname, fd, options));
+    SetFD_CLOEXEC(fd);
     if (nullptr != options.arena) {
       result = ALLOC_OBJECT(PosixRandomRWFile, *options.arena, fname, fd, options);
     } else {
@@ -473,7 +336,6 @@ class PosixEnv : public Env {
 
   virtual Status NewDirectory(const std::string& name,
                               Directory *&result) override {
-//    result->reset();
     int fd;
     {
       IOSTATS_TIMER_GUARD(open_nanos);
@@ -482,7 +344,6 @@ class PosixEnv : public Env {
     if (fd < 0) {
       return IOError(name, errno);
     } else {
-//      result->reset(new PosixDirectory(fd));
       result = MOD_NEW_OBJECT(memory::ModId::kEnv, PosixDirectory, fd);
     }
     return Status::OK();
@@ -648,7 +509,7 @@ class PosixEnv : public Env {
       result = IOError("lock " + fname, errno);
       close(fd);
     } else {
-      SetFD_CLOEXEC(fd, nullptr);
+      SetFD_CLOEXEC(fd);
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
       my_lock->filename = fname;
@@ -816,7 +677,6 @@ class PosixEnv : public Env {
   EnvOptions OptimizeForLogWrite(const EnvOptions& env_options,
                                  const DBOptions& db_options) const override {
     EnvOptions optimized = env_options;
-    optimized.use_mmap_writes = false;
     optimized.concurrent_writable_file_buffer_num =
         db_options.concurrent_writable_file_buffer_num;
     optimized.concurrent_writable_file_single_buffer_size =
@@ -837,7 +697,6 @@ class PosixEnv : public Env {
       const EnvOptions& env_options) const override {
     EnvOptions optimized = env_options;
     optimized.fallocate_with_keep_size = true;
-    optimized.use_mmap_writes = false;
     optimized.use_direct_writes = true;
     optimized.concurrent_writable_file_buffer_num = 2;
     optimized.concurrent_writable_file_single_buffer_size = 1024U * 1024U;

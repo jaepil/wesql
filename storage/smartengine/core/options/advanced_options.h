@@ -16,11 +16,6 @@
 #include "memtable/memtablerep.h"
 
 namespace smartengine {
-
-namespace table {
-class TablePropertiesCollectorFactory;
-}
-
 namespace common {
 
 class Slice;
@@ -52,19 +47,6 @@ struct CompressionOptions {
 };
 
 struct AdvancedColumnFamilyOptions {
-  // The maximum number of write buffers that are built up in memory.
-  // The default and the minimum number is 2, so that when 1 write buffer
-  // is being flushed to storage, new writes can continue to the other
-  // write buffer.
-  // If max_write_buffer_number > 3, writing will be slowed down to
-  // options.delayed_write_rate if we are writing to the last write buffer
-  // allowed.
-  //
-  // Default: 2
-  //
-  // Dynamically changeable through SetOptions() API
-  int max_write_buffer_number = 2;
-
   // The minimum number of write buffers that will be merged together
   // before writing to storage.  If set to 1, then
   // all write buffers are flushed to L0 as individual files and this increases
@@ -100,43 +82,6 @@ struct AdvancedColumnFamilyOptions {
   // set by the user.  Otherwise, the default is 0.
   int max_write_buffer_number_to_maintain = 0;
 
-  // Page size for huge page for the arena used by the memtable. If <=0, it
-  // won't allocate from huge page but from malloc.
-  // Users are responsible to reserve huge pages for it to be allocated. For
-  // example:
-  //      sysctl -w vm.nr_hugepages=20
-  // See linux doc Documentation/vm/hugetlbpage.txt
-  // If there isn't enough free huge page available, it will fall back to
-  // malloc.
-  //
-  // Dynamically changeable through SetOptions() API
-  size_t memtable_huge_page_size = 0;
-
-  // Control locality of bloom filter probes to improve cache miss rate.
-  // This option only applies to memtable prefix bloom and plaintable
-  // prefix bloom. It essentially limits every bloom checking to one cache line.
-  // This optimization is turned off when set to 0, and positive number to turn
-  // it on.
-  // Default: 0
-  uint32_t bloom_locality = 0;
-
-  // size of one block in arena memory allocation.
-  // If <= 0, a proper value is automatically calculated (usually 1/8 of
-  // writer_buffer_size, rounded up to a multiple of 4KB).
-  //
-  // There are two additional restriction of the The specified size:
-  // (1) size should be in the range of [4096, 2 << 30] and
-  // (2) be the multiple of the CPU word (which helps with the memory
-  // alignment).
-  //
-  // We'll automatically check and adjust the size number to make sure it
-  // conforms to the restrictions.
-  //
-  // Default: 0
-  //
-  // Dynamically changeable through SetOptions() API
-  size_t arena_block_size = 0;
-
   // Different levels can have different compression policies. There
   // are cases where most lower levels would like to use quick compression
   // algorithms while the higher levels (which have more data) use
@@ -163,26 +108,6 @@ struct AdvancedColumnFamilyOptions {
   // used in build-index case, we need assure all records
   // maintain existed during flush&compaction until build-index process finished
   bool background_disable_merge = false;
-
-  // Target file size for compaction.
-  // target_file_size_base is per-file size for level-1.
-  // Target file size for level L can be calculated by
-  // target_file_size_base * (target_file_size_multiplier ^ (L-1))
-  // For example, if target_file_size_base is 2MB and
-  // target_file_size_multiplier is 10, then each file on level-1 will
-  // be 2MB, and each file on level 2 will be 20MB,
-  // and each file on level-3 will be 200MB.
-  //
-  // Default: 64MB.
-  //
-  // Dynamically changeable through SetOptions() API
-  uint64_t target_file_size_base = 64 * 1048576;
-
-  // By default target_file_size_multiplier is 1, which means
-  // by default files in different levels will have similar size.
-  //
-  // Dynamically changeable through SetOptions() API
-  int target_file_size_multiplier = 10;
 
   // If true, RocksDB will pick target size of each level dynamically.
   // We will pick a base level b >= 1. L0 will be directly merged into level b,
@@ -243,122 +168,16 @@ struct AdvancedColumnFamilyOptions {
   // Default: false
   bool level_compaction_dynamic_level_bytes = false;
 
-  // Default: 10.
-  //
-  // Dynamically changeable through SetOptions() API
-  double max_bytes_for_level_multiplier = 10;
-
-  // We try to limit number of bytes in one compaction to be lower than this
-  // threshold. But it's not guaranteed.
-  // Value 0 will be sanitized.
-  //
-  // Default: result.target_file_size_base * 25
-  uint64_t max_compaction_bytes = 0;
-
-  // All writes will be slowed down to at least delayed_write_rate if estimated
-  // bytes needed to be compaction exceed this threshold.
-  //
-  // Default: 64GB
-  uint64_t soft_pending_compaction_bytes_limit = 64 * 1073741824ull;
-
-  // All writes are stopped if estimated bytes needed to be compaction exceed
-  // this threshold.
-  //
-  // Default: 256GB
-  uint64_t hard_pending_compaction_bytes_limit = 256 * 1073741824ull;
-
-  // An iteration->Next() sequentially skips over keys with the same
-  // user-key unless this option is set. This number specifies the number
-  // of keys (with the same userkey) that will be sequentially
-  // skipped before a reseek is issued.
-  //
-  // Default: 8
-  //
-  // Dynamically changeable through SetOptions() API
-  uint64_t max_sequential_skip_in_iterations = 100;
-
   // This is a factory that provides MemTableRep objects.
   // Default: a factory that provides a skip-list-based implementation of
   // MemTableRep.
   std::shared_ptr<memtable::MemTableRepFactory> memtable_factory =
       std::shared_ptr<memtable::SkipListFactory>(new memtable::SkipListFactory);
 
-  // Block-based table related options are moved to BlockBasedTableOptions.
-  // Related options that were originally here but now moved include:
-  //   no_block_cache
-  //   block_cache
-  //   block_cache_compressed
-  //   block_size
-  //   block_size_deviation
-  //   block_restart_interval
-  //   filter_policy
-  //   whole_key_filtering
-  // If you'd like to customize some of these options, you will need to
-  // use NewBlockBasedTableFactory() to construct a new table factory.
-
-  // This option allows user to collect their own interested statistics of
-  // the tables.
-  // Default: empty vector -- no user-defined statistics collection will be
-  // performed.
-  typedef std::vector<std::shared_ptr<table::TablePropertiesCollectorFactory>>
-      TablePropertiesCollectorFactories;
-  TablePropertiesCollectorFactories table_properties_collector_factories;
-
-  // This flag specifies that the implementation should optimize the filters
-  // mainly for cases where keys are found rather than also optimize for keys
-  // missed. This would be used in cases where the application knows that
-  // there are very few misses or the performance in the case of misses is not
-  // important.
-  //
-  // For now, this flag allows us to not store filters for the last level i.e
-  // the largest level which contains data of the LSM store. For keys which
-  // are hits, the filters in this level are not useful because we will search
-  // for the data anyway. NOTE: the filters in other levels are still useful
-  // even for key hit because they tell us whether to look in that level or go
-  // to the higher level.
-  //
-  // Default: false
-  bool optimize_filters_for_hits = false;
-
-  // After writing every SST file, reopen it and read all the keys.
-  // Default: false
-  bool paranoid_file_checks = false;
-
-  // In debug mode, RocksDB run consistency checks on the LSM everytime the LSM
-  // change (Flush, Compaction, AddFile). These checks are disabled in release
-  // mode, use this option to enable them in release mode as well.
-  // Default: false
-  bool force_consistency_checks = false;
-
-  // Measure IO stats in compactions and flushes, if true.
-  // Default: false
-  bool report_bg_io_stats = false;
-
   // Create ColumnFamilyOptions with default values for all fields
   AdvancedColumnFamilyOptions();
   // Create ColumnFamilyOptions from Options
   explicit AdvancedColumnFamilyOptions(const Options& options);
-
-  // ---------------- OPTIONS NOT SUPPORTED ANYMORE ----------------
-
-  // NOT SUPPORTED ANYMORE -- this options is no longer used
-  // Puts are delayed to options.delayed_write_rate when any level has a
-  // compaction score that exceeds soft_rate_limit. This is ignored when == 0.0.
-  //
-  // Default: 0 (disabled)
-  //
-  // Dynamically changeable through SetOptions() API
-  double soft_rate_limit = 0.0;
-
-  // NOT SUPPORTED ANYMORE -- this options is no longer used
-  double hard_rate_limit = 0.0;
-
-  // NOT SUPPORTED ANYMORE -- this options is no longer used
-  unsigned int rate_limit_delay_max_milliseconds = 100;
-
-  // NOT SUPPORTED ANYMORE
-  // Does not have any effect.
-  bool purge_redundant_kvs_while_flush = true;
 };
 
 }  // namespace common

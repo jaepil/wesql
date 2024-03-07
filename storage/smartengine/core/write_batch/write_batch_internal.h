@@ -13,7 +13,6 @@
 #include <vector>
 #include "db/batch_group.h"
 #include "db/db.h"
-#include "db/write_thread.h"
 #include "options/options.h"
 #include "util/autovector.h"
 #include "write_batch/write_batch.h"
@@ -149,30 +148,6 @@ class WriteBatchInternal {
   static common::Status SetContents(WriteBatch* batch,
                                     const common::Slice& contents);
 
-  // Inserts batches[i] into memtable, for i in 0..num_batches-1 inclusive.
-  //
-  // If ignore_missing_column_families == true. WriteBatch
-  // referencing non-existing column family will be ignored.
-  // If ignore_missing_column_families == false, processing of the
-  // batches will be stopped if a reference is found to a non-existing
-  // column family and InvalidArgument() will be returned.  The writes
-  // in batches may be only partially applied at that point.
-  //
-  // If log_number is non-zero, the memtable will be updated only if
-  // memtables->GetLogNumber() >= log_number.
-  //
-  // If flush_scheduler is non-null, it will be invoked if the memtable
-  // should be flushed.
-  //
-  // Under concurrent use, the caller is responsible for making sure that
-  // the memtables object itself is thread-local.
-  static common::Status InsertInto(
-      const util::autovector<WriteThread::Writer*>& batches,
-      common::SequenceNumber sequence, ColumnFamilyMemTables* memtables,
-      FlushScheduler* flush_scheduler,
-      bool ignore_missing_column_families = false, uint64_t log_number = 0,
-      DB* db = nullptr, bool concurrent_memtable_writes = false);
-
   // Convenience form of InsertInto when you have only one batch
   // last_seq_used returns the last sequnce number used in a MemTable insert
   static common::Status InsertInto(
@@ -182,13 +157,6 @@ class WriteBatchInternal {
       DB* db = nullptr, bool concurrent_memtable_writes = false,
       common::SequenceNumber* last_seq_used = nullptr,
       bool* has_valid_writes = nullptr, std::unordered_map<int64_t, int64_t> *missing_subtable_during_recovery = nullptr);
-
-  static common::Status InsertInto(WriteThread::Writer* writer,
-                                   ColumnFamilyMemTables* memtables,
-                                   FlushScheduler* flush_scheduler,
-                                   bool ignore_missing_column_families = false,
-                                   uint64_t log_number = 0, DB* db = nullptr,
-                                   bool concurrent_memtable_writes = false);
 
   // for pipline insert in serialization mode
   static common::Status InsertInto(db::WriteRequest* writer,

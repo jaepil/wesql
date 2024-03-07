@@ -1072,14 +1072,17 @@ int ha_smartengine::delete_row(const uchar *const buf)
 
 int ha_smartengine::truncate(dd::Table *table_def)
 {
+  /**SmartEngine supports HTON_CAN_RECREATE flag, and the truncate
+   * command use create function instead of truncate function.*/
+  se_assert(false);
   DBUG_ENTER_FUNC();
-
+  
   assert(m_tbl_def != nullptr);
 
   m_tbl_def->m_auto_incr_val = 1;
   m_tbl_def->m_hidden_pk_val = 1;
 
-  remove_rows(m_tbl_def.get());
+  //remove_rows(m_tbl_def.get());
 
   DBUG_RETURN(HA_EXIT_SUCCESS);
 }
@@ -3528,44 +3531,6 @@ const char *ha_smartengine::thd_se_tmpdir()
 
   return (tmp_dir);
 }
-
-void ha_smartengine::remove_rows(SeTableDef *const tbl)
-{
-  const common::WriteOptions wo =
-      se_get_se_write_options(handler::ha_thd());
-
-  common::ReadOptions opts;
-  opts.total_order_seek = true;
-  IteratorUptr it(se_db->NewIterator(opts));
-
-  char key_buf[MAX_KEY_LENGTH];
-  uint key_len;
-  /*
-    Remove all records in each index.
-    (This is is not crash-safe, but it doesn't matter, because bulk row
-    deletion will be handled on se side)
-  */
-  for (uint i = 0; i < tbl->m_key_count; i++) {
-    const SeKeyDef &kd = *tbl->m_key_descr_arr[i];
-    kd.get_infimum_key(reinterpret_cast<uchar *>(key_buf), &key_len);
-
-    const common::Slice table_key(key_buf, key_len);
-    it->Seek(table_key);
-    while (it->Valid()) {
-      const common::Slice key = it->key();
-      if (!kd.covers_key(key)) {
-        break;
-      }
-
-      if (can_use_single_delete(i))
-        se_db->SingleDelete(wo, key);
-      else
-        se_db->Delete(wo, key);
-      it->Next();
-    }
-  }
-}
-
 
 /**
   Checking if an index is used for ascending scan or not

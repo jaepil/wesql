@@ -108,10 +108,6 @@ class InternalIterator : public common::Cleanable {
   // Iterator is not deleted.
   virtual bool IsValuePinned() const { return false; }
 
-  virtual common::Status GetProperty(std::string prop_name, std::string* prop) {
-    return common::Status::NotSupported("");
-  }
-
   virtual void set_end_key(const common::Slice& end_ikey, const bool need_seek_end_key)
   {
     end_ikey_ = end_ikey;

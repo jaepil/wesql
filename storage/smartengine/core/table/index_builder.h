@@ -29,22 +29,11 @@ class WritableBuffer;
 namespace table {
 
 // The interface for building index.
-// Instruction for adding a new concrete IndexBuilder:
-//  1. Create a subclass instantiated from IndexBuilder.
-//  2. Add a new entry associated with that subclass in TableOptions::IndexType.
-//  3. Add a create function for the new subclass in CreateIndexBuilder.
-// Note: we can devise more advanced design to simplify the process for adding
-// new subclass, which will, on the other hand, increase the code complexity and
-// catch unwanted attention from readers. Given that we won't add/change
-// indexes frequently, it makes sense to just embrace a more straightforward
-// design that just works.
 class IndexBuilder {
  public:
-  static IndexBuilder* CreateIndexBuilder(
-      BlockBasedTableOptions::IndexType index_type,
-      const db::InternalKeyComparator* comparator,
-      const BlockBasedTableOptions& table_opt,
-      util::WritableBuffer* buf = nullptr);
+  static IndexBuilder* CreateIndexBuilder(const db::InternalKeyComparator* comparator,
+                                          const BlockBasedTableOptions& table_opt,
+                                          util::WritableBuffer* buf);
 
   // Index builder will construct a set of blocks which contain:
   //  1. One primary index block.
@@ -72,8 +61,6 @@ class IndexBuilder {
   virtual void AddIndexEntry(std::string* last_key_in_current_block,
                              const common::Slice* first_key_in_next_block,
                              const BlockHandle& block_handle) = 0;
-
-  virtual bool SupportAddBlock() const { return false; }
 
   // Add a new index entry to index block.
   // Write block_stats to the value part.
@@ -168,8 +155,6 @@ class ShortenedIndexBuilder : public IndexBuilder {
     block_handle.EncodeTo(&handle_encoding);
     index_block_builder_.Add(*last_key_in_current_block, handle_encoding);
   }
-
-  virtual bool SupportAddBlock() const override { return true; }
 
   virtual void AddIndexEntry(std::string* last_key_in_current_block,
                              const common::Slice* first_key_in_next_block,

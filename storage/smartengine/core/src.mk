@@ -40,11 +40,8 @@ LIB_SOURCES =                                                   \
   db/recovery_point.cc                                          \
   db/snapshot_impl.cc                                           \
   db/table_cache.cc                                             \
-  db/table_properties_collector.cc                              \
   db/version_set.cc                                             \
   db/wal_manager.cc                                             \
-  db/write_controller.cc                                        \
-  db/write_thread.cc                                            \
   db/batch_group.cc                                             \
   db/pipline_queue_manager.cc                                   \
   env/env.cc                                                    \
@@ -78,7 +75,6 @@ LIB_SOURCES =                                                   \
   options/db_options.cc                                         \
   options/options.cc                                            \
   options/options_helper.cc                                     \
-  options/options_sanity_check.cc                               \
   port/port_posix.cc                                            \
   port/stack_trace.cc                                           \
   storage/change_info.cc                                        \
@@ -123,9 +119,7 @@ LIB_SOURCES =                                                   \
   util/comparator.cc                                            \
   util/concurrent_arena.cc                                      \
   util/crc32c.cc                                                \
-  util/delete_scheduler.cc                                      \
   util/dynamic_bloom.cc                                         \
-  util/event_logger.cc                                          \
   util/ebr.cc                                                   \
   util/file_reader_writer.cc                                    \
   util/concurrent_direct_file_writer.cc                         \
@@ -133,12 +127,10 @@ LIB_SOURCES =                                                   \
   util/filename.cc                                              \
   util/filter_policy.cc                                         \
   util/hash.cc                                                  \
-  util/log_buffer.cc                                            \
   util/murmurhash.cc                                            \
   util/random.cc                                                \
   util/rate_limiter.cc                                          \
   util/slice.cc                                                 \
-  util/sst_file_manager_impl.cc                                 \
   util/status.cc                                                \
   util/status_message.cc                                        \
   util/string_util.cc                                           \
@@ -243,7 +235,6 @@ MAIN_SOURCES =                                                    \
   unittest/db/db_log_iter_test.cc                                       \
   unittest/db/db_options_test.cc                                        \
   unittest/db/db_sst_test.cc                                            \
-  unittest/db/db_table_properties_test.cc                               \
   unittest/db/db_tailing_iter_test.cc                                   \
   unittest/db/db_test.cc                                                \
   unittest/db/db_universal_compaction_test.cc                           \
@@ -255,7 +246,6 @@ MAIN_SOURCES =                                                    \
   unittest/db/fault_injection_test.cc                                   \
   unittest/db/filename_test.cc                                          \
   unittest/db/flush_job_test.cc                                         \
-  unittest/db/listener_test.cc                                          \
   unittest/db/log_test.cc                                               \
   unittest/db/manual_compaction_test.cc                                 \
   unittest/db/merge_test.cc                                             \
@@ -263,12 +253,9 @@ MAIN_SOURCES =                                                    \
   unittest/db/perf_context_test.cc                                      \
   unittest/db/prefix_test.cc                                            \
   unittest/db/shrink_job_test.cc                                        \
-  unittest/db/table_properties_collector_test.cc                        \
-  unittest/db/version_builder_test.cc                                   \
   unittest/db/wal_manager_test.cc                                       \
   unittest/db/write_batch_test.cc                                       \
   unittest/db/write_callback_test.cc                                    \
-  unittest/db/write_controller_test.cc                                  \
   unittest/memtable/art_test.cc                                         \
   unittest/memtable/inlineskiplist_test.cc                              \
   unittest/memtable/skiplist_test.cc                                    \

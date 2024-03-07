@@ -23,8 +23,8 @@ class MemTable;
 
 struct JobContext {
   inline bool HaveSomethingToDelete() const {
-    return full_scan_candidate_files.size() || sst_delete_files.size() ||
-           log_delete_files.size() || manifest_delete_files.size() ||
+    return full_scan_candidate_files.size() ||
+           log_delete_files.size() ||
            new_superversion != nullptr || superversions_to_free.size() > 0 ||
            memtables_to_free.size() > 0 || logs_to_free.size() > 0;
   }
@@ -49,21 +49,8 @@ struct JobContext {
   // (filled only if we're doing full scan)
   std::vector<CandidateFileInfo> full_scan_candidate_files;
 
-  // the list of all live sst files that cannot be deleted
-  std::vector<FileDescriptor> sst_live;
-
-  // a list of sst files that we need to delete
-  std::vector<FileMetaData*> sst_delete_files;
-
   // a list of log files that we need to delete
   std::vector<uint64_t> log_delete_files;
-
-  // a list of log files that we need to preserve during full purge since they
-  // will be reused later
-  std::vector<uint64_t> log_recycle_files;
-
-  // a list of manifest files that we need to delete
-  std::vector<std::string> manifest_delete_files;
 
   // a list of memtables to be free
   util::autovector<MemTable*> memtables_to_free;
@@ -74,19 +61,14 @@ struct JobContext {
 
   SuperVersion* new_superversion;  // if nullptr no new superversion
 
-  // the current manifest_file_number, log_number and prev_log_number
-  // that corresponds to the set of files in 'live'.
-  uint64_t manifest_file_number;
-  uint64_t pending_manifest_file_number;
   uint64_t log_number;
   uint64_t prev_log_number;
 
-  uint64_t min_pending_output = 0;
   uint64_t prev_total_log_size = 0;
   size_t num_alive_log_files = 0;
   uint64_t size_log_to_delete = 0;
-  uint64_t checkpoint_file_number_;
 
+  //TODO(Zhao Dongsheng) the follow member variables should not be here.
   storage::StorageLogger *storage_logger_;
   TaskType task_type_;
   int64_t output_level_;
@@ -95,12 +77,9 @@ struct JobContext {
                       storage::StorageLogger *storage_logger = nullptr,
                       bool create_superversion = false) {
     job_id = _job_id;
-    manifest_file_number = 0;
-    pending_manifest_file_number = 0;
     log_number = 0;
     prev_log_number = 0;
     new_superversion = create_superversion ? MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion) : nullptr;
-    checkpoint_file_number_ = 0;
     storage_logger_ = storage_logger;
     task_type_ = TaskType::FLUSH_TASK;
     output_level_ = 0;
@@ -113,21 +92,17 @@ struct JobContext {
   void Clean() {
     // free pending memtables
     for (auto m : memtables_to_free) {
-//      delete m;
       MOD_DELETE_OBJECT(MemTable, m);
     }
     // free superversions
     for (auto s : superversions_to_free) {
-//      delete s;
       MOD_DELETE_OBJECT(SuperVersion, s);
     }
     for (auto l : logs_to_free) {
-//      delete l;
       MOD_DELETE_OBJECT(Writer, l);
     }
     // if new_superversion was not used, it will be non-nullptr and needs
     // to be freed here
-//    delete new_superversion;
     MOD_DELETE_OBJECT(SuperVersion, new_superversion);
 
     memtables_to_free.clear();

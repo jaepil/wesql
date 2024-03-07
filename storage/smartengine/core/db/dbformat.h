@@ -14,11 +14,12 @@
 #include <string>
 #include <utility>
 #include "db/db.h"
-#include "util/coding.h"
-#include "util/serialization.h"
 #include "port/likely.h"
 #include "storage/io_extent.h"
 #include "table/table.h"
+#include "table/table_properties.h"
+#include "util/coding.h"
+#include "util/serialization.h"
 
 namespace smartengine {
 namespace storage {

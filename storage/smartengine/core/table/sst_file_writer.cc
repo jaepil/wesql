@@ -101,9 +101,7 @@ Status SstFileWriter::Open(const std::string& file_path) {
     return s;
   }
   CompressionType compression_type;
-  if (r->ioptions.bottommost_compression != kDisableCompressionOption) {
-    compression_type = r->ioptions.bottommost_compression;
-  } else if (!r->ioptions.compression_per_level.empty()) {
+  if (!r->ioptions.compression_per_level.empty()) {
     // Use the compression of the last level if we have per level compression
     compression_type = *(r->ioptions.compression_per_level.rbegin());
   } else {
@@ -112,15 +110,11 @@ Status SstFileWriter::Open(const std::string& file_path) {
 
   uint32_t cf_id;
 
-  if (r->cfh != nullptr) {
-    // user explicitly specified that this file will be ingested into cfh,
-    // we can persist this information in the file.
-    cf_id = r->cfh->GetID();
-    r->column_family_name = r->cfh->GetName();
-  } else {
-    r->column_family_name = "";
-    cf_id = TablePropertiesCollectorFactory::Context::kUnknownColumnFamily;
-  }
+  se_assert(nullptr != r->cfh);
+  // user explicitly specified that this file will be ingested into cfh,
+  // we can persist this information in the file.
+  cf_id = r->cfh->GetID();
+  r->column_family_name = r->cfh->GetName();
 
   ColumnFamilyData* cfd;
   auto column_family = reinterpret_cast<ColumnFamilyHandleImpl*>(r->cfh);
@@ -134,12 +128,14 @@ Status SstFileWriter::Open(const std::string& file_path) {
                                                  ? (storage::LayerPosition(0, storage::LayerPosition::NEW_GENERATE_LAYER_INDEX))
                                                  : (storage::LayerPosition(mtables_->level, 0));
   TableBuilderOptions table_builder_options(
-      r->ioptions, r->internal_comparator,
-      cfd->int_tbl_prop_collector_factories(), compression_type,
-      r->ioptions.compression_opts, nullptr /* compression_dict */,
-      false /* skip_filters */, r->column_family_name, output_layer_position);
-//  r->file_writer.reset(
-//      new WritableFileWriter(sst_file, r->env_options));
+      r->ioptions,
+      r->internal_comparator,
+      compression_type,
+      r->ioptions.compression_opts,
+      nullptr /* compression_dict */,
+      false /* skip_filters */,
+      r->column_family_name,
+      output_layer_position);
   r->file_writer.reset(ALLOC_OBJECT(WritableFileWriter, *alloc_, sst_file, r->env_options, nullptr, false/*sst_file use allocator*/));
 
   //TODO(tec) : If table_factory is using compressed block cache, we will
@@ -204,7 +200,7 @@ Status SstFileWriter::Finish(ExternalSstFileInfo* file_info) {
   r->file_info.file_size = r->builder->FileSize();
 
   if (s.ok()) {
-    s = r->file_writer->Sync(r->ioptions.use_fsync);
+    s = r->file_writer->Sync(false /**use_fsync*/);
     InvalidatePageCache(true /* closing */);
     if (s.ok()) {
       s = r->file_writer->Close();

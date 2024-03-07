@@ -19,7 +19,6 @@
 #include "compact/new_compaction_iterator.h"
 #include "db/builder.h"
 #include "db/table_cache.h"
-#include "db/table_properties_collector.h"
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
 #include "options/db_options.h"
@@ -146,7 +145,6 @@ int GeneralCompaction::open_extent() {
   extent_builder_.reset(NewTableBuilder(
       *context_.cf_options_,
       *context_.internal_comparator_,
-      &props_,
       cf_desc_.column_family_id_,
       cf_desc_.column_family_name_,
       &mini_tables_,

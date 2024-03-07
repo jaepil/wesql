@@ -92,8 +92,7 @@ class TransactionLogIteratorImpl : public TransactionLogIterator {
   struct LogReporter : public log::Reader::Reporter {
     util::Env* env;
     virtual void Corruption(size_t bytes, const common::Status& s) override {
-      __SE_LOG(INFO, "dropping %" ROCKSDB_PRIszt " bytes; %s", bytes,
-                      s.ToString().c_str());
+      __SE_LOG(INFO, "dropping %ld bytes; %s", bytes, s.ToString().c_str());
     }
     virtual void Info(const char* s) { __SE_LOG(INFO, "%s", s); }
   } reporter_;

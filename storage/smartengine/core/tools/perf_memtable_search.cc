@@ -69,9 +69,6 @@ class StorageManagerTest {
   void init(bool open) {
     if (open) {
       db_options_.db_paths.emplace_back(dbname_, 0);
-      db_options_.create_if_missing = true;
-      db_options_.fail_if_options_file_error = true;
-      db_options_.create_missing_column_families = true;
       db_options_.env = env_;
       options_ = Options(db_options_, column_family_options_);
       DestroyDB(dbname_, options_);
@@ -82,19 +79,11 @@ class StorageManagerTest {
     Status s;
     if (open) {
       uint64_t file_number = 0;
-      //TODO:yuanfeng
-      //StorageManager::parse_current_file(*env_, dbname_, file_number);
       std::string manifest_filename = DescriptorFileName(dbname_, file_number);
-//      std::unique_ptr<WritableFile> descriptor_file;
       WritableFile *descriptor_file = nullptr;
       EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(env_options_);
       s = NewWritableFile(env_, manifest_filename, descriptor_file, opt_env_opts);
       if (s.ok()) {
-        descriptor_file->SetPreallocationBlockSize(
-            db_options_.manifest_preallocation_size);
-
-//        unique_ptr<util::ConcurrentDirectFileWriter> file_writer(
-//            new util::ConcurrentDirectFileWriter(descriptor_file, opt_env_opts));
         util::ConcurrentDirectFileWriter *file_writer = new util::ConcurrentDirectFileWriter(descriptor_file, opt_env_opts);
         s = file_writer->init_multi_buffer();
         if (s.ok()) {
@@ -111,12 +100,6 @@ class StorageManagerTest {
     db_options_.write_buffer_manager.reset(wb);
 
     env_->NewDirectory(dbname_, db_dir);
-    //TODO:yuanfeng
-    /*
-    mgr = new StorageManager(*env_, dbname_, db_options_,
-                             ColumnFamilyOptions(options_), env_options_,
-                             db_dir.get(), table_cache_.get(), nullptr);
-    */
 
     s = mgr->init(env_, spacemanager_, table_cache_.get());
     assert(s.ok());
@@ -135,7 +118,7 @@ class StorageManagerTest {
   void Close() {
     for (auto h : handles_) {
       if (h) {
-        db_->DestroyColumnFamilyHandle(h);
+        MOD_DELETE_OBJECT(ColumnFamilyHandle, h);
       }
     }
     handles_.clear();
@@ -146,14 +129,7 @@ class StorageManagerTest {
 
   Status TryOpen(std::vector<std::string> cf,
                  std::vector<ColumnFamilyOptions> options = {}) {
-    std::vector<ColumnFamilyDescriptor> column_families;
-    names_.clear();
-    for (size_t i = 0; i < cf.size(); ++i) {
-      column_families.push_back(ColumnFamilyDescriptor(
-          cf[i], options.size() == 0 ? column_family_options_ : options[i]));
-      names_.push_back(cf[i]);
-    }
-    return DB::Open(db_options_, dbname_, column_families, &handles_, &db_);
+    return DB::Open(options_, dbname_, &handles_, &db_);
   }
 
   void Destroy() {
@@ -464,7 +440,6 @@ class StorageManagerTest {
   ImmutableDBOptions im_db_options_;
   MutableCFOptions mutable_cf_options_;
   std::shared_ptr<Cache> table_cache_;
-  WriteController write_controller_;
   WriteBufferManager write_buffer_manager_;
   std::unique_ptr<VersionSet> versions_;
   Env *env_;

@@ -211,18 +211,6 @@ DEFINE_int64(merge_keys, -1,
              "If negative, there will be FLAGS_num keys.");
 DEFINE_int32(num_column_families, 1, "Number of Column Families to use.");
 
-DEFINE_int32(info_log_level, 1, "log level.");
-DEFINE_uint64(max_log_file_size, 0,
-              "The maximal size of the info log file. If the log file"
-              "is larger than `max_log_file_size`, a new info log file will"
-              "be created."
-              "if it is 0, all logs will be written to one log file.");
-DEFINE_uint64(log_file_time_to_roll, 0,
-              "log file will be rolled"
-              "if it has been active longer than `log_file_time_to_roll`."
-              "0 means disabled.");
-DEFINE_uint64(keep_log_file_num, 1000, "Maximal info log files to be kept.");
-
 DEFINE_int32(
     num_hot_column_families, 0,
     "Number of Hot Column Families. If more than 0, only write to this "
@@ -237,8 +225,6 @@ DEFINE_int64(reads, -1,
 DEFINE_int64(deletes, -1,
              "Number of delete operations to do.  "
              "If negative, do FLAGS_num deletions.");
-
-DEFINE_int32(bloom_locality, 0, "Control bloom filter probes locality");
 
 DEFINE_int64(seed, 0,
              "Seed base for random number generators. "
@@ -320,10 +306,6 @@ DEFINE_int64(flush_delete_percent_trigger, Options().flush_delete_percent_trigge
 DEFINE_int64(flush_delete_record_trigger, Options().flush_delete_record_trigger,
              "Record trigger for delete triggered switch");
 
-DEFINE_int32(max_write_buffer_number, Options().max_write_buffer_number,
-             "The number of in-memory memtables. Each memtable is of size"
-             "write_buffer_size.");
-
 DEFINE_int32(min_write_buffer_number_to_merge,
              Options().min_write_buffer_number_to_merge,
              "The minimum number of write buffers that will be merged together"
@@ -387,10 +369,6 @@ DEFINE_int32(
     Options().concurrent_writable_file_buffer_switch_limit,
     "The maximum switch buffer limit for concurrent_direct_file_writer");
 
-DEFINE_int32(arena_block_size, Options().arena_block_size,
-    "arena_block_size");
-
-
 DEFINE_bool(use_direct_write_for_wal, true, "wether use direct write for wal");
 
 DEFINE_int64(cache_size, 8 << 20,  // 8MB
@@ -447,31 +425,12 @@ DEFINE_int64(row_cache_size, 0,
              "Number of bytes to use as a cache of individual rows"
              " (0 = disabled).");
 
-DEFINE_int32(open_files, Options().max_open_files,
-             "Maximum number of files to keep open at the same time"
-             " (use default if == 0)");
-
-DEFINE_int32(file_opening_threads, Options().max_file_opening_threads,
-             "If open_files is set to -1, this option set the number of "
-             "threads that will be used to open files during DB::Open()");
-
-DEFINE_int32(new_table_reader_for_compaction_inputs, true,
-             "If true, uses a separate file handle for compaction inputs");
-
-DEFINE_int32(compaction_readahead_size, 0, "Compaction readahead size");
-
-DEFINE_int32(random_access_max_buffer_size, 1024 * 1024,
-             "Maximum windows randomaccess buffer size");
-
 DEFINE_int32(writable_file_max_buffer_size, 1024 * 1024,
              "Maximum write buffer for Writable File");
 
 DEFINE_int32(bloom_bits, -1,
              "Bloom filter bits per key. Negative means"
              " use default settings.");
-
-DEFINE_bool(memtable_use_huge_page, false,
-            "Try to use huge page in memtables.");
 
 DEFINE_bool(use_existing_db, false,
             "If true, do not destroy the existing"
@@ -528,26 +487,12 @@ DEFINE_bool(finish_after_writes, false,
 
 DEFINE_bool(sync, false, "Sync all writes to disk");
 
-DEFINE_bool(use_fsync, false, "If true, issue fsync instead of fdatasync");
-
 DEFINE_bool(disable_wal, false, "If true, do not write WAL for write.");
 
 DEFINE_string(wal_dir, "", "If not empty, use the given dir for WAL");
 
-DEFINE_int64(target_file_size_base, Options().target_file_size_base,
-             "Target file size at level-1");
-
-DEFINE_int32(target_file_size_multiplier, Options().target_file_size_multiplier,
-             "A multiplier to compute target level-N file size (N >= 2)");
-
-DEFINE_uint64(max_bytes_for_level_base, Options().max_bytes_for_level_base,
-              "Max bytes for level-1");
-
 DEFINE_bool(level_compaction_dynamic_level_bytes, false,
             "Whether level size base is dynamic");
-
-DEFINE_double(max_bytes_for_level_multiplier, 10,
-              "A multiplier to compute max bytes for level-N (N >= 2)");
 
 DEFINE_int32(level0_file_num_compaction_trigger,
              Options().level0_file_num_compaction_trigger,
@@ -601,11 +546,6 @@ DEFINE_int32(deletepercent, 2,
              "deletepercent), so deletepercent must be smaller than (100 - "
              "FLAGS_readwritepercent)");
 
-DEFINE_bool(optimize_filters_for_hits, false,
-            "Optimizes bloom filters for workloads for most lookups return "
-            "a value. For now this doesn't create bloom filters for the max "
-            "level of the LSM to reduce metadata that should fit in RAM. ");
-
 DEFINE_uint64(delete_obsolete_files_period_micros, 0,
               "Ignored. Left here for backward compatibility");
 
@@ -652,15 +592,11 @@ DEFINE_string(
     "\t--row_cache_size\n"
     "\t--row_cache_numshardbits\n"
     "\t--enable_io_prio\n"
-    "\t--dump_malloc_stats\n"
     "\t--num_multi_db\n");
 
 DEFINE_uint64(fifo_compaction_max_table_files_size_mb, 0,
               "The limit of total table file sizes to trigger FIFO compaction");
 #endif  // ROCKSDB_LITE
-
-DEFINE_bool(report_bg_io_stats, false,
-            "Measure times spents on I/Os while in compactions. ");
 
 static enum CompressionType StringToCompressionType(const char* ctype) {
   assert(ctype);
@@ -684,16 +620,6 @@ static enum CompressionType StringToCompressionType(const char* ctype) {
 
   fprintf(stdout, "Cannot parse compression type '%s'\n", ctype);
   return kSnappyCompression;  // default value
-}
-
-static std::string ColumnFamilyName(size_t i) {
-  if (i == 0) {
-    return kDefaultColumnFamilyName;
-  } else {
-    char name[100];
-    snprintf(name, sizeof(name), "column_family_name_%06zu", i);
-    return std::string(name);
-  }
 }
 
 DEFINE_string(compression_type, "zlib",
@@ -768,42 +694,8 @@ DEFINE_int32(thread_status_per_interval, 0,
 
 DEFINE_int32(perf_level, PerfLevel::kDisable, "Level of perf collection");
 
-static bool ValidateRateLimit(const char* flagname, double value) {
-  const double EPSILON = 1e-10;
-  if (value < -EPSILON) {
-    fprintf(stderr, "Invalid value for --%s: %12.6f, must be >= 0.0\n",
-            flagname, value);
-    return false;
-  }
-  return true;
-}
-DEFINE_double(soft_rate_limit, 0.0, "DEPRECATED");
-
-DEFINE_double(hard_rate_limit, 0.0, "DEPRECATED");
-
-DEFINE_uint64(soft_pending_compaction_bytes_limit, 64ull * 1024 * 1024 * 1024,
-              "Slowdown writes if pending compaction bytes exceed this number");
-
-DEFINE_uint64(hard_pending_compaction_bytes_limit, 128ull * 1024 * 1024 * 1024,
-              "Stop writes if pending compaction bytes exceed this number");
-
-DEFINE_uint64(delayed_write_rate, 8388608u,
-              "Limited bytes allowed to DB when soft_rate_limit or "
-              "level0_slowdown_writes_trigger triggers");
-
 DEFINE_bool(allow_concurrent_memtable_write, false,
             "Allow multi-writers to update mem tables in parallel.");
-
-DEFINE_bool(enable_write_thread_adaptive_yield, false,
-            "Use a yielding spin loop for brief writer thread waits.");
-
-DEFINE_uint64(
-    write_thread_max_yield_usec, 100,
-    "Maximum microseconds for enable_write_thread_adaptive_yield operation.");
-
-DEFINE_uint64(write_thread_slow_yield_usec, 3,
-              "The threshold at which a slow yield is considered a signal that "
-              "other processes or threads want the core.");
 
 DEFINE_int32(rate_limit_delay_max_milliseconds, 1000,
              "When hard_rate_limit is set then this is the max time a put will"
@@ -821,41 +713,15 @@ DEFINE_uint64(
     "If non-zero, db_bench will rate-limit the reads from SE. This "
     "is the global rate in ops/second.");
 
-DEFINE_uint64(max_compaction_bytes, Options().max_compaction_bytes,
-              "Max bytes allowed in one compaction");
-
-
 DEFINE_bool(disable_auto_compactions, false, "Do not auto trigger compactions");
 
-DEFINE_uint64(wal_ttl_seconds, 0, "Set the TTL for the WAL Files in seconds.");
-DEFINE_uint64(wal_size_limit_MB, 0,
-              "Set the size limit for the WAL Files"
-              " in MB.");
 DEFINE_uint64(max_total_wal_size, 0, "Set total max WAL size");
-
-DEFINE_bool(mmap_read, Options().allow_mmap_reads,
-            "Allow reads to occur via mmap-ing files");
-
-DEFINE_bool(mmap_write, Options().allow_mmap_writes,
-            "Allow writes to occur via mmap-ing files");
 
 DEFINE_bool(use_direct_reads, Options().use_direct_reads,
             "Use O_DIRECT for reading data");
 
-DEFINE_bool(use_direct_io_for_flush_and_compaction,
-            Options().use_direct_io_for_flush_and_compaction,
-            "Use O_DIRECT for background flush and compaction I/O");
-
-DEFINE_bool(advise_random_on_open, Options().advise_random_on_open,
-            "Advise random access on table file open");
-
 DEFINE_string(compaction_fadvice, "NORMAL",
               "Access pattern advice when a file is compacted");
-static auto FLAGS_compaction_fadvice_e =
-    Options().access_hint_on_compaction_start;
-
-DEFINE_bool(use_adaptive_mutex, Options().use_adaptive_mutex,
-            "Use adaptive mutex");
 
 DEFINE_uint64(bytes_per_sync, Options().bytes_per_sync,
               "Allows OS to incrementally sync SST files to disk while they are"
@@ -913,10 +779,6 @@ DEFINE_bool(identity_as_first_hash, false,
 DEFINE_int32(stats_dump_period_sec, 600,
              "Dump status in every stats_dump_period_sec");
 
-DEFINE_bool(dump_malloc_stats, true, "Dump malloc stats in LOG ");
-
-DEFINE_bool(query_trace_print_stats, true, "Dump trace stats in LOG ");
-
 DEFINE_bool(large_kv, false, "Add a few large KV");
 
 DEFINE_bool(medium_kv, false, "Add a few medium KV (50KB 500KB)");
@@ -959,12 +821,6 @@ DEFINE_bool(use_block_based_filter, false,
 DEFINE_bool(report_file_operations, false,
             "if report number of file "
             "operations");
-
-static const bool FLAGS_soft_rate_limit_dummy __attribute__((unused)) =
-    RegisterFlagValidator(&FLAGS_soft_rate_limit, &ValidateRateLimit);
-
-static const bool FLAGS_hard_rate_limit_dummy __attribute__((unused)) =
-    RegisterFlagValidator(&FLAGS_hard_rate_limit, &ValidateRateLimit);
 
 static const bool FLAGS_key_size_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_key_size, &ValidateKeySize);
@@ -2767,10 +2623,6 @@ class Benchmark {
         method = &Benchmark::ReadRandom;
       } else if (name == "readrandomfast") {
         method = &Benchmark::ReadRandomFast;
-      } else if (name == "multireadrandom") {
-        fprintf(stderr, "entries_per_batch = %" PRIi64 "\n",
-                entries_per_batch_);
-        method = &Benchmark::MultiReadRandom;
       } else if (name == "readmissing") {
         ++key_size_;
         method = &Benchmark::ReadRandom;
@@ -2863,8 +2715,6 @@ class Benchmark {
         method = &Benchmark::TimeSeries;
       } else if (name == "stats") {
         PrintStats("smartengine.stats");
-      } else if (name == "resetstats") {
-        ResetStats();
       } else if (name == "levelstats") {
         PrintStats("smartengine.levelstats");
       } else if (name == "sstables") {
@@ -3228,13 +3078,6 @@ class Benchmark {
     Options& options = *opts;
 
     assert(db_.db == nullptr);
-    options.arena_block_size = 32768;
-    options.info_log_level = static_cast<util::InfoLogLevel>(FLAGS_info_log_level);
-    options.max_log_file_size = FLAGS_max_log_file_size;
-    options.log_file_time_to_roll = FLAGS_log_file_time_to_roll;
-    options.keep_log_file_num = FLAGS_keep_log_file_num;
-    options.create_missing_column_families = FLAGS_num_column_families > 1;
-    options.max_open_files = FLAGS_open_files;
     options.db_write_buffer_size = FLAGS_db_write_buffer_size;
     options.db_total_write_buffer_size = FLAGS_db_total_write_buffer_size;
     options.write_buffer_size = FLAGS_write_buffer_size;
@@ -3242,7 +3085,6 @@ class Benchmark {
     options.compaction_delete_percent = FLAGS_compaction_delete_percent;
     options.flush_delete_percent_trigger = FLAGS_flush_delete_percent_trigger;
     options.flush_delete_record_trigger = FLAGS_flush_delete_record_trigger;
-    options.max_write_buffer_number = FLAGS_max_write_buffer_number;
     options.min_write_buffer_number_to_merge =
         FLAGS_min_write_buffer_number_to_merge;
     options.max_write_buffer_number_to_maintain =
@@ -3250,11 +3092,7 @@ class Benchmark {
     options.base_background_compactions = FLAGS_base_background_compactions;
     options.max_background_compactions = FLAGS_max_background_compactions;
     options.max_background_flushes = FLAGS_max_background_flushes;
-    options.allow_mmap_reads = FLAGS_mmap_read;
-    options.allow_mmap_writes = FLAGS_mmap_write;
     options.use_direct_reads = FLAGS_use_direct_reads;
-    options.use_direct_io_for_flush_and_compaction =
-        FLAGS_use_direct_io_for_flush_and_compaction;
 
     if (FLAGS_use_uint64_comparator) {
       options.comparator = test::Uint64Comparator();
@@ -3263,22 +3101,9 @@ class Benchmark {
         exit(1);
       }
     }
-    options.memtable_huge_page_size = FLAGS_memtable_use_huge_page ? 2048 : 0;
-    options.bloom_locality = FLAGS_bloom_locality;
-    options.max_file_opening_threads = FLAGS_file_opening_threads;
-    options.new_table_reader_for_compaction_inputs =
-        FLAGS_new_table_reader_for_compaction_inputs;
-    options.compaction_readahead_size = FLAGS_compaction_readahead_size;
-    options.random_access_max_buffer_size = FLAGS_random_access_max_buffer_size;
     options.writable_file_max_buffer_size = FLAGS_writable_file_max_buffer_size;
-    options.use_fsync = FLAGS_use_fsync;
-    options.target_file_size_base = FLAGS_target_file_size_base;
-    options.target_file_size_multiplier = FLAGS_target_file_size_multiplier;
-    options.max_bytes_for_level_base = FLAGS_max_bytes_for_level_base;
     options.level_compaction_dynamic_level_bytes =
         FLAGS_level_compaction_dynamic_level_bytes;
-    options.max_bytes_for_level_multiplier =
-        FLAGS_max_bytes_for_level_multiplier;
     switch (FLAGS_rep_factory) {
       case kSkipList:
         options.memtable_factory.reset(new SkipListFactory());
@@ -3292,7 +3117,6 @@ class Benchmark {
         exit(1);
     }
     BlockBasedTableOptions block_based_options;
-    block_based_options.index_type = BlockBasedTableOptions::kBinarySearch;
     if (cache_ == nullptr) {
       block_based_options.no_block_cache = true;
     }
@@ -3326,8 +3150,6 @@ class Benchmark {
     options.compression = FLAGS_compression_type_e;
     options.compression_opts.level = FLAGS_compression_level;
     options.compression_opts.max_dict_bytes = FLAGS_compression_max_dict_bytes;
-    options.WAL_ttl_seconds = FLAGS_wal_ttl_seconds;
-    options.WAL_size_limit_MB = FLAGS_wal_size_limit_MB;
     options.max_total_wal_size = FLAGS_max_total_wal_size;
     options.scan_add_blocks_limit = FLAGS_scan_add_blocks_limit;
     if (FLAGS_min_level_to_compress >= 0) {
@@ -3335,34 +3157,14 @@ class Benchmark {
         options.compression_per_level[i] = kNoCompression;
       }
     }
-    options.soft_rate_limit = FLAGS_soft_rate_limit;
-    options.hard_rate_limit = FLAGS_hard_rate_limit;
-    options.soft_pending_compaction_bytes_limit =
-        FLAGS_soft_pending_compaction_bytes_limit;
-    options.hard_pending_compaction_bytes_limit =
-        FLAGS_hard_pending_compaction_bytes_limit;
-    options.delayed_write_rate = FLAGS_delayed_write_rate;
     options.allow_concurrent_memtable_write =
         FLAGS_allow_concurrent_memtable_write;
-    options.enable_write_thread_adaptive_yield =
-        FLAGS_enable_write_thread_adaptive_yield;
-    options.write_thread_max_yield_usec = FLAGS_write_thread_max_yield_usec;
-    options.write_thread_slow_yield_usec = FLAGS_write_thread_slow_yield_usec;
-    options.rate_limit_delay_max_milliseconds =
-        FLAGS_rate_limit_delay_max_milliseconds;
     options.table_cache_numshardbits = FLAGS_table_cache_numshardbits;
-    options.max_compaction_bytes = FLAGS_max_compaction_bytes;
     options.disable_auto_compactions = FLAGS_disable_auto_compactions;
-    options.optimize_filters_for_hits = FLAGS_optimize_filters_for_hits;
 
     // fill storage options
-    options.advise_random_on_open = FLAGS_advise_random_on_open;
-    options.access_hint_on_compaction_start = FLAGS_compaction_fadvice_e;
-    options.use_adaptive_mutex = FLAGS_use_adaptive_mutex;
     options.bytes_per_sync = FLAGS_bytes_per_sync;
     options.wal_bytes_per_sync = FLAGS_wal_bytes_per_sync;
-
-    options.report_bg_io_stats = FLAGS_report_bg_io_stats;
 
     if (FLAGS_thread_status_per_interval > 0) {
       options.enable_thread_tracking = true;
@@ -3391,8 +3193,6 @@ class Benchmark {
           FLAGS_max_log_buffer_switch_limit;
 
     options.use_direct_write_for_wal = FLAGS_use_direct_write_for_wal;
-    options.arena_block_size = FLAGS_arena_block_size;
-
   }
 
   void InitializeOptionsGeneral(Options* opts) {
@@ -3400,10 +3200,7 @@ class Benchmark {
 
     options.statistics = dbstats;
     options.wal_dir = FLAGS_wal_dir;
-    options.create_if_missing = !FLAGS_use_existing_db;
     options.stats_dump_period_sec = FLAGS_stats_dump_period_sec;
-    options.dump_malloc_stats = FLAGS_dump_malloc_stats;
-    options.query_trace_print_stats = FLAGS_query_trace_print_stats;
 
     if (FLAGS_row_cache_size) {
       NewRowCache(FLAGS_row_cache_size, options.row_cache);
@@ -3448,31 +3245,42 @@ class Benchmark {
       } else {
         FLAGS_num_hot_column_families = FLAGS_num_column_families;
       }
-      std::vector<ColumnFamilyDescriptor> column_families;
-      for (size_t i = 0; i < num_hot; i++) {
-        column_families.push_back(ColumnFamilyDescriptor(
-            ColumnFamilyName(i), ColumnFamilyOptions(options)));
-      }
+      //std::vector<ColumnFamilyDescriptor> column_families;
+      //for (size_t i = 0; i < num_hot; i++) {
+      //  column_families.push_back(ColumnFamilyDescriptor(
+      //      ColumnFamilyName(i), ColumnFamilyOptions(options)));
+      //}
 #ifndef ROCKSDB_LITE
       if (FLAGS_optimistic_transaction_db) {
-        s = OptimisticTransactionDB::Open(options, db_name, column_families,
-                                          &db->cfh, &db->opt_txn_db);
+        s = OptimisticTransactionDB::Open(options,
+                                          db_name,
+                                          &db->cfh,
+                                          &db->opt_txn_db);
         if (s.ok()) {
           db->db = db->opt_txn_db->GetBaseDB();
         }
       } else if (FLAGS_transaction_db) {
         TransactionDB* ptr;
         TransactionDBOptions txn_db_options;
-        s = TransactionDB::Open(options, txn_db_options, db_name,
-                                column_families, &db->cfh, &ptr);
+        s = TransactionDB::Open(options,
+                                txn_db_options,
+                                db_name,
+                                &db->cfh,
+                                &ptr);
         if (s.ok()) {
           db->db = ptr;
         }
       } else {
-        s = DB::Open(options, db_name, column_families, &db->cfh, &db->db);
+        s = DB::Open(options,
+                    db_name,
+                    &db->cfh,
+                    &db->db);
       }
 #else
-      s = DB::Open(options, db_name, column_families, &db->cfh, &db->db);
+      s = DB::Open(options,
+                   db_name,
+                   &db->cfh,
+                   &db->db);
 #endif  // ROCKSDB_LITE
       DBImpl *dbimpl = (reinterpret_cast<DBImpl *>(db->db));
       ColumnFamilyHandle *cf_handle = nullptr;
@@ -3500,20 +3308,38 @@ class Benchmark {
       db->num_hot = num_hot;
 #ifndef ROCKSDB_LITE
     } else if (FLAGS_optimistic_transaction_db) {
-      s = OptimisticTransactionDB::Open(options, db_name, &db->opt_txn_db);
+      std::vector<ColumnFamilyHandle *> cf_handles;
+      s = OptimisticTransactionDB::Open(options, db_name, &cf_handles, &db->opt_txn_db);
       if (s.ok()) {
         db->db = db->opt_txn_db->GetBaseDB();
       }
+      for (auto handle : cf_handles) {
+        delete handle;
+      }
     } else if (FLAGS_transaction_db) {
-      TransactionDB* ptr;
+      TransactionDB* ptr = nullptr;
       TransactionDBOptions txn_db_options;
-      s = TransactionDB::Open(options, txn_db_options, db_name, &ptr);
+      std::vector<ColumnFamilyHandle *> cf_handles;
+      s = TransactionDB::Open(options,
+                              txn_db_options,
+                              db_name,
+                              &cf_handles,
+                              &ptr);
       if (s.ok()) {
         db->db = ptr;
       }
+
+      for (auto handle : cf_handles) {
+        delete handle;
+      }
 #endif  // ROCKSDB_LITE
     } else {
-      s = DB::Open(options, db_name, &db->db);
+      std::vector<ColumnFamilyHandle *> cf_handles;
+      s = DB::Open(options, db_name, &cf_handles, &db->db);
+      for (auto handle : cf_handles) {
+        delete handle;
+      }
+
     }
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
@@ -4029,7 +3855,7 @@ class Benchmark {
   void ReadSequential(ThreadState* thread, DB* db) {
     ReadOptions options(FLAGS_verify_checksum, true);
 
-    Iterator* iter = db->NewIterator(options);
+    Iterator* iter = db->NewIterator(options, db->DefaultColumnFamily());
     int64_t i = 0;
     int64_t bytes = 0;
     for (iter->SeekToFirst(); i < reads_ && iter->Valid(); iter->Next()) {
@@ -4063,7 +3889,7 @@ class Benchmark {
   }
 
   void ReadReverse(ThreadState* thread, DB* db) {
-    Iterator* iter = db->NewIterator(ReadOptions(FLAGS_verify_checksum, true));
+    Iterator* iter = db->NewIterator(ReadOptions(FLAGS_verify_checksum, true), db->DefaultColumnFamily());
     int64_t i = 0;
     int64_t bytes = 0;
     for (iter->SeekToLast(); i < reads_ && iter->Valid(); iter->Prev()) {
@@ -4101,7 +3927,7 @@ class Benchmark {
         int64_t key_rand = thread->rand.Next() & (pot - 1);
         GenerateKeyFromInt(key_rand, FLAGS_num, &key);
         ++read;
-        auto status = db->Get(options, key, &value);
+        auto status = db->Get(options, db->DefaultColumnFamily(), key, &value);
         if (status.ok()) {
           ++found;
         } else if (!status.IsNotFound()) {
@@ -4223,61 +4049,12 @@ class Benchmark {
     }
   }
 
-  // Calls MultiGet over a list of keys from a random distribution.
-  // Returns the total number of keys found.
-  void MultiReadRandom(ThreadState* thread) {
-    int64_t read = 0;
-    int64_t num_multireads = 0;
-    int64_t found = 0;
-    ReadOptions options(FLAGS_verify_checksum, true);
-    std::vector<Slice> keys;
-    std::vector<std::unique_ptr<const char[]>> key_guards;
-    std::vector<std::string> values(entries_per_batch_);
-    while (static_cast<int64_t>(keys.size()) < entries_per_batch_) {
-      key_guards.push_back(std::unique_ptr<const char[]>());
-      keys.push_back(AllocateKey(&key_guards.back()));
-    }
-
-    Duration duration(FLAGS_duration, reads_);
-    while (!duration.Done(1)) {
-      DB* db = SelectDB(thread);
-      for (int64_t i = 0; i < entries_per_batch_; ++i) {
-        GenerateKeyFromInt(GetRandomKey(&thread->rand), FLAGS_num, &keys[i]);
-      }
-      std::vector<Status> statuses = db->MultiGet(options, keys, &values);
-      assert(static_cast<int64_t>(statuses.size()) == entries_per_batch_);
-
-      read += entries_per_batch_;
-      num_multireads++;
-      for (int64_t i = 0; i < entries_per_batch_; ++i) {
-        if (statuses[i].ok()) {
-          ++found;
-        } else if (!statuses[i].IsNotFound()) {
-          fprintf(stderr, "MultiGet returned an error: %s\n",
-                  statuses[i].ToString().c_str());
-          abort();
-        }
-      }
-      if (thread->shared->read_rate_limiter.get() != nullptr &&
-          num_multireads % 256 == 255) {
-        thread->shared->read_rate_limiter->Request(
-            256 * entries_per_batch_, Env::IO_HIGH, nullptr /* stats */);
-      }
-      thread->stats.FinishedOps(nullptr, db, entries_per_batch_, kRead);
-    }
-
-    char msg[100];
-    snprintf(msg, sizeof(msg), "(%" PRIu64 " of %" PRIu64 " found)", found,
-             read);
-    thread->stats.AddMessage(msg);
-  }
-
   void IteratorCreation(ThreadState* thread) {
     Duration duration(FLAGS_duration, reads_);
     ReadOptions options(FLAGS_verify_checksum, true);
     while (!duration.Done(1)) {
       DB* db = SelectDB(thread);
-      Iterator* iter = db->NewIterator(options);
+      Iterator* iter = db->NewIterator(options, db->DefaultColumnFamily());
       delete iter;
       thread->stats.FinishedOps(nullptr, db, 1, kOthers);
     }
@@ -4300,10 +4077,10 @@ class Benchmark {
     Iterator* single_iter = nullptr;
     std::vector<Iterator*> multi_iters;
     if (db_.db != nullptr) {
-      single_iter = db_.db->NewIterator(options);
+      single_iter = db_.db->NewIterator(options, db_.db->DefaultColumnFamily());
     } else {
       for (const auto& db_with_cfh : multi_dbs_) {
-        multi_iters.push_back(db_with_cfh.db->NewIterator(options));
+        multi_iters.push_back(db_with_cfh.db->NewIterator(options, db_with_cfh.db->DefaultColumnFamily()));
       }
     }
 
@@ -4315,14 +4092,14 @@ class Benchmark {
     while (!duration.Done(1)) {
       if (db_.db != nullptr) {
         delete single_iter;
-        single_iter = db_.db->NewIterator(options);
+        single_iter = db_.db->NewIterator(options, db_.db->DefaultColumnFamily());
       } else {
         for (auto iter : multi_iters) {
           delete iter;
         }
         multi_iters.clear();
         for (const auto& db_with_cfh : multi_dbs_) {
-          multi_iters.push_back(db_with_cfh.db->NewIterator(options));
+          multi_iters.push_back(db_with_cfh.db->NewIterator(options, db_with_cfh.db->DefaultColumnFamily()));
         }
       }
       // Pick a Iterator to use
@@ -4485,7 +4262,7 @@ class Benchmark {
       Status s;
 
       if (write_merge == kWrite) {
-        s = db->Put(write_options_, key, gen.Generate(value_size_));
+        s = db->Put(write_options_, db->DefaultColumnFamily(), key, gen.Generate(value_size_));
       } else {
         se_assert(false);
       }
@@ -4558,7 +4335,7 @@ class Benchmark {
     for (int i = 0; i < 3; i++) {
       keys[i] = key.ToString() + suffixes[i];
       key_slices[i] = keys[i];
-      s = db->Get(readoptionscopy, key_slices[i], value);
+      s = db->Get(readoptionscopy, db->DefaultColumnFamily(), key_slices[i], value);
       if (!s.ok() && !s.IsNotFound()) {
         fprintf(stderr, "get error: %s\n", s.ToString().c_str());
         values[i] = "";
@@ -4685,7 +4462,7 @@ class Benchmark {
       }
       if (get_weight > 0) {
         // do all the gets first
-        Status s = db->Get(options, key, &value);
+        Status s = db->Get(options, db->DefaultColumnFamily(), key, &value);
         if (!s.ok() && !s.IsNotFound()) {
           fprintf(stderr, "get error: %s\n", s.ToString().c_str());
           // we continue after error rather than exiting so that we can
@@ -4699,7 +4476,7 @@ class Benchmark {
       } else if (put_weight > 0) {
         // then do all the corresponding number of puts
         // for all the gets we have done earlier
-        Status s = db->Put(write_options_, key, gen.Generate(value_size_));
+        Status s = db->Put(write_options_, db->DefaultColumnFamily(), key, gen.Generate(value_size_));
         if (!s.ok()) {
           fprintf(stderr, "put error: %s\n", s.ToString().c_str());
           exit(1);
@@ -4733,7 +4510,7 @@ class Benchmark {
       DB* db = SelectDB(thread);
       GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
 
-      auto status = db->Get(options, key, &value);
+      auto status = db->Get(options, db->DefaultColumnFamily(), key, &value);
       if (status.ok()) {
         ++found;
         bytes += key.size() + value.size();
@@ -4743,7 +4520,7 @@ class Benchmark {
         abort();
       }
 
-      Status s = db->Put(write_options_, key, gen.Generate(value_size_));
+      Status s = db->Put(write_options_, db->DefaultColumnFamily(), key, gen.Generate(value_size_));
       if (!s.ok()) {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
         exit(1);
@@ -4776,7 +4553,7 @@ class Benchmark {
       DB* db = SelectDB(thread);
       GenerateKeyFromInt(thread->rand.Next() % FLAGS_num, FLAGS_num, &key);
 
-      auto status = db->Get(options, key, &value);
+      auto status = db->Get(options, db->DefaultColumnFamily(), key, &value);
       if (status.ok()) {
         ++found;
         bytes += key.size() + value.size();
@@ -4798,7 +4575,7 @@ class Benchmark {
       value.append(operand.data(), operand.size());
 
       // Write back to the database
-      Status s = db->Put(write_options_, key, value);
+      Status s = db->Put(write_options_, db->DefaultColumnFamily(), key, value);
       if (!s.ok()) {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
         exit(1);
@@ -4822,7 +4599,7 @@ class Benchmark {
 
     DB* db = SelectDB(thread);
     std::unique_ptr<db::Iterator> iter(
-        db->NewIterator(ReadOptions(FLAGS_verify_checksum, true)));
+        db->NewIterator(ReadOptions(FLAGS_verify_checksum, true), db->DefaultColumnFamily()));
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -4965,7 +4742,7 @@ class Benchmark {
     DB* db = SelectDB(thread);
     for (int64_t i = 0; i < FLAGS_numdistinct; i++) {
       GenerateKeyFromInt(i * max_counter, FLAGS_num, &key);
-      s = db->Put(write_options_, key, gen.Generate(value_size_));
+      s = db->Put(write_options_, db->DefaultColumnFamily(), key, gen.Generate(value_size_));
       if (!s.ok()) {
         fprintf(stderr, "Operation failed: %s\n", s.ToString().c_str());
         exit(1);
@@ -4984,13 +4761,13 @@ class Benchmark {
                                 static_cast<int64_t>(0));
       GenerateKeyFromInt(key_id * max_counter + counters[key_id], FLAGS_num,
                          &key);
-      s = FLAGS_use_single_deletes ? db->SingleDelete(write_options_, key)
-                                   : db->Delete(write_options_, key);
+      s = FLAGS_use_single_deletes ? db->SingleDelete(write_options_, db->DefaultColumnFamily(), key)
+                                   : db->Delete(write_options_, db->DefaultColumnFamily(), key);
       if (s.ok()) {
         counters[key_id] = (counters[key_id] + 1) % max_counter;
         GenerateKeyFromInt(key_id * max_counter + counters[key_id], FLAGS_num,
                            &key);
-        s = db->Put(write_options_, key, Slice());
+        s = db->Put(write_options_, db->DefaultColumnFamily(), key, Slice());
       }
 
       if (!s.ok()) {
@@ -5018,7 +4795,7 @@ class Benchmark {
     Iterator* iter = nullptr;
     // Only work on single database
     assert(db_.db != nullptr);
-    iter = db_.db->NewIterator(options);
+    iter = db_.db->NewIterator(options, db_.db->DefaultColumnFamily());
 
     std::unique_ptr<const char[]> key_guard;
     Slice key = AllocateKey(&key_guard);
@@ -5033,7 +4810,7 @@ class Benchmark {
         }
       }
       delete iter;
-      iter = db_.db->NewIterator(options);
+      iter = db_.db->NewIterator(options, db_.db->DefaultColumnFamily());
       // Pick a Iterator to use
 
       int64_t key_id = thread->rand.Next() % FLAGS_key_id_range;
@@ -5054,7 +4831,7 @@ class Benchmark {
           bytes += iter->key().size();
           if (KeyExpired(timestamp_emulator_.get(), iter->key())) {
             thread->stats.FinishedOps(&db_, db_.db, 1, kDelete);
-            db_.db->Delete(write_options_, iter->key());
+            db_.db->Delete(write_options_, db_.db->DefaultColumnFamily(), iter->key());
           } else {
             break;
           }
@@ -5131,7 +4908,7 @@ class Benchmark {
 
       Status s;
 
-      s = db->Put(write_options_, key, gen.Generate(value_size_));
+      s = db->Put(write_options_, db->DefaultColumnFamily(), key, gen.Generate(value_size_));
 
       if (!s.ok()) {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
@@ -5158,15 +4935,6 @@ class Benchmark {
       TimeSeriesWrite(thread);
       thread->stats.Stop();
       thread->stats.Report("timeseries write");
-    }
-  }
-
-  void ResetStats() {
-    if (db_.db != nullptr) {
-      db_.db->ResetStats();
-    }
-    for (const auto& db_with_cfh : multi_dbs_) {
-      db_with_cfh.db->ResetStats();
     }
   }
 
@@ -6943,19 +6711,6 @@ int db_bench_tool(int argc, char** argv) {
 
   FLAGS_compression_type_e =
       StringToCompressionType(FLAGS_compression_type.c_str());
-
-  if (!strcasecmp(FLAGS_compaction_fadvice.c_str(), "NONE"))
-    FLAGS_compaction_fadvice_e = Options::NONE;
-  else if (!strcasecmp(FLAGS_compaction_fadvice.c_str(), "NORMAL"))
-    FLAGS_compaction_fadvice_e = Options::NORMAL;
-  else if (!strcasecmp(FLAGS_compaction_fadvice.c_str(), "SEQUENTIAL"))
-    FLAGS_compaction_fadvice_e = Options::SEQUENTIAL;
-  else if (!strcasecmp(FLAGS_compaction_fadvice.c_str(), "WILLNEED"))
-    FLAGS_compaction_fadvice_e = Options::WILLNEED;
-  else {
-    fprintf(stdout, "Unknown compaction fadvice:%s\n",
-            FLAGS_compaction_fadvice.c_str());
-  }
 
   FLAGS_rep_factory = StringToRepFactory(FLAGS_memtablerep.c_str());
 

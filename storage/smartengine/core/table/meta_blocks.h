@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "db/builder.h"
-#include "db/table_properties_collector.h"
 #include "options/options.h"
 #include "table/block_builder.h"
 #include "table/format.h"
@@ -68,37 +67,6 @@ class PropertyBlockBuilder {
   std::unique_ptr<BlockBuilder, memory::ptr_destruct_delete<BlockBuilder>> properties_block_;
   util::stl_wrappers::KVMap props_;
 };
-
-// Were we encounter any error occurs during user-defined statistics collection,
-// we'll write the warning message to info log.
-void LogPropertiesCollectionError(const std::string& method,
-                                  const std::string& name);
-
-// Utility functions help table builder to trigger batch events for user
-// defined property collectors.
-// Return value indicates if there is any error occurred; if error occurred,
-// the warning message will be logged.
-// NotifyCollectTableCollectorsOnAdd() triggers the `Add` event for all
-// property collectors.
-bool NotifyCollectTableCollectorsOnAdd(
-    const common::Slice& key, const common::Slice& value, uint64_t file_size,
-    const std::vector<std::unique_ptr<db::IntTblPropCollector>>& collectors);
-
-// Utility functions help table builder to trigger batch events for user
-// defined property collectors.
-// Return value indicates if there is any error occurred; if error occurred,
-// the warning message will be logged.
-// NotifyCollectTableCollectorsOnAdd() triggers the `Add` event for all
-// property collectors.
-bool NotifyCollectTableCollectorsOnAdd(
-    const db::BlockStats& block_stats, uint64_t file_size,
-    const std::vector<std::unique_ptr<db::IntTblPropCollector>>& collectors);
-
-// NotifyCollectTableCollectorsOnAdd() triggers the `Finish` event for all
-// property collectors. The collected properties will be added to `builder`.
-bool NotifyCollectTableCollectorsOnFinish(
-    const std::vector<std::unique_ptr<db::IntTblPropCollector>>& collectors,
-    PropertyBlockBuilder* builder);
 
 // Read the properties from the table.
 // @returns a status to indicate if the operation succeeded. On success,

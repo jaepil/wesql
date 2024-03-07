@@ -23,7 +23,6 @@
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_updater.h"
 #include "monitoring/thread_status_util.h"
-#include "util/sst_file_manager_impl.h"
 #include "util/sync_point.h"
 #include "util/string_util.h"
 #include "storage/multi_version_extent_meta_layer.h"
@@ -63,7 +62,7 @@ Status DBImpl::SyncClosedLogs(JobContext* job_context) {
 
     for (log::Writer* log : logs_to_sync) {
       __SE_LOG(INFO, "[JOB %d] Syncing log #%" PRIu64, job_context->job_id, log->get_log_number());
-      s = log->file()->sync(immutable_db_options_.use_fsync);
+      s = log->file()->sync(false /**use_fsync*/);
     }
     if (s.ok()) {
       s = directories_.GetWalDir()->Fsync();
@@ -126,8 +125,7 @@ int DBImpl::dump_memtable_to_outputfile(
     ret = Status::kOk; // by design
     SE_LOG(INFO, "just cancel the dump task", K(sub_table->GetID()));
   } else if (!SUCC(ret)) {
-    // if a bad error happened (not ShutdownInProgress) and paranoid_checks is
-    // true, mark DB read-only
+    // if a bad error happened (not ShutdownInProgress) mark DB read-only
     SE_LOG(ERROR, "flush memtable error set bg_error_", K(ret));
     bg_error_ = Status(ret);
   }
@@ -257,7 +255,6 @@ Status DBImpl::FlushMemTableToOutputFile(
       SchedulePendingCompaction(sub_table);
       MaybeScheduleFlushOrCompaction();
     }
-    schedule_background_recycle();
     if (made_progress) {
       *made_progress = true;
     }
@@ -283,8 +280,7 @@ Status DBImpl::FlushMemTableToOutputFile(
     ret = Status::kOk; // by design
     SE_LOG(INFO, "just cancel the task", K(get_task_type_name(st_flush_job.get_task_type())));
   } else if (!SUCC(ret)) {
-    // if a bad error happened (not ShutdownInProgress) and paranoid_checks is
-    // true, mark DB read-only
+    // if a bad error happened (not ShutdownInProgress) mark DB read-only
     SE_LOG(ERROR, "flush memtable error set bg_error_", K(ret));
     bg_error_ = Status(ret);
   }
@@ -623,16 +619,6 @@ int DBImpl::master_schedule_compaction(const CompactionScheduleType type) {
   return ret;
 }
 
-void DBImpl::schedule_background_recycle() {
-  mutex_.AssertHeld();
-  // no concurrence
-  if (bg_recycle_scheduled_ > 0) {
-    return;
-  }
-  bg_recycle_scheduled_++;  // indicate one high schedule
-  env_->Schedule(&DBImpl::bg_work_recycle, this, Env::Priority::HIGH, nullptr);
-}
-
 int DBImpl::maybe_schedule_dump() {
   int ret = Status::kOk;
   mutex_.AssertHeld();
@@ -827,11 +813,7 @@ int DBImpl::bg_dumps_allowed() const {
 
 int DBImpl::BGCompactionsAllowed() const {
   mutex_.AssertHeld();
-  if (write_controller_.NeedSpeedupCompaction()) {
-    return mutable_db_options_.max_background_compactions;
-  } else {
-    return mutable_db_options_.base_background_compactions;
-  }
+  return mutable_db_options_.base_background_compactions;
 }
 
 size_t DBImpl::compaction_job_size() {
@@ -1245,13 +1227,6 @@ void DBImpl::UnscheduleCallback(void* arg) {
   TEST_SYNC_POINT("DBImpl::UnscheduleCallback");
 }
 
-void DBImpl::bg_work_recycle(void* db) {
-  IOSTATS_SET_THREAD_POOL_ID(Env::Priority::HIGH);
-  TEST_SYNC_POINT("DBImpl::bg_work_recycle");
-  reinterpret_cast<DBImpl*>(db)->background_call_recycle();
-  TEST_SYNC_POINT("DBImpl::bg_work_recycle:done");
-}
-
 void DBImpl::bg_work_shrink(void *arg)
 {
   IOSTATS_SET_THREAD_POOL_ID(Env::Priority::SHRINK_EXTENT_SPACE);
@@ -1268,33 +1243,6 @@ void DBImpl::bg_work_ebr(void *db)
   TEST_SYNC_POINT("DBImpl::bg_work_ebr");
   reinterpret_cast<DBImpl *>(db)->background_call_ebr();
   TEST_SYNC_POINT("DBImpl::bg_work_ebr:done");
-}
-
-Status DBImpl::background_call_recycle() {
-  Status s = bg_error_;
-  mutex_.Lock();
-  if (s.ok() && shutting_down_.load(std::memory_order_acquire)) {
-    bg_recycle_scheduled_--;
-    bg_cv_.SignalAll();
-    mutex_.Unlock();
-    return Status::ShutdownInProgress();
-  }
-
-  std::unordered_map<int32_t, SequenceNumber> all;
-  //TODo:yuanfeng, unused function
-  //versions_->get_earliest_meta_version(&all);
-  mutex_.Unlock();
-  int ret = versions_->recycle_storage_manager_meta(&all, mutex_);
-  if (ret != Status::kOk) {
-    __SE_LOG(ERROR, "Recycle the storage manager extents failed %d\n", ret);
-  }
-
-  mutex_.Lock();
-  bg_recycle_scheduled_--;
-  bg_cv_.SignalAll();
-  mutex_.Unlock();
-  
-  return Status(static_cast<Status::Code>(ret));
 }
 
 int DBImpl::background_dump(bool* madeProgress, JobContext* job_context) {
@@ -1388,8 +1336,8 @@ int DBImpl::background_gc()
 
   return ret;
 }
-Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
-                               LogBuffer* log_buffer) {
+Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context)
+{
   mutex_.AssertHeld();
 
   Status status = bg_error_;
@@ -1555,70 +1503,52 @@ void DBImpl::BackgroundCallFlush() {
 
   TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:start");
 
-  LogBuffer log_buffer(logger::InfoLogLevel::INFO_LEVEL);
-  {
-    InstrumentedMutexLock l(&mutex_);
-    num_running_flushes_++;
+  InstrumentedMutexLock l(&mutex_);
+  num_running_flushes_++;
 
-    //TODO:yuanfeng
-    //auto pending_outputs_inserted_elem =
-    //    CaptureCurrentFileNumberInPendingOutputs();
-
-    Status s = BackgroundFlush(&made_progress, &job_context, &log_buffer);
-    if (!s.ok() && !s.IsShutdownInProgress()) {
-      // Wait a little bit before retrying background flush in
-      // case this is an environmental problem and we do not want to
-      // chew up resources for failed flushes for the duration of
-      // the problem.
-      uint64_t error_cnt =
-          default_cf_internal_stats_->BumpAndGetBackgroundErrorCount();
-      bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
-      mutex_.Unlock();
-      __SE_LOG(ERROR, "Waiting after background flush error: %s "
-                           "Accumulated background error counts: %" PRIu64,
-                    s.ToString().c_str(), error_cnt);
-      log_buffer.FlushBufferToLog();
-      // LogFlush(immutable_db_options_.info_log);
-      env_->SleepForMicroseconds(1000000);
-      mutex_.Lock();
-    }
-
-    //TODO:yuanfeng
-    //ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
-    __SE_LOG(INFO, "BEFORE FindObsoleteFiles");
-    // LogFlush(immutable_db_options_.info_log);
-    // If flush failed, we want to delete all temporary files that we might have
-    // created. Thus, we force full scan in FindObsoleteFiles()
-    FindObsoleteFiles(&job_context, !s.ok() && !s.IsShutdownInProgress());
-    __SE_LOG(INFO, "AFTER FindObsoleteFiles");
-    // LogFlush(immutable_db_options_.info_log);
-    // delete unnecessary files if any, this is done outside the mutex
-    if (job_context.HaveSomethingToDelete() || !log_buffer.IsEmpty()) {
-      mutex_.Unlock();
-      // Have to flush the info logs before bg_flush_scheduled_--
-      // because if bg_flush_scheduled_ becomes 0 and the lock is
-      // released, the deconstructor of DB can kick in and destroy all the
-      // states of DB so info_log might not be available after that point.
-      // It also applies to access other states that DB owns.
-      log_buffer.FlushBufferToLog();
-      if (job_context.HaveSomethingToDelete()) {
-        PurgeObsoleteFiles(job_context);
-      }
-      job_context.Clean();
-      mutex_.Lock();
-    }
-
-    assert(num_running_flushes_ > 0);
-    num_running_flushes_--;
-    bg_flush_scheduled_--;
-    // See if there's more work to be done
-    MaybeScheduleFlushOrCompaction();
-    bg_cv_.SignalAll();
-    // IMPORTANT: there should be no code after calling SignalAll. This call may
-    // signal the DB destructor that it's OK to proceed with destruction. In
-    // that case, all DB variables will be dealloacated and referencing them
-    // will cause trouble.
+  Status s = BackgroundFlush(&made_progress, &job_context);
+  if (!s.ok() && !s.IsShutdownInProgress()) {
+    // Wait a little bit before retrying background flush in
+    // case this is an environmental problem and we do not want to
+    // chew up resources for failed flushes for the duration of
+    // the problem.
+    uint64_t error_cnt =
+        default_cf_internal_stats_->BumpAndGetBackgroundErrorCount();
+    bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
+    mutex_.Unlock();
+    __SE_LOG(ERROR, "Waiting after background flush error: %s "
+                         "Accumulated background error counts: %" PRIu64,
+                  s.ToString().c_str(), error_cnt);
+    env_->SleepForMicroseconds(1000000);
+    mutex_.Lock();
   }
+
+  __SE_LOG(INFO, "BEFORE FindObsoleteFiles");
+  // If flush failed, we want to delete all temporary files that we might have
+  // created. Thus, we force full scan in FindObsoleteFiles()
+  FindObsoleteFiles(&job_context, !s.ok() && !s.IsShutdownInProgress());
+  __SE_LOG(INFO, "AFTER FindObsoleteFiles");
+  // delete unnecessary files if any, this is done outside the mutex
+  if (job_context.HaveSomethingToDelete()) {
+    mutex_.Unlock();
+    if (job_context.HaveSomethingToDelete()) {
+      PurgeObsoleteFiles(job_context);
+    }
+    job_context.Clean();
+    mutex_.Lock();
+  }
+
+  assert(num_running_flushes_ > 0);
+  num_running_flushes_--;
+  bg_flush_scheduled_--;
+  // See if there's more work to be done
+  MaybeScheduleFlushOrCompaction();
+  bg_cv_.SignalAll();
+  // IMPORTANT: there should be no code after calling SignalAll. This call may
+  // signal the DB destructor that it's OK to proceed with destruction. In
+  // that case, all DB variables will be dealloacated and referencing them
+  // will cause trouble.
+  
 }
 
 void DBImpl::BackgroundCallCompaction()
@@ -1626,23 +1556,14 @@ void DBImpl::BackgroundCallCompaction()
   bool made_progress = false;
   JobContext job_context(next_job_id_.fetch_add(1), storage_logger_, true);
   TEST_SYNC_POINT("BackgroundCallCompaction:0");
-  LogBuffer log_buffer(logger::InfoLogLevel::INFO_LEVEL);
   {
     InstrumentedMutexLock l(&mutex_);
 
-    // This call will unlock/lock the mutex to wait for current running
-    // IngestExternalFile() calls to finish.
-    WaitForIngestFile();
-
     num_running_compactions_++;
-
-    //TODO:yuanfeng
-    //auto pending_outputs_inserted_elem =
-    //    CaptureCurrentFileNumberInPendingOutputs();
 
     assert(bg_compaction_scheduled_);
     Status s;
-    s = BackgroundCompaction(&made_progress, &job_context, &log_buffer);
+    s = BackgroundCompaction(&made_progress, &job_context);
     TEST_SYNC_POINT("BackgroundCallCompaction:1");
     if (!s.ok() && !s.IsShutdownInProgress()) {
       // Wait a little bit before retrying background compaction in
@@ -1653,17 +1574,12 @@ void DBImpl::BackgroundCallCompaction()
           default_cf_internal_stats_->BumpAndGetBackgroundErrorCount();
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
       mutex_.Unlock();
-      log_buffer.FlushBufferToLog();
       __SE_LOG(ERROR, "Waiting after background compaction error: %s, "
                            "Accumulated background error counts: %" PRIu64,
                     s.ToString().c_str(), error_cnt);
-      // LogFlush(immutable_db_options_.info_log);
       env_->SleepForMicroseconds(1000000);
       mutex_.Lock();
     }
-
-    //TODO:yuanfeng
-    //ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
 
     // If compaction failed, we want to delete all temporary files that we might
     // have created (they might not be all recorded in job_context in case of a
@@ -1671,14 +1587,8 @@ void DBImpl::BackgroundCallCompaction()
     FindObsoleteFiles(&job_context, !s.ok() && !s.IsShutdownInProgress());
 
     // delete unnecessary files if any, this is done outside the mutex
-    if (job_context.HaveSomethingToDelete() || !log_buffer.IsEmpty()) {
+    if (job_context.HaveSomethingToDelete()) {
       mutex_.Unlock();
-      // Have to flush the info logs before bg_compaction_scheduled_--
-      // because if bg_flush_scheduled_ becomes 0 and the lock is
-      // released, the deconstructor of DB can kick in and destroy all the
-      // states of DB so info_log might not be available after that point.
-      // It also applies to access other states that DB owns.
-      log_buffer.FlushBufferToLog();
       if (job_context.HaveSomethingToDelete()) {
         PurgeObsoleteFiles(job_context);
       }
@@ -1709,15 +1619,13 @@ void DBImpl::BackgroundCallCompaction()
   }
 }
 
-Status DBImpl::build_compaction_job(LogBuffer* log_buffer,
-                                    ColumnFamilyData* cfd,
+Status DBImpl::build_compaction_job(ColumnFamilyData* cfd,
                                     const Snapshot* snapshot,
                                     JobContext* job_context,
                                     storage::CompactionJob*& job,
                                     CFCompactionJob &cf_job) {
 
   int ret = Status::kOk;
-//  job = new storage::CompactionJob();
   job = ALLOC_OBJECT(CompactionJob, cf_job.compaction_alloc_, cf_job.compaction_alloc_);
   if (nullptr == job) {
     ret = Status::kErrorUnexpected;
@@ -1801,8 +1709,6 @@ Status DBImpl::build_compaction_job(LogBuffer* log_buffer,
         K(job->get_task_size()));
   }
   if (Status::kOk != ret && nullptr != job) {
-//    delete job;
-//    job = nullptr;
     FREE_OBJECT(CompactionJob, cf_job.compaction_alloc_, job);
   }
   return Status(ret);
@@ -1926,7 +1832,6 @@ Status DBImpl::run_one_compaction_task(ColumnFamilyData* sub_table,
           mutex_.Lock();
           if (SUCCED(ret)) {
             InstallSuperVersionAndScheduleWorkWrapper(sub_table, job_context, *sub_table->GetLatestMutableCFOptions());
-            schedule_background_recycle();
             SE_LOG(INFO, "install compaction result to level(2)");
           }
         }
@@ -1945,16 +1850,8 @@ void DBImpl::record_compaction_stats(
   IOSTATS_RESET(bytes_written);
 }
 
-//void DBImpl::record_compaction_stats(
-//    const storage::MajorCompaction::Statstics& compaction_stats) {
-//  // compaction IO
-//  IOSTATS_RESET(bytes_read);
-//  IOSTATS_RESET(bytes_written);
-//}
-
-Status DBImpl::BackgroundCompaction(bool* made_progress,
-                                    JobContext* job_context,
-                                    LogBuffer* log_buffer) {
+Status DBImpl::BackgroundCompaction(bool* made_progress, JobContext* job_context)
+{
   *made_progress = false;
   mutex_.AssertHeld();
   TEST_SYNC_POINT("DBImpl::BackgroundCompaction:Start");
@@ -1989,7 +1886,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       remove_compaction_job(cf_job, false);
     } else if (nullptr == cf_job->job_) {
       // Case 1, we should build compaction job when first scheduled this CF.
-      status = build_compaction_job(log_buffer, cf_job->cfd_, cf_job->meta_snapshot_, job_context, cf_job->job_, *cf_job);
+      status = build_compaction_job(cf_job->cfd_, cf_job->meta_snapshot_, job_context, cf_job->job_, *cf_job);
       if (!status.ok()) {
         // may be build at next round;We remove cf_job in case of memory leak;
         SE_LOG(INFO, "first schedule cfd, failed to build,maybe try again",
@@ -2017,7 +1914,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         // print subtable schedule info
         SE_LOG(INFO, "first schedule cfd",
             K(cfd->GetID()),
-            K(cfd->get_level1_file_num_compaction_trigger(meta_snapshot)),
             K(meta_snapshot->GetSequenceNumber()),
             K(cf_job->job_->get_task_size()),
             K((int)cf_job->job_->get_task_type()),
@@ -2068,7 +1964,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
           mutex_.Lock();
           if (SUCCED(ret)) {
             InstallSuperVersionAndScheduleWorkWrapper(cfd, job_context, *cfd->GetLatestMutableCFOptions());
-            schedule_background_recycle();
             SE_LOG(INFO, "install compaction result ", K((int)cf_job->job_->get_task_type()));
           } else {
             SE_LOG(ERROR, "install compaction result failed", K(ret));
@@ -2098,7 +1993,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     SE_LOG(INFO, "just cancel the task");
   } else {
     SE_LOG(WARN, "Compaction error", K(status.ToString().c_str()));
-    if (immutable_db_options_.paranoid_checks && bg_error_.ok()) {
+    if (bg_error_.ok()) {
       bg_error_ = status;
       SE_LOG(WARN, "failed during BackgroundCompaction", K((int)bg_error_.code()));
     }
@@ -2137,14 +2032,7 @@ SuperVersion* DBImpl::InstallSuperVersionAndScheduleWork(
     const MutableCFOptions& mutable_cf_options) {
   mutex_.AssertHeld();
 
-  // Update max_total_in_memory_state_
-  size_t old_memtable_size = 0;
   auto* old_sv = cfd->GetSuperVersion();
-  if (old_sv) {
-    old_memtable_size = old_sv->mutable_cf_options.write_buffer_size *
-                        old_sv->mutable_cf_options.max_write_buffer_number;
-  }
-
   auto* old = cfd->InstallSuperVersion(new_sv ? new_sv : MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion),
                                        &mutex_, mutable_cf_options);
 
@@ -2154,10 +2042,6 @@ SuperVersion* DBImpl::InstallSuperVersionAndScheduleWork(
   SchedulePendingCompaction(cfd);
   MaybeScheduleFlushOrCompaction();
 
-  // Update max_total_in_memory_state_
-  max_total_in_memory_state_ = max_total_in_memory_state_ - old_memtable_size +
-                               mutable_cf_options.write_buffer_size *
-                                   mutable_cf_options.max_write_buffer_number;
   return old;
 }
 }

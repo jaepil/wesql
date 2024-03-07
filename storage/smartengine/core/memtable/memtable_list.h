@@ -20,7 +20,6 @@
 #include "options/options.h"
 #include "util/autovector.h"
 #include "util/filename.h"
-#include "util/log_buffer.h"
 
 namespace smartengine {
 namespace monitor {

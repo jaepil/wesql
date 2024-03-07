@@ -55,12 +55,6 @@ class StackableDB : public db::DB {
     return db_->DropColumnFamily(column_family);
   }
 
-  virtual common::Status DestroyColumnFamilyHandle(
-      ColumnFamilyHandle* column_family) override {
-    return db_->DestroyColumnFamilyHandle(column_family);
-  }
-
-  using DB::Put;
   virtual common::Status Put(const common::WriteOptions& options,
                              ColumnFamilyHandle* column_family,
                              const common::Slice& key,
@@ -76,15 +70,6 @@ class StackableDB : public db::DB {
     return db_->Get(options, column_family, key, value);
   }
 
-  using DB::MultiGet;
-  virtual std::vector<common::Status> MultiGet(
-      const common::ReadOptions& options,
-      const std::vector<ColumnFamilyHandle*>& column_family,
-      const std::vector<common::Slice>& keys,
-      std::vector<std::string>* values) override {
-    return db_->MultiGet(options, column_family, keys, values);
-  }
-
   using DB::InstallSstExternal;
   virtual common::Status InstallSstExternal(ColumnFamilyHandle* column_family,
                                             MiniTables* mtables) override {
@@ -95,14 +80,6 @@ class StackableDB : public db::DB {
     return db_->GetStorageLogger();
   }
 
-
-  using DB::KeyMayExist;
-  virtual bool KeyMayExist(const common::ReadOptions& options,
-                           ColumnFamilyHandle* column_family,
-                           const common::Slice& key, std::string* value,
-                           bool* value_found = nullptr) override {
-    return db_->KeyMayExist(options, column_family, key, value, value_found);
-  }
 
   using DB::Delete;
   virtual common::Status Delete(const common::WriteOptions& wopts,
@@ -209,12 +186,6 @@ class StackableDB : public db::DB {
 
   virtual util::Env* GetEnv() const override { return db_->GetEnv(); }
 
-  using DB::GetOptions;
-  virtual common::Options GetOptions(
-      ColumnFamilyHandle* column_family) const override {
-    return db_->GetOptions(column_family);
-  }
-
   using DB::GetDBOptions;
   virtual common::DBOptions GetDBOptions() const override {
     return db_->GetDBOptions();
@@ -240,26 +211,8 @@ class StackableDB : public db::DB {
 
 #endif  // ROCKSDB_LITE
 
-  virtual common::Status GetLiveFiles(std::vector<std::string>& vec,
-                                      uint64_t* mfs,
-                                      bool flush_memtable = true) override {
-    return db_->GetLiveFiles(vec, mfs, flush_memtable);
-  }
-
   virtual common::SequenceNumber GetLatestSequenceNumber() const override {
     return db_->GetLatestSequenceNumber();
-  }
-
-  virtual common::Status GetSortedWalFiles(db::VectorLogPtr& files) override {
-    return db_->GetSortedWalFiles(files);
-  }
-
-  virtual common::Status DeleteFile(std::string name) override {
-    return db_->DeleteFile(name);
-  }
-
-  virtual common::Status GetDbIdentity(std::string& identity) const override {
-    return db_->GetDbIdentity(identity);
   }
 
   virtual int reset_pending_shrink(const uint64_t subtable_id) override {
@@ -283,20 +236,6 @@ class StackableDB : public db::DB {
       const std::unordered_map<std::string, std::string>& new_options)
       override {
     return db_->SetDBOptions(new_options);
-  }
-
-  using DB::GetPropertiesOfAllTables;
-  virtual common::Status GetPropertiesOfAllTables(
-      ColumnFamilyHandle* column_family,
-      db::TablePropertiesCollection* props) override {
-    return db_->GetPropertiesOfAllTables(column_family, props);
-  }
-
-  using DB::GetPropertiesOfTablesInRange;
-  virtual common::Status GetPropertiesOfTablesInRange(
-      ColumnFamilyHandle* column_family, const Range* range, std::size_t n,
-      db::TablePropertiesCollection* props) override {
-    return db_->GetPropertiesOfTablesInRange(column_family, range, n, props);
   }
 
   virtual common::Status GetUpdatesSince(

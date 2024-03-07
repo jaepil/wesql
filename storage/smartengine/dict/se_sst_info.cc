@@ -237,15 +237,8 @@ SeSstInfo::SeSstInfo(db::DB *const db,
   // is loaded in parallel
   m_prefix += std::to_string(m_prefix_counter.fetch_add(1)) + "_";
 
-  db::ColumnFamilyDescriptor cf_descr;
-  const common::Status s = m_cf->GetDescriptor(&cf_descr);
-  if (!s.ok()) {
-    // Default size if we can't get the cf's target size
-    m_max_size = 64 * 1024 * 1024;
-  } else {
-    // Set the maximum size to 3 times the cf's target size
-    m_max_size = cf_descr.options.target_file_size_base * 3;
-  }
+  //TODO(Zhao Dongsheng), this constant value is suitable?
+  m_max_size = 192 * 1024 * 1024;
 }
 
 SeSstInfo::~SeSstInfo()

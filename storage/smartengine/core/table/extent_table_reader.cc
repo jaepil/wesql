@@ -402,7 +402,6 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   rep->fd = (fd == nullptr ? FileDescriptor() : *fd);
   rep->file_read_hist = file_read_hist;
   rep->footer = footer;
-  rep->index_type = table_options.index_type;
   rep->hash_index_allow_collision = table_options.hash_index_allow_collision;
   SetupCacheKeyPrefix(rep, file_size);
   ExtentBasedTable *new_table = COMMON_NEW(ModId::kRep, ExtentBasedTable, alloc, rep);
@@ -561,21 +560,6 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
 }
 
 void ExtentBasedTable::SetupForCompaction() {
-  switch (rep_->ioptions.access_hint_on_compaction_start) {
-    case Options::NONE:
-      break;
-    case Options::NORMAL:
-      rep_->file->file()->Hint(RandomAccessFile::NORMAL);
-      break;
-    case Options::SEQUENTIAL:
-      rep_->file->file()->Hint(RandomAccessFile::SEQUENTIAL);
-      break;
-    case Options::WILLNEED:
-      rep_->file->file()->Hint(RandomAccessFile::WILLNEED);
-      break;
-    default:
-      assert(false);
-  }
   compaction_optimized_ = true;
 }
 
@@ -1521,37 +1505,24 @@ bool ExtentBasedTable::TEST_KeyInCache(const ReadOptions& options,
 //  2. index_handle,
 //  3. options
 //  4. internal_comparator
-//  5. index_type
 Status ExtentBasedTable::CreateIndexReader(IndexReader** index_reader, 
                                            AIOHandle *aio_handle,
                                            InternalIterator* preloaded_meta_index_iter,
                                            int level,
-                                           SimpleAllocator *alloc) {
-  // Some old version of block-based tables don't have index type present in
-  // table properties. If that's the case we can safely use the kBinarySearch.
-  auto index_type_on_file = BlockBasedTableOptions::kBinarySearch;
-
+                                           SimpleAllocator *alloc)
+{
   auto file = rep_->file.get();
   auto comparator = &rep_->internal_comparator;
   const Footer& footer = rep_->footer;
 
-  switch (index_type_on_file) {
-    case BlockBasedTableOptions::kBinarySearch: {
-      return BinarySearchIndexReader::Create(file,
-                                             footer,
-                                             footer.index_handle(),
-                                             rep_->ioptions,
-                                             comparator,
-                                             index_reader,
-                                             aio_handle,
-                                             alloc);
-    }
-    default: {
-      std::string error_message =
-          "Unrecognized index type: " + ToString(rep_->index_type);
-      return Status::InvalidArgument(error_message.c_str());
-    }
-  }
+  return BinarySearchIndexReader::Create(file,
+                                         footer,
+                                         footer.index_handle(),
+                                         rep_->ioptions,
+                                         comparator,
+                                         index_reader,
+                                         aio_handle,
+                                         alloc);
 }
 
 uint64_t ExtentBasedTable::ApproximateOffsetOf(const Slice& key) {

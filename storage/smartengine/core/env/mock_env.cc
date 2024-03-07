@@ -382,18 +382,6 @@ Status MockEnv::NewRandomRWFile(const std::string& fname,
   return Status::OK();
 }
 
-Status MockEnv::ReuseWritableFile(const std::string& fname,
-                                  const std::string& old_fname,
-                                  WritableFile *&result,
-                                  const EnvOptions& options) {
-  auto s = RenameFile(old_fname, fname);
-  if (!s.ok()) {
-    return s;
-  }
-//  result->reset();
-  return NewWritableFile(fname, result, options);
-}
-
 Status MockEnv::NewWritableFile(const std::string& fname,
                                 WritableFile *&result,
                                 const EnvOptions& env_options) {

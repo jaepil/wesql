@@ -32,7 +32,6 @@ class RecoverNoSpaceTest : public DBTestBase {
 
 TEST_F(RecoverNoSpaceTest, FailInRecover) {
   Options options;
-  options.create_if_missing = true;
   options.write_buffer_size = 10000;
   SyncPoint::GetInstance()->SetCallBack(
       "VersionSet::LogAndApply:AfterSyncManifest", [&](void* arg) {

@@ -40,7 +40,6 @@ public:
 TEST_F(ParallelRecoveryTest, parallel_recovery_test) {
   Options options;
   //options.write_buffer_size = 4096 * 4096;
-  options.create_if_missing = true;
   options.env = env_;
   options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency; 
   options.parallel_wal_recovery = true;
@@ -66,7 +65,6 @@ TEST_F(ParallelRecoveryTest, parallel_recovery_test) {
 
 TEST_F(ParallelRecoveryTest, recovery_test) {
   Options options;
-  options.create_if_missing = true;
   options.env = env_;
   options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency; 
   options.parallel_wal_recovery = false;
@@ -103,7 +101,6 @@ TEST_F(ParallelRecoveryTest, parallel_recovery_task_queue_full_test) {
   SyncPoint::GetInstance()->EnableProcessing();
 
   Options options;
-  options.create_if_missing = true;
   options.env = env_;
   options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
   CreateAndReopenWithCF({"xiaoyuan", "gavin", "test"}, options);
@@ -223,13 +220,11 @@ TEST_F(ParallelRecoveryTest, parallel_recovery_switch_test) {
 
   Options options;
   options.write_buffer_size = 4096 * 4096;
-  options.create_if_missing = false;
   options.env = env_;
   options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
   options.db_total_write_buffer_size =  4 * 4096 * 4096;
   options.db_write_buffer_size = 2 * 4096 * 4096;
   options.dump_memtable_limit_size = 500;
-  options.create_if_missing = true;
   options.allow_2pc = false;
   CreateAndReopenWithCF({"xiaoyuan", "gavin", "test"}, options);
   ASSERT_OK(Put(2, "hello", "world"));
@@ -268,13 +263,11 @@ TEST_F(ParallelRecoveryTest, parallel_recovery_switch_test) {
   ASSERT_OK(Delete(3, "hello"));
   Options new_options;
   new_options.write_buffer_size = 4096 * 4096;
-  new_options.create_if_missing = false;
   new_options.env = env_;
   new_options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
   options.dump_memtable_limit_size = 500;
   new_options.db_total_write_buffer_size =  4 * 4096 * 4096;
   new_options.db_write_buffer_size = 2 * 4096 * 4096;
-  new_options.create_if_missing = true;
   TryReopenWithColumnFamilies({"default", "xiaoyuan", "gavin", "test"}, new_options);
   ASSERT_EQ("world", Get(2, "hello"));
   ASSERT_EQ("v0", Get(1, "foo0"));
@@ -311,13 +304,11 @@ TEST_F(ParallelRecoveryTest, parallel_recovery_barrier_test) {
 
   Options options;
   options.write_buffer_size = 4096 * 4096;
-  options.create_if_missing = false;
   options.env = env_;
   options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
   options.db_total_write_buffer_size =  4 * 4096 * 4096;
   options.db_write_buffer_size = 2 * 4096 * 4096;
   options.dump_memtable_limit_size = 500;
-  options.create_if_missing = true;
   CreateAndReopenWithCF({"xiaoyuan", "gavin", "test"}, options);
   ASSERT_OK(Put(2, "hello", "world"));
   ASSERT_OK(Put(1, "foo0", "v0"));
@@ -356,13 +347,11 @@ TEST_F(ParallelRecoveryTest, parallel_recovery_barrier_test) {
   ASSERT_OK(Put(3, "hello", "world1"));
   Options new_options;
   new_options.write_buffer_size = 4096 * 4096;
-  new_options.create_if_missing = false;
   new_options.env = env_;
   new_options.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
   new_options.dump_memtable_limit_size = 500;
   new_options.db_total_write_buffer_size =  4 * 4096 * 4096;
   new_options.db_write_buffer_size = 2 * 4096 * 4096;
-  new_options.create_if_missing = true;
   SyncPoint::GetInstance()->SetCallBack(
     "ReplayThreadPool::need_barrier_during_replay::need_barrier", [&](void* arg) {
       bool* need_barrier = reinterpret_cast<bool*>(arg);
@@ -400,7 +389,6 @@ TEST_F(ParallelRecoveryTest, parallel_replay_error) {
   options0.db_total_write_buffer_size =  4 * 4096 * 4096;
   options0.db_write_buffer_size = 2 * 4096 * 4096;
   options0.dump_memtable_limit_size = 500;
-  options0.create_if_missing = true;
   CreateAndReopenWithCF({"xiaoyuan"}, options0);
   ASSERT_OK(Put("bar0", "v0"));
   ASSERT_OK(Put("bar1", "v1"));

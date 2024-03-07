@@ -96,7 +96,7 @@ bool RandomTransactionInserter::DoInsert(DB* db, Transaction* txn,
     if (txn != nullptr) {
       s = txn->GetForUpdate(read_options_, key, &value);
     } else {
-      s = db->Get(read_options_, key, &value);
+      s = db->Get(read_options_, db->DefaultColumnFamily(), key, &value);
     }
 
     if (s.ok()) {
@@ -201,7 +201,7 @@ Status RandomTransactionInserter::Verify(DB* db, uint16_t num_sets) {
     snprintf(prefix_buf, sizeof(prefix_buf), "%.4u", i + 1);
     uint64_t total = 0;
 
-    Iterator* iter = db->NewIterator(ReadOptions());
+    Iterator* iter = db->NewIterator(ReadOptions(), db->DefaultColumnFamily());
 
     for (iter->Seek(Slice(prefix_buf, 4)); iter->Valid(); iter->Next()) {
       Slice key = iter->key();

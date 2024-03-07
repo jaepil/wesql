@@ -24,25 +24,15 @@ using namespace common;
 
 namespace table {
 // Create a index builder based on its type.
-IndexBuilder* IndexBuilder::CreateIndexBuilder(
-    BlockBasedTableOptions::IndexType index_type,
-    const InternalKeyComparator* comparator,
-    const BlockBasedTableOptions& table_opt,
-    WritableBuffer* buf)
+IndexBuilder* IndexBuilder::CreateIndexBuilder(const InternalKeyComparator* comparator,
+                                               const BlockBasedTableOptions& table_opt,
+                                                WritableBuffer* buf)
 {
-  switch (index_type) {
-    case BlockBasedTableOptions::kBinarySearch: {
-      return MOD_NEW_OBJECT(memory::ModId::kDefaultMod, ShortenedIndexBuilder,
-          comparator, table_opt.index_block_restart_interval, buf);
-    }
-    default: {
-      assert(!"Do not recognize the index type ");
-      return nullptr;
-    }
-  }
-  // impossible.
-  assert(false);
-  return nullptr;
+  return MOD_NEW_OBJECT(memory::ModId::kDefaultMod,
+                        ShortenedIndexBuilder,
+                        comparator,
+                        table_opt.index_block_restart_interval,
+                        buf);
 }
 
 }  // namespace table

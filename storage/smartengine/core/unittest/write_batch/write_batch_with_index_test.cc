@@ -967,7 +967,6 @@ TEST_F(WriteBatchWithIndexTest, TestGetFromBatchMerge) {
   DB* db;
   Options options;
   options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
-  options.create_if_missing = true;
 
   std::string dbname = test::TmpDir() + "/write_batch_with_index_test";
 
@@ -1015,7 +1014,6 @@ TEST_F(WriteBatchWithIndexTest, TestGetFromBatchMerge2) {
   DB* db;
   Options options;
   options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
-  options.create_if_missing = true;
 
   std::string dbname = test::TmpDir() + "/write_batch_with_index_test";
 
@@ -1074,7 +1072,6 @@ TEST_F(WriteBatchWithIndexTest, TestGetFromBatchMerge2) {
 TEST_F(WriteBatchWithIndexTest, TestGetFromBatchAndDB) {
   DB* db;
   Options options;
-  options.create_if_missing = true;
   std::string dbname = test::TmpDir() + "/write_batch_with_index_test";
 
   DestroyDB(dbname, options);
@@ -1125,7 +1122,6 @@ TEST_F(WriteBatchWithIndexTest, TestGetFromBatchAndDBMerge) {
   DB* db;
   Options options;
 
-  options.create_if_missing = true;
   std::string dbname = test::TmpDir() + "/write_batch_with_index_test";
 
   options.merge_operator = MergeOperators::CreateFromStringId("stringappend");
@@ -1251,7 +1247,6 @@ TEST_F(WriteBatchWithIndexTest, TestGetFromBatchAndDBMerge2) {
   DB* db;
   Options options;
 
-  options.create_if_missing = true;
   std::string dbname = test::TmpDir() + "/write_batch_with_index_test";
 
   options.merge_operator = MergeOperators::CreateFromStringId("stringappend");

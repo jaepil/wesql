@@ -152,20 +152,11 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   opt.table_factory.reset(NewExtentBasedTableFactory(table_options));
   opt.disable_auto_compactions = true;
   opt.compression = args.compression;
-  opt.create_if_missing = true;
-  opt.fail_if_options_file_error = true;
-  opt.create_missing_column_families = true;
   opt.env = Env::Default();
   int db_write_buffer_size = 64 * 1024 * 1024;
   opt.db_write_buffer_size = db_write_buffer_size;
   int write_buffer_size = db_write_buffer_size;
   opt.write_buffer_size = write_buffer_size;
-  // Arena will assert kBlockSize in 4096 to (2u << 30)
-  opt.arena_block_size = 4096 * 2;
-  opt.memtable_huge_page_size = 4096 * 2;
-
-  int file_size = db_write_buffer_size * 1024;
-  opt.target_file_size_base = file_size;
 
   std::string db_path_ = test::TmpDir() + "/compaction_test";
   if (opt.db_paths.size() == 0) {
@@ -214,7 +205,6 @@ class CompactionTest : public testing::Test {
     space_manager_ = nullptr;
     descriptor_log_.reset();
     db_dir = nullptr;
-    props_.clear();
     // std::string compression_dict_;
     mini_tables_.metas.clear();
     mini_tables_.props.clear();
@@ -252,20 +242,12 @@ class CompactionTest : public testing::Test {
     //    storage::StorageLogger *storage_logger_;
     //    storage::ExtentSpaceManager *extent_space_mgr_;
 
-//    GlobalContext *global_ctx = new GlobalContext(dbname_, *(const_cast<Options*>(context_->options_)));
     GlobalContext *global_ctx = ALLOC_OBJECT(GlobalContext, alloc_, dbname_, *(const_cast<Options*>(context_->options_)));
-//    WriteBufferManager *write_buffer_manager = new WriteBufferManager(0);
     WriteBufferManager *write_buffer_manager = ALLOC_OBJECT(WriteBufferManager, alloc_, 0);
-//    WriteController *write_controller = new WriteController();
-    WriteController *write_controller = ALLOC_OBJECT(WriteController, alloc_);
-//    storage_logger_ = new StorageLogger();
     storage_logger_ = ALLOC_OBJECT(StorageLogger, alloc_);
-//    space_manager_ = new ExtentSpaceManager(context_->db_options_, next_file_number_);
     space_manager_ = ALLOC_OBJECT(ExtentSpaceManager, alloc_, env_, context_->env_options_, context_->db_options_);
-//    table_cache_ = new TableCache(context_->icf_options_, context_->env_options_, cache_.get(), space_manager_);
     table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, context_->env_options_, cache_.get(), space_manager_);
-//    version_set_ = new VersionSet(dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager, write_controller);
-    version_set_ = ALLOC_OBJECT(VersionSet, alloc_, dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager, write_controller);
+    version_set_ = ALLOC_OBJECT(VersionSet, alloc_, dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager);
 
     global_ctx->env_ = env_;
     global_ctx->cache_ = cache_.get();
@@ -284,47 +266,26 @@ class CompactionTest : public testing::Test {
     uint64_t file_number = 1;
     std::string manifest_filename =
         util::DescriptorFileName(dbname_, file_number);
-//    std::unique_ptr<WritableFile> descriptor_file;
     WritableFile *descriptor_file = nullptr;
     EnvOptions opt_env_opts =
         env_->OptimizeForManifestWrite(context_->env_options_);
     s = NewWritableFile(env_, manifest_filename, descriptor_file,
                         opt_env_opts);
     if (s.ok()) {
-      descriptor_file->SetPreallocationBlockSize(
-          context_->db_options_.manifest_preallocation_size);
-
-//      unique_ptr<util::ConcurrentDirectFileWriter> file_writer(
-//          new util::ConcurrentDirectFileWriter(std::move(descriptor_file),
-//                                               opt_env_opts));
       util::ConcurrentDirectFileWriter *file_writer = MOD_NEW_OBJECT(ModId::kTestMod, util::ConcurrentDirectFileWriter,
           descriptor_file, opt_env_opts);
       s = file_writer->init_multi_buffer();
       if (s.ok()) {
-//        descriptor_log_.reset(
         db::log::Writer *log_writer = MOD_NEW_OBJECT(ModId::kTestMod, db::log::Writer, file_writer, 0, false);
         storage_logger_->set_log_writer(log_writer);
       }
     }
-    // get subtable
-    //SubTableMap &sub_table_map = version_set_->get_global_ctx()->all_sub_table_.sub_table_map_;
     ColumnFamilyData *sub_table = nullptr;
-    // Mock parameters here
-//    CreateSubTableArgs subtable_args;
-//    subtable_args.create_paxos_index_ = 1;
-//    subtable_args.index_id_ = 1;
-//    subtable_args.index_no_ = 1;
-//    subtable_args.wal_log_file_id_ = 1;
-
-
-//    storage_manager_ = new StorageManager(context_->env_options_, context_->icf_options_, context_->mutable_cf_options_);
     storage_manager_ = ALLOC_OBJECT(StorageManager, alloc_, context_->env_options_, context_->icf_options_, context_->mutable_cf_options_);
     storage_manager_->init(env_, space_manager_, cache_.get());
 
-    //s = storage_manager_->init(space_manager_.get(), 0);
     assert(s.ok());
     wb_ = ALLOC_OBJECT(WriteBufferManager, alloc_, context_->db_options_.db_write_buffer_size);
-//    wb_ = new WriteBufferManager(context_->db_options_.db_write_buffer_size);
   }
 
   void shutdown() { Close(); }
@@ -335,7 +296,6 @@ class CompactionTest : public testing::Test {
     table_cache_->~TableCache();
     space_manager_->~ExtentSpaceManager();
     storage_logger_->~StorageLogger();
- //   Destroy();
   };
 
   void Close() {
@@ -644,14 +604,16 @@ class CompactionTest : public testing::Test {
     }
     mini_tables_.space_manager = space_manager_;
     mini_tables_.table_space_id_ = 0;
-    extent_builder_.reset(NewTableBuilder(
-        context_->icf_options_, internal_comparator_, &props_,
-        cf_desc_.column_family_id_, cf_desc_.column_family_name_, &mini_tables_,
-        get_compression_type(context_->icf_options_,
-                             context_->mutable_cf_options_,
-                             level),
-        context_->icf_options_.compression_opts, output_layer_position,
-        &compression_dict_, true));
+    extent_builder_.reset(NewTableBuilder(context_->icf_options_,
+                                          internal_comparator_,
+                                          cf_desc_.column_family_id_,
+                                          cf_desc_.column_family_name_,
+                                          &mini_tables_,
+                                          get_compression_type(context_->icf_options_,
+                                                               context_->mutable_cf_options_,
+                                                               level),
+                                          context_->icf_options_.compression_opts, output_layer_position,
+                                          &compression_dict_, true));
   }
 
   void build_memtable(MemTable*& mem) {
@@ -819,18 +781,6 @@ class CompactionTest : public testing::Test {
     close(level);
   }
 
-  //void write_data_fpga(const int64_t key_start, const int64_t key_end,
-  //                     const int64_t sequence, const int64_t level,
-  //                     const int64_t key_size, const int64_t row_size,
-  //                     const int64_t step = 1) {
-  //  open_for_write();
-  //  if (level == 0)
-  //    append_fpga(key_start, key_end, sequence, key_size, row_size, step);
-  //  else
-  //    append_fpga(key_start, key_end, 0, key_size, row_size, step);
-  //  close(level);
-  //}
-
   void run_mt_ext_task() {
     CompactionContext ct;
     build_compact_context(&ct);
@@ -840,11 +790,9 @@ class CompactionTest : public testing::Test {
     ct.space_manager_ = space_manager_;
     ct.task_type_ = db::TaskType::FLUSH_LEVEL1_TASK;
     ImmutableCFOptions &ioptions = context_->icf_options_;
-    LogBuffer log_buffer(logger::InfoLogLevel::INFO_LEVEL);
     Options option;
     ColumnFamilyData sub_table(option);
     monitor::InstrumentedMutex mutex(nullptr, env_);
-//    util::EventLogger event_logger;
     Directory* output_file_directory = nullptr;
     monitor::Statistics* stats = nullptr;
     ArenaAllocator arena;
@@ -1046,7 +994,6 @@ class CompactionTest : public testing::Test {
   ExtentSpaceManager* space_manager_;
   std::unique_ptr<db::log::Writer> descriptor_log_;
   Directory *db_dir;
-  std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>> props_;
   ColumnFamilyDesc cf_desc_;
   std::string compression_dict_;
   MiniTables mini_tables_;

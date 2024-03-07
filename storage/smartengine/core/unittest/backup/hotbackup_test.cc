@@ -121,20 +121,16 @@ void HotbackupTest::copy_extents(const std::string &backup_tmp_dir_path,
                                  const std::string &extent_file)
 {
   // read extent id file
-//  std::unique_ptr<SequentialFile> reader;
   SequentialFile *reader = nullptr;
   EnvOptions r_opt;
   EnvOptions w_opt;
-  w_opt.use_mmap_writes = false;
   w_opt.use_direct_writes = false;
   ASSERT_OK(db_->GetEnv()->NewSequentialFile(extent_ids_file, reader, r_opt));
-//  std::unique_ptr<WritableFile> extent_writer;
   WritableFile *extent_writer = nullptr;
   ASSERT_OK(NewWritableFile(env_, extent_file, extent_writer, w_opt));
   char buf[16];
   char *extent_buf = nullptr;
   Slice result;
-  //
   std::unordered_map<int32_t, int32_t> fds_map;
   int fd = -1;
   std::string fname;

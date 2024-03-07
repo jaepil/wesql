@@ -69,7 +69,6 @@ class DBBlockCacheTest : public DBTestBase {
 
   Options GetOptions(const BlockBasedTableOptions& table_options) {
     Options options = CurrentOptions();
-    options.create_if_missing = true;
     options.avoid_flush_during_recovery = false;
     // options.compression = kNoCompression;
     options.statistics = CreateDBStatistics();
@@ -193,7 +192,7 @@ TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache) {
   // flush to sst
   set_trace_count();
   for (size_t i = 0; i < kNumBlocks - 1; i++) {
-    iter = db_->NewIterator(read_options);
+    iter = db_->NewIterator(read_options, db_->DefaultColumnFamily());
     iter->Seek(ToString(i));
     ASSERT_OK(iter->status());
     CheckCacheCounters(options, 1, 0, 1, 0);
@@ -207,7 +206,7 @@ TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache) {
 
   // Test with strict capacity limit.
   cache->SetStrictCapacityLimit(true);
-  iter = db_->NewIterator(read_options);
+  iter = db_->NewIterator(read_options, db_->DefaultColumnFamily());
   iter->Seek(ToString(kNumBlocks - 1));
   ASSERT_TRUE(iter->status().IsIncomplete());
   CheckCacheCounters(options, 1, 0, 0, 1);
@@ -223,7 +222,7 @@ TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache) {
   }
   ASSERT_EQ(0, cache->GetPinnedUsage());
   for (size_t i = 0; i < kNumBlocks - 1; i++) {
-    iter = db_->NewIterator(read_options);
+    iter = db_->NewIterator(read_options, db_->DefaultColumnFamily());
     iter->Seek(ToString(i));
     ASSERT_OK(iter->status());
     CheckCacheCounters(options, 0, 1, 0, 0);
@@ -306,7 +305,6 @@ TEST_F(DBBlockCacheTest, TestWithCompressedBlockCache) {
 /*
 TEST_F(DBBlockCacheTest, IndexAndFilterBlocksOfNewTableAddedToCache) {
   Options options = CurrentOptions();
-  options.create_if_missing = true;
   // no use , use querytrace
   //options.statistics = CreateDBStatistics();
   BlockBasedTableOptions table_options;
@@ -359,7 +357,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksOfNewTableAddedToCache) {
 TEST_F(DBBlockCacheTest, IndexAndFilterBlocksStats) {
 
   Options options = CurrentOptions();
-  options.create_if_missing = true;
   options.statistics = CreateDBStatistics();
   BlockBasedTableOptions table_options;
   table_options.cache_index_and_filter_blocks = true;
@@ -442,7 +439,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksCachePriority) {
 
   for (auto priority : {Cache::Priority::LOW, Cache::Priority::HIGH}) {
     Options options = CurrentOptions();
-    options.create_if_missing = true;
     options.statistics = CreateDBStatistics();
     BlockBasedTableOptions table_options;
     table_options.cache_index_and_filter_blocks = true;
@@ -515,10 +511,8 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksCachePriority) {
 
 TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   Options options = CurrentOptions();
-  options.create_if_missing = true;
   options.statistics = CreateDBStatistics();
   options.level0_file_num_compaction_trigger = 2;
-  options.paranoid_file_checks = true;
   BlockBasedTableOptions table_options;
   table_options.cache_index_and_filter_blocks = false;
   table_options.filter_policy.reset(NewBloomFilterPolicy(20));
@@ -532,7 +526,6 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
 
   // Create a new table.
   set_trace_count();
-//  set_tmp_schema(1);
   ASSERT_OK(Flush(1));
   dbfull()->TEST_WaitForFlushMemTable(get_column_family_handle(1));
 //  dbfull()->TEST_wait_for_filter_build();
@@ -543,25 +536,17 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   ASSERT_OK(Put(1, "9_key2", "val2"));
   // Create a new SST file. This will further trigger a compaction
   // and generate another file.
-//  set_tmp_schema(1);
   ASSERT_OK(Flush(1));
   dbfull()->TEST_wait_for_filter_build();
   dbfull()->TEST_WaitForCompact();
   ASSERT_EQ(cache_add_cnt_ + 4,
             TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
 
-  // After disabling options.paranoid_file_checks. NO further block
-  // is added after generating a new file. todo get_column_family_handle
-//  ASSERT_OK(dbfull()->SetOptions(get_column_family_handle(1),
-//                                 {{"paranoid_file_checks", "false"}}));
-
   ASSERT_OK(Put(1, "1_key3", "val3"));
   ASSERT_OK(Put(1, "9_key3", "val3"));
-//  set_tmp_schema(1);
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "1_key4", "val4"));
   ASSERT_OK(Put(1, "9_key4", "val4"));
-//  set_tmp_schema(1);
   ASSERT_OK(Flush(1));
   dbfull()->TEST_wait_for_filter_build();
   dbfull()->TEST_WaitForCompact();
@@ -687,7 +672,6 @@ TEST_F(DBBlockCacheTest, CompressedCache) {
         ASSERT_TRUE(false);
     }
 
-    options.create_if_missing = true;
     DestroyAndReopen(options);
   }
 }

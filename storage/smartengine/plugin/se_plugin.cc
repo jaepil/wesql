@@ -42,9 +42,6 @@ namespace smartengine
 {
 using namespace util;
 
-static const size_t DEFAULT_SE_ARENA_BLOCK_SIZE = 32768;
-static const bool DEFAULT_SE_OPTIMIZE_FILTERS_FOR_HITS = true;
-
 /**Storage Engine initialization function, invoked when plugin is loaded.*/
 static int se_init_func(void *const p)
 {
@@ -133,8 +130,6 @@ static int se_init_func(void *const p)
     se_db_options.rate_limiter = se_rate_limiter;
   }
 
-  //se_db_options.delayed_write_rate = se_delayed_write_rate;
-
   int log_init_ret = 0;
   auto log_level = get_se_log_level(log_error_verbosity);
   // according to setup_error_log() in sql/mysqld.cc
@@ -166,53 +161,6 @@ static int se_init_func(void *const p)
   se_db_options.parallel_wal_recovery = se_parallel_wal_recovery;
   se_db_options.parallel_recovery_thread_num = se_parallel_recovery_thread_num;
 
-  if (se_db_options.allow_mmap_reads &&
-      se_db_options.use_direct_reads) {
-    // allow_mmap_reads implies !use_direct_reads and se will not open if
-    // mmap_reads and direct_reads are both on.   (NO_LINT_DEBUG)
-    sql_print_error("SE: Can't enable both use_direct_reads "
-                    "and allow_mmap_reads\n");
-    se_open_tables.free_hash();
-    DBUG_RETURN(HA_EXIT_FAILURE);
-  }
-
-  if (se_db_options.allow_mmap_writes &&
-      se_db_options.use_direct_io_for_flush_and_compaction) {
-    // See above comment for allow_mmap_reads. (NO_LINT_DEBUG)
-    sql_print_error("SE: Can't enable both use_direct_writes "
-                    "and allow_mmap_writes\n");
-    se_open_tables.free_hash();
-    DBUG_RETURN(HA_EXIT_FAILURE);
-  }
-
-  std::vector<std::string> cf_names;
-  smartengine::common::Status status;
-  status = smartengine::db::DB::ListColumnFamilies(se_db_options, se_datadir,
-                                           &cf_names);
-  if (!status.ok()) {
-    /*
-      When we start on an empty datadir, ListColumnFamilies returns IOError,
-      and se doesn't provide any way to check what kind of error it was.
-      Checking system errno happens to work right now.
-    */
-    if (status.IsIOError() && errno == ENOENT) {
-      sql_print_information("SE: Got ENOENT when listing column families");
-      sql_print_information(
-          "SE:   assuming that we're creating a new database");
-    } else {
-      std::string err_text = status.ToString();
-      sql_print_error("SE: Error listing column families: %s",
-                      err_text.c_str());
-      se_open_tables.free_hash();
-      DBUG_RETURN(HA_EXIT_FAILURE);
-    }
-  } else
-    sql_print_information("SE: %ld column families found",
-                          cf_names.size());
-
-  std::vector<smartengine::db::ColumnFamilyDescriptor> cf_descr;
-  std::vector<smartengine::db::ColumnFamilyHandle *> cf_handles;
-
   if (!se_tbl_options.no_block_cache) {
     se_tbl_options.block_cache =
         smartengine::cache::NewLRUCache(se_block_cache_size, -1, false, 0.1, 0.375,
@@ -221,21 +169,10 @@ static int se_init_func(void *const p)
   // Using newer ExtentBasedTable format version for reuse of block and SST.
   se_tbl_options.format_version = 3;
 
-  properties_collector_factory =
-      std::make_shared<SeTablePropertyCollectorFactory>(&ddl_manager);
-
-  SE_MUTEX_LOCK_CHECK(se_sysvars_mutex);
-
-  properties_collector_factory->SetTableStatsSamplingPct(SE_DEFAULT_TBL_STATS_SAMPLE_PCT);
-
-  SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
-
   // set default value for some internal options
   se_tbl_options.cache_index_and_filter_blocks = true;
   se_tbl_options.cache_index_and_filter_blocks_with_high_priority = true;
   se_tbl_options.pin_l0_filter_and_index_blocks_in_cache = false;
-  se_default_cf_options.arena_block_size = DEFAULT_SE_ARENA_BLOCK_SIZE;
-  se_default_cf_options.optimize_filters_for_hits = DEFAULT_SE_OPTIMIZE_FILTERS_FOR_HITS;
   se_db_options.allow_concurrent_memtable_write = true;
   se_db_options.use_direct_write_for_wal = false;
   se_db_options.concurrent_writable_file_buffer_num =
@@ -259,47 +196,17 @@ static int se_init_func(void *const p)
     DBUG_RETURN(1);
   }
 
-  if (!se_cf_options_map.init(se_tbl_options,
-                              properties_collector_factory,
-                              se_default_cf_options)) {
+  if (!se_cf_options_map.init(se_tbl_options, se_default_cf_options)) {
     // NO_LINT_DEBUG
     sql_print_error("SE: Failed to initialize CF options map.");
     se_open_tables.free_hash();
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
-  /*
-    If there are no column families, we're creating the new database.
-    Create one column family named "default".
-  */
-  if (cf_names.size() == 0)
-    cf_names.push_back(DEFAULT_CF_NAME);
-
-  std::vector<int> compaction_enabled_cf_indices;
-  sql_print_information("SE: Column Families at start:");
-  for (size_t i = 0; i < cf_names.size(); ++i) {
-    smartengine::common::ColumnFamilyOptions opts;
-    se_cf_options_map.get_cf_options(cf_names[i], &opts);
-
-    sql_print_information("  cf=%s", cf_names[i].c_str());
-    sql_print_information("    write_buffer_size=%ld", opts.write_buffer_size);
-    //sql_print_information("    target_file_size_base=%" PRIu64,
-    sql_print_information("    target_file_size_base= %lu",
-                          opts.target_file_size_base);
-
-    /*
-      Temporarily disable compactions to prevent a race condition where
-      compaction starts before compaction filter is ready.
-    */
-    if (!opts.disable_auto_compactions) {
-      compaction_enabled_cf_indices.push_back(i);
-      opts.disable_auto_compactions = true;
-    }
-    cf_descr.push_back(smartengine::db::ColumnFamilyDescriptor(cf_names[i], opts));
-
-  }
-
-  smartengine::common::Options main_opts(se_db_options, se_cf_options_map.get_defaults());
+  std::vector<smartengine::db::ColumnFamilyHandle *> cf_handles;
+  common::Options main_opts(se_db_options, se_cf_options_map.get_defaults());
+  main_opts.disable_auto_compactions = true;
+  main_opts.allow_2pc = true;
   // 1 more bg thread for create extent space
   main_opts.env->SetBackgroundThreads(main_opts.max_background_flushes + 1,
                                       smartengine::util::Env::Priority::HIGH);
@@ -308,12 +215,15 @@ static int se_init_func(void *const p)
                                       main_opts.max_background_dumps + 3,
                                       smartengine::util::Env::Priority::LOW);
 
-  smartengine::util::TransactionDBOptions tx_db_options;
+  util::TransactionDBOptions tx_db_options;
   tx_db_options.transaction_lock_timeout = 2; // 2 seconds
   tx_db_options.custom_mutex_factory = std::make_shared<SeMutexFactory>();
 
-  status = smartengine::util::TransactionDB::Open(
-      main_opts, tx_db_options, se_datadir, cf_descr, &cf_handles, &se_db);
+  common::Status status = util::TransactionDB::Open(main_opts,
+                                                    tx_db_options,
+                                                    se_datadir,
+                                                    &cf_handles,
+                                                    &se_db);
 
   if (!status.ok()) {
     std::string err_text = status.ToString();
@@ -352,18 +262,6 @@ static int se_init_func(void *const p)
 
   SeSstInfo::init(se_db);
 
-  /*
-    Enable auto compaction, things needed for compaction filter are finished
-    initializing
-  */
-  std::vector<smartengine::db::ColumnFamilyHandle *> compaction_enabled_cf_handles;
-  compaction_enabled_cf_handles.reserve(compaction_enabled_cf_indices.size());
-  for (const auto &index : compaction_enabled_cf_indices) {
-    compaction_enabled_cf_handles.push_back(cf_handles[index]);
-  }
-
-  //status = se_db->EnableAutoCompaction(compaction_enabled_cf_handles);
-  //allow auto compactions for all subtable
   se_db->SetOptions({{"disable_auto_compactions", "false"}});
 
   if (!status.ok()) {
@@ -553,7 +451,7 @@ mysql_declare_plugin(smartengine){
     smartengine::se_i_s_perf_context, smartengine::se_i_s_perf_context_global,
     /*smartengine::se_i_s_cfoptions,*/ smartengine::se_i_s_compact_stats,
     smartengine::se_i_s_global_info, smartengine::se_i_s_ddl,
-    smartengine::se_i_s_index_file_map, smartengine::se_i_s_lock_info,
+    smartengine::se_i_s_lock_info,
     smartengine::se_i_s_trx_info, smartengine::i_s_se_tables, smartengine::i_s_se_columns,
     smartengine::se_i_s_se_compaction_task, smartengine::se_i_s_se_compaction_history,
     smartengine::se_i_s_se_mem_alloc,

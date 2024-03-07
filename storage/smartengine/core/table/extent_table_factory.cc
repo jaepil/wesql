@@ -86,7 +86,7 @@ TableBuilder* ExtentBasedTableFactory::NewTableBuilderExt(
   if (IS_NULL(tmp_table_builder = new ExtentBasedTableBuilder(
           table_builder_options.ioptions, table_options_,
           table_builder_options.internal_comparator,
-          table_builder_options.int_tbl_prop_collector_factories, column_family_id,
+          column_family_id,
           mtables, table_builder_options.compression_type,
           table_builder_options.compression_opts,
           table_builder_options.compression_dict,
@@ -105,13 +105,9 @@ TableBuilder* ExtentBasedTableFactory::NewTableBuilderExt(
   return table_builder;
 }
 
+//TODO(Zhao Dongsheng): This function is useless.
 Status ExtentBasedTableFactory::SanitizeOptions(
     const DBOptions& db_opts, const ColumnFamilyOptions& cf_opts) const {
-  if (table_options_.index_type == BlockBasedTableOptions::kHashSearch) {
-    return Status::InvalidArgument(
-        "Hash index is specified for "
-        "OptimizedBlockBasedTable");
-  }
   if (cf_opts.compression_opts.max_dict_bytes > 0) {
     return Status::InvalidArgument(
         "max_dict_bytes is larget than 0 for "
@@ -158,9 +154,6 @@ std::string ExtentBasedTableFactory::GetPrintableTableOptions() const {
            "  pin_l0_filter_and_index_blocks_in_cache: %d\n",
            table_options_.pin_l0_filter_and_index_blocks_in_cache);
   ret.append(buffer);
-  snprintf(buffer, kBufferSize, "  index_type: %d\n",
-           table_options_.index_type);
-  ret.append(buffer);
   snprintf(buffer, kBufferSize, "  hash_index_allow_collision: %d\n",
            table_options_.hash_index_allow_collision);
   ret.append(buffer);
@@ -196,7 +189,7 @@ std::string ExtentBasedTableFactory::GetPrintableTableOptions() const {
     ret.append("  block_cache_compressed_options:\n");
     ret.append(table_options_.block_cache_compressed->GetPrintableOptions());
   }
-  snprintf(buffer, kBufferSize, "  block_size: %" ROCKSDB_PRIszt "\n",
+  snprintf(buffer, kBufferSize, "  block_size: %ld\n",
            table_options_.block_size);
   ret.append(buffer);
   snprintf(buffer, kBufferSize, "  block_size_deviation: %d\n",

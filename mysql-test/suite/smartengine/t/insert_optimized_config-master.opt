@@ -1,5 +1,4 @@
 --smartengine_write_buffer_size=16k
 --smartengine_level0_file_num_compaction_trigger=4
---smartengine_max_write_buffer_number=16
 --smartengine_compression_per_level=kNoCompression
 

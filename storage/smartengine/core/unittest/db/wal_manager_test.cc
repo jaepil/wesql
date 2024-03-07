@@ -58,8 +58,7 @@ class WalManagerTest : public testing::Test {
     db_options_.env = env_.get();
 
     versions_.reset(new VersionSet(dbname_, &db_options_, env_options_,
-                                   table_cache_.get(), &write_buffer_manager_,
-                                   &write_controller_));
+                                   table_cache_.get(), &write_buffer_manager_));
     GlobalContext *global_ctx = new GlobalContext();
     StorageLogger *storage_logger = new StorageLogger();
     DBOptions dboption;
@@ -97,12 +96,9 @@ class WalManagerTest : public testing::Test {
   void RollTheLog(bool archived) {
     current_log_number_++;
     std::string fname = ArchivedLogFileName(dbname_, current_log_number_);
-//    unique_ptr<WritableFile> file;
     WritableFile *file = nullptr;
     ASSERT_OK(env_->NewWritableFile(fname, file, env_options_));
     using smartengine::util::ConcurrentDirectFileWriter;
-//    unique_ptr<ConcurrentDirectFileWriter> file_writer(
-//        new ConcurrentDirectFileWriter(file, EnvOptions()));
     ConcurrentDirectFileWriter *file_writer = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, ConcurrentDirectFileWriter, file, EnvOptions());
     current_log_writer_.reset(
         new log::Writer(file_writer, 0, false));
@@ -129,7 +125,6 @@ class WalManagerTest : public testing::Test {
   std::unique_ptr<MockEnv> env_;
   std::string dbname_;
   ImmutableDBOptions db_options_;
-  WriteController write_controller_;
   EnvOptions env_options_;
   std::shared_ptr<Cache> table_cache_;
   WriteBufferManager write_buffer_manager_;
@@ -159,8 +154,7 @@ TEST_F(WalManagerTest, ReadFirstRecordCache) {
 //  unique_ptr<ConcurrentDirectFileWriter> file_writer(
 //      new ConcurrentDirectFileWriter(file, EnvOptions()));
   ConcurrentDirectFileWriter *file_writer = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, ConcurrentDirectFileWriter, file, EnvOptions());
-  log::Writer writer(file_writer, 1,
-                     db_options_.recycle_log_file_num > 0);
+  log::Writer writer(file_writer, 1, false /**recycle_log_files*/);
   WriteBatch batch;
   batch.Put("foo", "bar");
   WriteBatchInternal::SetSequence(&batch, 10);
@@ -237,8 +231,6 @@ int CountRecords(TransactionLogIterator* iter) {
 }  // namespace
 
 TEST_F(WalManagerTest, WALArchivalSizeLimit) {
-  db_options_.wal_ttl_seconds = 0;
-  db_options_.wal_size_limit_mb = 1000;
   Init();
 
   // TEST : Create WalManager with huge size limit and no ttl.
@@ -258,24 +250,21 @@ TEST_F(WalManagerTest, WALArchivalSizeLimit) {
       ListSpecificFiles(env_.get(), archive_dir, kLogFile);
   ASSERT_EQ(log_files.size(), 20U);
 
-  db_options_.wal_size_limit_mb = 8;
   Reopen();
   wal_manager_->PurgeObsoleteWALFiles();
 
   uint64_t archive_size = GetLogDirSize(archive_dir, env_.get());
-  ASSERT_TRUE(archive_size <= db_options_.wal_size_limit_mb * 1024 * 1024);
 
-  db_options_.wal_ttl_seconds = 1;
   env_->FakeSleepForMicroseconds(2 * 1000 * 1000);
   Reopen();
   wal_manager_->PurgeObsoleteWALFiles();
 
   log_files = ListSpecificFiles(env_.get(), archive_dir, kLogFile);
-  ASSERT_TRUE(log_files.empty());
+  //ASSERT_TRUE(log_files.empty());
+  ASSERT_FALSE(log_files.empty());
 }
 
 TEST_F(WalManagerTest, WALArchivalTtl) {
-  db_options_.wal_ttl_seconds = 1000;
   Init();
 
   // TEST : Create WalManager with a ttl and no size limit.
@@ -291,13 +280,13 @@ TEST_F(WalManagerTest, WALArchivalTtl) {
       ListSpecificFiles(env_.get(), archive_dir, kLogFile);
   ASSERT_GT(log_files.size(), 0U);
 
-  db_options_.wal_ttl_seconds = 1;
   env_->FakeSleepForMicroseconds(3 * 1000 * 1000);
   Reopen();
   wal_manager_->PurgeObsoleteWALFiles();
 
   log_files = ListSpecificFiles(env_.get(), archive_dir, kLogFile);
-  ASSERT_TRUE(log_files.empty());
+  //ASSERT_TRUE(log_files.empty());
+  ASSERT_FALSE(log_files.empty());
 }
 
 TEST_F(WalManagerTest, TransactionLogIteratorMoveOverZeroFiles) {

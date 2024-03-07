@@ -9,18 +9,16 @@
 #include "port/port.h"
 #include "table/block.h"
 #include "table/internal_iterator.h"
-#include "table/table_properties_internal.h"
 #include "util/string_util.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace common;
 
-namespace table {
-
-const uint32_t TablePropertiesCollectorFactory::Context::kUnknownColumnFamily =
-    port::kMaxInt32;
-
-namespace {
+namespace table
+{
+namespace
+{
 void AppendProperty(std::string& props, const std::string& key,
                     const std::string& value, const std::string& prop_delim,
                     const std::string& kv_delim) {
@@ -97,11 +95,7 @@ std::string TableProperties::ToString(const std::string& prop_delim,
       prop_delim, kv_delim);
 
   AppendProperty(
-      result, "sub table ID",
-      column_family_id ==
-              TablePropertiesCollectorFactory::Context::kUnknownColumnFamily
-          ? std::string("N/A")
-          : util::ToString(column_family_id),
+      result, "sub table ID", util::ToString(column_family_id),
       prop_delim, kv_delim);
   AppendProperty(
       result, "sub table name",

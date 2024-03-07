@@ -164,7 +164,7 @@ db::WriteBatchBase *SeWritebatchImpl::get_indexed_write_batch()
 db::Iterator *SeWritebatchImpl::get_iterator(const common::ReadOptions &options,
                                              db::ColumnFamilyHandle *const column_family)
 {
-  const auto it = se_db->NewIterator(options);
+  const auto it = se_db->NewIterator(options, se_db->DefaultColumnFamily());
   return m_batch->NewIteratorWithBase(it);
 }
 

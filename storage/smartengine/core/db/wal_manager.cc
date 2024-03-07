@@ -130,8 +130,11 @@ Status WalManager::GetUpdatesSince(
 //    b. get sorted non-empty archived logs
 //    c. delete what should be deleted
 void WalManager::PurgeObsoleteWALFiles() {
-  bool const ttl_enabled = db_options_.wal_ttl_seconds > 0;
-  bool const size_limit_enabled = db_options_.wal_size_limit_mb > 0;
+  //bool const ttl_enabled = db_options_.wal_ttl_seconds > 0;
+  //bool const size_limit_enabled = db_options_.wal_size_limit_mb > 0;
+  //TODO(Zhao Dongsheng): the wal ttl is deprecated.
+  bool const ttl_enabled = false;
+  bool const size_limit_enabled = false;
   if (!ttl_enabled && !size_limit_enabled) {
     return;
   }
@@ -145,9 +148,7 @@ void WalManager::PurgeObsoleteWALFiles() {
     return;
   }
   uint64_t const now_seconds = static_cast<uint64_t>(current_time);
-  uint64_t const time_to_check = (ttl_enabled && !size_limit_enabled)
-                                     ? db_options_.wal_ttl_seconds / 2
-                                     : kDefaultIntervalToDeleteObsoleteWAL;
+  uint64_t const time_to_check = kDefaultIntervalToDeleteObsoleteWAL;
 
   if (purge_wal_files_last_run_ + time_to_check > now_seconds) {
     return;
@@ -179,18 +180,16 @@ void WalManager::PurgeObsoleteWALFiles() {
           __SE_LOG(WARN, "Can't get file mod time: %s: %s", file_path.c_str(), s.ToString().c_str());
           continue;
         }
-        if (now_seconds - file_m_time > db_options_.wal_ttl_seconds) {
-          s = env_->DeleteFile(file_path);
-          if (!s.ok()) {
-            __SE_LOG(WARN, "Can't delete file: %s: %s", file_path.c_str(), s.ToString().c_str());
-            continue;
-          } else {
-            SE_LOG(INFO, "success to delete wal file", K(file_path), K(number));
-            MutexLock l(&read_first_record_cache_mutex_);
-            read_first_record_cache_.erase(number);
-          }
+        s = env_->DeleteFile(file_path);
+        if (!s.ok()) {
+          __SE_LOG(WARN, "Can't delete file: %s: %s", file_path.c_str(), s.ToString().c_str());
           continue;
+        } else {
+          SE_LOG(INFO, "success to delete wal file", K(file_path), K(number));
+          MutexLock l(&read_first_record_cache_mutex_);
+          read_first_record_cache_.erase(number);
         }
+        continue;
       }
 
       if (size_limit_enabled) {
@@ -223,8 +222,7 @@ void WalManager::PurgeObsoleteWALFiles() {
     return;
   }
 
-  size_t const files_keep_num =
-      db_options_.wal_size_limit_mb * 1024 * 1024 / log_file_size;
+  size_t const files_keep_num = 0;
   if (log_files_num <= files_keep_num) {
     return;
   }
@@ -408,11 +406,9 @@ Status WalManager::ReadFirstLine(const std::string& fname,
     const char* fname;
 
     Status* status;
-    bool ignore_error;  // true if db_options_.paranoid_checks==false
     virtual void Corruption(size_t bytes, const Status& s) override {
       __SE_LOG(WARN, "[WalManager] %s%s: dropping %d bytes; %s",
-                     (this->ignore_error ? "(ignoring error) " : ""), fname,
-                     static_cast<int>(bytes), s.ToString().c_str());
+                     "", fname, static_cast<int>(bytes), s.ToString().c_str());
       if (this->status->ok()) {
         // only keep the first error
         *this->status = s;
@@ -431,14 +427,12 @@ Status WalManager::ReadFirstLine(const std::string& fname,
   reporter.env = env_;
   reporter.fname = fname.c_str();
   reporter.status = &status;
-  reporter.ignore_error = !db_options_.paranoid_checks;
   log::Reader reader(file_reader, &reporter, true /*checksum*/,
                      0 /*initial_offset*/, number);
   std::string scratch;
   Slice record;
 
-  if (reader.ReadRecord(&record, &scratch) &&
-      (status.ok() || !db_options_.paranoid_checks)) {
+  if (reader.ReadRecord(&record, &scratch) && status.ok()) {
     if (record.size() < WriteBatchInternal::kHeader) {
       reporter.Corruption(record.size(),
                           Status::Corruption("log record too small"));

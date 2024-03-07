@@ -42,7 +42,6 @@ extern Iterator* NewDBIterator(util::Env* env,
                                table::InternalIterator* internal_iter,
                                const common::SequenceNumber& sequence,
                                uint64_t max_sequential_skip_in_iterations,
-                               uint64_t version_number,
                                util::Arena* arena = nullptr,
                                storage::ExtentSpaceManager* space_manager = nullptr);
 
@@ -54,7 +53,6 @@ extern Iterator* NewDBIterator(util::Env* env,
                                const common::SequenceNumber& sequence,
                                bool use_arena,  // using a outer arena
                                uint64_t max_sequential_skip_in_iterations,
-                               uint64_t version_number,
                                util::Arena* arena = nullptr,
                                storage::ExtentSpaceManager* space_manager = nullptr);
 
@@ -91,8 +89,6 @@ class ArenaWrappedDBIter : public Iterator {
   virtual common::Status status() const override;
 
   void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
-  virtual common::Status GetProperty(std::string prop_name,
-                                     std::string* prop) override;
   virtual int set_end_key(const common::Slice& end_key_slice) override;
   virtual common::SequenceNumber key_seq() const override;
   virtual RecordStatus key_status() const override;
@@ -105,11 +101,11 @@ class ArenaWrappedDBIter : public Iterator {
 
 // Generate the arena wrapped iterator class.
 extern ArenaWrappedDBIter* NewArenaWrappedDbIterator(
-    util::Env* env, const common::ReadOptions& read_options,
+    util::Env* env,
+    const common::ReadOptions& read_options,
     const common::ImmutableCFOptions& cf_options,
     const util::Comparator* user_key_comparator,
     const common::SequenceNumber& sequence,
-    uint64_t max_sequential_skip_in_iterations, uint64_t version_number,
     storage::ExtentSpaceManager* space_manager = nullptr);
 }
 }  // namespace smartengine

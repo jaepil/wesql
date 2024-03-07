@@ -61,7 +61,6 @@ DBTestBase::DBTestBase(const std::string path)
   env_->SetBackgroundThreads(4, Env::FILTER);
   dbname_ = test::TmpDir(env_) + path;
   alternative_wal_dir_ = dbname_ + "/wal";
-  alternative_db_log_dir_ = dbname_ + "/db_log_dir";
   auto options = CurrentOptions();
   options.env = env_;
   auto delete_options = options;
@@ -164,7 +163,6 @@ bool DBTestBase::ChangeOptions(int skip_mask) {
     return false;
   } else {
     auto options = CurrentOptions();
-    options.create_if_missing = true;
     DestroyAndReopen(options);
     return true;
   }
@@ -177,7 +175,6 @@ bool DBTestBase::ChangeWalOptions() {
     Destroy(last_options_);
     auto options = CurrentOptions();
     Destroy(options);
-    options.create_if_missing = true;
     TryReopen(options);
     return true;
   } else if (option_config_ == kDBLogDir) {
@@ -185,7 +182,6 @@ bool DBTestBase::ChangeWalOptions() {
     Destroy(last_options_);
     auto options = CurrentOptions();
     Destroy(options);
-    options.create_if_missing = true;
     TryReopen(options);
     return true;
   } else if (option_config_ == kWalDirAndMmapReads) {
@@ -213,7 +209,6 @@ bool DBTestBase::ChangeFilterOptions() {
   Destroy(last_options_);
 
   auto options = CurrentOptions();
-  options.create_if_missing = true;
   TryReopen(options);
   return true;
 }
@@ -223,9 +218,6 @@ Options DBTestBase::CurrentOptions(
     const anon::OptionsOverride& options_override) {
   Options options;
   options.write_buffer_size = 4090 * 4096;
-  options.target_file_size_base = 2 * 1024 * 1024;
-  options.max_bytes_for_level_base = 10 * 1024 * 1024;
-  options.max_open_files = 5000;
   options.base_background_compactions = -1;
   options.wal_recovery_mode = WALRecoveryMode::kTolerateCorruptedTailRecords;
 
@@ -245,44 +237,29 @@ Options DBTestBase::CurrentOptions(
       break;
     case kFullFilterWithNewTableReaderForCompactions:
       table_options.filter_policy.reset(NewBloomFilterPolicy(10, false));
-      options.new_table_reader_for_compaction_inputs = true;
-      options.compaction_readahead_size = 10 * 1024 * 1024;
       break;
     case kPartitionedFilterWithNewTableReaderForCompactions:
       table_options.filter_policy.reset(NewBloomFilterPolicy(10, false));
       table_options.partition_filters = true;
-      table_options.index_type =
-          BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
-      options.new_table_reader_for_compaction_inputs = true;
-      options.compaction_readahead_size = 10 * 1024 * 1024;
       break;
     case kUncompressed:
       options.compression = kNoCompression;
       break;
     case kDBLogDir:
-      options.db_log_dir = alternative_db_log_dir_;
+      //options.db_log_dir = alternative_db_log_dir_;
       break;
     case kWalDirAndMmapReads:
       options.wal_dir = alternative_wal_dir_;
-      // mmap reads should be orthogonal to WalDir setting, so we piggyback to
-      // this option config to test mmap reads as well
-      options.allow_mmap_reads = true;
       break;
     case kManifestFileSize:
-      options.max_manifest_file_size = 50;  // 50 bytes
       break;
     case kPerfOptions:
-      options.soft_rate_limit = 2.0;
-      options.delayed_write_rate = 8 * 1024 * 1024;
-      options.report_bg_io_stats = true;
-      // TODO(3.13) -- test more options
       break;
     case kCompressedBlockCache:
-      options.allow_mmap_writes = true;
       table_options.block_cache_compressed = NewLRUCache(8 * 1024 * 1024);
       break;
     case kInfiniteMaxOpenFiles:
-      options.max_open_files = -1;
+      //options.max_open_files = -1;
       break;
     case kxxHashChecksum: {
       // table_options.checksum = kxxHash;
@@ -293,7 +270,6 @@ Options DBTestBase::CurrentOptions(
       break;
     }
     case kOptimizeFiltersForHits: {
-      options.optimize_filters_for_hits = true;
       set_block_based_table_factory = true;
       break;
     }
@@ -302,12 +278,10 @@ Options DBTestBase::CurrentOptions(
       break;
     }
     case kRecycleLogFiles: {
-      options.recycle_log_file_num = 2;
       break;
     }
     case kConcurrentSkipList: {
       options.allow_concurrent_memtable_write = true;
-      options.enable_write_thread_adaptive_yield = true;
       break;
     }
 
@@ -325,8 +299,6 @@ Options DBTestBase::CurrentOptions(
         table::NewExtentBasedTableFactory(table_options));
   }
   options.env = env_;
-  options.create_if_missing = true;
-  options.fail_if_options_file_error = true;
   return options;
 }
 
@@ -373,13 +345,8 @@ Status DBTestBase::TryReopenWithColumnFamilies(
     const std::vector<std::string>& cfs, const std::vector<Options>& options) {
   Close();
   EXPECT_EQ(cfs.size(), options.size());
-  std::vector<ColumnFamilyDescriptor> column_families;
-  for (size_t i = 0; i < cfs.size(); ++i) {
-    column_families.push_back(ColumnFamilyDescriptor(cfs[i], options[i]));
-  }
-  DBOptions db_opts = DBOptions(options[0]);
   std::vector<ColumnFamilyHandle*> handles;
-  Status s = DB::Open(db_opts, dbname_, column_families, &handles, &db_);
+  Status s = DB::Open(options[0], dbname_, &handles, &db_);
   if (s.ok()) {
     for (auto h : handles) {
         cfh_map_.erase(h->GetID());
@@ -404,7 +371,7 @@ void DBTestBase::Reopen(const Options& options, const std::string *db_name) {
 void DBTestBase::Close() {
   for (auto &cfh : cfh_map_) {
     if (cfh.second != dbfull()->DefaultColumnFamily()) {
-      db_->DestroyColumnFamilyHandle(cfh.second);
+      MOD_DELETE_OBJECT(ColumnFamilyHandle, cfh.second);
     }
   }
   cfh_map_.clear();
@@ -445,14 +412,8 @@ Status DBTestBase::TryReopen(const Options& options, const std::string *db_name)
 common::Status DBTestBase::open_create_default_subtable(const common::Options& options,
                                                         const std::string *db_name) {
   uint32_t kDefaultColumnFamilyId = 0;
-  DBOptions db_options(options);
-  ColumnFamilyOptions cf_options(options);
-  std::vector<ColumnFamilyDescriptor> column_families;
-  // DBImpl::Open will filter out kDefaultColumnFamilyName from column_families
-  column_families.push_back(
-      ColumnFamilyDescriptor(kDefaultColumnFamilyName, cf_options));
   std::vector<ColumnFamilyHandle*> handles;
-  Status s = DB::Open(db_options, db_name == nullptr ? dbname_ : *db_name, column_families, &handles, &db_);
+  Status s = DB::Open(options, db_name == nullptr ? dbname_ : *db_name, &handles, &db_);
   if (s.ok()) {
     for (auto h : handles) {
       cfh_map_.erase(h->GetID());
@@ -497,10 +458,10 @@ common::Status DBTestBase::open_create_default_subtable(const common::Options& o
       ColumnFamilyHandle *handle = nullptr;
       int ret = 0;
       // table:0 for default column family, 1+ for user's column family
-      ColumnFamilyDescriptor cf(kDefaultColumnFamilyName, cf_options);
+      ColumnFamilyDescriptor cf(kDefaultColumnFamilyName, ColumnFamilyOptions(options));
       if (FAILED(dbfull()->TEST_create_subtable(cf, kDefaultColumnFamilyId, handle))) {
         SE_LOG(ERROR, "Failed to create sub table!", K(ret));
-        db_->DestroyColumnFamilyHandle(handle);
+        MOD_DELETE_OBJECT(ColumnFamilyHandle, handle);
       } else {
         cfh_map_.emplace(kDefaultColumnFamilyId, handle);
         //dbfull()->SetDefaultColumnFamily(handle);
@@ -516,7 +477,6 @@ common::Status DBTestBase::open_create_default_subtable(const common::Options& o
 }
 bool DBTestBase::IsDirectIOSupported() {
   util::EnvOptions env_options;
-  env_options.use_mmap_writes = false;
   env_options.use_direct_writes = true;
   std::string tmp = TempFileName(dbname_, 999);
   Status s;
@@ -576,7 +536,7 @@ Status DBTestBase::Put(int cf, const Slice& k, const Slice& v,
 }
 
 Status DBTestBase::Delete(const std::string& k) {
-  return db_->Delete(WriteOptions(), k);
+  return db_->Delete(WriteOptions(), db_->DefaultColumnFamily(), k);
 }
 
 Status DBTestBase::Delete(int cf, const std::string& k) {
@@ -584,7 +544,7 @@ Status DBTestBase::Delete(int cf, const std::string& k) {
 }
 
 Status DBTestBase::SingleDelete(const std::string& k) {
-  return db_->SingleDelete(WriteOptions(), k);
+  return db_->SingleDelete(WriteOptions(), db_->DefaultColumnFamily(), k);
 }
 
 Status DBTestBase::SingleDelete(int cf, const std::string& k) {
@@ -596,7 +556,7 @@ std::string DBTestBase::Get(const std::string& k, const Snapshot* snapshot) {
   options.verify_checksums = true;
   options.snapshot = snapshot;
   std::string result;
-  Status s = db_->Get(options, k, &result);
+  Status s = db_->Get(options, db_->DefaultColumnFamily(), k, &result);
   if (s.IsNotFound()) {
     result = "NOT_FOUND";
   } else if (!s.ok()) {
@@ -660,7 +620,7 @@ uint64_t DBTestBase::GetTimeOldestSnapshots() {
 std::string DBTestBase::Contents(int cf) {
   std::vector<std::string> forward;
   std::string result;
-  Iterator* iter = (cf == 0) ? db_->NewIterator(ReadOptions())
+  Iterator* iter = (cf == 0) ? db_->NewIterator(ReadOptions(), db_->DefaultColumnFamily())
                              : db_->NewIterator(ReadOptions(), get_column_family_handle(cf));
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     std::string s = IterStatus(iter);
@@ -812,8 +772,6 @@ std::string DBTestBase::IterStatus(Iterator* iter) {
 
 Options DBTestBase::OptionsForLogIterTest() {
   Options options = CurrentOptions();
-  options.create_if_missing = true;
-  options.WAL_ttl_seconds = 1000;
   return options;
 }
 
@@ -825,7 +783,7 @@ void DBTestBase::VerifyIterLast(std::string expected_key, int cf) {
   Iterator* iter;
   ReadOptions ro;
   if (cf == 0) {
-    iter = db_->NewIterator(ro);
+    iter = db_->NewIterator(ro, db_->DefaultColumnFamily());
   } else {
     iter = db_->NewIterator(ro, get_column_family_handle(cf));
   }
@@ -931,5 +889,45 @@ ColumnFamilyHandle* DBTestBase::get_column_family_handle(int64_t cf) const {
   }
   return h;
 }
+
+int test_open_db(const common::Options &options, const std::string &db_name, DB **db)
+{
+  int ret = Status::kOk;
+  std::vector<ColumnFamilyHandle *> cf_handles;
+
+  if (FAILED(DB::Open(options, db_name, &cf_handles, db).code())) {
+    SE_LOG(WARN, "Fail to open db", K(ret));
+  }
+
+  for (auto cf_handle : cf_handles) {
+    MOD_DELETE_OBJECT(ColumnFamilyHandle, cf_handle);
+  }
+
+  return ret;
+}
+
+int test_open_trans_db(const Options &options,
+                       const TransactionDBOptions &trans_db_options,
+                       const std::string &db_name,
+                       TransactionDB **trans_db)
+{
+  int ret = Status::kOk;
+  std::vector<ColumnFamilyHandle *> cf_handles;
+
+  if (FAILED(TransactionDB::Open(options,
+                                 trans_db_options,
+                                 db_name,
+                                 &cf_handles,
+                                 trans_db).code())) {
+    SE_LOG(WARN, "Fail to open trans db", K(ret)) ; 
+  }
+
+  for (auto cf_handle : cf_handles) {
+    MOD_DELETE_OBJECT(ColumnFamilyHandle, cf_handle);
+  }
+
+  return ret;
+}
+
 }
 }  // namespace smartengine

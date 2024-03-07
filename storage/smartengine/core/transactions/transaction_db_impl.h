@@ -32,9 +32,7 @@ class TransactionDBImpl : public util::TransactionDB {
 
   ~TransactionDBImpl();
 
-  common::Status Initialize(
-      const std::vector<size_t>& compaction_enabled_cf_indices,
-      const std::vector<db::ColumnFamilyHandle*>& handles);
+  common::Status Initialize();
 
   util::Transaction* BeginTransactionWrap(const common::WriteOptions& opts);
 
@@ -107,16 +105,10 @@ class TransactionDBImpl : public util::TransactionDB {
 
   virtual int do_manual_checkpoint(int32_t &manifest_file_num) override;
 
-  virtual int stream_log_extents(
-              std::function<int(const char*, int, int64_t, int)> *stream_extent,
-              int64_t start, int64_t end, int dest_fd) override;
-
   virtual int create_backup_snapshot(db::MetaSnapshotMap &meta_snapshot,
                                      int32_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
                                      uint64_t &last_wal_file_num) override;
-
-  virtual int64_t get_last_wal_file_size() const override;
 
   virtual int release_backup_snapshot(db::MetaSnapshotMap &meta_snapshot) override;
 
@@ -124,7 +116,6 @@ class TransactionDBImpl : public util::TransactionDB {
                                             const int32_t last_manifest_file_num,
                                             const uint64_t last_manifest_file_size) override;
 
-  virtual int64_t backup_manifest_file_size() const override;
  private:
   void ReinitializeTransaction(
       util::Transaction* txn, const common::WriteOptions& write_options,

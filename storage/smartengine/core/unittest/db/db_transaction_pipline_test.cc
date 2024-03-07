@@ -83,7 +83,6 @@ class DBTestTransactionPipline : public DBTestBase {
 
 TEST_F(DBTestTransactionPipline, SwitchCorruptedWAL) {
   Options options = CurrentOptions();
-  options.create_if_missing = true;
   options.concurrent_writable_file_single_buffer_size = 2 * 1024 * 1024;
   options.concurrent_writable_file_buffer_num = 8;
   options.concurrent_writable_file_buffer_switch_limit = 256 * 1024;
@@ -226,7 +225,6 @@ TEST_F(DBTestTransactionPipline, SwitchCorruptedWAL) {
 
 TEST_F(DBTestTransactionPipline, WriteMemtableFail) {
   Options options = CurrentOptions();
-  options.create_if_missing = true;
   options.concurrent_writable_file_single_buffer_size = 2 * 1024 * 1024;
   options.concurrent_writable_file_buffer_num = 8;
   options.concurrent_writable_file_buffer_switch_limit = 256 * 1024;
@@ -338,7 +336,6 @@ TEST_F(DBTestTransactionPipline, WriteMemtableFail) {
 
 TEST_F(DBTestTransactionPipline, CommitFail) {
   Options options = CurrentOptions();
-  options.create_if_missing = true;
   options.concurrent_writable_file_single_buffer_size = 2 * 1024 * 1024;
   options.concurrent_writable_file_buffer_num = 8;
   options.concurrent_writable_file_buffer_switch_limit = 256 * 1024;
@@ -450,7 +447,6 @@ TEST_F(DBTestTransactionPipline, CommitFail) {
 
 TEST_F(DBTestTransactionPipline, CopyLogFail) {
   Options options = CurrentOptions();
-  options.create_if_missing = true;
   options.concurrent_writable_file_single_buffer_size = 2 * 1024 * 1024;
   options.concurrent_writable_file_buffer_num = 8;
   options.concurrent_writable_file_buffer_switch_limit = 256 * 1024;
