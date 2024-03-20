@@ -1,0 +1,4 @@
+!include suite/consensus_replication/my.cnf
+
+[mysqld]
+consensus_replication_disable_fifo_cache=ON

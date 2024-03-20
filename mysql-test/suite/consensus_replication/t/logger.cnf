@@ -1,0 +1,4 @@
+!include suite/consensus_replication/my.cnf
+
+[mysqld.3]
+consensus-replication-log-type-node=ON

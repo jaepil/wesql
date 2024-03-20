@@ -1,0 +1,77 @@
+create table t1(id int);
+SET debug_sync = 'bgc_after_sync_stage_before_commit_stage SIGNAL step WAIT_FOR continue';
+insert into t1 values (1);
+SET debug_sync = 'now WAIT_FOR step';
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_2");
+insert into t1 values(2);
+SET debug_sync = "now SIGNAL continue";
+insert into t1 values(3);
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
+"data consistent!"
+drop table t1;
+create table t1(id int);
+SET debug_sync = 'bgc_after_enrolling_for_flush_stage SIGNAL step WAIT_FOR continue';
+insert into t1 values (1);
+SET debug_sync = 'now WAIT_FOR step';
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_2");
+insert into t1 values(2);
+SET debug_sync = "now SIGNAL continue";
+insert into t1 values(3);
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
+"data consistent!"
+drop table t1;
+create table t1(id int);
+SET debug_sync = 'bgc_after_enrolling_for_sync_stage SIGNAL step WAIT_FOR continue';
+insert into t1 values (1);
+SET debug_sync = 'now WAIT_FOR step';
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_2");
+insert into t1 values(2);
+SET debug_sync = "now SIGNAL continue";
+insert into t1 values(3);
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
+"data consistent!"
+drop table t1;
+create table t1(id int);
+SET debug_sync = 'bgc_after_enrolling_for_commit_stage SIGNAL step WAIT_FOR continue';
+insert into t1 values (1);
+SET debug_sync = 'now WAIT_FOR step';
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_2");
+insert into t1 values(2);
+SET debug_sync = "now SIGNAL continue";
+insert into t1 values(3);
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
+"data consistent!"
+drop table t1;
+create table t1(id int);
+SET debug_sync = 'consensus_replication_after_sync SIGNAL step WAIT_FOR continue';
+insert into t1 values (1);
+SET debug_sync = 'now WAIT_FOR step';
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_2");
+insert into t1 values(2);
+SET debug_sync = "now SIGNAL continue";
+insert into t1 values(3);
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
+"data consistent!"
+drop table t1;
+create table t1(id int);
+SET debug_sync = 'consensus_replication_after_consensus_commit SIGNAL step WAIT_FOR continue';
+insert into t1 values (1);
+SET debug_sync = 'now WAIT_FOR step';
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_2");
+insert into t1 values(2);
+SET debug_sync = "now SIGNAL continue";
+insert into t1 values(3);
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
+"data consistent!"
+drop table t1;
+create table t1(id int);
+SET debug_sync = 'bgc_after_enrolling_for_after_commit_stage SIGNAL step WAIT_FOR continue';
+insert into t1 values (1);
+SET debug_sync = 'now WAIT_FOR step';
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_2");
+insert into t1 values(2);
+SET debug_sync = "now SIGNAL continue";
+insert into t1 values(3);
+call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
+"data consistent!"
+drop table t1;

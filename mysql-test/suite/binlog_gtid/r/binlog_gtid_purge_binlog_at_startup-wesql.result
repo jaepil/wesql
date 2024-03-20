@@ -1,0 +1,24 @@
+RESET MASTER;
+CREATE TABLE t (a INT);
+FLUSH LOGS;
+INSERT INTO t VALUES (1), (2), (3);
+include/stop_mysqld.inc [server 1]
+# restart: --binlog-expire-logs-seconds=5
+include/assert.inc [We have 1 binlog file]
+==== BEGIN include/assert.inc [We have 1 binlog file] ====
+DO_NOT_CHECK_IN_THIS_LINE: $rpl_debug should only be used for debugging. Never check in a test that has $rpl_debug=1.
+ con='default' warn='1' qlog='1' rlog='1' aborterr='1'
+# debug: assert_text='We have 1 binlog file' assert_cond='1 = 1'
+.==== BEGIN include/eval.inc ====
+. con='default' warn='1' qlog='1' rlog='1' aborterr='1'
+# debug: eval_expr='1 = 1' eval_no_result='' eval_escape=''
+# debug: interpolated_expr='1 = 1'
+# debug: result='1'
+[connection default]
+.==== END include/eval.inc ====
+. con='default' warn='1' qlog='1' rlog='1' aborterr='1'
+[connection default]
+==== END include/assert.inc [We have 1 binlog file] ====
+ con='default' warn='1' qlog='1' rlog='1' aborterr='1'
+DROP TABLE t;
+SET GLOBAL binlog_expire_logs_seconds = SAVED_EXPIRE_SECONDS;

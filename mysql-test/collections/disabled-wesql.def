@@ -1,0 +1,543 @@
+##############################################################################
+#
+# List the test cases that are to be disabled temporarily.
+#
+# Separate the test case name and the comment with ':'.
+#   <suite>.<test> [@platform|@!platform] : <BUG|WL>#<XXXX> [<comment>]
+#
+# Note:
+#   - Do not use any TAB characters for whitespace.
+#   - Length of a comment section must not be more than 80 characters.
+#
+##############################################################################
+
+# audit_log
+audit_log.audit_log_prune_seconds_var_cnf @windows : BUG#32245509 Test lets mysqltest crash only on windows.
+
+# audit_null
+audit_null.audit_plugin_bugs : BUG#28080637 Test fails consistently
+
+# auth_sec
+auth_sec.host_sort : WL#21509040 WeSQL does not support ipv6
+
+# binlog suite tests
+binlog.binlog_mysqlbinlog_rewrite_db @windows     : BUG#26717205 Requires a debug client binary and fails consistently.
+binlog_gtid.binlog_xa_select_gtid_executed_explicitly_crash : Bug#28588717 Fails both on FreeBSD and other platforms
+# binlog_nogtid.binlog_gtid_next_xa                 : BUG#33650776 Failure of XA COMMIT of prepared txn, can result in txn rollback
+# func1 suite tests
+funcs_1.is_basics_mixed @darwin  : BUG#25882809 INCORRECT RESULT WHEN USING SUBQUERY ON TOP OF VIEW.
+funcs_1.is_basics_mixed @windows : BUG#25882809 INCORRECT RESULT WHEN USING SUBQUERY ON TOP OF VIEW.
+
+# innodb suite tests
+innodb.analyze_table @solaris                     : BUG#22607584 Failing too often on PB2 due to timeout.
+innodb.log_corruption @darwin                     : BUG#27760219 Test fails consistently on freebsd and Mac after WL#11009.
+innodb.log_corruption @freebsd                    : BUG#27760219 Test fails consistently on freebsd and Mac after WL#11009.
+innodb.create_tablespace_partition                : WL#12034 Enable again once shared tablespaces are allowed in partitioned table.
+innodb.alter_tablespace_partition                 : WL#12034 Enable again once shared tablespaces are allowed in partitioned table.
+innodb.truncate                                   : WL#12034 Enable again once shared tablespaces are allowed in partitioned table.
+innodb.subpartition                               : WL#12034 Enable again once shared tablespaces are allowed in partitioned table.
+innodb.ddl_crash_alter_table_partition_tablespace : WL#12034 Enable again once shared tablespaces are allowed in partitioned table.
+innodb.innodb_bug14676111                         : BUG#18200831 The test has never worked correctly
+innodb.fts_exec_interrupt                         : Bug#28534199 The test is unstable and should be rewritten
+innodb.slow_shutdown                              : Bug#31763837 mtr hits this debug assert post test run cleanup
+innodb.upgrade_fts_aux                            : Bug#33034679 Test needs an upgrade of its 5.7 data files
+innodb.instant_ddl_recovery_old                   : WL#12527 Redo format has changed - crashed_datadir.zip needs to be recreated.
+innodb.log_logical_size                           : WL#12527 Test is shaky - needs to be fixed.
+
+innodb.row_format                                 : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.log_5_6_case1                              : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.log_5_7_8_case1                            : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.log_5_7_8_case2                            : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.log_5_7_9_case1                            : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.log_5_7_9_case2                            : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.log_5_7_9_case3                            : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.log_5_7_9_case4                            : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.log_5_7_9_case5                            : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.log_5_7_9_case6                            : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.log_5_7_9_case7                            : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.log_8_0_11_case1                           : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.log_8_0_19_case1                           : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_5727_lin_lctn_0          : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_5727_lin_lctn_1          : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8013                     : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_8015                     : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_8017                     : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_8019_lin_lctn_0          : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8019_lin_lctn_1          : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_8019_mac_lctn_1          : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_8019_mac_lctn_2          : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_8019_win_lctn_1          : BUG#41 WeSQL does not support upgrading from MySQL 
+innodb.partition_upgrade_8019_win_lctn_2          : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_5727_lin_lctn_0_debug    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_5727_lin_lctn_1_debug    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8019_lin_lctn_0_debug    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8019_lin_lctn_1_debug    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8019_mac_lctn_1_debug    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8019_win_lctn_1_debug    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8013_debug               : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8015_debug               : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_8017_debug               : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.discarded_partition_upgrade_from_57        : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.discarded_partition_upgrade_from_80        : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.partition_upgrade_create                   : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_metadata               : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_part                   : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_part_metadata          : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_rollback               : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_update                 : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_recovery_old                   : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.import_compress_encrypt                    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.upgrade_partition                          : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.innodb_autoextend_upgrade                  : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_recovery_old_2                 : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade                        : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_debug                  : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_metadata_debug         : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_part_debug             : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.instant_ddl_upgrade_part_metadata_debug    : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.upgrade_geometry_56                        : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.upgrade_index_stats                        : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.upgrade_unknown_directory                  : BUG#41 WeSQL does not support upgrading from MySQL
+innodb.innodb_temporary_file_path                 : BUG#46 WeSQL does not support setting innodb-read-only
+innodb.autoinc_persist                            : BUG#46 WeSQL does not support setting innodb-read-only
+innodb.redo_log_disable                           : BUG#46 WeSQL does not support setting innodb-read-only
+innodb.tablespace_portability                     : BUG#19 disable temp
+innodb.dblwr_encrypt_recover1                     : BUG#57 disable temp
+
+# keyring tests
+keyring_encrypted_file.keyring_migration_bugs @darwin : Bug#31041633
+
+# Tests that run ALTER on the "mysql" database
+innodb.mysql_ts_alter_encrypt_1                 : BUG#29531106 - ATTACHABLE_TRX(): ASSERTION `!M_THD->TRANSACTION_ROLLBACK_REQUEST' FAILED
+component_keyring_file.mysql_ts_alter_encrypt_1 : BUG#29531106 - ATTACHABLE_TRX(): ASSERTION `!M_THD->TRANSACTION_ROLLBACK_REQUEST' FAILED
+
+
+# main suite tests
+main.ds_mrr-big @solaris : BUG#14168107 Test leads to timeout on Solaris on slow sparc servers.
+main.gtid_next_xa_binlog_off : BUG#33650776 Failure of XA COMMIT of prepared txn, can result in txn rollback
+
+# Disabled due to InnoDB issues
+main.internal_tmp_disk_storage_engine : BUG#26917416 Disabled it since it's failing on pb2.
+
+main.persisted_variables_extended                : WL#21509040 binlog deleted before restart
+main.skip_log_bin                                : WL#21509040 skip-log-bin
+main.grant_dynamic				                       : WL#21509040 start slave
+main.rewrite_general_log                         : WL#21509040 change master
+main.dd_upgrade_partition                        : WL#21509040 disable binlog
+main.dd_upgrade_test                             : WL#21509040 disable temp
+main.fix_priv_tables                             : WL#21509040 check slave_master_info failed
+main.basedir                                     : WL#21509040 disable temp
+main.binlog_partial_json_warnings                : WL#21509040 binlog=stmt
+main.initialize_gtid                             : WL#21509040 not support gtid
+main.dictionary_tablespace                       : WL#21509040 disable temp
+main.mysqld_safe                                 : WL#21509040 disable temp
+main.log_tables_upgrade                          : WL#21509040 disable temp check failed
+main.rpl_multi_source_mysqldump_slave            : WL#21509040 start slave
+main.mysql_upgrade_slave_master_info             : WL#21509040 slave_master_info
+main.populate_collations_read_only               : WL#21509040 not support innodb_read_only
+main.mysql_57_inplace_upgrade                    : WL#21509040 disable temp
+main.mysql_80_inplace_upgrade                    : WL#21509040 disable temp
+main.dd_upgrade_cs                               : WL#21509040 not support start from no 3 nodes dir
+main.dd_upgrade_error_debug                      : WL#21509040 not support start from no 3 nodes dir
+main.dd_upgrade_error                            : WL#21509040 not support start from no 3 nodes dir
+main.dd_upgrade_error_ci                         : WL#21509040 not support start from no 3 nodes dir
+main.dd_upgrade_error_cs                         : WL#21509040 not support start from no 3 nodes dir
+main.dd_upgrade_non_debug                        : WL#21509040 not support start from no 3 nodes dir
+main.mysql_inplace_upgrade                       : WL#21509040 disable temp
+main.mysqladmin                                  : WL#21509040 disable tmp
+main.dd_schema_definition_debug                  : WL#21509040 disable tmp
+main.bind_address_3                              : WL#21509040 ipv6
+main.events_1                                    : WL#21509040 disable tmp
+main.events_bugs                                 : WL#21509040 disable tmp
+main.all_persisted_variables                     : WL#21509040 disable tmp
+main.mysql_upgrade                               : WL#21509040 disable tmp
+main.mysqldump                                   : WL#21509040 disable tmp
+main.mysqlslap                                            : BUG#000 Take too long (timeout)
+main.lock_multi_bug38691                                  : BUG#000 Take too long (timeout)
+main.check                                                : BUG#000 Take too long (timeout)
+main.partition_prefixkey_upgrade                          : BUG#41 disable tamporarily
+main.dd_schema_definition_after_upgrade_57_debug          : BUG#41 disable tamporarily
+main.wl14965                                              : BUG#42 core, disable tamporarily
+main.upgrade_system_tables                                : BUG#43 upgrade case, disable tamporarily
+main.schema_read_only_cs                                  : BUG#43 execute bootstrap file fail, disable tamporarily
+main.read_only_persisted_variables                        : BUG#44 core, disable tamporarily
+main.flush2                                               : WL#21509040 --skip-bin-log
+main.mysqldump-no-binlog                                  : BUG#000 do not support no binlog
+main.myisam-blob                                          : BUG#000 disable myisam engine
+main.no_binlog_related_options                            : BUG#000 do not support no binlog
+main.disabled_replication                                 : BUG#000 do not support no binlog
+main.warnings                                             : BUG#000 failed to start with mysqld option --server-id=0
+main.xa_prepared_binlog_off                               : BUG#000 do not support no binlog
+main.system_tables_myisam                                 : BUG#000 disable myisam engine
+main.system_tables_myisam_lctn_2                          : BUG#000 disable myisam engine
+main.myisam_explain_json_non_select_all                   : BUG#000 disable myisam engine
+main.myisam_explain_json_non_select_none                  : BUG#000 disable myisam engine
+
+# Disable temporarilly
+main.skip_grants_flush                                    : BUG#000 query 'SET PASSWORD = 'cant have'' succeeded, should have failed
+main.admin_interface                                      : BUG#000 command "exec" failed with wrong error: 2, should have failed with error '1'
+main.log_components_filter                                : BUG#000 consensus log cause unstable output
+main.log_components_split                                 : BUG#000 consensus log cause unstable output
+main.log_components                                       : BUG#000 consensus log cause unstable output
+main.log_components_config                                : BUG#000 consensus log cause unstable output
+
+binlog.binlog_reencrypt_logs                     : WL#21509040 encrypt binlog
+binlog.binlog_rotate_binlog_master_key_errors    : WL#21509040 encrypt binlog
+binlog.binlog_rotate_binlog_master_key_crash_recovery_at_startup : WL#21509040 encrypt binlog
+binlog.binlog_encryption_random_access           : WL#21509040 encrypt binlog
+binlog.binlog_encryption_random_access           : WL#21509040 encrypt binlog
+binlog.binlog_encryption_random_access           : WL#21509040 encrypt binlog
+binlog.binlog_rotate_binlog_master_key_crash_recovery : WL#21509040 binlog encrypt
+binlog.binlog_expire_logs_days_deprecation       : WL#21509040 binlog expire
+binlog.binlog_purge_binary_logs_stall             : WL#21509040 disable temp
+binlog.binlog_cache_write_failure                : WL#21509040 commit failed
+binlog.binlog_index                              : WL#21509040 crash
+binlog.binlog_max_extension                      : WL#21509040 disable tmp
+binlog.binlog_restart_server_with_exhausted_index_value : WL#21509040 disable tmp
+binlog.binlog_purge_binary_logs_to               : WL#21509040 crash
+binlog.binlog_rewrite                            : WL#21509040 change master failed
+binlog.binlog_reset_master_active_trx            : WL#21509040 binlog check failed
+binlog_nogtid.binlog_gtid_simple_recovery        : WL#21509040 failed
+binlog_nogtid.binlog_persist_only_variables      : WL#21509040 disable tmp
+binlog_nogtid.binlog_mysqlbinlog_row_trans       : WL#21509040 disable tmp
+binlog.binlog_cache_temp_file_encrypt_cover      : WL#21509040 encrypt binlog
+binlog.binlog_reset_master_delete_file_failure   : BUG#20 binlog deleted before restart
+binlog.binlog_error_action                       : BUG#20 binlog unusable during case run
+binlog.binlog_check_flush_log_assertion          : BUG#20 binlog unusable during case run
+binlog.binlog_max_flush_queue_time_warn          : BUG#000 unstable
+
+innodb.innodb_read_only-2                        : WL#21509040 disalbe temp
+innodb.bootstrap                                 : WL#21509040 disalbe temp
+innodb.portability_tablespace_linux              : BUG#28352630 The maintainability of the zip files required by this test is not acceptable.
+innodb.log_encrypt_6                             : WL#21509040 start from not 3 node dir
+innodb.sdi                                       : WL#21509040 master branch not support
+innodb.optimizer_temporary_table                 : WL#21509040 --innodb-read-only
+innodb_undo.undo_settings                        : WL#21509040 --innodb-read-only
+innodb.innodb_corrupt_readonly                   : WL#21509040 --innodb-read-only
+innodb.ibuf_not_empty                            : WL#21509040 --innodb-force-recovery=6
+innodb.innodb_bug-13628249                       : WL#21509040 --innodb-force-recovery=2
+innodb.row_format_redundant                      : WL#21509040 --innodb-read-only
+innodb.temporary_table                           : WL#21509040 --innodb-read-only
+innodb.create_tablespace                         : WL#21509040 --innodb-read-only
+innodb.portability_basic                         : WL#21509040 start from not 3 node dir
+innodb_undo.truncate_recover_09                  : WL#21509040 not support remove file binlog*
+innodb.portability_tablespace                    : WL#21509040 start from not 3 node dir
+innodb_undo.truncate_recover_04                  : WL#21509040 not support remove file binlog*
+innodb.log_encrypt_6                             : WL#21509040 --innodb-force-recovery
+innodb_undo.truncate_recover_08                  : WL#21509040 not support remove file binlog*
+innodb_undo.truncate_recover_03                  : WL#21509040 not support remove file binlog*
+innodb_undo.truncate_recover_07                  : WL#21509040 not support remove file binlog*
+innodb.readonly                                  : WL#21509040 --innodb-read-only
+innodb.innodb_read_only                          : WL#21509040 flush consensus_info failed
+innodb_undo.truncate_recover_02                  : WL#21509040 not support remove file binlog*
+innodb.innodb_force_recovery                     : WL#21509040 --innodb-force-recovery
+innodb_undo.truncate_recover_05                  : WL#21509040 not support remove file binlog*
+innodb_undo.truncate_recover_06                  : WL#21509040 not support remove file binlog*
+innodb.upgrade_compressed_recv                   : WL#21509040 skip_bin_log
+innodb_undo.truncate_recover_01                  : WL#21509040 not support remove file binlog*
+innodb.upgrade_orphan                            : WL#21509040 start from not 3 node dir
+innodb.ddl_crash_basic                           : WL#21509040 disable temp
+innodb.crc32_endianness                          : WL#21509040 disable temp
+innodb.import_5_7                                : WL#21509040 disable temp
+innodb.table_encrypt_portable_64                 : WL#21509040 disable temp lizard
+innodb.innodb_buffer_pool_load                   : WL#21509040 disable temp
+innodb.innodb-import-lctn_1                      : WL#21509040 disable temp
+innodb.mysqldump_max_recordsize                  : WL#21509040 disable temp
+
+innodb_undo.truncate_recover_01                  : BUG#54 disable temp
+innodb_undo.truncate_recover_02                  : BUG#54 disable temp
+innodb_undo.truncate_recover_03                  : BUG#54 disable temp
+innodb_undo.truncate_recover_04                  : BUG#54 disable temp
+innodb_undo.truncate_recover_05                  : BUG#54 disable temp
+innodb_undo.truncate_recover_06                  : BUG#54 disable temp
+innodb_undo.truncate_recover_07                  : BUG#54 disable temp
+innodb_undo.truncate_recover_08                  : BUG#54 disable temp
+innodb_undo.truncate_recover_09                  : BUG#54 disable temp
+innodb_undo.truncate_recover_e01                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e02                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e03                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e04                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e05                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e06                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e07                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e08                 : BUG#54 disable temp
+innodb_undo.truncate_recover_e09                 : BUG#54 disable temp
+innodb_undo.truncate                             : BUG#54 disable temp
+innodb_undo.truncate_explicit                    : BUG#54 disable temp
+
+perfschema.hostcache_ipv6_addrinfo_again_allow : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_addrinfo_again_deny : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_addrinfo_bad_allow : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_addrinfo_bad_deny : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_addrinfo_good_allow : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_addrinfo_good_deny : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_addrinfo_noname_allow : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_addrinfo_noname_deny : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_auth_plugin : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_blocked : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_max_con : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_nameinfo_again_allow : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_nameinfo_again_deny : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_nameinfo_noname_allow : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_nameinfo_noname_deny : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_passwd : WL#21509040 not support ipv6
+perfschema.hostcache_ipv6_ssl : WL#21509040 not support ipv6
+perfschema.event_aggregate_no_u : WL#21509040 disable temp
+perfschema.event_aggregate_no_h : WL#21509040 disable temp
+perfschema.event_aggregate : WL#21509040 disable temp
+perfschema.transaction_nested_events : WL#21509040 disable temp
+perfschema.persisted_variables : WL#21509040 RESET PERSIST
+perfschema.idx_compare_mems_by_thread_by_event_name : WL#21509040 disable temp
+perfschema.idx_compare_socket_instances             : WL#21509040 ipv6
+performance_schema.socket_instances                 : WL#21509040 ipv6
+perfschema.table_binary_log_transaction_compression_stats_restart : BUG#46 WeSQL does not support setting skip-log-bin
+
+# ssl
+main.ssl_crl                                        : WL#21509040 ssl
+main.ssl_crl_clients_valid                          : WL#21509040 ssl
+main.ssl_crl_crlpath                                : WL#21509040 ssl
+main.ssl_ca                                         : WL#21509040 ssl
+auth_sec.server_withssl_client_withssl              : WL#21509040 ssl
+
+# resource group
+main.resource_group_thr_prio_unsupported_debug      : WL#21509040 resource group
+main.resource_group_thr_prio_unsupported            : WL#21509040 resource group
+main.resource_group_bugs                            : WL#21509040 resource group
+main.resource_group_binlog_events                   : WL#21509040 resource group
+main.join_outer                                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam.
+main.join_outer_bka                                 : BUG#000 Temporarily skip the case where the storage engine is MyIsam.
+main.join_outer_bka_nobnl                           : BUG#000 Temporarily skip the case where the storage engine is MyIsam.
+
+lock_order.cycle                                 : BUG#60 disable temp
+
+information_schema.i_s_schema_definition_debug   : WL#21509040 disable temp
+opt_trace.bugs_no_prot_none                         : WL#21509040 disable temp
+service_sys_var_registration.sys_var_service_cl     : WL#21509040 not support restart --log-in
+test_services.test_host_application_signal_plugin   : WL#21509040 disable temp
+test_services.test_services                         : WL#21509040 disable temp
+test_services.test_table_access_utf8                : BUG#53 disable temp
+test_service_sql_api.test_session_info              : WL#21509040 disable temp
+
+# disalbe binlog binlog_gtid binlog_nogtid temp for consensus replication
+binlog.binlog_table_map_optional_metadata                  : WL#21509040 disable temp
+binlog.binlog_temp_table_prevents_switch_session_binlog_format : WL#21509040 disable temp
+binlog.binlog_truncate_myisam                              : WL#21509040 disable temp
+binlog.binlog_xa_commit_failure                            : WL#21509040 disable temp
+binlog.binlog_xa_handling                                  : WL#21509040 disable temp
+binlog.binlog_xa_prepare_failure                           : WL#21509040 disable temp
+binlog.binlog_xa_rollback_failure                          : WL#21509040 disable temp
+binlog.binlog_xa_trx_split_across_binlog                   : WL#21509040 disable temp
+binlog.binlog_crash_safe_master_checksum_myisam            : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_mixed_load_data                              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_incident                                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_innodb_row_myisam                            : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_killed_simulate                              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_drop_temp_table_on_disconnect_stmt_myisam    : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_stm_blackhole                                : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_stm_delete_all_rows_myisam                   : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_stm_drop_tmp_tbl_myisam                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_stm_user_variables                           : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_rotate_bgc_sync                              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_truncate_kill                                : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_killed                                       : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_row_delete_all_rows_myisam                   : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_stm_row                                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_switch_inside_trans                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog.binlog_open_errors                                  : BUG#000 This case manully truncated prev_consensus_log_ev in binlog
+binlog.binlog_set_trans_dependency_deadlock                : BUG#000 Async execute purge log in consensus plugin makes current_thd NULL
+binlog.binlog_alter_table_not_blocked_by_purge             : BUG#000 Async execute purge log in consensus plugin makes current_thd NULL
+binlog.binlog_purge_binary_logs_backup_lock                : BUG#000 Async execute purge log in consensus plugin makes current_thd NULL
+binlog.binlog_row_mix_drop_tmp_tbl                         : BUG#416 can not generate 'drop temporary table' to binlog when disconnect
+binlog.binlog_drop_temp_table_on_disconnect_stmt           : BUG#416 can not generate 'drop temporary table' to binlog when disconnect
+binlog.binlog_stm_drop_tmp_tbl                             : BUG#416 can not generate 'drop temporary table' to binlog when disconnect
+binlog.binlog_stm_tmp_table                                : BUG#416 can not generate 'drop temporary table' to binlog when disconnect
+binlog_gtid.binlog_gtid_log_status_errors                  : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_mysqlbinlog_row                    : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_mysqlbinlog_row_myisam             : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_row_ctype_ucs                      : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_select_taking_write_locks          : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_show_binlog_events                 : WL#21509040 disable temp
+binlog_gtid.binlog_gtids_table_gcov                        : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_table_readonly                     : WL#21509040 disable temp
+binlog_gtid.binlog_simulate_crash_and_error_on_compress_gtid_table  : WL#21509040 disable temp
+binlog_gtid.binlog_xa_empty_rollback                            : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_mysqlbinlog_row_innodb                  : WL#21509040 disable temp
+binlog_gtid.binlog_gtid_xa_commit_failure_after_rotate          : BUG#000 The previous state cannot be restored after restart_mysqld.
+binlog_gtid.binlog_gtid_xa_commit_failure_before_write_binlog   : BUG#000 The previous state cannot be restored after restart_mysqld.
+binlog_gtid.binlog_gtid_xa_rollback_failure_after_rotate        : BUG#000 The previous state cannot be restored after restart_mysqld.
+binlog_gtid.binlog_gtid_xa_rollback_failure_before_write_binlog : BUG#000 The previous state cannot be restored after restart_mysqld.
+binlog_gtid.binlog_gtid_xa_prepare_failure_before_prepare_2nd_phase : BUG#000 The previous state cannot be restored after restart_mysqld.
+binlog_gtid.binlog_gtid_mysqlpump                               : BUG#000 The previous state cannot be restored after restart_mysqld.
+binlog_gtid.binlog_gtid_mysqldump                               : BUG#000 Reset master causes the consensus log to be truncated.
+binlog_gtid.binlog_gtid_exhausted                               : BUG#000 When a commit error occurs, wesql will automatically roll back.
+binlog_gtid.binlog_gtid_binlog_recovery_errors                  : BUG#000 tmp skip
+binlog_gtid.binlog_gtid_purge_binlog_at_startup-wesql           : BUG#000 tmp skip
+binlog_gtid.binlog_gtid_myisam                                  : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_gtid.binlog_gtid_purge_binlog_at_startup                 : BUG#417 Auto purge binlog not working when mysqld starts bug
+binlog_nogtid.binlog_enforce_gtid_consistency_multiple_warnings : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_stm_mix_innodb_myisam                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_myisam                                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_stm_cache_stat                             : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_gtid_next_single_stmt_trx_rollback_myisam  : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_stm_binlog_myisam                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_mixed_cache_stat                           : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_mts_logical_clock                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_row_mix_innodb_myisam                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_stm_ctype_cp932_myisam                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_row_binlog_myisam                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_row_ctype_cp932_myisam                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_stm_insert_select                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_old_versions                               : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_row_insert_select                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_row_kill_create_select_myisam              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.compression_non_trans                             : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_mysqlbinlog_row_trans_myisam               : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_nogtid_stm_blackhole                       : BUG#000 Temporarily skip the case where the storage engine is MyIsam
+binlog_nogtid.binlog_bug23533                              : WL#21509040 disable temp
+binlog_nogtid.binlog_gtid_next_single_stmt_trx_rollback    : WL#21509040 disable temp
+binlog_nogtid.binlog_gtid_next_temporary_table             : WL#21509040 disable temp
+binlog_nogtid.binlog_implicit_commit                       : WL#21509040 disable temp
+binlog_nogtid.binlog_mysqlbinlog_row                       : WL#21509040 disable temp
+binlog_nogtid.binlog_mysqlbinlog_row_myisam                : WL#21509040 disable temp
+binlog_nogtid.binlog_mysqlbinlog_row_trans                 : WL#21509040 disable temp
+binlog_nogtid.binlog_nogtid_create_drop_temporary_table    : WL#21509040 disable temp
+binlog_nogtid.binlog_nogtid_not_yet_determined_reacquire   : WL#21509040 disable temp
+binlog_nogtid.binlog_nogtid_select_taking_write_locks      : WL#21509040 disable temp
+binlog_nogtid.binlog_replication_applier_priv_checks       : WL#21509040 disable temp
+binlog_nogtid.binlog_row_cache_stat                        : WL#21509040 disable temp
+binlog_nogtid.binlog_row_create_select_crash               : WL#21509040 disable temp
+binlog_nogtid.binlog_row_ctype_cp932                       : WL#21509040 disable temp
+binlog_nogtid.binlog_row_ctype_ucs                         : WL#21509040 disable temp
+binlog_nogtid.binlog_row_kill_create_select                : WL#21509040 disable temp
+binlog_nogtid.binlog_xa_gtid_consistency_violation         : WL#21509040 disable temp
+
+# max_parts suite tests
+max_parts.innodb-import-partition-1                         : BUG#27413612 Fails consistently on hudson jobs. Disabled until bug is fixed.
+max_parts.innodb_partition_open_files_limit @solaris        : BUG#27423163 Times out on Solaris platform on Hudson. Disabled until bug is fixed.
+max_parts.partition_max_parts_hash_innodb @windows          : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_parts_inv_innodb @windows           : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_parts_key_innodb @windows           : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_parts_list_innodb @windows          : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_parts_range_innodb @windows         : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_sub_parts_key_list_innodb @windows  : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_sub_parts_key_range_innodb @windows : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_sub_parts_list_innodb @windows      : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.partition_max_sub_parts_range_innodb @windows     : BUG#27681900 Disabling max_parts tests on windows.
+max_parts.innodb_partition_open_files_limit                 : BUG#27423163 Test times out consistently on Hudson.
+max_parts.partition_max_parts_hash_innodb                   : BUG#61 WeSQL does not support upgrading from MySQL.
+
+# perfschema suite test
+perfschema.threads_history      : BUG#27712231
+perfschema.ssl                  : BUG#30910698
+perfschema.idx_compare_events_waits_current : BUG#27865960
+perfschema.idx_compare_ews_by_thread_by_event_name : BUG#31041671
+perfschema.idx_compare_ews_by_instance : BUG#31791537
+perfschema.idx_compare_rwlock_instances : BUG#31791537
+
+# rpl_gtid suite tests
+rpl_gtid.rpl_async_conn_failover_restart @windows : BUG#34132168 Disabled until bug is fixed
+rpl_gtid.rpl_gtid_truncate_memory_table_after_start_server : BUG#24351040
+rpl_gtid.rpl_gtid_perfschema_applier_xa_status           : BUG#27914287 Disabled until the WL#9075 (Performance Schema, XA Transactions) be implemented
+rpl_gtid.rpl_gtid_mts_spco_deadlock_other_locks          : Bug#32499883 RPL_GTID.RPL_GTID_MTS_SPCO_DEADLOCK_OTHER_LOCKS FAILS ON PB2
+rpl_gtid.rpl_start_replica_until_pos_with_gtid_only      : Bug#33119241 START REPLICA UNTIL SOURCE_LOG_POS SHOULD NOT STOP ON REPLICA EVENTS
+
+# rpl_nogtid suite tests
+rpl_nogtid.rpl_perfschema_applier_xa_status_check : BUG#27914287 Disabled until the WL#9075 (Performance Schema, XA Transactions) be implemented
+rpl_nogtid.rpl_binlog_format_errors               : BUG#29776083 EXPLICIT BINLOG INJECTION WITH SELF LOGGING ENGINES IS BROKEN
+
+# rpl suite tests
+rpl.rpl_io_thd_wait_for_disk_space_stress : BUG#23581287 Disabled until bug is fixed.
+rpl.rpl_writeset_add_unique_key : Bug#33134835 RPL_WRITESET_ADD_UNIQUE_KEY FAILS SPORADICALLY
+
+rpl.rpl_mts_replica_preserve_commit_order_trans_DDL_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_replica_preserve_commit_order_xa_commit_one_phase_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_half_atomic_ddl_no_binlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_replica_preserve_commit_order_error_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_skip_error_no_binlog_slave : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_skip_error_no_binlog_slave_myisam : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_spco_xa_prepare_error_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_replica_preserve_commit_order_wait_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_replica_preserve_commit_order_xa_commit_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_replica_preserve_commit_order_xa_prepare_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_replica_preserve_commit_order_xa_rollback_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_mts_replica_preserve_commit_order_nobinlog : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_xa_with_filters_binlogless_slave : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_rotate_binlog_master_key_errors : BUG#000 WeSQL does not support nobinlog
+rpl.rpl_flushlog_loop : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_sync : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_worker_repository_conversion_with_relaylog_recovery : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_server_id_ignore : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_mts_logical_clock_recovery : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_000017 : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_server_id_ignore : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_deprecations : BUG#000 WeSQL does not support to set info_repository = "FILE"
+rpl.rpl_trx_boundary_parser_warning : BUG#000 WeSQL does not support to set info_repository = "FILE"
+
+rpl.rpl_binlog_errors : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_crash_safe_master_myisam : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_packet : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_get_master_version_and_clock : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_show_replica_auth_info : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_slave_load_in : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_slave_load_in_myisam : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_filter_with_default_channel : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_recovery_replicate_same_server_id : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_report_port : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_perfschema_connect_status : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_row_jsondiff_error : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_trx_boundary_parser_relay_log_recovery : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_perfschema_applier_status_by_coordinator : BUG#000 WeSQL does not support executing reset master on slave
+
+rpl_gtid.rpl_wait_for_executed_gtid_set_no_timeout: BUG#000 unstable
+
+# sys_vars tests
+sys_vars.max_execution_time_basic @freebsd : BUG#31041720
+sys_vars.innodb_log_writer_threads_basic : Bug#32129814 SYS_VARS.INNODB_LOG_WRITER_THREADS_BASIC TIMES OUT SPORADICALLY ON PB2
+sys_vars.persisted_sysvars_with_aliases   : BUG#19 disable temp
+
+# sysschema suite tests
+sysschema.v_wait_classes_global_by_avg_latency : BUG#21550054 Test fails too often.
+
+# x plugin suite tests
+
+# WeSQL timeout case
+main.multi_update2 : BUG#000 Take too long (timeout)
+main.window_functions_big : BUG#000 Take too long (timeout)
+large_tests.alter_table : BUG#000 Consume too much space
+large_tests.innodb_innochecksum_3gb : BUG#000 Take too long (timeout)
+innodb_gis.rtree_split_geographic : BUG#000 Take too long (timeout)
+main.mysqlpump_extended : BUG#000 timeout
+
+consensus_replication.smart_uk_conflict                     : WL#001 smart replay mode is not supported
+consensus_replication.smart_row_image_not_full              : WL#001 smart replay mode is not supported
+consensus_replication.long_trx_leader_transfer              : WL#001 testcase issue
+consensus_replication.purge_local                           : WL#001 not stable
+consensus_replication.force_promote                         : WL#001 not stable
+consensus_replication.purge_log                             : WL#001 not stable
+consensus_replication.cascade_replication                   : WL#001 not stable
+consensus_replication.auto_leader_transfer                  : WL#001 not stable
+consensus_replication.force_single_mode                     : WL#001 not stable
+consensus_replication.failpoint                             : WL#001 only works with cmake -DWITH_FAIL_POINT=ON
+
+# Group Replication tests.
+
+# These will only run in XCom because of the following issue:
+group_replication.gr_join_with_suspect_member : BUG#31704262 XCOM CREATES NODES WITH PAST GHOST VIEWS
+group_replication.gr_leave_with_suspect_member : BUG#31704262 XCOM CREATES NODES WITH PAST GHOST VIEWS
+group_replication.gr_majority_loss_restored_after_timeout : BUG#31704262 XCOM CREATES NODES WITH PAST GHOST VIEWS
+group_replication.gr_primary_mode_group_operations_joining_during_election @windows : BUG#33679225 Disabled until bug is fixed
+group_replication.gr_primary_mode_group_operations_net_partition_4 @windows : BUG#34673762 Disabled until bug is fixed
+group_replication.gr_suspect_member_resumes_after_crash_join_retries : BUG#32458239 GR_SUSPECT_MEMBER_RESUMES_AFTER_CRASH_JOIN_RETRIES IS NOT STABLE
+group_replication.gr_xa_commit_failure_before_gtid_externalization @windows : BUG#34155238 Disabled until bug is fixed
+group_replication.gr_xa_commit_one_phase_failure_before_gtid_externalization @windows : BUG#34155238 Disabled until bug is fixed
+group_replication.gr_xa_prepare_failure_before_gtid_externalization @windows : BUG#34155238 Disabled until bug is fixed
+group_replication.gr_xa_rollback_failure_before_gtid_externalization @windows : BUG#34155238 Disabled until bug is fixed
+
+# information_schema tests
+information_schema.upgrade_cs                   :BUG#41 WeSQL does not support upgrading from MySQL
+
+# x test
+x.upgrade                                       : BUG#41 WeSQL does not support upgrading from MySQL
+x.resource_groups                               : BUG#64 Disable temp
+x.session_resource_group                        : BUG#64 Disable temp
+

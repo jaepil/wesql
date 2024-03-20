@@ -1,0 +1,4 @@
+!include suite/consensus_replication/my.cnf
+
+[mysqld]
+performance_schema=1

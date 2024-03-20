@@ -1,0 +1,5 @@
+!include suite/consensus_replication/my.cnf
+
+[mysqld]
+event_scheduler=ON
+consensus_replication_election_timeout=1000

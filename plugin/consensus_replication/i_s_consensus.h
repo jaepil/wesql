@@ -1,0 +1,12 @@
+#ifndef CONSENSUS_I_S_INCLUDED
+#define CONSENSUS_I_S_INCLUDED
+
+extern struct st_mysql_plugin i_s_wesql_cluster_global;
+extern struct st_mysql_plugin i_s_wesql_cluster_local;
+extern struct st_mysql_plugin i_s_wesql_cluster_health;
+extern struct st_mysql_plugin i_s_wesql_cluster_learner_source;
+extern struct st_mysql_plugin i_s_wesql_cluster_prefetch_channel;
+extern struct st_mysql_plugin i_s_wesql_cluster_consensus_status;
+extern struct st_mysql_plugin i_s_wesql_cluster_consensus_membership_change;
+
+#endif /* CONSENSUS_I_S_INCLUDED */
