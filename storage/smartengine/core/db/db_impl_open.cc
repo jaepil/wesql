@@ -16,7 +16,6 @@
 #include <inttypes.h>
 #include <thread>
 
-#include "db/builder.h"
 #include "db/debug_info.h"
 #include "db/replay_task.h"
 #include "db/replay_thread_pool.h"
@@ -156,7 +155,6 @@ Status DBImpl::Directories::SetDirectories(
     if (db_path == dbname) {
       data_dirs_.emplace_back(nullptr);
     } else {
-//      std::unique_ptr<Directory> path_directory;
       Directory *path_directory = nullptr;
       s = CreateAndNewDirectory(env, db_path, path_directory);
       if (!s.ok()) {

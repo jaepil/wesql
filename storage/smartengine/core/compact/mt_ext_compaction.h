@@ -30,26 +30,16 @@ class MtExtCompaction : public GeneralCompaction {
   virtual int cleanup() override;
   int add_mem_iterators(util::autovector<table::InternalIterator *> &iters);
   int update_row_cache();
-  const db::MiniTables &get_mini_tables() const{
-    return flush_minitables_;
-  }
-  db::MiniTables &get_apply_mini_tables() {
-    return mini_tables_;
-  }
-  void add_input_bytes(const int64_t input_bytes) {
-    stats_.record_stats_.total_input_bytes += input_bytes;
-  }
-//  void set_schema(const common::SeSchema *schema) {
-//    schema_ = schema;
-//    mini_tables_.schema = schema;
-//  }
+  const db::MiniTables &get_mini_tables() const { return flush_minitables_; }
+  db::MiniTables &get_apply_mini_tables() { return mini_tables_; }
+  void add_input_bytes(const int64_t input_bytes) { stats_.record_stats_.total_input_bytes += input_bytes; }
  private:
  int build_mem_se_iterators();
  int build_mem_merge_iterator(MultipleSEIterator *&merge_iterator);
   // memtable iterators
   util::autovector<table::InternalIterator *> mem_iterators_;
   MemSEIterator *mem_se_iterators_;
-//  const common::SeSchema *schema_;
+  //TODO(Zhao Dongsheng): This variable is confused with mini_tables_.
   db::MiniTables flush_minitables_; // save all metas
 };
 } // storage

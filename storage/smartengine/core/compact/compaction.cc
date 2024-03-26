@@ -17,7 +17,6 @@
 #include "compact/compaction.h"
 
 #include "compact/new_compaction_iterator.h"
-#include "db/builder.h"
 #include "db/table_cache.h"
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
@@ -101,13 +100,6 @@ int GeneralCompaction::add_merge_batch(
         ret = Status::kCorruption;
         COMPACTION_LOG(WARN, "extent_meta is null", K(ret), K(meta_dt), KP(extent_meta));
       } else {
-        // todo support schema
-//        meta_dt.set_schema(extent_meta->get_schema());
-//        if (nullptr == mini_tables_.schema ||
-//            mini_tables_.schema->get_schema_version() <
-//                extent_meta->get_schema()->get_schema_version()) {
-//          mini_tables_.schema = extent_meta->get_schema();
-//        }
         // suppose extent hold the keys memory, no need do deep copy again.
         merge_extents_.emplace_back(meta_dt);
         assert(meta_dt.layer_position_.level_ >= 0);
@@ -142,20 +134,20 @@ int GeneralCompaction::open_extent() {
     output_layer_position.layer_index_ = 0;
   }
 
-  extent_builder_.reset(NewTableBuilder(
-      *context_.cf_options_,
-      *context_.internal_comparator_,
-      cf_desc_.column_family_id_,
-      cf_desc_.column_family_name_,
-      &mini_tables_,
-      get_compression_type(*context_.cf_options_,
-                           *context_.mutable_cf_options_,
-                           context_.output_level_),
-      context_.cf_options_->compression_opts,
-      output_layer_position,
-      &compression_dict_,
-      true,
-      is_flush));
+  CompressionType compression_type = get_compression_type(*(context_.cf_options_),
+                                                          *(context_.mutable_cf_options_),
+                                                          context_.output_level_);
+  TableBuilderOptions table_builder_opts(*(context_.cf_options_),
+                                         *(context_.internal_comparator_),
+                                         compression_type, 
+                                         context_.cf_options_->compression_opts,
+                                         &compression_dict_,
+                                         true /**skip_filters*/,
+                                         cf_desc_.column_family_name_,
+                                         output_layer_position,
+                                         is_flush);
+  extent_builder_.reset(context_.cf_options_->table_factory->NewTableBuilderExt(
+        table_builder_opts, cf_desc_.column_family_id_, &mini_tables_)); 
   if (nullptr == extent_builder_.get()) {
     COMPACTION_LOG(WARN,
                    "create new table builder error",
@@ -181,7 +173,10 @@ int GeneralCompaction::close_extent(MiniTables *flush_tables) {
     int64_t compaction_delete_percent = context_.mutable_cf_options_->compaction_delete_percent;
     stats_.record_stats_.merge_output_extents += mini_tables_.metas.size();
 
-    COMPACTION_LOG(INFO, "compaction generate new extent stats", "column_family_id", cf_desc_.column_family_id_, "extent_count", mini_tables_.metas.size());
+    COMPACTION_LOG(INFO, "compaction generate new extent stats",
+        "column_family_id", cf_desc_.column_family_id_,
+        "extent_count", mini_tables_.metas.size());
+
     for (FileMetaData &meta : mini_tables_.metas) {
       stats_.record_stats_.total_output_bytes += meta.fd.file_size;
       if (nullptr != flush_tables) {
@@ -341,17 +336,6 @@ int GeneralCompaction::copy_data_block(const MetaDescriptor &data_block
   }
 
   TableReader *table_reader = reader_reps_[data_block.type_.sequence_].table_reader_;
-  // covert row according to target_schema, then add it to extent_builder one
-  // by one
-//  if (IS_NULL(schema) || IS_NULL(mini_tables_.schema)) {
-//    ret = Status::kNotInit;
-//    COMPACTION_LOG(WARN, "block's or mini_tables' schema is null", K(ret), KP(schema));
-//  } else if (mini_tables_.schema->get_schema_version() > schema->get_schema_version()) {
-//    if (FAILED(switch_schema_for_block(data_block, schema, table_reader))) {
-//      COMPACTION_LOG(WARN, "switch schema for block failed", K(ret), K(data_block));
-//    }
-//  } else {  // no need convert, row's schema is equal to the newest schema in
-//            // the task
   COMPACTION_LOG(DEBUG, "NOT changed: copy block to dest.", K(data_block));
 
   ExtentBasedTable *reader = dynamic_cast<ExtentBasedTable *>(table_reader);
@@ -371,7 +355,6 @@ int GeneralCompaction::copy_data_block(const MetaDescriptor &data_block
   }
   if (SUCC(ret)) {
     stats_.record_stats_.total_input_bytes += block_size;
-//    stats_.record_stats_.merge_input_records +=
     stats_.record_stats_.reuse_datablocks += 1;
     if (1 == data_block.type_.level_) {
       stats_.record_stats_.reuse_datablocks_at_l1 += 1;
@@ -592,7 +575,6 @@ int GeneralCompaction::build_compactor(NewCompactionIterator *&compactor,
       context_.earliest_write_conflict_snapshot_,
       true /*do not allow corrupt key*/,
       merge_iterator,
-     /* mini_tables_.schema,*/
       arena_, change_info_, context_.output_level_/*output level*/,
       context_.shutting_down_, context_.bg_stopped_, context_.cancel_type_, true,
       context_.mutable_cf_options_->background_disable_merge);
@@ -808,46 +790,6 @@ int GeneralCompaction::cleanup() {
   return 0;
 }
 
-/*int GeneralCompaction::switch_schema_for_block(
-    const MetaDescriptor &data_block,
-    const SeSchema *src_schema,
-    TableReader *table_reader) {
-  int ret = 0;
-  COMPACTION_LOG(DEBUG,
-      "NOT changed: copy block to dest.need switch schema for each row.",
-      K(data_block));
-  BlockIter *block_iter = nullptr;
-  if (FAILED(create_data_block_iterator(data_block.block_position_, table_reader, block_iter))) {
-    COMPACTION_LOG(WARN, "create data block iterator failed", K(ret), K(data_block));
-  } else if (IS_NULL(block_iter)) {
-    ret = Status::kCorruption;
-    COMPACTION_LOG(WARN, "block iter is null", K(ret), K(data_block));
-  } else {
-    block_iter->SeekToFirst();
-    Slice tmp_value;
-    while (block_iter->Valid() && SUCC(ret)) {
-      Slice key = block_iter->key();
-      Slice tmp_value = block_iter->value();
-      uint64_t num = util::DecodeFixed64(key.data() + key.size() - 8);
-      unsigned char c = num & 0xff;
-      ValueType type = static_cast<ValueType>(c);
-      if (kTypeValue == type && block_iter->value().size() > 0
-          && FAILED(FieldExtractor::get_instance()->convert_schema(src_schema,
-              mini_tables_.schema, block_iter->value(), tmp_value, row_arena_))) {
-        COMPACTION_LOG(WARN, "switch value failed.", K(ret), K(block_iter->value()), K(tmp_value));
-      } else if (FAILED(extent_builder_->Add(key, tmp_value))) {
-        COMPACTION_LOG(WARN, "add kv failed", K(ret), K(key));
-      } else {
-        row_arena_.get_arena().fast_reuse();
-        stats_.record_stats_.switch_output_records += 1;
-        block_iter->Next();
-      }
-    }
-  }
-  return ret;
-}
-*/
-
 void GeneralCompaction::clear_current_readers() {
   // clear se_iterators
   if (nullptr != se_iterators_) {
@@ -856,7 +798,7 @@ void GeneralCompaction::clear_current_readers() {
     }
   }
 
- //  incase some readers not used while error happens break compaction.
+  //incase some readers not used while error happens break compaction.
   for (int64_t i = 0; i < (int64_t)reader_reps_.size(); ++i) {
     destroy_extent_index_iterator(i);
   }
@@ -865,7 +807,6 @@ void GeneralCompaction::clear_current_readers() {
     if (nullptr != item.second) {
       item.second->reset();
       // AsyncExtentExtent needs delete if not used.
-//      delete item.second;
       FREE_OBJECT(AsyncRandomAccessExtent, arena_, item.second);
     }
   }

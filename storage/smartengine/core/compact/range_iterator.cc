@@ -78,7 +78,6 @@ MetaDescriptor::MetaDescriptor()
       extent_id_(),
       key_(),
       value_() ,
-//      schema_(nullptr),
       delete_percent_(0)
 {
 }
@@ -92,7 +91,6 @@ MetaDescriptor MetaDescriptor::deep_copy(Allocator &allocator) const {
   ret.extent_id_ = extent_id_;
   ret.key_ = key_.deep_copy(allocator);
   ret.value_ = value_.deep_copy(allocator);
-//  ret.schema_ = schema_;  // need be careful, schema is one pointer
   ret.delete_percent_ = delete_percent_;
   return ret;
 }
@@ -106,7 +104,6 @@ MetaDescriptor MetaDescriptor::deep_copy(memory::SimpleAllocator &allocator) con
   ret.extent_id_ = extent_id_;
   ret.key_ = key_.deep_copy(allocator);
   ret.value_ = value_.deep_copy(allocator);
-//  ret.schema_ = schema_;  // need be careful, schema is one pointer
   ret.delete_percent_ = delete_percent_;
   return ret;
 }
@@ -127,7 +124,6 @@ DEFINE_TO_STRING(MetaDescriptor, KV_(type), KV_(range), "bp1",
 
 SEIterator::SEIterator()
     : compaction_(nullptr),
-//      schema_(nullptr),
       iter_level_(kDataEnd),
       startkey_(),
       endkey_() {}
@@ -152,7 +148,6 @@ MemSEIterator::~MemSEIterator() { reset(); }
 
 void MemSEIterator::reset() {
   compaction_ = nullptr;
-//  schema_ = nullptr;
   iter_level_ = kDataEnd;
   mem_iter_ = nullptr;
 }
@@ -254,7 +249,6 @@ void ExtSEIterator::reset() {
   startkey_.clear();
   endkey_.clear();
   meta_descriptor_arena_.clear();
-//  schema_ = nullptr;
 }
 
 int ExtSEIterator::create_current_iterator() {
@@ -279,7 +273,6 @@ int ExtSEIterator::create_current_iterator() {
     } else if (FAILED(compaction_->delete_extent_meta(extent_list_[extent_index_]))) {
       COMPACTION_LOG(WARN, "delete extent meta failed", K(ret), K(extent_list_[extent_index_]));
     } else {
-//      schema_ = extent_list_[extent_index_].get_schema();
       current_iterator_->seek_to_first();
       prefetch_next_extent();
       // update startkey, endkey, level

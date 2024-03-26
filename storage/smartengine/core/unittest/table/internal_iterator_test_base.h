@@ -356,18 +356,20 @@ void InternalIteratorTestBase::open_extent_builder()
   mini_tables_.table_space_id_ = 0;
   cf_desc_.column_family_id_ = 1;
   storage::LayerPosition output_layer_position(level_, 0);
-  extent_builder_.reset(NewTableBuilder(context_->icf_options_,
-                                        internal_comparator_,
-                                        cf_desc_.column_family_id_,
-                                        cf_desc_.column_family_name_,
-                                        &mini_tables_,
-                                        get_compression_type(context_->icf_options_,
-                                                             context_->mutable_cf_options_,
-                                                             level_),
-                                        context_->icf_options_.compression_opts,
-                                        output_layer_position,
-                                        &compression_dict_,
-                                        true));
+  common::CompressionType compression_type = get_compression_type(context_->icf_options_,
+                                                          context_->mutable_cf_options_,
+                                                          level_);
+  TableBuilderOptions table_builder_opts(context_->icf_options_,
+                                         internal_comparator_,
+                                         compression_type,
+                                         context_->icf_options_.compression_opts,
+                                         &compression_dict_,
+                                         true /**skip_filter*/,
+                                         cf_desc_.column_family_name_,
+                                         output_layer_position,
+                                         false /**is_flush*/);
+  extent_builder_.reset(context_->icf_options_.table_factory->NewTableBuilderExt(
+        table_builder_opts, cf_desc_.column_family_id_, &mini_tables_));
 }
 
 // NOTICE! the end_key will in the next block/extent

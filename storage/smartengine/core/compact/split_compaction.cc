@@ -17,7 +17,6 @@
 #include "compact/split_compaction.h"
 
 #include "logger/log_module.h"
-#include "db/builder.h"
 #include "db/table_cache.h"
 #include "memory/mod_info.h"
 #include "options/db_options.h"

@@ -58,7 +58,6 @@ namespace storage {
 
 class ExtentSpaceManager;
 class StorageLogger;
-class CompactionIterator;
 class NewCompactionIterator;
 
 struct CompactionContext {
@@ -244,13 +243,13 @@ class GeneralCompaction : public Compaction {
   int destroy_data_block_iterator(table::BlockIter *block_iterator);
 
   AsyncRandomAccessExtent *get_async_extent_reader(int64_t extent_id) const;
+
   void destroy_async_extent_reader(int64_t extent_id, bool is_reuse = false);
 
-  int switch_schema_for_block(const MetaDescriptor &data_block,
-                              /*const common::SeSchema *src_schema,*/
-                              table::TableReader *table_reader);
   virtual void clear_current_readers();
+
   virtual void clear_current_writers();
+
   void record_compaction_iterator_stats(
       const NewCompactionIterator &compactor,
       CompactRecordStats &stats);

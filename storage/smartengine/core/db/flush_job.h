@@ -45,17 +45,24 @@ namespace util {
 class Arena;
 }
 
-namespace storage {
+namespace storage
+{
 class MtExtCompaction;
-struct LayerPosition;
 }
 
 namespace db {
-class TableCache;
-class Version;
-class VersionEdit;
-class VersionSet;
-
+/**TODO(Zhao Dongsheng): The future inheritance hierrarchy should be:
+ *            Base FLush
+ *               /   \
+ *              /     \
+ *             /       \
+ *    FlushToLevel0  FlushToLevel1
+ *           /  \
+ *          /    \
+ *         /      \
+ *     FullFlush PartialFlush
+ * And some member-variables like memtable_merge_iter_ and output_layer_position_
+ * should be placed properly.*/
 class BaseFlush {
  public:
   BaseFlush(ColumnFamilyData* cfd,
@@ -86,17 +93,20 @@ class BaseFlush {
     return mems_;
   }
 
-//  void set_recovery_point(PaxosGroupRecoveryPoint &rp) {
-//    recovery_point_ = rp;
-//  }
+ protected:
+  typedef util::autovector<table::InternalIterator *> MemtableIterators;
 
-  void set_min_hold_wal_file_id(int32_t min_hold_wal_file_id) {
-    min_hold_wal_file_id_ = min_hold_wal_file_id;
-  }
- public:
-  int write_level0_table(MiniTables *mtables, uint64_t max_seq = 0);
-  int fill_table_cache(const MiniTables &mtables);
-  int delete_old_M0(const InternalKeyComparator *internal_comparator, MiniTables &mtables);
+  virtual table::InternalIterator *create_memtable_iterator(const common::ReadOptions &read_options,
+                                                           MemTable *memtable) = 0;
+  int build_memtable_iterators(MemtableIterators &memtable_iterators);
+  int build_memtable_merge_iterator(table::InternalIterator *&memtable_merge_iterator);
+  int get_memtable_stats(int64_t &memory_usage, int64_t &num_entries, int64_t &num_deletes);
+  int flush_data(const storage::LayerPosition &output_layer_position,
+                 const bool is_flush,
+                 MiniTables &mini_tables);
+  int write_level0(MiniTables &mini_tables);
+  int fill_table_cache(const MiniTables &mini_tables);
+  int delete_old_M0(const InternalKeyComparator *internal_comparator, MiniTables &mini_tables);
   int stop_record_flush_stats(const int64_t bytes_written,
                               const uint64_t start_micros);
   void upload_current_flush_stats_to_global(uint64_t bytes_written,
@@ -104,6 +114,8 @@ class BaseFlush {
                                             uint64_t end_micros);
   void RecordFlushIOStats();
 
+
+ protected:
   ColumnFamilyData* cfd_;
   const common::ImmutableDBOptions& db_options_;
   const common::MutableCFOptions& mutable_cf_options_;
@@ -111,18 +123,13 @@ class BaseFlush {
   const std::atomic<bool>* shutting_down_;
   common::SequenceNumber earliest_write_conflict_snapshot_;
   JobContext &job_context_;
-  // Variables below are set by PickMemTable():
   util::autovector<MemTable*> mems_;
-  // env option
   std::vector<common::SequenceNumber> existing_snapshots_;
-
   util::Directory* output_file_directory_;
   const util::EnvOptions *env_options_;
   memory::ArenaAllocator &arena_;
   util::Arena tmp_arena_;
   bool pick_memtable_called_;
-  int32_t min_hold_wal_file_id_;
-//  PaxosGroupRecoveryPoint recovery_point_;
 };
 
 class FlushJob : public BaseFlush {
@@ -145,17 +152,21 @@ class FlushJob : public BaseFlush {
   virtual int prepare_flush_task(MiniTables &mtables) override;
   virtual int run(MiniTables& mtables) override;
   void cancel();
-  int prepare_flush_level1_task(MiniTables &mtables);
-  int run_mt_ext_task(MiniTables &mtables);
   void set_meta_snapshot(const db::Snapshot *meta_snapshot) {
     meta_snapshot_ = meta_snapshot;
   }
   storage::MtExtCompaction *get_compaction() const {
     return compaction_;
   }
+
+ protected:
+  virtual table::InternalIterator *create_memtable_iterator(const common::ReadOptions &read_options,
+                                                            MemTable *memtable) override;
+
  private:
   void ReportStartedFlush();
   void ReportFlushInputSize(const util::autovector<MemTable*>& mems);
+  int prepare_flush_level1_task();
   int get_memtable_range(util::autovector<table::InternalIterator*> &memtables,
                          storage::Range &wide_range);
   int build_mt_ext_compaction(
@@ -165,12 +176,9 @@ class FlushJob : public BaseFlush {
   int create_meta_iterator(const storage::LayerPosition &layer_position,
                            table::InternalIterator *&iterator);
   int parse_meta(const table::InternalIterator *iter, storage::ExtentMeta *&extent_meta);
-  int get_memtable_iterators(
-      common::ReadOptions &ro,
-      util::autovector<table::InternalIterator*> &memtables,
-      MiniTables& mtables,
-      int64_t &total_size);
+  int run_mt_ext_task(MiniTables &mtables);
 
+ private:
   const std::string& dbname_;
   monitor::Statistics* stats_;
   storage::CompactionContext compaction_context_;

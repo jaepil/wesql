@@ -402,7 +402,6 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   rep->fd = (fd == nullptr ? FileDescriptor() : *fd);
   rep->file_read_hist = file_read_hist;
   rep->footer = footer;
-  rep->hash_index_allow_collision = table_options.hash_index_allow_collision;
   SetupCacheKeyPrefix(rep, file_size);
   ExtentBasedTable *new_table = COMMON_NEW(ModId::kRep, ExtentBasedTable, alloc, rep);
 

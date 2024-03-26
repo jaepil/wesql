@@ -85,17 +85,8 @@ Status MockTableFactory::NewTableReader(
   }
 
   table_reader = new MockTableReader(it->second);
-//  table_reader->reset(new MockTableReader(it->second));
 
   return Status::OK();
-}
-
-TableBuilder* MockTableFactory::NewTableBuilder(
-    const TableBuilderOptions& table_builder_options, uint32_t column_family_id,
-    WritableFileWriter* file) const {
-  uint32_t id = GetAndWriteNextID(file);
-
-  return new MockTableBuilder(id, &file_system_);
 }
 
 TableBuilder* MockTableFactory::NewTableBuilderExt(

@@ -60,10 +60,6 @@ class ExtentBasedTableFactory : public TableFactory {
       bool prefetch_index_and_filter_in_cache = true,
       memory::SimpleAllocator *arena = nullptr) const override;
 
-  TableBuilder* NewTableBuilder(
-      const TableBuilderOptions& table_builder_options,
-      uint32_t column_family_id, util::WritableFileWriter* file) const override;
-
   TableBuilder* NewTableBuilderExt(
       const TableBuilderOptions& table_builder_options,
       uint32_t column_family_id, db::MiniTables* mtables) const override;

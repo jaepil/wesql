@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "db/builder.h"
 #include "options/options.h"
 #include "table/block_builder.h"
 #include "table/format.h"

@@ -313,10 +313,6 @@ void print_help() {
     --show_properties
       Print table properties after iterating over the file
 
-    --show_compression_sizes
-      Independent command that will recreate the SST file using 16K block size with different
-      compressions and report the size of the file using such compression
-
     --set_block_size=<block_size>
       Can be combined with --show_compression_sizes to set the block size that will be used
       when trying different compression algorithms
@@ -344,9 +340,6 @@ int SSTDumpTool::Run(int argc, char** argv) {
   bool has_to = false;
   bool use_from_as_prefix = false;
   bool show_properties = false;         // print metainfo of the sst file
-  bool show_compression_sizes = false;  // recreate the sst file in memory using
-                                        // different compresion algorithms and
-                                        // report the sizes
   bool show_summary = false;
   bool set_block_size = false;  // set the block size when using show_compresion_size
   bool set_extent_offset = false;
@@ -395,8 +388,6 @@ int SSTDumpTool::Run(int argc, char** argv) {
       use_from_as_prefix = true;
     } else if (strcmp(argv[i], "--show_properties") == 0) {
       show_properties = true;
-    } else if (strcmp(argv[i], "--show_compression_sizes") == 0) {
-      show_compression_sizes = true;
     } else if (strcmp(argv[i], "--show_summary") == 0) {
       show_summary = true;
     } else if (strncmp(argv[i], "--set_block_size=", 17) == 0) {
@@ -513,8 +504,6 @@ int SSTDumpTool::Run(int argc, char** argv) {
               reader.getStatus().ToString().c_str());
       continue;
     }
-
-    assert(!show_compression_sizes);
 
     if (command == "raw") {
       std::string out_filename = filename.substr(0, filename.length() - 4);

@@ -362,7 +362,6 @@ set(SOURCES
         cache/lru_cache.cc
         cache/sharded_cache.cc
         cache/row_cache.cc
-        db/builder.cc
         db/column_family.cc
         db/db_filesnapshot.cc
         db/db_impl.cc
@@ -494,18 +493,18 @@ set(SOURCES
         util/aio_wrapper.cc
         #util/alloc_mgr.cc
         #util/mod_info.cc
+        compact/compaction.cc
+        compact/compaction_job.cc
+        compact/compaction_iterator.cc
+        compact/compaction_stats.cc
+        compact/compaction_tasks_picker.cc
+        compact/flush_iterator.cc
+        compact/mt_ext_compaction.cc
+        compact/new_compaction_iterator.cc
         compact/reuse_block_merge_iterator.cc
         compact/range_iterator.cc
-        #        compact/minor_compaction.cc
-        compact/compaction.cc
-        compact/mt_ext_compaction.cc
         compact/split_compaction.cc
-        compact/compaction_tasks_picker.cc
-        compact/compaction_stats.cc
-        compact/compaction_job.cc
         compact/task_type.cc
-        compact/compaction_iterator.cc
-        compact/new_compaction_iterator.cc
         transactions/optimistic_transaction_db_impl.cc
         transactions/optimistic_transaction_impl.cc
         transactions/transaction_base.cc

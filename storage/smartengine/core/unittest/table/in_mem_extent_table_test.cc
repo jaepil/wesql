@@ -122,7 +122,7 @@ TEST(InMemExtent, sim) {
           ioptions, internal_comparator,
           options.compression, CompressionOptions(),
           nullptr /* compression_dict */, false /* skip_filters */,
-          column_family_name, output_layer_position),
+          column_family_name, output_layer_position, false /**is_flush*/),
       0,
       &mtables));
 
@@ -139,15 +139,11 @@ TEST(InMemExtent, sim) {
   size_t size1;
   {
     // method 1: read it normally
-//    unique_ptr<RandomAccessExtent> extent(new storage::RandomAccessExtent());
     RandomAccessExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessExtent);
     s = space_manager->get_random_access_extent(eid, *extent);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
-//    unique_ptr<RandomAccessFileReader> file_reader(
-//        new RandomAccessFileReader(extent));
     RandomAccessFileReader *file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent);
-//    unique_ptr<TableReader> table_reader;
     TableReader *table_reader = nullptr;
     s = ioptions.table_factory->NewTableReader(
         TableReaderOptions(ioptions, soptions, internal_comparator),
@@ -172,7 +168,6 @@ TEST(InMemExtent, sim) {
     // method 2: read it using the new added mem interface
     const int size = MAX_EXTENT_SIZE;
 
-//    unique_ptr<AsyncRandomAccessExtent> extent(new AsyncRandomAccessExtent());
     AsyncRandomAccessExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, AsyncRandomAccessExtent);
     s = space_manager->get_random_access_extent(eid, *extent);
     EXPECT_TRUE(s.ok()) << s.ToString();
@@ -185,10 +180,7 @@ TEST(InMemExtent, sim) {
     extent->prefetch();
 
     // the mem interface
-//    unique_ptr<RandomAccessFileReader> in_mem_file_reader(
-//        new RandomAccessFileReader(std::move(extent)));
     RandomAccessFileReader *in_mem_file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent);
-//    unique_ptr<TableReader> in_mem_table_reader;
     TableReader *in_mem_table_reader = nullptr;
     s = ioptions.table_factory->NewTableReader(
         TableReaderOptions(ioptions, soptions, internal_comparator),

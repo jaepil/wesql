@@ -177,8 +177,6 @@ int MtExtCompaction::build_mem_se_iterators() {
   for (int64_t  i = 0; i < mem_num && SUCC(ret); ++i) {
     new(mem_se_iterators_ + i) MemSEIterator();
     mem_se_iterators_[i].set_mem_iter(mem_iterators_.at(i));
-    // todo support schema
-//    mem_se_iterators_[i].set_schema(schema_);
   }
   return ret;
 }

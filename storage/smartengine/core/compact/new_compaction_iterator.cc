@@ -18,17 +18,16 @@
 #include "compact/task_type.h"
 #include "logger/log_module.h"
 #include "table/internal_iterator.h"
-//#include "utilities/field_extractor/field_extractor.h"
 
-using namespace smartengine;
+namespace smartengine
+{
 using namespace common;
-using namespace storage;
 using namespace util;
 using namespace table;
 using namespace db;
 
-namespace smartengine {
-namespace storage {
+namespace storage
+{
 
 NewCompactionIterator::NewCompactionIterator(
     const util::Comparator *cmp,
@@ -38,7 +37,6 @@ NewCompactionIterator::NewCompactionIterator(
     common::SequenceNumber earliest_write_conflict_snapshot,
     bool expect_valid_internal_key,
     MultipleSEIterator *cur_iterator,
-    /*const SeSchema *schema,*/
     memory::SimpleAllocator &arena,
     storage::ChangeInfo &change_info,
     const int level,
@@ -64,12 +62,9 @@ NewCompactionIterator::NewCompactionIterator(
       at_next_(false),
       cur_iterator_(cur_iterator),
       output_level_(SEIterator::kDataEnd),
-//      row_arena_(row_arena),
-//      dst_schema_(schema),
       arena_(arena),
       change_info_(change_info),
       level_(level),
-//      cur_schema_(nullptr),
       need_check_snapshot_(need_check_snapshot),
       background_disable_merge_(background_disable_merge) {
   if (snapshots_->size() == 0) {
@@ -113,7 +108,6 @@ int NewCompactionIterator::seek_to_first() {
   if (nullptr != cur_iterator_) {
     cur_iterator_->seek_to_first();
     output_level_ = cur_iterator_->get_output_level();
-//    cur_schema_ = cur_iterator_->get_schema();
     if (!cur_iterator_->valid()) {
       // only one way and reuse all extent/block
       COMPACTION_LOG(WARN, "get next item failed.");
@@ -142,7 +136,6 @@ int NewCompactionIterator::next_item() {
       COMPACTION_LOG(WARN, "failed to get next item", K(ret));
     } else {
       output_level_ = cur_iterator_->get_output_level();
-//      cur_schema_ = cur_iterator_->get_schema();
     }
   }
   return ret;
@@ -155,7 +148,6 @@ int NewCompactionIterator::next() {
   } else {
     at_next_ = false;
     output_level_ = cur_iterator_->get_output_level();
-//    cur_schema_ = cur_iterator_->get_schema();
   }
   if (SUCC(ret) && SEIterator::kKVLevel == output_level_) {
     ret = process_next_item();
@@ -174,7 +166,6 @@ int NewCompactionIterator::do_single_deletion(
     common::SequenceNumber prev_snapshot) {
   int ret = 0;
   ParsedInternalKey next_ikey;
-//  const SeSchema *last_schema = cur_schema_;
   if (FAILED(next_item())) {
   } else if (IS_NULL(cur_iterator_)) {
     ret = Status::kCorruption;
@@ -228,9 +219,7 @@ int NewCompactionIterator::do_single_deletion(
   if (valid_) {
     at_next_ = true;
     // because call next() again, maybe it is kBlockLevel/kExtentLevel
-    // update cur_schema , be consistent with output key.
     output_level_ = SEIterator::kKVLevel;
-//    cur_schema_ = last_schema;
   }
   return ret;
 }
@@ -427,31 +416,8 @@ int NewCompactionIterator::process_next_item() {
 int NewCompactionIterator::prepare_output() {
   int ret = Status::kOk;
 
-  //if we disable merge, there need keep all multi-version value with different sequence,
   if (background_disable_merge_) {
-    return ret;  
-  }
-
-  if (SEIterator::kKVLevel != output_level_) {
-    // do nothing, no data
-    /*  } else if (IS_NULL(cur_schema_) || IS_NULL(dst_schema_)) {
-    ret = Status::kAborted;
-    COMPACTION_LOG(WARN, "invalid cur_schema or dst_schema.", K(ret), KP(cur_schema_));
- } else if (cur_schema_->get_schema_version() < dst_schema_->get_schema_version()) {
-    Slice key = key_;
-    Slice tmp_value = value_;
-    uint64_t num = util::DecodeFixed64(key.data() + key.size() - 8);
-    unsigned char c = num & 0xff;
-    ValueType type = static_cast<ValueType>(c);
-    if (kTypeValue == type && value_.size()
-        && FAILED(FieldExtractor::get_instance()->convert_schema(cur_schema_,
-            dst_schema_, value_, tmp_value, row_arena_))) {
-      COMPACTION_LOG(WARN, "switch value failed.", K(ret), K(value_));
-    } else {
-      value_ = tmp_value;
-    } */
-  }
-  if (FAILED(ret)) {
+    //if we disable merge, there need keep all multi-version value with different sequence,
   } else if (2 != level_) {
     // do nothing
   } else if (valid_ && SEIterator::kKVLevel == output_level_ &&

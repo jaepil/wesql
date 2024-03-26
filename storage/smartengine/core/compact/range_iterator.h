@@ -85,7 +85,6 @@ struct MetaDescriptor {
   ExtentId extent_id_;
   common::Slice key_;    // copy iterator's key
   common::Slice value_;  // copy iterator's value
-//  const common::SeSchema *schema_;  // extent's/block's schema
   int64_t delete_percent_;
   MetaDescriptor();
   MetaDescriptor deep_copy(memory::Allocator &allocator) const;
@@ -108,8 +107,6 @@ struct MetaDescriptor {
     return get_user_key(range_.end_key_);
   }
 
-//  void set_schema(const common::SeSchema *schema) { schema_ = schema; }
-//  const common::SeSchema *get_schema() const { return schema_; }
 };
 
 using MetaDescriptorList = std::vector<MetaDescriptor,
@@ -487,13 +484,9 @@ class SEIterator {
   common::Slice get_start_ukey() const;
   common::Slice get_end_ukey() const;
   void set_compaction(GeneralCompaction *compaction) { compaction_ = compaction; }
-//  const common::SeSchema *get_schema() const { return schema_; }
-//  void set_schema(const common::SeSchema *schema) {
-//    schema_ = schema;
-//  }
+
 public:
   GeneralCompaction *compaction_;
-//  const common::SeSchema *schema_;
   IterLevel iter_level_;
   common::Slice startkey_;
   common::Slice endkey_;
@@ -618,10 +611,7 @@ class ExtSEIterator : public SEIterator{
     }
   }
   // return the reuse block/extent meta
-  const MetaDescriptor &get_reuse_meta(/*const SeSchema *&schema*/) const {
-//    schema = schema_;
-    return reuse_meta_;
-  }
+  const MetaDescriptor &get_reuse_meta() const { return reuse_meta_; }
   IterLevel get_iter_level() const { return iter_level_; }
   size_t get_extent_index() const { return extent_index_; }
   int64_t get_extent_level() const {
@@ -697,15 +687,11 @@ public:
   }
 
   // return the reuse block/extent meta
-  const MetaDescriptor &get_reuse_meta(/*const SeSchema *&schema*/) const {
+  const MetaDescriptor &get_reuse_meta() const {
     assert(current_iterator_);
-    return static_cast<ExtSEIterator *>(current_iterator_)->get_reuse_meta(/*schema*/);
+    return static_cast<ExtSEIterator *>(current_iterator_)->get_reuse_meta();
   }
 
-//  const SeSchema *get_schema() const {
-//    assert(current_iterator_);
-//    return current_iterator_->get_schema();
-//  }
   void set_last_user_key(const common::Slice &last_user_key) {
     last_user_key_ = last_user_key;
   }

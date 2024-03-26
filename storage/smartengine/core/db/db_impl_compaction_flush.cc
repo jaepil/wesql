@@ -17,7 +17,6 @@
 #include <algorithm>
 
 #include "compact/compaction_job.h"
-#include "db/builder.h"
 #include "db/dump_job.h"
 #include "logger/log_module.h"
 #include "monitoring/iostats_context_imp.h"

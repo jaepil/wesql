@@ -21,8 +21,8 @@
 #include <vector>
 
 #include "compact/compaction_job.h"
+#include "compact/flush_iterator.h"
 #include "compact/mt_ext_compaction.h"
-#include "db/builder.h"
 #include "db/db.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
@@ -84,95 +84,179 @@ BaseFlush::BaseFlush(ColumnFamilyData* cfd,
       env_options_(env_options),
       arena_(arena),
       tmp_arena_(CharArena::DEFAULT_PAGE_SIZE, 0, memory::ModId::kFlush),
-      pick_memtable_called_(false),
-      min_hold_wal_file_id_(0)
-//      recovery_point_()
+      pick_memtable_called_(false)
+{}
+
+BaseFlush::~BaseFlush() {}
+
+int BaseFlush::get_memtable_stats(int64_t &memory_usage, int64_t &num_entries, int64_t &num_deletes)
 {
-}
+  int ret = Status::kOk;
+  MemTable *memtable = nullptr;
+  memory_usage = 0;
+  num_entries = 0;
+  num_deletes = 0;
 
-BaseFlush::~BaseFlush() {
-
-}
-
-int BaseFlush::write_level0_table(MiniTables *mtables, uint64_t max_seq) {
-  int ret = 0;
-  AutoThreadOperationStageUpdater stage_updater(ThreadStatus::STAGE_FLUSH_WRITE_L0);
-  const uint64_t start_micros = db_options_.env->NowMicros();
-  uint64_t bytes_written = 0;
-  std::vector<InternalIterator*> memtables;
-  ReadOptions ro;
-  ro.total_order_seek = true;
-  uint64_t total_num_entries = 0;
-  uint64_t total_num_deletes = 0;
-  size_t total_memory_usage = 0;
-  storage::LayerPosition output_layer_position(0);
-  for (MemTable* m : mems_) {
-    if (IS_NULL(m)) {
+  for (uint32_t i = 0; SUCCED(ret) && i < mems_.size(); ++i) {
+    if (IS_NULL(memtable = mems_[i])) {
       ret = Status::kErrorUnexpected;
-      FLUSH_LOG(WARN, "m is null", K(ret), K((int)job_context_.task_type_), K(cfd_->GetID()));
-      break;
-    } else if (DUMP_TASK == job_context_.task_type_) {
-      memtables.push_back(m->NewDumpIterator(ro, max_seq, tmp_arena_));
-      output_layer_position.layer_index_ = storage::LayerPosition::INVISIBLE_LAYER_INDEX;
+      FLUSH_LOG(WARN, "memtable mustn't be nullptr", K(ret), K(i), KP(memtable));
     } else {
-      output_layer_position.layer_index_ = storage::LayerPosition::NEW_GENERATE_LAYER_INDEX;
-      memtables.push_back(m->NewIterator(ro, &tmp_arena_));
+      memory_usage += memtable->ApproximateMemoryUsage();
+      num_entries += memtable->num_entries();
+      num_deletes += memtable->num_deletes();
     }
-    FLUSH_LOG(INFO, "Flushing memtable info",  K((int)job_context_.task_type_), K(cfd_->GetID()),
-        K(job_context_.job_id)/*, K(m->get_redo_file_id())*/);
-    //must have equal schema, assure when pick mems
-//    mtables->schema = &(m->get_schema());
-    total_num_entries += m->num_entries();
-    total_num_deletes += m->num_deletes();
-    total_memory_usage += m->ApproximateMemoryUsage();
   }
-  if (SUCC(ret)) {
-    FLUSH_LOG(INFO, "begin to run flush job", K((int)job_context_.task_type_), K(cfd_->GetID()), K(mems_.size()),
-        K(total_num_entries), K(total_num_deletes), K(total_memory_usage));
 
-    TEST_SYNC_POINT_CALLBACK("FlushJob::WriteLevel0Table:output_compression", &output_compression_);
-    InternalIterator *merge_iter = NewMergingIterator(
-        &cfd_->internal_comparator(), &memtables[0],
-        static_cast<int>(memtables.size()), &arena_);
-    bool is_flush = TaskType::FLUSH_TASK == job_context_.task_type_;
-    mtables->table_space_id_ = cfd_->get_table_space_id();
-    if (FAILED(BuildTable(*cfd_->ioptions(),
-                          mutable_cf_options_,
-                          merge_iter,
-                          mtables,
-                          cfd_->internal_comparator(),
-                          cfd_->GetID(),
-                          cfd_->GetName(),
-                          existing_snapshots_,
-                          earliest_write_conflict_snapshot_,
-                          output_compression_,
-                          cfd_->ioptions()->compression_opts,
-                          cfd_->internal_stats(),
-                          output_layer_position,
-                          Env::IO_HIGH,
-                          nullptr,
-                          is_flush))) {
-      if (Status::kCancelTask != ret) {
-        FLUSH_LOG(WARN, "failed to build table", K(ret), K(cfd_->GetID()));
-      }
+  return ret;
+}
+
+int BaseFlush::build_memtable_iterators(MemtableIterators &memtable_iterators)
+{
+  int ret = Status::kOk;
+  MemTable *memtable = nullptr;
+  InternalIterator *iterator = nullptr;
+  ReadOptions read_options;
+  read_options.total_order_seek = true;
+
+  se_assert(pick_memtable_called_ && !mems_.empty());
+  for (uint32_t i = 0; SUCCED(ret) && i < mems_.size(); ++i) {
+    if (IS_NULL(memtable = mems_[i])) {
+      ret = Status::kErrorUnexpected;
+      FLUSH_LOG(WARN, "memtable mustn't be nullptr", K(ret), K(i), KP(memtable));
+    } else if (IS_NULL(iterator = create_memtable_iterator(read_options, memtable))) {
+      ret = Status::kMemoryLimit;
+      FLUSH_LOG(WARN, "fail to construct memtable iterator", K(ret));
     } else {
-      for (auto& meta : mtables->metas) {
-        bytes_written += meta.fd.GetFileSize();
-        FLUSH_LOG(INFO, "GENERATE new extent for flush or dump", K((int)job_context_.task_type_), K(cfd_->GetID()), K(meta));
+      memtable_iterators.push_back(iterator);
+    }
+  }
+
+  return ret;
+}
+
+int BaseFlush::build_memtable_merge_iterator(InternalIterator *&memtable_merge_iterator)
+{
+  int ret = Status::kOk;
+  MergeIteratorBuilder merge_iterator_builder(&cfd_->internal_comparator(), &tmp_arena_);
+  MemtableIterators memtable_iterators;
+  
+  if (FAILED(build_memtable_iterators(memtable_iterators))) {
+    FLUSH_LOG(WARN, "failed to build memtable iterators", K(ret));
+  } else if (memtable_iterators.empty()) {
+    ret = Status::kErrorUnexpected;
+    FLUSH_LOG(WARN, "at least one memtable iterator", K(ret));
+  } else {
+    for (auto iterator : memtable_iterators) {
+      merge_iterator_builder.AddIterator(iterator);
+    }
+
+    if (IS_NULL(memtable_merge_iterator = merge_iterator_builder.Finish())) {
+      ret = Status::kErrorUnexpected;
+      FLUSH_LOG(WARN, "fail to construct memtable merge iterator", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int BaseFlush::flush_data(const LayerPosition &output_layer_position,
+                          const bool is_flush,
+                          MiniTables &mini_tables)
+{
+  int ret = Status::kOk;
+  InternalIterator *memtable_merge_iterator = nullptr;
+  FlushIterator flush_iterator;
+  TableBuilder *table_builder = nullptr;
+  TableBuilderOptions builder_options(*cfd_->ioptions(),
+                                      cfd_->internal_comparator(),
+                                      output_compression_,
+                                      cfd_->ioptions()->compression_opts,
+                                      nullptr /**compression_dict*/,
+                                      false /**skip_filter*/,
+                                      cfd_->GetName(),
+                                      output_layer_position,
+                                      is_flush);
+  /**TODO(Zhao Dongsheng): The table space id pass by MiniTables is unsuitable.*/
+  mini_tables.table_space_id_ = cfd_->get_table_space_id();
+
+  if (!output_layer_position.is_valid()) {
+    ret = Status::kInvalidArgument;
+    FLUSH_LOG(WARN, "invalid argument", K(ret), K(output_layer_position), K(is_flush));
+  } else if (IS_NULL(table_builder = cfd_->ioptions()->table_factory->NewTableBuilderExt(
+      builder_options, cfd_->GetID(), &mini_tables))) {
+    ret = Status::kMemoryLimit;
+    FLUSH_LOG(WARN, "fail to construct table builder", K(ret));
+  } else if (FAILED(build_memtable_merge_iterator(memtable_merge_iterator))) {
+    FLUSH_LOG(WARN, "fail to build memtable merge iterator", K(ret));
+  } else if (FAILED(flush_iterator.init(memtable_merge_iterator,
+                                        cfd_->internal_comparator().user_comparator(),
+                                        &existing_snapshots_,
+                                        earliest_write_conflict_snapshot_,
+                                        mutable_cf_options_.background_disable_merge))) {
+    FLUSH_LOG(WARN, "fail to init flush iterator", K(ret));
+  } else {
+    flush_iterator.SeekToFirst();
+    while (SUCCED(ret) && flush_iterator.Valid()) {
+      if (FAILED(table_builder->Add(flush_iterator.key(), flush_iterator.value()))) {
+        FLUSH_LOG(WARN, "fail to append kv", K(ret));
+      } else {
+        flush_iterator.Next();
+        ret = flush_iterator.inner_ret();
       }
-      FLUSH_LOG(INFO, "Level-0 flush table info", K((int)job_context_.task_type_),
-          K(cfd_->GetID()), K(job_context_.job_id), K(mtables->metas.size()), K(bytes_written));
     }
-    if (output_file_directory_ != nullptr) {
-      output_file_directory_->Fsync();
+
+    if (FAILED(ret) || (0 == table_builder->NumEntries())) {
+      table_builder->Abandon();
+    } else if (FAILED(table_builder->Finish())) {
+      FLUSH_LOG(WARN, "fail to finish table builder", K(ret));
+    } else {
+      //TODO(Zhao Dongsheng): fsync the directory is needless?
+      if (nullptr != output_file_directory_) {
+        output_file_directory_->Fsync();
+      }
     }
-    FREE_OBJECT(InternalIterator, arena_, merge_iter);
   }
-  TEST_SYNC_POINT("FlushJob::WriteLevel0Table");
-  if (TaskType::DUMP_TASK != job_context_.task_type_) {
-    // Note that here we treat flush as level 0 compaction in internal stats
-    stop_record_flush_stats(bytes_written, start_micros);
+
+  //TODO(Zhao Dongsheng): Add destroy function for TableBuilder
+  if (nullptr != table_builder) {
+    delete table_builder;
   }
+
+  return ret;
+}
+
+int BaseFlush::write_level0(MiniTables &mini_tables)
+{
+  int ret = Status::kOk;
+  uint64_t bytes_written = 0;
+  const uint64_t start_micros = db_options_.env->NowMicros();
+  bool is_flush = (FLUSH_TASK == job_context_.task_type_);
+  int32_t layer_index = is_flush ? LayerPosition::NEW_GENERATE_LAYER_INDEX
+                                 : LayerPosition::INVISIBLE_LAYER_INDEX;
+  LayerPosition output_layer_position(0 /**level*/, layer_index);
+
+  if ((FLUSH_TASK != job_context_.task_type_ && DUMP_TASK != job_context_.task_type_)) {
+    ret = Status::kInvalidArgument;
+    FLUSH_LOG(WARN, "invalid argument", K(ret), KE_(job_context_.task_type));
+  } else if (FAILED(flush_data(output_layer_position, is_flush, mini_tables))) {
+    FLUSH_LOG(WARN, "fail to flush data", K(ret), K(output_layer_position), K(is_flush));
+  } else {
+    for (auto file_meta : mini_tables.metas) {
+      bytes_written += file_meta.fd.GetFileSize();
+      FLUSH_LOG(INFO, "generate new level 0 extent", KE_(job_context_.task_type),
+          "index_id", cfd_->GetID(), K(file_meta));
+    }
+
+    if (is_flush) {
+      stop_record_flush_stats(bytes_written, start_micros);
+    }
+
+    FLUSH_LOG(INFO, "success to flush level0 data", KE(job_context_.task_type_),
+        "index_id", cfd_->GetID(), "job_id", job_context_.job_id, "extent_count",
+        mini_tables.metas.size(), K(bytes_written));
+  }
+
   return ret;
 }
 
@@ -181,7 +265,6 @@ int BaseFlush::after_run_flush(MiniTables &mtables, int ret) {
   MemTable* last_mem = mems_.size() > 0 ? mems_.back() : nullptr;
   RecoveryPoint recovery_point;
 
-//  common::SeSchema schema;
   if (SUCC(ret)) {
     if (IS_NULL(last_mem)
         || IS_NULL(mtables.change_info_)
@@ -198,7 +281,6 @@ int BaseFlush::after_run_flush(MiniTables &mtables, int ret) {
     } else {
       recovery_point = last_mem->get_recovery_point();
       SE_LOG(INFO, "get_recovery_point", KP(last_mem), K(recovery_point));
-//      schema = last_mem->get_schema();
     }
   }
   if (FAILED(ret)) {
@@ -434,27 +516,14 @@ void FlushJob::ReportFlushInputSize(const autovector<MemTable*>& mems) {
 void FlushJob::pick_memtable() {
   assert(!pick_memtable_called_);
   pick_memtable_called_ = true;
-//  int32_t min_hold_wal_file_id = xlog::INVALID_FILE_ID;
-  // Save the contents of the earliest memtable as a new Table
   assert(cfd_);
   assert(cfd_->imm());
-  cfd_->imm()->PickMemtablesToFlush(&mems_/*, min_hold_wal_file_id*/);
+  cfd_->imm()->PickMemtablesToFlush(&mems_);
   if (mems_.empty()) {
     return;
   }
 
   ReportFlushInputSize(mems_);
-
-  // entries mems are (implicitly) sorted in ascending order by their created
-  // time. We will use the first memtable's `edit` to keep the meta info for
-  // this flush.
-  //MemTable* m = mems_[0];
-  //edit_ = m->GetEdits();
-  //edit_->SetPrevLogNumber(0);
-  // SetLogNumber(log_num) indicates logs with number smaller than log_num
-  // will no longer be picked up for recovery.
-  //edit_->SetLogNumber(mems_.back()->GetNextLogNumber());
-  //edit_->SetColumnFamily(cfd_->GetID());
 }
 
 int FlushJob::run(MiniTables& mtables) {
@@ -464,55 +533,66 @@ int FlushJob::run(MiniTables& mtables) {
     FLUSH_LOG(WARN, "cfd is null", K(ret));
   } else if (mems_.empty()) {
     FLUSH_LOG(INFO, "Nothing in memtable to flush", K(cfd_->GetID()));
-  } else if (TaskType::FLUSH_LEVEL1_TASK == job_context_.task_type_) {
-    if (FAILED(run_mt_ext_task(mtables))) {
-      if (Status::kCancelTask != ret) {
-        FLUSH_LOG(WARN, "failed to run mt ext task", K(ret));
-      }
-    } else {
-      FLUSH_LOG(INFO, "success to do flush level1 job", K(cfd_->GetID()));
-    }
-  } else if (FAILED(write_level0_table(&mtables))){
-    if (Status::kCancelTask != ret) {
-      FLUSH_LOG(WARN, "failed to write level0 table", K(ret));
-    }
-  } else if (FAILED(fill_table_cache(mtables))) {
-    FLUSH_LOG(WARN, "failed to fill table cache", K(ret));
   } else {
-    FLUSH_LOG(INFO, "success to do normal flush job", K(cfd_->GetID()));
+    if (TaskType::FLUSH_LEVEL1_TASK == job_context_.task_type_) {
+      if (FAILED(run_mt_ext_task(mtables))) {
+        FLUSH_LOG(WARN, "failed to run mt ext task", K(ret));
+      } else {
+        FLUSH_LOG(INFO, "success to do flush level1 job", K(cfd_->GetID()));
+      } 
+    } else {
+      se_assert(FLUSH_TASK == job_context_.task_type_);
+      if (FAILED(write_level0(mtables))) {
+        FLUSH_LOG(WARN, "fail to write level0 data", K(ret));
+      } else if (FAILED(fill_table_cache(mtables))) {
+        FLUSH_LOG(WARN, "fail to fill table cache", K(ret));
+      } else {
+        FLUSH_LOG(INFO, "success to do normal flush job", K(cfd_->GetID()));
+      }
+    }
   }
+
   RecordFlushIOStats();
   return ret;
 }
 
 int FlushJob::run_mt_ext_task(MiniTables &mtables) {
-  int ret = 0;
+  int ret = Status::kOk;
+  int64_t memory_usage = 0;
+  int64_t num_entries = 0;
+  int64_t num_deletes = 0;
   uint64_t start_micros = db_options_.env->NowMicros();
   FLUSH_LOG(INFO, "begin to run flush to level1 task", K(mems_.size()));
   if (IS_NULL(compaction_) || IS_NULL(cfd_)) {
     ret = Status::kNotInit;
     FLUSH_LOG(WARN, "compaction or cfd is null", K(ret), K(cfd_->GetID()));
-  } else if (FAILED(compaction_->run())) {
-    FLUSH_LOG(WARN, "failed to do met_ext_compaction", K(ret));
+  } else if (FAILED(get_memtable_stats(memory_usage, num_entries, num_deletes))) {
+    FLUSH_LOG(WARN, "failed to get memtable stats", K(ret));
   } else {
-    const MiniTables &mini_tables = compaction_->get_mini_tables();
-    if (FAILED(fill_table_cache(mini_tables))) {
-      FLUSH_LOG(WARN, "failed to fill table cache", K(ret));
+    compaction_->add_input_bytes(memory_usage);
+    if (FAILED(compaction_->run())) {
+      FLUSH_LOG(WARN, "failed to do met_ext_compaction", K(ret));
     } else {
-      mtables.change_info_ = &compaction_->get_change_info();
-      FLUSH_LOG(INFO, "Level-0 flush info", K(cfd_->GetID()));
-      if (FAILED(delete_old_M0(compaction_context_.internal_comparator_, compaction_->get_apply_mini_tables()))) {
-        FLUSH_LOG(WARN, "failed to delete old m0", K(ret));
+      const MiniTables &mini_tables = compaction_->get_mini_tables();
+      if (FAILED(fill_table_cache(mini_tables))) {
+        FLUSH_LOG(WARN, "failed to fill table cache", K(ret));
+      } else {
+        mtables.change_info_ = &compaction_->get_change_info();
+        FLUSH_LOG(INFO, "Level-0 flush info", K(cfd_->GetID()));
+        if (FAILED(delete_old_M0(compaction_context_.internal_comparator_,
+                                 compaction_->get_apply_mini_tables()))) {
+          FLUSH_LOG(WARN, "failed to delete old m0", K(ret));
+        }
       }
+
+      FLUSH_LOG(INFO, "complete one mt_ext compaction", K(ret),
+          K(cfd_->GetID()), K(job_context_.job_id),
+          K(memory_usage), K(num_entries), K(num_deletes),
+          K(mini_tables.metas.size()), K(compaction_->get_stats().record_stats_),
+          K(compaction_->get_stats().perf_stats_));
     }
-    FLUSH_LOG(INFO, "complete one mt_ext compaction",
-        K(ret),
-        K(cfd_->GetID()),
-        K(job_context_.job_id),
-        K(mini_tables.metas.size()),
-        K(compaction_->get_stats().record_stats_),
-        K(compaction_->get_stats().perf_stats_));
   }
+
   return ret;
 }
 
@@ -521,7 +601,7 @@ int FlushJob::prepare_flush_task(MiniTables &mtables) {
   pick_memtable(); // pick memtables
 
   if (TaskType::FLUSH_LEVEL1_TASK == job_context_.task_type_) {
-    if (FAILED(prepare_flush_level1_task(mtables))) {
+    if (FAILED(prepare_flush_level1_task())) {
       FLUSH_LOG(WARN, "failed to prepare flush level1 task", K(ret));
     }
   } else if (IS_NULL(mtables.change_info_ = ALLOC_OBJECT(ChangeInfo, arena_))) {
@@ -536,28 +616,32 @@ int FlushJob::prepare_flush_task(MiniTables &mtables) {
   return ret;
 }
 
-int FlushJob::prepare_flush_level1_task(MiniTables &mtables) {
+int FlushJob::prepare_flush_level1_task() {
   int ret = 0;
   compaction_context_.output_level_ = 1;
   storage::Range wide_range;
   RangeIterator *l1_iterator = nullptr;
-  autovector<InternalIterator*> mem_iters;
-  ReadOptions ro;
-  ro.total_order_seek = true;
-  int64_t total_size = 0;
-  if (FAILED(get_memtable_iterators(ro, mem_iters, mtables, total_size))) {
-    FLUSH_LOG(WARN, "failed to get memtable iterators", K(ret));
-  } else if (FAILED(get_memtable_range(mem_iters, wide_range))) {
+  MemtableIterators memtable_iterators;
+  if (FAILED(build_memtable_iterators(memtable_iterators))) {
+    FLUSH_LOG(WARN, "failed to build memtable iterators", K(ret));
+  } else if (FAILED(get_memtable_range(memtable_iterators, wide_range))) {
     FLUSH_LOG(WARN, "failed to get memtable range", K(ret), K(wide_range));
   } else if(FAILED(build_l1_iterator(wide_range, l1_iterator))) {
     FLUSH_LOG(WARN, "failed to build l1 iterator", K(ret), K(wide_range));
-  } else if (FAILED(build_mt_ext_compaction(mem_iters, l1_iterator))) {
+  } else if (FAILED(build_mt_ext_compaction(memtable_iterators, l1_iterator))) {
     FLUSH_LOG(WARN, "failed to build mt_ext_compaction", K(ret), KP(l1_iterator));
-  } else if (nullptr != compaction_) {
-    compaction_->add_input_bytes(total_size);
+  } else {
+    se_assert(nullptr != compaction_);
   }
+
   FREE_OBJECT(RangeIterator, arena_, l1_iterator);
   return ret;
+}
+
+InternalIterator *FlushJob::create_memtable_iterator(const ReadOptions &read_options, MemTable *memtable)
+{
+  se_assert(nullptr != memtable);
+  return memtable->NewIterator(read_options, &tmp_arena_);
 }
 
 int FlushJob::create_meta_iterator(const LayerPosition &layer_position,
@@ -722,7 +806,6 @@ int FlushJob::build_mt_ext_compaction(
     ret = Status::kInvalidArgument;
     FLUSH_LOG(WARN, "last mem is null", K(ret));
   } else {
-//    compaction_->set_schema(&last_mem->get_schema());
     if (0 == extents.size()) {
       // level1 has no data
     } else if (FAILED(compaction_->add_merge_batch(extents, 0, extents.size()))) {
@@ -734,27 +817,6 @@ int FlushJob::build_mt_ext_compaction(
   return ret;
 }
 
-int FlushJob::get_memtable_iterators(
-    ReadOptions &ro,
-    autovector<InternalIterator*> &memtables,
-    MiniTables& mtables,
-    int64_t &total_size) {
-  int ret = 0;
-  for (MemTable* m : mems_) {
-    if (IS_NULL(m)) {
-      ret = Status::kErrorUnexpected;
-      FLUSH_LOG(WARN, "m is null", K(ret));
-      break;
-    }
-    total_size += m->ApproximateMemoryUsage();
-    if (nullptr != cfd_) {
-      FLUSH_LOG(INFO, "Flushing memtable info", K(cfd_->GetName()),
-          K(job_context_.job_id)/*, K(m->get_redo_file_id())*/);
-    }
-    memtables.push_back(m->NewIterator(ro, &tmp_arena_));
-//    mtables.schema = &(m->get_schema()); // no use
-  }
-  return ret;
-}
+
 }
 }  // namespace smartengine

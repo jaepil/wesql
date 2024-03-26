@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #include "db/dump_job.h"
-#include "db/builder.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
 #include "logger/log_module.h"
@@ -76,8 +75,7 @@ int DumpJob::run(MiniTables& mtables) {
     FLUSH_LOG(INFO, "Nothing in memtable to dump", K(cfd_->GetID()));
   } else {
     FLUSH_LOG(INFO, "begin to run dump job", K(mems_.size()), K(cfd_->GetID()));
-    // build one new M0
-    if (SUCC(ret) && FAILED(write_level0_table(&mtables, dump_max_seq_))) {
+    if (FAILED(write_level0(mtables))) {
       FLUSH_LOG(WARN, "failed to write level0 table", K(ret));
     }
   }
@@ -101,5 +99,13 @@ void DumpJob::pick_memtable() {
   }
   pick_memtable_called_ = true;
 }
+
+table::InternalIterator *DumpJob::create_memtable_iterator(const ReadOptions &read_options,
+                                                    MemTable *memtable)
+{
+  se_assert(nullptr != memtable);
+  return memtable->NewDumpIterator(read_options, dump_max_seq_, tmp_arena_);
+}
+
 }
 }

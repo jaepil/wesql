@@ -51,12 +51,11 @@ class DumpJob : public BaseFlush {
     dump_mem_ = mem;
   }
   int after_run_dump(MiniTables &mtables, int ret);
- private:
-//  int build_dump_iterator(const storage::ExtentLayer *level_extent_layer,
-//                          const InternalKeyComparator *internal_comparator,
-//                          util::Arena &arena,
-//                          storage::MetaDataSingleIterator *&meta_iter);
+ protected:
+  virtual table::InternalIterator *create_memtable_iterator(const common::ReadOptions &read_options,
+                                                            MemTable *memtable) override;
 
+ private:
   MemTable *dump_mem_;
   common::SequenceNumber dump_max_seq_;
 };

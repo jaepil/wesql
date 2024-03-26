@@ -44,7 +44,6 @@
 #include "cache/row_cache.h"
 #include "cache/sharded_cache.h"
 #include "compact/compaction_job.h"
-#include "db/builder.h"
 #include "db/db_info_dumper.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
@@ -53,10 +52,8 @@
 #include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "db/table_cache.h"
-#include "db/table_cache.h"
 #include "db/version_set.h"
 #include "db/write_callback.h"
-#include "logger/log_module.h"
 #include "memtable/memtable_list.h"
 #include "monitoring/query_perf_context.h"
 #include "monitoring/thread_status_updater.h"
@@ -844,18 +841,10 @@ Status DBImpl::SetOptions(
     s = cfd->SetOptions(options_map);
     if (s.ok()) {
       new_options = *cfd->GetLatestMutableCFOptions();
-      // Append new version to recompute compaction score.
-      //VersionEdit dummy_edit;
-      //versions_->LogAndApply(cfd, new_options, &dummy_edit, &mutex_,
-      //                       directories_.GetDbDir());
-      // Trigger possible flush/compactions. This has to be before we persist
-      // options to file, otherwise there will be a deadlock with writer
-      // thread.
       // todo object pool
       SuperVersion *sv = MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion);
       auto* old_sv = cfd->InstallSuperVersion(sv, &mutex_, new_options);
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
-//      delete old_sv;
       this->wait_all_active_thread_exit();
     }
   }

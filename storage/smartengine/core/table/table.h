@@ -93,11 +93,6 @@ struct BlockBasedTableOptions {
   // during flushing
   bool flush_fill_block_cache = true;
 
-
-  // This option is now deprecated. No matter what value it is set to,
-  // it will behave as if hash_index_allow_collision=true.
-  bool hash_index_allow_collision = true;
-
   // Use the specified checksum type. Newly created table files will be
   // protected with this checksum type. Old table files will still be readable,
   // even though they have different checksum type.
@@ -137,26 +132,6 @@ struct BlockBasedTableOptions {
 
   // Same as block_restart_interval but used for the index block.
   int index_block_restart_interval = 1;
-
-  // Block size for partitioned metadata. Currently applied to indexes when
-  // kTwoLevelIndexSearch is used and to filters when partition_filters is used.
-  // Note: Since in the current implementation the filters and index partitions
-  // are aligned, an index/filter block is created when eitehr index or filter
-  // block size reaches the specified limit.
-  // Note: this limit is currently applied to only index blocks; a filter
-  // partition is cut right after an index block is cut
-  // TODO(myabandeh): remove the note above when filter partitions are cut
-  // separately
-  uint64_t metadata_block_size = 4096;
-
-  // Note: currently this option requires kTwoLevelIndexSearch to be set as
-  // well.
-  // TODO(myabandeh): remove the note above once the limitation is lifted
-  // TODO(myabandeh): this feature is in experimental phase and shall not be
-  // used in production; either remove the feature or remove this comment if
-  // it is ready to be used in production.
-  // Use partitioned full filters for each SST file
-  bool partition_filters = false;
 
   // Use delta encoding to compress keys in blocks.
   // ReadOptions::pin_data requires this option to be disabled.
@@ -256,29 +231,6 @@ class TableFactory {
       bool prefetch_index_and_filter_in_cache = true,
       memory::SimpleAllocator *arena = nullptr) const = 0;
 
-  // Return a table builder to write to a file for this table type.
-  //
-  // It is called in several places:
-  // (1) When flushing memtable to a level-0 output file, it creates a table
-  //     builder (In DBImpl::WriteLevel0Table(), by calling BuildTable())
-  // (2) During compaction, it gets the builder for writing compaction output
-  //     files in DBImpl::OpenCompactionOutputFile().
-  // (3) When recovering from transaction logs, it creates a table builder to
-  //     write to a level-0 output file (In DBImpl::WriteLevel0TableForRecovery,
-  //     by calling BuildTable())
-  // (4) When running Repairer, it creates a table builder to convert logs to
-  //     SST files (In Repairer::ConvertLogToTable() by calling BuildTable())
-  //
-  // Multiple configured can be acceseed from there, including and not limited
-  // to compression options. file is a handle of a writable file.
-  // It is the caller's responsibility to keep the file open and close the file
-  // after closing the table builder. compression_type is the compression type
-  // to use in this table.
-  virtual TableBuilder* NewTableBuilder(
-      const TableBuilderOptions& table_builder_options,
-      uint32_t column_family_id, util::WritableFileWriter* file) const = 0;
-
-  // suffix Ext means Extent based
   virtual TableBuilder* NewTableBuilderExt(
       const TableBuilderOptions& table_builder_options,
       uint32_t column_family_id, db::MiniTables* mtables) const {
@@ -314,30 +266,8 @@ class TableFactory {
   virtual void* GetOptions() { return nullptr; }
 };
 
-#ifndef ROCKSDB_LITE
-// Create a special table factory that can open either of the supported
-// table formats, based on setting inside the SST files. It should be used to
-// convert a DB from one table format to another.
-// @table_factory_to_write: the table factory used when writing to new files.
-// @block_based_table_factory:  block based table factory to use. If NULL, use
-//                              a default one.
-// @plain_table_factory: plain table factory to use. If NULL, use a default one.
-// @cuckoo_table_factory: cuckoo table factory to use. If NULL, use a default
-// one.
-extern TableFactory* NewAdaptiveTableFactory(
-    std::shared_ptr<TableFactory> table_factory_to_write = nullptr,
-    std::shared_ptr<TableFactory> block_based_table_factory = nullptr,
-    std::shared_ptr<TableFactory> plain_table_factory = nullptr,
-    std::shared_ptr<TableFactory> cuckoo_table_factory = nullptr);
-
-#endif  // ROCKSDB_LITE
+extern TableFactory* NewExtentBasedTableFactory(const BlockBasedTableOptions& table_options);
 
 }  // namespace table
 }  // namespace smartengine
 
-namespace smartengine {
-namespace table {
-extern TableFactory* NewExtentBasedTableFactory(
-    const BlockBasedTableOptions& table_options = BlockBasedTableOptions());
-}
-}

@@ -69,13 +69,6 @@ Status ExtentBasedTableFactory::NewTableReader(
       table_reader_options.skip_filters, table_reader_options.level, arena);
 }
 
-TableBuilder* ExtentBasedTableFactory::NewTableBuilder(
-    const TableBuilderOptions& table_builder_options, uint32_t column_family_id,
-    WritableFileWriter* file) const {
-  assert(0);
-  return nullptr;
-}
-
 TableBuilder* ExtentBasedTableFactory::NewTableBuilderExt(
     const TableBuilderOptions& table_builder_options, uint32_t column_family_id,
     MiniTables* mtables) const {
@@ -153,9 +146,6 @@ std::string ExtentBasedTableFactory::GetPrintableTableOptions() const {
   snprintf(buffer, kBufferSize,
            "  pin_l0_filter_and_index_blocks_in_cache: %d\n",
            table_options_.pin_l0_filter_and_index_blocks_in_cache);
-  ret.append(buffer);
-  snprintf(buffer, kBufferSize, "  hash_index_allow_collision: %d\n",
-           table_options_.hash_index_allow_collision);
   ret.append(buffer);
   snprintf(buffer, kBufferSize, "  checksum: %d\n", table_options_.checksum);
   ret.append(buffer);

@@ -19,7 +19,6 @@
 #include <chrono>
 #include "cache/lru_cache.h"
 #include "compact/compaction_job.h"
-#include "db/builder.h"
 #include "db/column_family.h"
 #include "db/dbformat.h"
 #include "db/db_impl.h"
@@ -400,14 +399,19 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
   }
   mini_tables_.space_manager = space_manager_;
   mini_tables_.table_space_id_ = 0;
-  extent_builder_.reset(NewTableBuilder(
-      context_->icf_options_, internal_comparator_,
-      cf_desc_.column_family_id_, cf_desc_.column_family_name_, &mini_tables_,
-      get_compression_type(context_->icf_options_,
-                           context_->mutable_cf_options_,
-                           level),
-      context_->icf_options_.compression_opts, output_layer_position,
-      &compression_dict_, true));
+  common::CompressionType compression_type = get_compression_type(
+      context_->icf_options_, context_->mutable_cf_options_, level);
+  TableBuilderOptions table_builder_opts(context_->icf_options_,
+                                         internal_comparator_,
+                                         compression_type,
+                                         context_->icf_options_.compression_opts,
+                                         &compression_dict_,
+                                         true /**skip_filter*/,
+                                         cf_desc_.column_family_name_,
+                                         output_layer_position,
+                                         false /**is_flush*/);
+  extent_builder_.reset(context_->icf_options_.table_factory->NewTableBuilderExt(
+        table_builder_opts, cf_desc_.column_family_id_, &mini_tables_));
 }
 
 void ParallelReadTest::close(const int64_t level, bool finish)

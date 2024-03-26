@@ -40,7 +40,6 @@ class TwoLevelIterator : public InternalIterator {
     first_level_iter_.DeleteIter(!need_free_iter_and_state_);
     second_level_iter_.DeleteIter(false);
     if (need_free_iter_and_state_) {
-//      delete state_;
       MOD_DELETE_OBJECT(TwoLevelIteratorState, state_);
     } else {
       state_->~TwoLevelIteratorState();
@@ -270,8 +269,6 @@ InternalIterator* NewTwoLevelIterator(TwoLevelIteratorState* state,
                                       memory::SimpleAllocator* arena,
                                       bool need_free_iter_and_state) {
   if (arena == nullptr) {
-//    return new TwoLevelIterator(state, first_level_iter,
-//                                point, need_free_iter_and_state);
     return MOD_NEW_OBJECT(memory::ModId::kDbIter, TwoLevelIterator,
         state, first_level_iter, point, need_free_iter_and_state);
   } else {

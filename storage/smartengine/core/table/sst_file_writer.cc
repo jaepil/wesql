@@ -135,7 +135,8 @@ Status SstFileWriter::Open(const std::string& file_path) {
       nullptr /* compression_dict */,
       false /* skip_filters */,
       r->column_family_name,
-      output_layer_position);
+      output_layer_position,
+      false /**is_flush*/);
   r->file_writer.reset(ALLOC_OBJECT(WritableFileWriter, *alloc_, sst_file, r->env_options, nullptr, false/*sst_file use allocator*/));
 
   //TODO(tec) : If table_factory is using compressed block cache, we will

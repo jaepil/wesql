@@ -9,6 +9,7 @@ LIB_SOURCES =                                                   \
   compact/range_iterator.cc                                     \
   compact/compaction_job.cc                                     \
   compact/compaction.cc                                         \
+	compact/flush_iterator.cc                                     \
   compact/split_compaction.cc                                   \
   compact/mt_ext_compaction.cc                                  \
   compact/compaction_tasks_picker.cc                            \
@@ -16,7 +17,6 @@ LIB_SOURCES =                                                   \
   compact/compaction_iterator.cc                                \
   compact/new_compaction_iterator.cc                            \
   compact/compaction_stats.cc                                   \
-  db/builder.cc                                                 \
   db/column_family.cc                                           \
   db/db_filesnapshot.cc                                         \
   db/db_impl.cc                                                 \

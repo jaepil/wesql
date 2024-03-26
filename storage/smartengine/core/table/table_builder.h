@@ -68,9 +68,11 @@ struct TableBuilderOptions {
       const db::InternalKeyComparator& _internal_comparator,
       common::CompressionType _compression_type,
       const common::CompressionOptions& _compression_opts,
-      const std::string* _compression_dict, bool _skip_filters,
-      const std::string& _column_family_name, const storage::LayerPosition &output_position,
-      bool _is_flush = false)
+      const std::string* _compression_dict,
+      bool _skip_filters,
+      const std::string& _column_family_name,
+      const storage::LayerPosition &output_position,
+      bool _is_flush)
       : ioptions(_ioptions),
         internal_comparator(_internal_comparator),
         compression_type(_compression_type),

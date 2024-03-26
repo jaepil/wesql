@@ -17,7 +17,6 @@
 #include "compact/compaction_job.h"
 #include "compact/mt_ext_compaction.h"
 #include "compact/task_type.h"
-#include "db/builder.h"
 #include "db/column_family.h"
 #include "db/db_impl.h"
 #include "db/db_iter.h"
@@ -525,62 +524,6 @@ class CompactionTest : public testing::Test {
   // We will fake 2 schema versions here: 
   //  schema_version 2 has 1 int, schema_versio 1 has 2 int, while 0 means invalid.
   void open_for_write(int level = 1, bool begin_trax = true, int64_t schema_version = 0) {
-    //mini_tables_.space_manager = space_manager_.get();
-
-    if (schema_version == 2) {
-//      SeSchema* schema = const_cast<SeSchema*>(mini_tables_.schema);
-//      schema->reset();
-//      schema->null_bytes_in_rec = 0;
-//      schema->maybe_unpack_info = false;
-//      SeFieldInfo field;
-//      schema->fields.push_back(field);
-
-      //field 0:int,not null
-//      schema->fields[0].field_unit.fu_struct.storage_type = smartengine::common::STORE_ALL;
-//      schema->fields[0].field_unit.fu_struct.field_type = smartengine::common::SE_TYPE_NORMAL;
-//      schema->fields[0].column_id = 0;
-//      schema->fields[0].field_unit.fu_struct.null_mask = (unsigned char) 0x0; //useless
-//      schema->fields[0].field_unit.fu_struct.null_offset = 0; // useless
-//      schema->fields[0].length_info = 4;
-//      schema->index_map.insert(std::make_pair(schema->fields[0].column_id,0));
-//      schema->fixed_notnull_cnt = 1;
-//      schema->fixed_nullable_cnt = 0;
-//      schema->var_len_cnt = 0;
-//
-//      schema->schema_version = 2;
-    } else if (schema_version == 1) {
-//      SeSchema* schema = const_cast<SeSchema*>(mini_tables_.schema);
-//      schema->reset();
-//      schema->null_bytes_in_rec = 0;
-//      schema->maybe_unpack_info = false;
-//      SeFieldInfo field;
-//      schema->fields.push_back(field);
-//      schema->fields.push_back(field);
-//
-//      //field 0:int,not null
-//      schema->fields[0].field_unit.fu_struct.storage_type = smartengine::common::STORE_ALL;
-//      schema->fields[0].field_unit.fu_struct.field_type = smartengine::common::SE_TYPE_NORMAL;
-//      schema->fields[0].column_id = 0;
-//      schema->fields[0].field_unit.fu_struct.null_mask = (unsigned char) 0x0; //useless
-//      schema->fields[0].field_unit.fu_struct.null_offset = 0; // useless
-//      schema->fields[0].length_info = 4;
-//      schema->index_map.insert(std::make_pair(schema->fields[0].column_id,0));
-//
-//      //field 1:int,not null
-//      schema->fields[1].field_unit.fu_struct.storage_type = smartengine::common::STORE_ALL;
-//      schema->fields[1].field_unit.fu_struct.field_type = smartengine::common::SE_TYPE_NORMAL;
-//      schema->fields[1].column_id = 1;
-//      schema->fields[1].field_unit.fu_struct.null_mask = (unsigned char) 0x0; //useless
-//      schema->fields[1].field_unit.fu_struct.null_offset = 0; // useless
-//      schema->fields[1].length_info = 4;
-//      schema->index_map.insert(std::make_pair(schema->fields[1].column_id,1));
-//      schema->fixed_notnull_cnt = 2;
-//      schema->fixed_nullable_cnt = 0;
-//      schema->var_len_cnt = 0;
-//
-//      schema->schema_version = 1;
-    }
-
     mini_tables_.change_info_ = &change_info_;
     int ret = Status::kOk;
     storage::LayerPosition output_layer_position =
@@ -590,30 +533,32 @@ class CompactionTest : public testing::Test {
     if (begin_trax) {
       if (0 == level) {
         ret = storage_logger_->begin(FLUSH);
-//        mini_tables_.change_info_->task_type_ = TaskType::FLUSH_TASK;
         ASSERT_EQ(Status::kOk, ret);
       } else if (1 == level) {
         ret = storage_logger_->begin(MINOR_COMPACTION);
-//        mini_tables_.change_info_->task_type_ = TaskType::SPLIT_TASK;
         ASSERT_EQ(Status::kOk, ret);
       } else {
         ret = storage_logger_->begin(MAJOR_COMPACTION);
-//        mini_tables_.change_info_->task_type_ = TaskType::MAJOR_SELF_COMPACTION_TASK;
         ASSERT_EQ(Status::kOk, ret);
       }
     }
     mini_tables_.space_manager = space_manager_;
     mini_tables_.table_space_id_ = 0;
-    extent_builder_.reset(NewTableBuilder(context_->icf_options_,
-                                          internal_comparator_,
-                                          cf_desc_.column_family_id_,
-                                          cf_desc_.column_family_name_,
-                                          &mini_tables_,
-                                          get_compression_type(context_->icf_options_,
-                                                               context_->mutable_cf_options_,
-                                                               level),
-                                          context_->icf_options_.compression_opts, output_layer_position,
-                                          &compression_dict_, true));
+    
+    common::CompressionType compression_type = get_compression_type(context_->icf_options_,
+                                                                    context_->mutable_cf_options_,
+                                                                    level);
+    TableBuilderOptions table_builder_opts(context_->icf_options_,
+                                           internal_comparator_,
+                                           compression_type,
+                                           context_->icf_options_.compression_opts,
+                                           &compression_dict_,
+                                           true /**skip_filter*/,
+                                           cf_desc_.column_family_name_,
+                                           output_layer_position,
+                                           false /**is_flush*/);
+    extent_builder_.reset(context_->icf_options_.table_factory->NewTableBuilderExt(
+          table_builder_opts, cf_desc_.column_family_id_, &mini_tables_));
   }
 
   void build_memtable(MemTable*& mem) {

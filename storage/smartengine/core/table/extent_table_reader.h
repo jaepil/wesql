@@ -515,7 +515,6 @@ struct ExtentBasedTable::Rep {
   // existence of
   // another member ("allocation").
   std::unique_ptr<BlockContents, memory::ptr_destruct<BlockContents>> compression_dict_block; // no use?
-  bool hash_index_allow_collision;
   bool whole_key_filtering;
 
   // only used in level 0 files:
