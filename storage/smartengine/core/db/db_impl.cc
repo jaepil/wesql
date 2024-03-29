@@ -2668,15 +2668,12 @@ void DBImpl::background_pull_gauge_statistics() {
       continue;
     }
     // we get all data we need in thread local sv to avoid mutex_ hold
-    SuperVersion *sv = sub_table->GetThreadLocalSuperVersion(&mutex_);
-    auto defer_return_sv = util::defer([&sub_table, &sv] {
+    SuperVersion *sv = GetAndRefSuperVersion(sub_table);
+    auto defer_return_sv = util::defer([this, &sub_table, &sv] {
       if (IS_NULL(sub_table)) {
         return;
       }
-      if (!sub_table->ReturnThreadLocalSuperVersion(sv)) {
-        SE_LOG(WARN, "return thread local super version failed",
-               K(sub_table->GetID()));
-      }
+      this->ReturnAndCleanupSuperVersion(sub_table, sv);
     });
     if (IS_NULL(sv->current_meta_)) {
       SE_LOG(WARN, "unexpected error, current meta snapshot must not nullptr",
