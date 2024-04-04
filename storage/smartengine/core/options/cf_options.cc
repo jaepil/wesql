@@ -101,7 +101,6 @@ void MutableCFOptions::Dump() const
   __SE_LOG(INFO, "      level0_layer_num_compaction_trigger: %d", level0_layer_num_compaction_trigger);
   __SE_LOG(INFO, "  level1_extents_major_compaction_trigger: %d", level1_extents_major_compaction_trigger);
   __SE_LOG(INFO, "                    level2_usage_percent: %ld", level2_usage_percent);
-  __SE_LOG(INFO, "                              compression: %d", static_cast<int>(compression));
   __SE_LOG(INFO, "                   scan_add_blocks_limit: %ld", scan_add_blocks_limit);
   __SE_LOG(INFO, "                         bottommost_level: %d", bottommost_level);
   __SE_LOG(INFO, "            compaction_task_extents_limit: %d", compaction_task_extents_limit);

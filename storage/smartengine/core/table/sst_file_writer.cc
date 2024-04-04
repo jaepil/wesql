@@ -98,12 +98,10 @@ Status SstFileWriter::Open(const std::string& file_path) {
   if (!s.ok()) {
     return s;
   }
-  CompressionType compression_type;
+  CompressionType compression_type = kNoCompression;
   if (!r->ioptions.compression_per_level.empty()) {
     // Use the compression of the last level if we have per level compression
     compression_type = *(r->ioptions.compression_per_level.rbegin());
-  } else {
-    compression_type = r->mutable_cf_options.compression;
   }
 
   uint32_t cf_id;

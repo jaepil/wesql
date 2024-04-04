@@ -99,13 +99,6 @@ Status CheckCompressionSupported(const ColumnFamilyOptions& cf_options) {
             " is not linked with the binary.");
       }
     }
-  } else {
-    if (!CompressionTypeSupported(cf_options.compression)) {
-      return Status::InvalidArgument(
-          "Compression type " +
-          CompressionTypeToString(cf_options.compression) +
-          " is not linked with the binary.");
-    }
   }
   return Status::OK();
 }

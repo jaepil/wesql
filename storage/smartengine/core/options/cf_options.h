@@ -68,7 +68,6 @@ struct MutableCFOptions {
         level1_extents_major_compaction_trigger(
             options.level1_extents_major_compaction_trigger),
         level2_usage_percent(options.level2_usage_percent),
-        compression(options.compression),
         background_disable_merge(false),
         scan_add_blocks_limit(options.scan_add_blocks_limit),
         bottommost_level(options.bottommost_level),
@@ -85,8 +84,6 @@ struct MutableCFOptions {
         level0_layer_num_compaction_trigger(0),
         level1_extents_major_compaction_trigger(0),
         level2_usage_percent(0),
-        compression(util::Snappy_Supported() ? kSnappyCompression
-                                             : kNoCompression),
         background_disable_merge(false),
         scan_add_blocks_limit(0),
         bottommost_level(2),
@@ -109,7 +106,6 @@ struct MutableCFOptions {
   int64_t level2_usage_percent;
 
   // Misc options
-  CompressionType compression;
   bool background_disable_merge;
 
   uint64_t scan_add_blocks_limit;

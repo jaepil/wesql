@@ -170,22 +170,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // Dynamically changeable through SetOptions() API
   int flush_delete_record_trigger = 700000;
 
-  // Compress blocks using the specified compression algorithm.  This
-  // parameter can be changed dynamically.
-  //
-  // Default: kSnappyCompression, if it's supported. If snappy is not linked
-  // with the library, the default is kNoCompression.
-  //
-  // Typical speeds of kSnappyCompression on an Intel(R) Core(TM)2 2.4GHz:
-  //    ~200-500MB/s compression
-  //    ~400-800MB/s decompression
-  // Note that these speeds are significantly faster than most
-  // persistent storage speeds, and therefore it is typically never
-  // worth switching to kNoCompression.  Even if the input data is
-  // incompressible, the kSnappyCompression implementation will
-  // efficiently detect that and will switch to uncompressed mode.
-  CompressionType compression;
-
   // different options for compression algorithms
   CompressionOptions compression_opts;
 
@@ -570,8 +554,6 @@ struct Options : public DBOptions, public ColumnFamilyOptions {
       : DBOptions(db_options), ColumnFamilyOptions(column_family_options) {}
 
   void Dump() const;
-
-  void DumpCFOptions() const;
 };
 
 //

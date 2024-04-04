@@ -54,7 +54,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
 }
 
 ColumnFamilyOptions::ColumnFamilyOptions()
-    : compression(Snappy_Supported() ? kSnappyCompression : kNoCompression) {
+{
 #ifndef NDEBUG
       table_factory = std::shared_ptr<TableFactory>(new table::ExtentBasedTableFactory());
 #endif
@@ -68,7 +68,6 @@ ColumnFamilyOptions::ColumnFamilyOptions(const Options& options)
       compaction_delete_percent(options.compaction_delete_percent),
       flush_delete_percent_trigger(options.flush_delete_percent_trigger),
       flush_delete_record_trigger(options.flush_delete_record_trigger),
-      compression(options.compression),
       compression_opts(options.compression_opts),
       level0_file_num_compaction_trigger(
           options.level0_file_num_compaction_trigger),
@@ -176,9 +175,6 @@ void ColumnFamilyOptions::Dump() const {
           INFO, "                   Options.compression[%d]: %s", i,
           CompressionTypeToString(compression_per_level[i]).c_str());
     }
-  } else {
-    __SE_LOG(INFO, "                      Options.compression: %s",
-                     CompressionTypeToString(compression).c_str());
   }
   __SE_LOG(INFO, " Options.min_write_buffer_number_to_merge: %d",
                    min_write_buffer_number_to_merge);
@@ -211,8 +207,6 @@ void Options::Dump() const
   DBOptions::Dump();
   ColumnFamilyOptions::Dump();
 }
-
-void Options::DumpCFOptions() const { ColumnFamilyOptions::Dump(); }
 
 ReadOptions::ReadOptions()
     : verify_checksums(true),

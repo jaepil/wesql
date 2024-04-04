@@ -125,8 +125,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
       mutable_cf_options.level2_usage_percent;
 
   // Misc options
-  cf_opts.compression = mutable_cf_options.compression;
-
   cf_opts.table_factory = options.table_factory;
   cf_opts.scan_add_blocks_limit = options.scan_add_blocks_limit;
   cf_opts.bottommost_level = options.bottommost_level;
@@ -272,19 +270,18 @@ bool ParseOptionHelper(char* opt_address, const OptionType& opt_type,
 
 }  // anonymouse namespace
 
-CompressionType get_compression_type(const ImmutableCFOptions &ioptions,
-                                     const MutableCFOptions &mutable_cf_options,
-                                     const int level)
+CompressionType get_compression_type(const ImmutableCFOptions &ioptions, const int level)
 {
+  CompressionType compression_type = kNoCompression;
   // If the user has specified a different compression level for each level,
   // then pick the compression for that level.
   if (!ioptions.compression_per_level.empty()) {
     assert(level >= 0 && level <= 2);
     const int n = static_cast<int>(ioptions.compression_per_level.size()) - 1;
-    return ioptions.compression_per_level[std::max(0, std::min(level, n))];
-  } else {
-    return mutable_cf_options.compression;
-  }  
+    compression_type = ioptions.compression_per_level[std::max(0, std::min(level, n))];
+  }
+
+  return compression_type;
 }
 
 bool GetVectorCompressionType(const std::string& value,

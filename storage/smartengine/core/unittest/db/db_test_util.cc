@@ -224,9 +224,6 @@ Options DBTestBase::CurrentOptions(
     case kPartitionedFilterWithNewTableReaderForCompactions:
       table_options.filter_policy.reset(NewBloomFilterPolicy(10, false));
       break;
-    case kUncompressed:
-      options.compression = kNoCompression;
-      break;
     case kDBLogDir:
       //options.db_log_dir = alternative_db_log_dir_;
       break;

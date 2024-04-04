@@ -120,7 +120,7 @@ TEST(InMemExtent, sim) {
   builder.reset(ioptions.table_factory->NewTableBuilderExt(
       TableBuilderOptions(
           ioptions, internal_comparator,
-          options.compression, CompressionOptions(),
+          kNoCompression, CompressionOptions(),
           nullptr /* compression_dict */, false /* skip_filters */,
           column_family_name, output_layer_position, false /**is_flush*/),
       0,

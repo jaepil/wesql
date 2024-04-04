@@ -86,7 +86,6 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   // table_options.format_version = args.format_version;
   opt.table_factory.reset(NewExtentBasedTableFactory(table_options));
   opt.disable_auto_compactions = true;
-  opt.compression = args.compression;
   opt.env = Env::Default();
   int db_write_buffer_size = 64 * 1024 * 1024;
   opt.db_write_buffer_size = db_write_buffer_size;
@@ -399,8 +398,7 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
   }
   mini_tables_.space_manager = space_manager_;
   mini_tables_.table_space_id_ = 0;
-  common::CompressionType compression_type = get_compression_type(
-      context_->icf_options_, context_->mutable_cf_options_, level);
+  common::CompressionType compression_type = get_compression_type(context_->icf_options_, level);
   TableBuilderOptions table_builder_opts(context_->icf_options_,
                                          internal_comparator_,
                                          compression_type,

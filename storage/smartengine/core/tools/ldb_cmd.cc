@@ -65,7 +65,6 @@ const std::string LDBCommand::ARG_FROM = "from";
 const std::string LDBCommand::ARG_TO = "to";
 const std::string LDBCommand::ARG_MAX_KEYS = "max_keys";
 const std::string LDBCommand::ARG_BLOOM_BITS = "bloom_bits";
-const std::string LDBCommand::ARG_COMPRESSION_TYPE = "compression_type";
 const std::string LDBCommand::ARG_COMPRESSION_MAX_DICT_BYTES =
     "compression_max_dict_bytes";
 const std::string LDBCommand::ARG_BLOCK_SIZE = "block_size";
@@ -337,7 +336,6 @@ std::vector<std::string> LDBCommand::BuildCmdLineOptions(
                                   ARG_BLOOM_BITS,
                                   ARG_BLOCK_SIZE,
                                   ARG_AUTO_COMPACTION,
-                                  ARG_COMPRESSION_TYPE,
                                   ARG_COMPRESSION_MAX_DICT_BYTES,
                                   ARG_WRITE_BUFFER_SIZE,
                                   ARG_CF_NAME};
@@ -423,32 +421,6 @@ Options LDBCommand::PrepareOptionsForOpenDB() {
   itr = option_map_.find(ARG_AUTO_COMPACTION);
   if (itr != option_map_.end()) {
     opt.disable_auto_compactions = !StringToBool(itr->second);
-  }
-
-  itr = option_map_.find(ARG_COMPRESSION_TYPE);
-  if (itr != option_map_.end()) {
-    std::string comp = itr->second;
-    if (comp == "no") {
-      opt.compression = kNoCompression;
-    } else if (comp == "snappy") {
-      opt.compression = kSnappyCompression;
-    } else if (comp == "zlib") {
-      opt.compression = kZlibCompression;
-    } else if (comp == "bzip2") {
-      opt.compression = kBZip2Compression;
-    } else if (comp == "lz4") {
-      opt.compression = kLZ4Compression;
-    } else if (comp == "lz4hc") {
-      opt.compression = kLZ4HCCompression;
-    } else if (comp == "xpress") {
-      opt.compression = kXpressCompression;
-    } else if (comp == "zstd") {
-      opt.compression = kZSTD;
-    } else {
-      // Unknown compression.
-      exec_state_ =
-          LDBCommandExecuteResult::Failed("Unknown compression level: " + comp);
-    }
   }
 
   int compression_max_dict_bytes;

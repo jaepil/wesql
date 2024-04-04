@@ -94,7 +94,6 @@ struct TestArgs {
     table_options_.block_cache = cache::NewLRUCache(block_cache_size_ == 0 ? 50000 : block_cache_size_, 1);
     options_->table_factory.reset(NewExtentBasedTableFactory(table_options_));
     options_->disable_auto_compactions = true;
-    options_->compression = compression_;
     options_->env = util::Env::Default();
     int db_write_buffer_size = 64 * 1024 * 1024;
     options_->db_write_buffer_size = db_write_buffer_size;
@@ -356,9 +355,7 @@ void InternalIteratorTestBase::open_extent_builder()
   mini_tables_.table_space_id_ = 0;
   cf_desc_.column_family_id_ = 1;
   storage::LayerPosition output_layer_position(level_, 0);
-  common::CompressionType compression_type = get_compression_type(context_->icf_options_,
-                                                          context_->mutable_cf_options_,
-                                                          level_);
+  common::CompressionType compression_type = get_compression_type(context_->icf_options_, level_);
   TableBuilderOptions table_builder_opts(context_->icf_options_,
                                          internal_comparator_,
                                          compression_type,

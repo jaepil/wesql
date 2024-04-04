@@ -600,7 +600,6 @@ TEST_F(DBBlockCacheTest, CompressedCache) {
         table_options.block_cache_compressed = NewLRUCache(8 * 1024 * 1024);
         options.table_factory.reset(
             new table::ExtentBasedTableFactory(table_options));
-        options.compression = kNoCompression;
         break;
       default:
         ASSERT_TRUE(false);

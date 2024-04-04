@@ -49,6 +49,7 @@
 #include "monitoring/statistics.h"
 #include "monitoring/thread_status.h"
 #include "options/options.h"
+#include "options/options_helper.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
 // TODO @zhencheng : use QUERY TRACE to print this.
@@ -205,10 +206,6 @@ DEFINE_int64(numdistinct, 1000,
              "read/write on fewer keys so that gets are more likely to find the"
              " key and puts are more likely to update the same key");
 
-DEFINE_int64(merge_keys, -1,
-             "Number of distinct keys to use for MergeRandom and "
-             "ReadRandomMergeRandom. "
-             "If negative, there will be FLAGS_num keys.");
 DEFINE_int32(num_column_families, 1, "Number of Column Families to use.");
 
 DEFINE_int32(
@@ -390,10 +387,6 @@ DEFINE_bool(use_clock_cache, false,
 DEFINE_bool(use_xcache, false,
             "Replace default LRU block cache with XCache.");
 
-DEFINE_int64(simcache_size, -1,
-             "Number of bytes to use as a simcache of "
-             "uncompressed data. Nagative value disables simcache.");
-
 DEFINE_bool(cache_index_and_filter_blocks, false,
             "Cache index/filter blocks in block cache.");
 
@@ -447,20 +440,6 @@ DEFINE_bool(show_table_properties, false,
 
 DEFINE_string(db, "", "Use the db with the following name.");
 
-// Read cache flags
-
-DEFINE_string(read_cache_path, "",
-              "If not empty string, a read cache will be used in this path");
-
-DEFINE_int64(read_cache_size, 4LL * 1024 * 1024 * 1024,
-             "Maximum size of the read cache");
-
-DEFINE_bool(read_cache_direct_write, true,
-            "Whether to use Direct IO for writing to the read cache");
-
-DEFINE_bool(read_cache_direct_read, true,
-            "Whether to use Direct IO for reading from read cache");
-
 static bool ValidateCacheNumshardbits(const char* flagname, int32_t value) {
   if (value >= 20) {
     fprintf(stderr, "Invalid value for --%s: %d, must be < 20\n", flagname,
@@ -475,7 +454,6 @@ DEFINE_bool(verify_checksum, false,
             " from storage");
 
 DEFINE_bool(statistics, false, "Database statistics");
-DEFINE_string(statistics_string, "", "Serialized statistics string");
 static class std::shared_ptr<Statistics> dbstats;
 
 DEFINE_int64(writes, -1,
@@ -533,12 +511,6 @@ DEFINE_int32(readwritepercent, 90,
              "default value 90 means 90% operations out of all reads and writes"
              " operations are reads. In other words, 9 gets for every 1 put.");
 
-DEFINE_int32(mergereadpercent, 70,
-             "Ratio of merges to merges&reads (expressed"
-             " as percentage) for the ReadRandomMergeRandom workload. The"
-             " default value 70 means 70% out of all read and merge operations"
-             " are merges. In other words, 7 merges for every 3 gets.");
-
 DEFINE_int32(deletepercent, 2,
              "Percentage of deletes out of reads/writes/"
              "deletes (used in RandomWithVerify only). RandomWithVerify "
@@ -550,10 +522,6 @@ DEFINE_uint64(delete_obsolete_files_period_micros, 0,
               "Ignored. Left here for backward compatibility");
 
 DEFINE_int64(range_tombstone_width, 100, "Number of keys in tombstone's range");
-
-DEFINE_int64(max_num_range_tombstones, 0,
-             "Maximum number of range tombstones "
-             "to insert.");
 
 DEFINE_bool(optimistic_transaction_db, false,
             "Open a OptimisticTransactionDB instance. "
@@ -596,34 +564,6 @@ DEFINE_string(
 DEFINE_uint64(fifo_compaction_max_table_files_size_mb, 0,
               "The limit of total table file sizes to trigger FIFO compaction");
 
-static enum CompressionType StringToCompressionType(const char* ctype) {
-  assert(ctype);
-
-  if (!strcasecmp(ctype, "none"))
-    return kNoCompression;
-  else if (!strcasecmp(ctype, "snappy"))
-    return kSnappyCompression;
-  else if (!strcasecmp(ctype, "zlib"))
-    return kZlibCompression;
-  else if (!strcasecmp(ctype, "bzip2"))
-    return kBZip2Compression;
-  else if (!strcasecmp(ctype, "lz4"))
-    return kLZ4Compression;
-  else if (!strcasecmp(ctype, "lz4hc"))
-    return kLZ4HCCompression;
-  else if (!strcasecmp(ctype, "xpress"))
-    return kXpressCompression;
-  else if (!strcasecmp(ctype, "zstd"))
-    return kZSTD;
-
-  fprintf(stdout, "Cannot parse compression type '%s'\n", ctype);
-  return kSnappyCompression;  // default value
-}
-
-DEFINE_string(compression_type, "zlib",
-              "Algorithm to use to compress the database");
-static enum CompressionType FLAGS_compression_type_e = kZlibCompression;
-
 DEFINE_int32(compression_level, -1,
              "Compression level. For zlib this should be -1 for the "
              "default level, or between 0 and 9.");
@@ -644,11 +584,8 @@ static bool ValidateCompressionLevel(const char* flagname, int32_t value) {
 static const bool FLAGS_compression_level_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_compression_level, &ValidateCompressionLevel);
 
-DEFINE_int32(min_level_to_compress, -1,
-             "If non-negative, compression starts"
-             " from this level. Levels with number < min_level_to_compress are"
-             " not compressed. Otherwise, apply compression_type to "
-             "all levels.");
+DEFINE_string(compression_per_level, "kNoCompression:kNoCompression:kNoCompression",
+              "compression alogrithm for each level");
 
 static bool ValidateTableCacheNumshardbits(const char* flagname,
                                            int32_t value) {
@@ -718,9 +655,6 @@ DEFINE_uint64(max_total_wal_size, 0, "Set total max WAL size");
 DEFINE_bool(use_direct_reads, Options().use_direct_reads,
             "Use O_DIRECT for reading data");
 
-DEFINE_string(compaction_fadvice, "NORMAL",
-              "Access pattern advice when a file is compacted");
-
 DEFINE_uint64(bytes_per_sync, Options().bytes_per_sync,
               "Allows OS to incrementally sync SST files to disk while they are"
               " being written, in the background. Issue one request for every"
@@ -769,10 +703,6 @@ DEFINE_int32(key_id_group_size, 32,
 DEFINE_bool(enable_io_prio, false,
             "Lower the background flush/compaction "
             "threads' IO priority");
-DEFINE_bool(identity_as_first_hash, false,
-            "the first hash function of cuckoo "
-            "table becomes an identity function. This is only valid when key "
-            "is 8 bytes");
 
 DEFINE_int32(stats_dump_period_sec, 600,
              "Dump status in every stats_dump_period_sec");
@@ -807,11 +737,6 @@ DEFINE_bool(use_plain_table, false,
 DEFINE_bool(use_cuckoo_table, false, "if use cuckoo table format");
 DEFINE_double(cuckoo_hash_ratio, 0.9, "Hash ratio for Cuckoo SST table.");
 DEFINE_bool(use_block_based_table, false, "if use block based table format");
-DEFINE_bool(use_extent_based_table, true, "if use extent based table format");
-DEFINE_bool(use_hash_search, false,
-            "if use kHashSearch "
-            "instead of kBinarySearch. "
-            "This is valid if only we use BlockTable");
 DEFINE_bool(use_block_based_filter, false,
             "if use kBlockBasedFilter "
             "instead of kFullFilter for filter block. "
@@ -829,9 +754,6 @@ static const bool FLAGS_cache_numshardbits_dummy __attribute__((unused)) =
 
 static const bool FLAGS_readwritepercent_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_readwritepercent, &ValidateInt32Percent);
-
-DEFINE_int32(disable_seek_compaction, false,
-             "Not used, left here for backwards compatibility");
 
 static const bool FLAGS_deletepercent_dummy __attribute__((unused)) =
     RegisterFlagValidator(&FLAGS_deletepercent, &ValidateInt32Percent);
@@ -2096,7 +2018,6 @@ class Benchmark {
   int key_size_;
   int64_t entries_per_batch_;
   int64_t range_tombstone_width_;
-  int64_t max_num_range_tombstones_;
   WriteOptions write_options_;
   Options open_options_;  // keep options around to properly destroy db later
   int64_t reads_;
@@ -2104,7 +2025,6 @@ class Benchmark {
   double read_random_exp_range_;
   int64_t writes_;
   int64_t readwrites_;
-  int64_t merge_keys_;
   bool report_file_operations_;
 
   // Used for stress test.
@@ -2144,42 +2064,6 @@ class Benchmark {
     return true;
   }
 
-  inline bool CompressSlice(const Slice& input, std::string* compressed) {
-    bool ok = true;
-    switch (FLAGS_compression_type_e) {
-      case kSnappyCompression:
-        ok = Snappy_Compress(Options().compression_opts, input.data(),
-                             input.size(), compressed);
-        break;
-      case kZlibCompression:
-        ok = Zlib_Compress(Options().compression_opts, 2, input.data(),
-                           input.size(), compressed);
-        break;
-      case kBZip2Compression:
-        ok = BZip2_Compress(Options().compression_opts, 2, input.data(),
-                            input.size(), compressed);
-        break;
-      case kLZ4Compression:
-        ok = LZ4_Compress(Options().compression_opts, 2, input.data(),
-                          input.size(), compressed);
-        break;
-      case kLZ4HCCompression:
-        ok = LZ4HC_Compress(Options().compression_opts, 2, input.data(),
-                            input.size(), compressed);
-        break;
-      case kXpressCompression:
-        ok = XPRESS_Compress(input.data(), input.size(), compressed);
-        break;
-      case kZSTD:
-        ok = ZSTD_Compress(Options().compression_opts, input.data(),
-                           input.size(), compressed);
-        break;
-      default:
-        ok = false;
-    }
-    return ok;
-  }
-
   void PrintHeader() {
     PrintEnvironment();
     fprintf(stdout, "Keys:       %d bytes each\n", FLAGS_key_size);
@@ -2211,9 +2095,6 @@ class Benchmark {
 #endif
     }
 
-    auto compression = CompressionTypeToString(FLAGS_compression_type_e);
-    fprintf(stdout, "Compression: %s\n", compression.c_str());
-
     switch (FLAGS_rep_factory) {
       case kSkipList:
         fprintf(stdout, "Memtablerep: skip_list\n");
@@ -2224,7 +2105,6 @@ class Benchmark {
     }
     fprintf(stdout, "Perf Level: %d\n", FLAGS_perf_level);
 
-    PrintWarnings(compression.c_str());
     fprintf(stdout, "------------------------------------------------\n");
   }
 
@@ -2238,21 +2118,6 @@ class Benchmark {
     fprintf(stdout,
             "WARNING: Assertions are enabled; benchmarks unnecessarily slow\n");
 #endif
-    if (FLAGS_compression_type_e != kNoCompression) {
-      // The test string should not be too small.
-      const int len = FLAGS_block_size;
-      std::string input_str(len, 'y');
-      std::string compressed;
-      bool result = CompressSlice(Slice(input_str), &compressed);
-
-      if (!result) {
-        fprintf(stdout, "WARNING: %s compression is not enabled\n",
-                compression);
-      } else if (compressed.size() >= input_str.size()) {
-        fprintf(stdout, "WARNING: %s compression is not effective\n",
-                compression);
-      }
-    }
   }
 
 // Current the following isn't equivalent to OS_LINUX.
@@ -2368,7 +2233,6 @@ class Benchmark {
             (FLAGS_writes < 0 && FLAGS_reads < 0)
                 ? FLAGS_num
                 : ((FLAGS_writes > FLAGS_reads) ? FLAGS_writes : FLAGS_reads)),
-        merge_keys_(FLAGS_merge_keys < 0 ? FLAGS_num : FLAGS_merge_keys),
         report_file_operations_(FLAGS_report_file_operations),
         STRESS_VALUE_SIZE(value_size_ + sizeof(uint32_t) * 3),
         STRESS_DATA_SIZE(value_size_ + sizeof(uint32_t) * 2),
@@ -2499,7 +2363,6 @@ class Benchmark {
       key_size_ = FLAGS_key_size;
       entries_per_batch_ = FLAGS_batch_size;
       range_tombstone_width_ = FLAGS_range_tombstone_width;
-      max_num_range_tombstones_ = FLAGS_max_num_range_tombstones;
       write_options_ = WriteOptions();
       read_random_exp_range_ = FLAGS_read_random_exp_range;
       if (FLAGS_sync) {
@@ -2654,10 +2517,6 @@ class Benchmark {
         method = &Benchmark::xxHash;
       } else if (name == "acquireload") {
         method = &Benchmark::AcquireLoad;
-      } else if (name == "compress") {
-        method = &Benchmark::Compress;
-      } else if (name == "uncompress") {
-        method = &Benchmark::Uncompress;
       } else if (name == "randomtransaction") {
         method = &Benchmark::RandomTransaction;
         post_process_method = &Benchmark::RandomTransactionVerify;
@@ -2686,11 +2545,6 @@ class Benchmark {
         fresh_db = false;
         stress_init(fresh_db);
         num_threads = FLAGS_threads;
-      } else if (name == "meta_check") {
-        // stress for storage meta operation
-        method = &Benchmark::meta_check;
-        // only one thread
-        num_threads = 1; 
       } else if (name == "timeseries") {
         timestamp_emulator_.reset(new TimestampEmulator());
         if (FLAGS_expire_style == "compaction_filter") {
@@ -2959,104 +2813,6 @@ class Benchmark {
     if (ptr == nullptr) exit(1);  // Disable unused variable warning.
   }
 
-  void Compress(ThreadState* thread) {
-    RandomGenerator gen;
-    Slice input = gen.Generate(FLAGS_block_size);
-    int64_t bytes = 0;
-    int64_t produced = 0;
-    bool ok = true;
-    std::string compressed;
-
-    // Compress 1G
-    while (ok && bytes < int64_t(1) << 30) {
-      compressed.clear();
-      ok = CompressSlice(input, &compressed);
-      produced += compressed.size();
-      bytes += input.size();
-      thread->stats.FinishedOps(nullptr, nullptr, 1, kCompress);
-    }
-
-    if (!ok) {
-      thread->stats.AddMessage("(compression failure)");
-    } else {
-      char buf[340];
-      snprintf(buf, sizeof(buf), "(output: %.1f%%)",
-               (produced * 100.0) / bytes);
-      thread->stats.AddMessage(buf);
-      thread->stats.AddBytes(bytes);
-    }
-  }
-
-  void Uncompress(ThreadState* thread) {
-    RandomGenerator gen;
-    Slice input = gen.Generate(FLAGS_block_size);
-    std::string compressed;
-
-    bool ok = CompressSlice(input, &compressed);
-    int64_t bytes = 0;
-    int decompress_size;
-    while (ok && bytes < 1024 * 1048576) {
-      char* uncompressed = nullptr;
-      switch (FLAGS_compression_type_e) {
-        case kSnappyCompression: {
-          // get size and allocate here to make comparison fair
-          size_t ulength = 0;
-          if (!Snappy_GetUncompressedLength(compressed.data(),
-                                            compressed.size(), &ulength)) {
-            ok = false;
-            break;
-          }
-          uncompressed = new char[ulength];
-          ok = Snappy_Uncompress(compressed.data(), compressed.size(),
-                                 uncompressed);
-          break;
-        }
-        case kZlibCompression:
-          uncompressed = Zlib_Uncompress(compressed.data(), compressed.size(),
-                                         &decompress_size, 2);
-          ok = uncompressed != nullptr;
-          break;
-        case kBZip2Compression:
-          uncompressed = BZip2_Uncompress(compressed.data(), compressed.size(),
-                                          &decompress_size, 2);
-          ok = uncompressed != nullptr;
-          break;
-        case kLZ4Compression:
-          uncompressed = LZ4_Uncompress(compressed.data(), compressed.size(),
-                                        &decompress_size, 2);
-          ok = uncompressed != nullptr;
-          break;
-        case kLZ4HCCompression:
-          uncompressed = LZ4_Uncompress(compressed.data(), compressed.size(),
-                                        &decompress_size, 2);
-          ok = uncompressed != nullptr;
-          break;
-        case kXpressCompression:
-          uncompressed = XPRESS_Uncompress(compressed.data(), compressed.size(),
-                                           &decompress_size);
-          ok = uncompressed != nullptr;
-          break;
-        case kZSTD:
-          uncompressed = ZSTD_Uncompress(compressed.data(), compressed.size(),
-                                         &decompress_size);
-          ok = uncompressed != nullptr;
-          break;
-        default:
-          ok = false;
-      }
-      delete[] uncompressed;
-      bytes += input.size();
-      thread->stats.FinishedOps(nullptr, nullptr, 1, kUncompress);
-    }
-
-    if (!ok) {
-      thread->stats.AddMessage("(compression failure)");
-    } else {
-      thread->stats.AddBytes(bytes);
-    }
-  }
-
-
   void InitializeOptionsFromFlags(Options* opts) {
     printf("Initializing SE Options from command-line flags\n");
     Options& options = *opts;
@@ -3121,7 +2877,6 @@ class Benchmark {
     block_based_options.filter_policy = filter_policy_;
     block_based_options.format_version = 2;
     block_based_options.read_amp_bytes_per_bit = FLAGS_read_amp_bytes_per_bit;
-    assert(FLAGS_use_extent_based_table);
     block_based_options.format_version = 3;
     options.table_factory.reset(table::NewExtentBasedTableFactory(block_based_options));
     options.level0_file_num_compaction_trigger =
@@ -3131,16 +2886,11 @@ class Benchmark {
     options.level1_extents_major_compaction_trigger =
         FLAGS_level1_extents_major_compaction_trigger;
     options.level2_usage_percent = FLAGS_level2_usage_percent;
-    options.compression = FLAGS_compression_type_e;
     options.compression_opts.level = FLAGS_compression_level;
     options.compression_opts.max_dict_bytes = FLAGS_compression_max_dict_bytes;
     options.max_total_wal_size = FLAGS_max_total_wal_size;
     options.scan_add_blocks_limit = FLAGS_scan_add_blocks_limit;
-    if (FLAGS_min_level_to_compress >= 0) {
-      for (int i = 0; i < FLAGS_min_level_to_compress; i++) {
-        options.compression_per_level[i] = kNoCompression;
-      }
-    }
+    common::GetVectorCompressionType(std::string(FLAGS_compression_per_level), &(options.compression_per_level));
     options.allow_concurrent_memtable_write =
         FLAGS_allow_concurrent_memtable_write;
     options.table_cache_numshardbits = FLAGS_table_cache_numshardbits;
@@ -6386,285 +6136,6 @@ class Benchmark {
     }
   }
 
-  int insert_one_entry(StorageManager *sm, int32_t level, 
-    int64_t seq, int64_t key, ThreadState *Thread, bool del, bool recover, int64_t max) {
-    //std::unique_ptr<WriteBatch> batch(new WriteBatch());
-    /*
-    Slice largest;
-    Slice smallest;
-    char end_key[16] = {0}; // fake internal key
-    char start_key[16] = {0};
-    ChangeInfo info;           
-    MetaKey meta_key;
-    MetaValue meta_value;
-    ExtentId extentid;
-    autovector<ExtentId> extentids;
-    int32_t size_1 = 0;
-    int32_t size_2 = 0;
-    // small key and value
-    char buf[1024];
-    int ret = Status::kOk;
-    ExtentMeta extentmeta;
-    //autovector<ExtentMeta> extentmetas;
-    std::chrono::nanoseconds diff;
-    std::chrono::high_resolution_clock::time_point begin, over;
-
-    int64_t pos = 0;
-    if (0 == max) {
-      util::encode_fixed_int64(end_key, 16, pos, 10 * (key + 1));
-      largest = Slice(end_key, 16);
-      meta_key = MetaKey(0, level, seq, largest); 
-      pos = 0;
-      util::encode_fixed_int64(start_key, 16, pos, 10 * key + 1);
-      smallest = Slice(start_key, 16);
-
-      extentid = ExtentId(key / 512, key % 512);
-      meta_value = MetaValue(smallest, extentid);
-      size_1 = meta_key.get_serialize_size();
-      size_2 = meta_value.get_serialize_size();
-      pos = 0; 
-      ret = meta_key.serialize(buf, size_1, pos);
-      if (ret != Status::kOk) {
-        fprintf(stderr, "Serialize key failed\n");
-        return ret;
-      } 
-      ret = meta_value.serialize(buf, size_1 + size_2, pos);
-      if (ret != Status::kOk) {
-        fprintf(stderr, "Serialize value failed\n");
-        return ret;
-      }
-      //extentmetas.clear();
-      if (del) {
-        info.batch_.Delete(Slice(buf, size_1));
-      } else {
-        info.batch_.Put(Slice(buf, size_1), Slice(buf + size_1, size_2)); 
-        extentmeta.extent_id_ = extentid;
-        extentmeta.largest_key_.DecodeFrom(largest);
-        extentmeta.smallest_key_.DecodeFrom(smallest);
-        info.extent_meta_.emplace_back(extentmeta);
-      }
-    } else {
-      for (key = 0; key < max; key++) {
-        pos = 0;
-        util::encode_fixed_int64(end_key, 16, pos, 10 * (key + 1));
-        largest = Slice(end_key, 16);
-        meta_key = MetaKey(0, level, seq, largest); 
-        pos = 0;
-        util::encode_fixed_int64(start_key, 16, pos, 10 * key + 1);
-        smallest = Slice(start_key, 16);
-        extentid = ExtentId(key / 512, key % 512);
-        meta_value = MetaValue(smallest, extentid);
-        size_1 = meta_key.get_serialize_size();
-        size_2 = meta_value.get_serialize_size();
-        pos = 0; 
-        ret = meta_key.serialize(buf, size_1, pos);
-        if (ret != Status::kOk) {
-          fprintf(stderr, "Serialize key failed\n");
-          return ret;
-        } 
-        ret = meta_value.serialize(buf, size_1 + size_2, pos);
-        if (ret != Status::kOk) {
-          fprintf(stderr, "Serialize value failed\n");
-          return ret;
-        }
-        if (del) {
-          info.batch_.Delete(Slice(buf, size_1));
-        } else {
-          info.batch_.Put(Slice(buf, size_1), Slice(buf + size_1, size_2)); 
-          extentmeta.extent_id_ = extentid;
-          extentmeta.largest_key_.DecodeFrom(largest);
-          extentmeta.smallest_key_.DecodeFrom(smallest);
-          info.extent_meta_.emplace_back(extentmeta);
-        }
-      }
-    }
-    //info = ChangeInfo(*batch, extentmetas);
-    begin = std::chrono::high_resolution_clock::now();
-    ret = sm->apply(info, recover); // recover = true don't check extent meta
-    over = std::chrono::high_resolution_clock::now();
-    diff = std::chrono::duration_cast<std::chrono::nanoseconds>(over - begin); 
-    Thread->stats.finished_ops(1, diff);
-    if (ret != Status::kOk) {
-      fprintf(stderr, "Apply meta failed\n");
-      return ret;
-    }
-    return ret;
-    */
-    return 0;
-  }
-
-  int search_one_key(StorageManager *sm, int64_t key, 
-                     int32_t &sorted_run, ThreadState *Thread) {
-    /*
-    char search_key[16] = {0};
-    const Snapshot *meta = sm->get_current_version();
-    std::vector<MetaEntry> chosen;
-    Arena arena;
-    Status s;
-    // search 100000 times
-    std::chrono::nanoseconds diff;
-    std::chrono::high_resolution_clock::time_point begin, over;
-
-    int64_t pos = 0;
-    util::encode_fixed_int64(search_key, 16, pos, key * 10 + 2);
-    chosen.clear();
-    begin = std::chrono::high_resolution_clock::now();
-    s = sm->search(Slice(search_key, 16), 0, meta, chosen, arena, sorted_run);
-    over = std::chrono::high_resolution_clock::now(); 
-    if (!s.ok()) {
-      fprintf(stderr, "Search storage manager failed %d\n", s.code());
-      return s.code();
-    }
-    if (chosen.empty()) {
-      fprintf(stderr, "Can't find the extent of key %ld\n", key);
-      return s.code();
-    } else {
-      std::vector<MetaEntry>::iterator meta_iter = chosen.begin();
-      if (meta_iter->value_.extent_id_.file_number != static_cast<int32_t>(key / 512) || 
-          meta_iter->value_.extent_id_.offset != static_cast<int64_t>(key % 512)) {
-        fprintf(stderr, "Find the wrong extent key %lu, Extent(%d, %d)\n", 
-                key, meta_iter->value_.extent_id_.file_number, meta_iter->value_.extent_id_.offset);
-        return s.code();
-      }
-      diff = std::chrono::duration_cast<std::chrono::nanoseconds>(over - begin);
-      Thread->stats.finished_ops(1, diff);
-    }
-    return s.code();
-    */
-    return 0;
-  }
-
-  void meta_check(ThreadState *Thread) {
-    /*
-    fprintf(stdout, "\n\nPrepare 5000000 meta entries all in level 1:\n");
-    int64_t n_meta_entries = 5000000; // 5M meta entries = 10T user data
-    int64_t stage = 0;
-    if (FLAGS_num_column_families <= 1) {
-      fprintf(stderr, 
-              "The column families not set correctly, please set num_column_families=2\n");
-      return;
-    }
-    if (db_.db != nullptr) {
-      db_.CreateNewCf(open_options_, stage);
-    } else {
-      fprintf(stderr, "db not create yet\n");
-      return;
-    }
-    size_t id = 0;
-    DBWithColumnFamilies* db_with_cfh = SelectDBWithCfh(id);
-    if (nullptr == db_with_cfh) {
-      fprintf(stderr, "Get the DBWithColumnFamilies failed\n");
-      return;
-    }
-    ColumnFamilyData *cfd = db_with_cfh->get_cfd(0);
-    if (nullptr == cfd) {
-      fprintf(stderr, "Get the ColumnFamilyData failed\n");
-      return;
-    }
-    StorageManager *sm = cfd->get_storage_manager();
-    if (nullptr == sm) {
-      fprintf(stderr, "Get the StorageManager failed");
-      return;
-    }
-    // prepare level1 meta data
-    int32_t ret = Status::kOk;
-    for (int64_t i = 0; i < n_meta_entries; i++) {
-      ret = insert_one_entry(sm, 1, 0, i, Thread, false, false, 0);
-      if (Status::kOk != ret) {
-        return;
-      } 
-      if (i > 0 && 0 == (i % 100000)) {
-        fprintf(stdout, "%ld ins\n", i);
-        fflush(stdout);
-      }
-    }
-    fprintf(stdout, "\nInsert %lu entries to storage manager\n", 
-            sm->get_mem_table_level2()->num_entries() );
-    Thread->stats.Report("meta insert");
-
-    Thread->stats.Start(-1);
-    // search level1
-    fprintf(stdout, "\n\nSearch 1000000 times of random key:\n");
-    uint64_t key = 0;
-    int32_t sorted_run = 0;
-
-    for (int64_t i = 0; i < 100000; i++) {
-      key = Thread->rand.Next() % n_meta_entries;
-      ret = search_one_key(sm, key, sorted_run, Thread);
-      if (ret != Status::kOk) {
-        return;
-      }  
-    }
-    Thread->stats.Report("meta search only level1");
-
-    // L0 and L1 all have data 
-    // different memtable size and different L0 levels
-    // memtable 128M, 1G, 8G (64, 512, 4096 extents)
-    // L0 level 4, 20, 100
-    std::string name;
-    for (int32_t l = 4; l <= 100; l *= 5) {
-      for (int32_t m = 64; m <= 4096; m *= 8) {
-        // prepare L0 data. every L0 layer cover the beginning range
-        for (int32_t i = 0; i < l; i++) {
-          ret = insert_one_entry(sm, 0, i + 1, 0, Thread, false, true, m);
-          if (ret != Status::kOk) {
-            return;
-          } 
-        }
-
-        // search only in level1
-        Thread->stats.Start(-1);
-        for (int64_t i = 0; i < 10000; i++) {
-          key = (Thread->rand.Next() % (n_meta_entries - m)) + m;
-          sorted_run = 0;
-          ret = search_one_key(sm, key, sorted_run, Thread); 
-          if (ret != Status::kOk) {
-            return;
-          }
-        }
-        name = "Random meta search only L1 with L0 " + 
-               std::to_string(l) + " levels " + 
-               std::to_string(m) +" extents/level";
-        Thread->stats.Report(name);
-
-        // search through level0 to level1
-        Thread->stats.Start(-1);        
-        for (int64_t i = 0; i < 10000; i++) {
-          key = (Thread->rand.Next() % m);
-          sorted_run = 0;
-          // up to down
-          while (sorted_run < l) {
-            ret = search_one_key(sm, key, sorted_run, Thread);
-            sorted_run++;
-          }
-        }
-        name = "Random meta search L0 with L0 " + 
-               std::to_string(l) + " levels " + 
-               std::to_string(m) +" extents/level";
-        Thread->stats.adjust_ops(l + 1); // searched l + 1 levels
-        Thread->stats.Report(name);
-
-        // cleanup
-        fprintf(stdout, "\nDelete the L0 entries ...\n");
-        for (int32_t i = 0; i < l; i++) {
-          for (int32_t j = 0; j < m; j++) {
-            ret = insert_one_entry(sm, 0, i + 1, j, Thread, true, true, 0);
-            if (ret != Status::kOk) {
-              return;
-            } 
-          }
-        }
-        fprintf(stdout, "Recycle delete entries ...\n");
-        ret = sm->recycle_delete_entries(
-              sm->get_current_version()->GetSequenceNumber());
-        if (ret != Status::kOk) {
-          fprintf(stderr, "Recycle delete entries failed");
-          return;
-        } 
-      }
-    }
-    */
-  }
 };
 
 thread_local int32_t Benchmark::stress_cf_id_ = -1;
@@ -6681,9 +6152,6 @@ int db_bench_tool(int argc, char** argv) {
   if (FLAGS_statistics) {
     dbstats = CreateDBStatistics();
   }
-
-  FLAGS_compression_type_e =
-      StringToCompressionType(FLAGS_compression_type.c_str());
 
   FLAGS_rep_factory = StringToRepFactory(FLAGS_memtablerep.c_str());
 
@@ -6702,16 +6170,6 @@ int db_bench_tool(int argc, char** argv) {
     default_db_path += "/dbbench";
     FLAGS_db = default_db_path;
   }
-  // initialize logger:::Logger
-  /*
-  if (!logger::Logger::get_log().is_inited()) {
-    std::ostringstream oss;
-    oss << FLAGS_db << "/Log";
-    auto log_level = static_cast<logger::InfoLogLevel>(FLAGS_info_log_level);
-    logger::Logger::get_log().init(oss.str().c_str(), log_level,
-                                       256 * 1024 * 1024);
-  }
-  */
 
   if (FLAGS_stats_interval_seconds > 0) {
     // When both are set then FLAGS_stats_interval determines the frequency

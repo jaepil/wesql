@@ -1752,7 +1752,6 @@ class StressTest {
     options_.use_direct_reads = FLAGS_use_direct_reads;
     options_.level0_file_num_compaction_trigger =
         FLAGS_level0_file_num_compaction_trigger;
-    options_.compression = FLAGS_compression_type_e;
     options_.allow_concurrent_memtable_write =
         FLAGS_allow_concurrent_memtable_write;
 

@@ -135,7 +135,6 @@ int GeneralCompaction::open_extent() {
   }
 
   CompressionType compression_type = get_compression_type(*(context_.cf_options_),
-                                                          *(context_.mutable_cf_options_),
                                                           context_.output_level_);
   TableBuilderOptions table_builder_opts(*(context_.cf_options_),
                                          *(context_.internal_comparator_),

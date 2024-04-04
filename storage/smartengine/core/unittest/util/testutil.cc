@@ -259,9 +259,6 @@ void RandomInitCFOptions(ColumnFamilyOptions* cf_opt, Random* rnd) {
 
   // uint64_t options
   static const uint64_t uint_max = static_cast<uint64_t>(UINT_MAX);
-
-  // custom typed options
-  cf_opt->compression = RandomCompressionType(rnd);
 }
 
 Status DestroyDir(Env* env, const std::string& dir) {

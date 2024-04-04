@@ -102,9 +102,7 @@ bool GetVectorCompressionType(const std::string& value,
 // A helper function to parse CompressionOptions from string
 bool GetCompressionOptions(const std::string& value, CompressionOptions* out);
 
-CompressionType get_compression_type(const ImmutableCFOptions &ioptions,
-                                     const MutableCFOptions &mutable_cf_options,
-                                     const int level);
+CompressionType get_compression_type(const ImmutableCFOptions &ioptions, const int level);
 
 static std::unordered_map<std::string, OptionTypeInfo> db_options_type_info = {
     /*
@@ -358,10 +356,6 @@ static std::unordered_map<std::string, OptionTypeInfo> cf_options_type_info = {
      {offset_of(&ColumnFamilyOptions::flush_delete_record_trigger),
       OptionType::kInt, OptionVerificationType::kNormal, true,
       offsetof(struct MutableCFOptions, flush_delete_record_trigger)}},
-    {"compression",
-     {offset_of(&ColumnFamilyOptions::compression),
-      OptionType::kCompressionType, OptionVerificationType::kNormal, true,
-      offsetof(struct MutableCFOptions, compression)}},
     {"compression_per_level",
      {offset_of(&ColumnFamilyOptions::compression_per_level),
       OptionType::kVectorCompressionType, OptionVerificationType::kNormal,

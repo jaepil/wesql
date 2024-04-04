@@ -122,7 +122,7 @@ CompressionType GetCompressionFlush(
     // For leveled compress when min_level_to_compress != 0.
     return ioptions.compression_per_level[level];
   } else {
-    return mutable_cf_options.compression;
+    return kNoCompression;
   }
 }
 

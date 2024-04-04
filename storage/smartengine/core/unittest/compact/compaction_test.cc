@@ -144,13 +144,10 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   std::map<std::string, std::string>::const_iterator itr;
 
   BlockBasedTableOptions table_options;
-  // table_options.filter_policy.reset(NewBloomFilterPolicy(10));
   int block_size = 16 * 1024;
   table_options.block_size = block_size;
-  // table_options.format_version = args.format_version;
   opt.table_factory.reset(NewExtentBasedTableFactory(table_options));
   opt.disable_auto_compactions = true;
-  opt.compression = args.compression;
   opt.env = Env::Default();
   int db_write_buffer_size = 64 * 1024 * 1024;
   opt.db_write_buffer_size = db_write_buffer_size;
@@ -168,17 +165,12 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   assert(wb != nullptr);
   // no free here ...
   opt.write_buffer_manager.reset(wb);
-
-  //DBOptions db_options(opt);
-  //CreateLoggerFromOptions(db_path_, db_options, &opt.info_log);
 }
 
 Context *get_default_context(const TestArgs &args) {
   common::Options *opt = new common::Options();
-//  common::Options *opt = ALLOC_OBJECT(Options, alloc_);
   build_default_options(args, *opt);
   Context *context = new Context(*opt);
-//  Context *context = ALLOC_OBJECT(Context, alloc_, *opt);
   return context;
 }
 
@@ -186,10 +178,6 @@ class CompactionTest : public testing::Test {
  public:
   CompactionTest()
       : context_(nullptr),
-        // cache_(NewLRUCache(50000, 16)),
-        // write_buffer_manager_(context_->db_options_.db_write_buffer_size),
-        // env_(context_->options_->env),
-        // dbname_(context_->options_->db_paths[0].path),
         space_manager_(nullptr),
         internal_comparator_(BytewiseComparator()),
         next_file_number_(2),
@@ -197,21 +185,14 @@ class CompactionTest : public testing::Test {
         bg_stopped_(false) {}
 
   void reset() {
-    // Env *env_;
     names_.clear();
     keys_.clear();
-    //space_manager_.reset();
     space_manager_ = nullptr;
     descriptor_log_.reset();
     db_dir = nullptr;
-    // std::string compression_dict_;
     mini_tables_.metas.clear();
     mini_tables_.props.clear();
-//    if (mini_tables_.schema == nullptr) {
-//      mini_tables_.schema = new common::SeSchema;
-//    }
     extent_builder_.reset();
-    // internal_comparator_;
     shutting_down_.store(false);
     table_cache_ = nullptr;
     cache_.reset();
@@ -546,7 +527,6 @@ class CompactionTest : public testing::Test {
     mini_tables_.table_space_id_ = 0;
     
     common::CompressionType compression_type = get_compression_type(context_->icf_options_,
-                                                                    context_->mutable_cf_options_,
                                                                     level);
     TableBuilderOptions table_builder_opts(context_->icf_options_,
                                            internal_comparator_,
