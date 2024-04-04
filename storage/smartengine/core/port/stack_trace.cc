@@ -9,8 +9,7 @@
 //
 #include "port/stack_trace.h"
 
-#if defined(ROCKSDB_LITE) ||                                                  \
-    !(defined(OS_LINUX) || defined(ROCKSDB_BACKTRACE) || defined(OS_MACOSX)) || defined(CYGWIN) || \
+#if !(defined(OS_LINUX) || defined(ROCKSDB_BACKTRACE) || defined(OS_MACOSX)) || defined(CYGWIN) || \
     defined(OS_FREEBSD)
 
 // noop

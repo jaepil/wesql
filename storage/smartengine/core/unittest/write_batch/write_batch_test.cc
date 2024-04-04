@@ -561,7 +561,6 @@ TEST_F(WriteBatchTest, ColumnFamiliesBatchTest) {
       handler.seen);
 }
 
-#ifndef ROCKSDB_LITE
 TEST_F(WriteBatchTest, ColumnFamiliesBatchWithIndexTest) {
   WriteBatchWithIndex batch;
   ColumnFamilyHandleImplDummy zero(0), two(2), three(3), eight(8);
@@ -649,7 +648,6 @@ TEST_F(WriteBatchTest, ColumnFamiliesBatchWithIndexTest) {
       "Put(foo, bar)",
       handler.seen);
 }
-#endif  // !ROCKSDB_LITE
 
 TEST_F(WriteBatchTest, SavePointTest) {
   Status s;

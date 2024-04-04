@@ -5,8 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#ifndef ROCKSDB_LITE
-
 #include "write_batch/write_batch_with_index_internal.h"
 #include "write_batch/write_batch_with_index.h"
 #include "db/column_family.h"
@@ -217,5 +215,3 @@ WriteBatchWithIndexInternal::Result WriteBatchWithIndexInternal::GetFromBatch(
 
 }  //  namespace util
 }  //  namespace smartengine
-
-#endif  // !ROCKSDB_LITE

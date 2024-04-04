@@ -7,8 +7,6 @@
 
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -240,5 +238,3 @@ class TransactionCallbackOnCommitBatch : public common::AsyncCallback {
 
 }  //  namespace util
 }  //  namespace smartengine
-
-#endif  // ROCKSDB_LITE

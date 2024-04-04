@@ -25,17 +25,15 @@
 #include "storage/multi_version_extent_meta_layer.h"
 #include "util/string_util.h"
 
-using namespace smartengine;
+namespace smartengine
+{
 using namespace common;
-using namespace util;
+using namespace storage;
 using namespace table;
+using namespace util;
 
-namespace smartengine {
-namespace db {
-using namespace smartengine::storage;
-
-#ifndef ROCKSDB_LITE
-
+namespace db
+{
 const std::map<LevelStatType, LevelStat> InternalStats::compaction_level_stats =
     {
         {LevelStatType::NUM_FILES, LevelStat{"NumFiles", "Extents"}},
@@ -1470,10 +1468,5 @@ void InternalStats::DumpCFFileHistogram(std::string* value) {
   }
 }
 
-#else
-
-const DBPropertyInfo* GetPropertyInfo(const Slice& property) { return nullptr; }
-
-#endif  // !ROCKSDB_LITE
-}
+}  // namespace db
 }  // namespace smartengine

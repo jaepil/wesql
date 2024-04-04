@@ -17,12 +17,6 @@
 namespace smartengine {
 namespace util {
 
-#ifdef ROCKSDB_LITE
-template <class T, size_t kSize = 8>
-class autovector : public std::vector<T> {
-  using std::vector<T>::vector;
-};
-#else
 // A vector that leverages pre-allocated stack-based array to achieve better
 // performance for array with small amount of items.
 //
@@ -334,6 +328,5 @@ autovector<T, kSize, Mod, AllocatorT>& autovector<T, kSize, Mod, AllocatorT>::as
 
   return *this;
 }
-#endif  // ROCKSDB_LITE
 }  // namespace util
 }  // namespace smartengine

@@ -6,10 +6,8 @@
 //  This source code is licensed under the BSD-style license found in the
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
-
-#ifndef ROCKSDB_LITE
-
 #pragma once
+
 #include <string>
 #include "env/env.h"
 #include "options/options.h"
@@ -109,7 +107,6 @@ class SstFileWriter {
   bool internal_alloc_;
   memory::SimpleAllocator *alloc_;
 };
+
 }  // namespace common
 }  // namespace smartengine
-
-#endif  // !ROCKSDB_LITE

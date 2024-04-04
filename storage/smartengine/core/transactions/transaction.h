@@ -9,8 +9,6 @@
 
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include <string>
 #include <vector>
 #include "db/db.h"
@@ -451,5 +449,3 @@ class Transaction {
 
 }  // namespace util
 }  // namespace smartengine
-
-#endif  // ROCKSDB_LITE

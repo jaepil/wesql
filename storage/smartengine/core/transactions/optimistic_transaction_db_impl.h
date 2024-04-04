@@ -4,7 +4,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #pragma once
-#ifndef ROCKSDB_LITE
 
 #include "options/options.h"
 #include "db/db.h"
@@ -37,4 +36,3 @@ class OptimisticTransactionDBImpl : public OptimisticTransactionDB {
 
 }  //  namespace util
 }  //  namespace smartengine
-#endif  // ROCKSDB_LITE

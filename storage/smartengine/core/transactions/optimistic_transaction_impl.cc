@@ -5,8 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#ifndef ROCKSDB_LITE
-
 #include "transactions/optimistic_transaction_impl.h"
 
 #include <algorithm>
@@ -143,5 +141,3 @@ Status OptimisticTransactionImpl::SetName(const TransactionName& name) {
 
 }  //  namespace util
 }  //  namespace smartengine
-
-#endif  // ROCKSDB_LITE

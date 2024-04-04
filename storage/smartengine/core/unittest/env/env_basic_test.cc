@@ -90,12 +90,9 @@ INSTANTIATE_TEST_CASE_P(EnvDefault, EnvMoreTestWithParam,
 static std::unique_ptr<Env> mock_env(new MockEnv(Env::Default()));
 INSTANTIATE_TEST_CASE_P(MockEnv, EnvBasicTestWithParam,
                         ::testing::Values(mock_env.get()));
-#ifndef ROCKSDB_LITE
 static std::unique_ptr<Env> mem_env(NewMemEnv(Env::Default()));
 INSTANTIATE_TEST_CASE_P(MemEnv, EnvBasicTestWithParam,
                         ::testing::Values(mem_env.get()));
-
-#endif  // ROCKSDB_LITE
 
 TEST_P(EnvBasicTestWithParam, Basics) {
   uint64_t file_size;

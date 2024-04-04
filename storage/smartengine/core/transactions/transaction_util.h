@@ -7,8 +7,6 @@
 
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include <string>
 #include <unordered_map>
 #include "db/db.h"
@@ -90,4 +88,3 @@ class TransactionUtil {
 
 }  //  namespace util
 }  //  namespace smartengine
-#endif  // ROCKSDB_LITE

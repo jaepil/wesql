@@ -5,7 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
-#ifndef ROCKSDB_LITE
 
 #include "tools/sst_dump_tool_imp.h"
 
@@ -578,5 +577,3 @@ int SSTDumpTool::Run(int argc, char** argv) {
 }
 }  // namespace tools
 }  // namespace smartengine
-
-#endif  // ROCKSDB_LITE

@@ -5,8 +5,6 @@
 
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include <stack>
 #include <string>
 #include <vector>
@@ -319,4 +317,3 @@ class TransactionBaseImpl : public util::Transaction {
 
 }  // namespace util
 }  // namespace smartengine
-#endif  // ROCKSDB_LITE

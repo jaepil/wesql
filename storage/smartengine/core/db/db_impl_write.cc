@@ -58,13 +58,11 @@ Status DBImpl::WriteAsync(const WriteOptions& write_options,
   return WriteImplAsync(write_options, my_batch, call_back, nullptr, 0, false);
 }
 
-#ifndef ROCKSDB_LITE
 Status DBImpl::WriteWithCallback(const WriteOptions& write_options,
                                  WriteBatch* my_batch,
                                  WriteCallback* callback) {
   return WriteImpl(write_options, my_batch, callback, nullptr);
 }
-#endif  // ROCKSDB_LITE
 
 Status DBImpl::WriteImpl(const WriteOptions& write_options,
                          WriteBatch* my_batch, WriteCallback* callback,

@@ -9,8 +9,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef ROCKSDB_LITE
-
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
@@ -29,13 +27,14 @@
 #include "util/mutexlock.h"
 #include "util/sync_point.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace common;
 using namespace monitor;
 using namespace util;
 
-namespace db {
-
+namespace db
+{
 Status DBImpl::DisableFileDeletions() {
   InstrumentedMutexLock l(&mutex_);
   ++disable_delete_obsolete_files_;
@@ -81,5 +80,3 @@ int DBImpl::IsFileDeletionsEnabled() const {
 
 }
 }
-
-#endif  // ROCKSDB_LITE

@@ -7,8 +7,6 @@
 
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include "options/options.h"
 #include "port/port.h"
 #include "transactions/optimistic_transaction_db.h"
@@ -118,5 +116,3 @@ class RandomTransactionInserter {
 
 }  // namespace util
 }  // namespace smartengine
-
-#endif  // ROCKSDB_LITE

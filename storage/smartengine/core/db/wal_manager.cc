@@ -39,9 +39,6 @@ using namespace util;
 using namespace common;
 
 namespace db {
-
-#ifndef ROCKSDB_LITE
-
 Status WalManager::GetSortedWalFiles(VectorLogPtr& files) {
   // First get sorted files in db dir, then get sorted files from archived
   // dir, to avoid a race condition where a log file is moved to archived
@@ -451,6 +448,5 @@ Status WalManager::ReadFirstLine(const std::string& fname,
   return status;
 }
 
-#endif  // ROCKSDB_LITE
 }  // namespace db
 }  // namespace smartengine

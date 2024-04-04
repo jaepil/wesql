@@ -5,7 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#ifndef ROCKSDB_LITE
 #include <string>
 
 #include "db/db_impl.h"
@@ -119,12 +118,3 @@ int main(int argc, char** argv) {
   return 0;
 #endif  // !(defined NDEBUG) || !defined(OS_WIN)
 }
-#else
-
-#include <cstdio>
-
-int main(int argc, char** argv) {
-  printf("Skipped as Options file is not supported in RocksDBLite.\n");
-  return 0;
-}
-#endif  // !ROCKSDB_LITE

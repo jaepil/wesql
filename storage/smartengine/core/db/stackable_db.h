@@ -199,8 +199,6 @@ class StackableDB : public db::DB {
 
   virtual common::Status SyncWAL() override { return db_->SyncWAL(); }
 
-#ifndef ROCKSDB_LITE
-
   virtual common::Status DisableFileDeletions() override {
     return db_->DisableFileDeletions();
   }
@@ -208,8 +206,6 @@ class StackableDB : public db::DB {
   virtual common::Status EnableFileDeletions(bool force) override {
     return db_->EnableFileDeletions(force);
   }
-
-#endif  // ROCKSDB_LITE
 
   virtual common::SequenceNumber GetLatestSequenceNumber() const override {
     return db_->GetLatestSequenceNumber();

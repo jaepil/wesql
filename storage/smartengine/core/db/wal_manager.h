@@ -25,10 +25,11 @@
 #include "port/port.h"
 #include "transactions/transaction_log.h"
 
-namespace smartengine {
-namespace db {
+namespace smartengine
+{
+namespace db
+{
 
-#ifndef ROCKSDB_LITE
 class WalManager {
  public:
   WalManager(const common::ImmutableDBOptions& db_options,
@@ -95,6 +96,5 @@ class WalManager {
   static const uint64_t kDefaultIntervalToDeleteObsoleteWAL = 600;
 };
 
-#endif  // ROCKSDB_LITE
-}
-}  // namespace smartengine
+} //namespace db
+} //namespace smartengine

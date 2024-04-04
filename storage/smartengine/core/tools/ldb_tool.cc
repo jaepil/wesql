@@ -5,7 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
-#ifndef ROCKSDB_LITE
 #include "tools/ldb_tool.h"
 #include "tools/ldb_cmd_impl.h"
 #include "tools/ldb_cmd.h"
@@ -118,5 +117,3 @@ void LDBTool::Run(int argc, char** argv, Options options,
 }
 }  // namespace tools
 }  // namespace smartengine
-
-#endif  // ROCKSDB_LITE

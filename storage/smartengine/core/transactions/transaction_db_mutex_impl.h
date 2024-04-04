@@ -4,7 +4,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #pragma once
-#ifndef ROCKSDB_LITE
 
 #include "transactions/transaction_db_mutex.h"
 
@@ -24,5 +23,3 @@ class TransactionDBMutexFactoryImpl : public TransactionDBMutexFactory {
 
 }  //  namespace util
 }  //  namespace smartengine
-
-#endif  // ROCKSDB_LITE

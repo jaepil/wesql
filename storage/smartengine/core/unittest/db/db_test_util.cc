@@ -94,23 +94,6 @@ DBTestBase::~DBTestBase() {
 }
 
 bool DBTestBase::ShouldSkipOptions(int option_config, int skip_mask) {
-#ifdef ROCKSDB_LITE
-  // These options are not supported in ROCKSDB_LITE
-  if (option_config == kHashSkipList ||
-      option_config == kPlainTableFirstBytePrefix ||
-      option_config == kPlainTableCappedPrefix ||
-      option_config == kPlainTableCappedPrefixNonMmap ||
-      option_config == kPlainTableAllBytesPrefix ||
-      option_config == kVectorRep || option_config == kHashLinkList ||
-      option_config == kHashCuckoo || option_config == kUniversalCompaction ||
-      option_config == kUniversalCompactionMultiLevel ||
-      option_config == kUniversalSubcompactions ||
-      option_config == kFIFOCompaction ||
-      option_config == kConcurrentSkipList) {
-    return true;
-  }
-#endif
-
   if ((skip_mask & kSkipUniversalCompaction) &&
       (option_config == kUniversalCompaction ||
        option_config == kUniversalCompactionMultiLevel)) {

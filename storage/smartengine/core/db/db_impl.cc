@@ -382,9 +382,7 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
       has_unpersisted_data_(false),
       unable_to_flush_oldest_log_(false),
       env_options_(BuildDBOptions(immutable_db_options_, mutable_db_options_)),
-#ifndef ROCKSDB_LITE
       wal_manager_(immutable_db_options_, env_options_),
-#endif  // ROCKSDB_LITE
       bg_work_paused_(0),
       bg_compaction_paused_(0),
       refitting_level_(false),
@@ -823,9 +821,6 @@ Status DBImpl::SetOptions(const std::unordered_map<std::string, std::string>& op
 Status DBImpl::SetOptions(
     ColumnFamilyHandle* column_family,
     const std::unordered_map<std::string, std::string>& options_map) {
-#ifdef ROCKSDB_LITE
-  return Status::NotSupported("Not supported in ROCKSDB LITE");
-#else
   auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family)->cfd();
   if (options_map.empty()) {
     __SE_LOG(WARN,
@@ -858,14 +853,10 @@ Status DBImpl::SetOptions(
   __SE_LOG(INFO, "SetOptions() on sub table [ID=%u] %s",
                 cfd->GetID(), oss.str().c_str());
   return s;
-#endif  // ROCKSDB_LITE
 }
 
 Status DBImpl::SetDBOptions(
     const std::unordered_map<std::string, std::string>& options_map) {
-#ifdef ROCKSDB_LITE
-  return Status::NotSupported("Not supported in ROCKSDB LITE");
-#else
   if (options_map.empty()) {
     __SE_LOG(WARN,
                    "SetDBOptions(), empty input.");
@@ -913,7 +904,6 @@ Status DBImpl::SetDBOptions(
     __SE_LOG(WARN, "SetDBOptions failed");
   }
   return s;
-#endif  // ROCKSDB_LITE
 }
 
 Status DBImpl::SyncWAL() {
@@ -1516,11 +1506,9 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
 
 const Snapshot* DBImpl::GetSnapshot() { return GetSnapshotImpl(false); }
 
-#ifndef ROCKSDB_LITE
 const Snapshot* DBImpl::GetSnapshotForWriteConflictBoundary() {
   return GetSnapshotImpl(true);
 }
-#endif  // ROCKSDB_LITE
 
 /* Get/Release Snapshot Optimize */
 /*
@@ -1971,7 +1959,6 @@ void DBImpl::GetApproximateSizes(ColumnFamilyHandle* column_family,
   ReturnAndCleanupSuperVersion(cfd, sv);
 }
 
-#ifndef ROCKSDB_LITE
 Status DBImpl::GetUpdatesSince(
     SequenceNumber seq, unique_ptr<TransactionLogIterator>* iter,
     const TransactionLogIterator::ReadOptions& read_options) {
@@ -1981,8 +1968,6 @@ Status DBImpl::GetUpdatesSince(
   }
   return wal_manager_.GetUpdatesSince(seq, iter, read_options, versions_.get());
 }
-
-#endif  // ROCKSDB_LITE
 
 Status DestroyDB(const std::string& dbname, const Options& options) {
   const ImmutableDBOptions soptions(SanitizeOptions(dbname, options));
@@ -2114,7 +2099,6 @@ void DumpSmartEngineBuildVersion() {
 #endif
 }
 
-#ifndef ROCKSDB_LITE
 SequenceNumber DBImpl::GetEarliestMemTableSequenceNumber(SuperVersion* sv,
                                                          bool include_history) {
   // Find the earliest sequence number that we know we can rely on reading
@@ -2128,9 +2112,7 @@ SequenceNumber DBImpl::GetEarliestMemTableSequenceNumber(SuperVersion* sv,
 
   return earliest_seq;
 }
-#endif  // ROCKSDB_LITE
 
-#ifndef ROCKSDB_LITE
 Status DBImpl::GetLatestSequenceForKey(SuperVersion* sv, const Slice& key,
                                        bool cache_only, SequenceNumber* seq,
                                        bool* found_record_for_key) {
@@ -2836,6 +2818,5 @@ void DBImpl::background_pull_gauge_statistics() {
 #endif
 }
 
-#endif  // ROCKSDB_LITE
-}
-}  // namespace smartengine
+} //namespace db
+} //namespace smartengine

@@ -20,8 +20,6 @@ using namespace util;
 using namespace db;
 
 namespace table {
-#ifndef ROCKSDB_LITE
-
 const size_t kFadviseTrigger = 1024 * 1024;  // 1MB
 
 struct SstFileWriter::Rep {
@@ -238,7 +236,6 @@ void SstFileWriter::InvalidatePageCache(bool closing) {
 }
 
 uint64_t SstFileWriter::FileSize() { return rep_->file_info.file_size; }
-#endif  // !ROCKSDB_LITE
 
 }  // namespace table
 }  // namespace smartengine

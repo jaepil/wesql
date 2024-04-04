@@ -8,7 +8,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #pragma once
-#ifndef ROCKSDB_LITE
 
 #include <string>
 #include <vector>
@@ -73,5 +72,3 @@ class OptimisticTransactionDB {
 
 }  // namespace util
 }  // namespace smartengine
-
-#endif  // ROCKSDB_LITE

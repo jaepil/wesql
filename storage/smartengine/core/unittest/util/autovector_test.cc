@@ -27,9 +27,7 @@ const unsigned long kSize = 8;
 namespace {
 template <class T>
 void AssertAutoVectorOnlyInStack(autovector<T, kSize>* vec, bool result) {
-#ifndef ROCKSDB_LITE
   ASSERT_EQ(vec->only_in_stack(), result);
-#endif  // !ROCKSDB_LITE
 }
 }  // namespace
 
@@ -112,9 +110,7 @@ void AssertEqual(const autovector<size_t, kSize>& a,
                  const autovector<size_t, kSize>& b) {
   ASSERT_EQ(a.size(), b.size());
   ASSERT_EQ(a.empty(), b.empty());
-#ifndef ROCKSDB_LITE
   ASSERT_EQ(a.only_in_stack(), b.only_in_stack());
-#endif  // !ROCKSDB_LITE
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], b[i]);
   }

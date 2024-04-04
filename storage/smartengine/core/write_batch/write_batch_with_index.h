@@ -14,8 +14,6 @@
 // inserted.
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include <memory>
 #include <string>
 #include "write_batch.h"
@@ -566,5 +564,3 @@ public:
 
 }  // namespace util
 }  // namespace smartengine
-
-#endif  // !ROCKSDB_LITE

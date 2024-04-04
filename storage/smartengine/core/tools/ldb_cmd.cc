@@ -5,7 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
-#ifndef ROCKSDB_LITE
 #include "tools/ldb_cmd.h"
 
 #ifndef __STDC_FORMAT_MACROS
@@ -1995,4 +1994,3 @@ void DBQuerierCommand::DoCommand() {
 
 }  // tools
 }  // namespace smartengine
-#endif  // ROCKSDB_LITE

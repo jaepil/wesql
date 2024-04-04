@@ -7,8 +7,6 @@
 
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include <stack>
 #include <string>
 #include <unordered_map>
@@ -99,5 +97,3 @@ class OptimisticTransactionCallback : public db::WriteCallback {
 
 }  //  namespace util
 }  //  namespace smartengine
-
-#endif  // ROCKSDB_LITE

@@ -5,8 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#ifndef ROCKSDB_LITE
-
 #include "transactions/transaction_impl.h"
 
 #include <map>
@@ -725,5 +723,3 @@ Status TransactionCallbackOnCommitBatch::call_back() {
 }
 }  //  namespace util
 }  //  namespace smartengine
-
-#endif  // ROCKSDB_LITE

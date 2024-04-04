@@ -6,8 +6,6 @@
 // of patent rights can be found in the PATENTS file in the same directory.
 #pragma once
 
-#ifndef ROCKSDB_LITE
-
 #include "write_batch_with_index.h"
 
 #include <limits>
@@ -110,4 +108,3 @@ class WriteBatchWithIndexInternal {
 
 }  //  namespace util
 }  //  namespace smartengine
-#endif  // !ROCKSDB_LITE

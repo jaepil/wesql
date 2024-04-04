@@ -15,8 +15,6 @@
  */
 
 #pragma once
-#ifndef ROCKSDB_LITE
-
 #include "backup/hotbackup.h"
 #include "db/db.h"
 #include "logger/log_module.h"
@@ -190,5 +188,3 @@ int BackupSnapshotImpl::link_dir_files(db::DB *db, const std::string &dir_path,
 
 } // namespace util
 } // namespace xengien
-
-#endif

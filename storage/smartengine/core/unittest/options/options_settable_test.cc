@@ -59,7 +59,6 @@ namespace common {
 // As a result, we only run the tests to verify new fields in options are
 // settable through string on limited platforms as it depends on behavior of
 // compilers.
-#ifndef ROCKSDB_LITE
 #ifdef OS_LINUX
 #ifndef __clang__
 
@@ -475,7 +474,6 @@ TEST_F(OptionsSettableTest, ColumnFamilyOptionsAllFieldsSettable) {
 }
 #endif  // !__clang__
 #endif  // OS_LINUX
-#endif  // !ROCKSDB_LITE
 
 }  // namespace common
 }  // namespace smartengine

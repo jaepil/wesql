@@ -413,7 +413,6 @@ struct DBOptions {
 
   // Use O_DIRECT for user reads
   // Default: false
-  // Not supported in ROCKSDB_LITE mode!
   bool use_direct_reads = false;
 
   // if not zero, dump rocksdb.stats to LOG every stats_dump_period_sec
@@ -515,7 +514,6 @@ struct DBOptions {
 
   // A global cache for table-level rows.
   // Default: nullptr (disabled)
-  // Not supported in ROCKSDB_LITE mode!
   std::shared_ptr<cache::RowCache> row_cache = nullptr;
 
   // By default RocksDB replay WAL logs and flush them on DB open, which may

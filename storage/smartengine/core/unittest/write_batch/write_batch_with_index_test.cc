@@ -7,8 +7,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#ifndef ROCKSDB_LITE
-
 #include "smartengine/utilities/write_batch_with_index.h"
 #include <map>
 #include <memory>
@@ -1785,13 +1783,3 @@ int main(int argc, char** argv) {
 	smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();
 }
-
-#else
-#include <stdio.h>
-
-int main() {
-  fprintf(stderr, "SKIPPED\n");
-  return 0;
-}
-
-#endif  // !ROCKSDB_LITE

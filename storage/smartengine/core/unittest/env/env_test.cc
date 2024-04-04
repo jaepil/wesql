@@ -694,7 +694,6 @@ class IoctlFriendlyTmpdir {
   std::string dir_;
 };
 
-#ifndef ROCKSDB_LITE
 TEST_F(EnvPosixTest, PositionedAppend) {
   unique_ptr<WritableFile> writable_file;
   EnvOptions options;
@@ -725,7 +724,6 @@ TEST_F(EnvPosixTest, PositionedAppend) {
   ASSERT_EQ('a', result[kBlockSize - 1]);
   ASSERT_EQ('b', result[kBlockSize]);
 }
-#endif  // !ROCKSDB_LITE
 
 // Only works in linux platforms
 TEST_P(EnvPosixTestWithParam, RandomAccessUniqueID) {
@@ -1369,13 +1367,11 @@ TEST_P(EnvPosixTestWithParam, PosixRandomRWFileRandomized) {
 INSTANTIATE_TEST_CASE_P(DefaultEnvWithoutDirectIO, EnvPosixTestWithParam,
                         ::testing::Values(std::pair<Env*, bool>(Env::Default(),
                                                                 false)));
-#if !defined(ROCKSDB_LITE)
 INSTANTIATE_TEST_CASE_P(DefaultEnvWithDirectIO, EnvPosixTestWithParam,
                         ::testing::Values(std::pair<Env*, bool>(Env::Default(),
                                                                 true)));
-#endif  // !defined(ROCKSDB_LITE)
 
-#if !defined(ROCKSDB_LITE) && !defined(OS_WIN)
+#if !defined(OS_WIN)
 static unique_ptr<Env> chroot_env(NewChrootEnv(Env::Default(),
                                                test::TmpDir(Env::Default())));
 INSTANTIATE_TEST_CASE_P(
@@ -1384,7 +1380,7 @@ INSTANTIATE_TEST_CASE_P(
 INSTANTIATE_TEST_CASE_P(
     ChrootEnvWithDirectIO, EnvPosixTestWithParam,
     ::testing::Values(std::pair<Env*, bool>(chroot_env.get(), true)));
-#endif  // !defined(ROCKSDB_LITE) && !defined(OS_WIN)
+#endif  // !defined(OS_WIN)
 
 }  // namespace util
 }  // namespace smartengine

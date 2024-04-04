@@ -271,7 +271,6 @@ class DBImpl : public DB {
 
   virtual common::SequenceNumber GetLatestSequenceNumber() const override;
 
-#ifndef ROCKSDB_LITE
   virtual common::Status DisableFileDeletions() override;
   virtual common::Status EnableFileDeletions(bool force) override;
   virtual int IsFileDeletionsEnabled() const;
@@ -359,8 +358,6 @@ class DBImpl : public DB {
                             const common::ReadOptions *read_opts,
                             const common::Slice &key,
                             common::SequenceNumber &seq);
-
-#endif  // ROCKSDB_LITE
 
   // Similar to GetSnapshot(), but also lets the db know that this snapshot
   // will be used for transaction write-conflict checking.  The DB can then
@@ -788,9 +785,6 @@ protected:
   friend class DB;
   friend class InternalStats;
   friend class util::TransactionImpl;
-#ifndef ROCKSDB_LITE
-  friend class ForwardIterator;
-#endif
   friend struct SuperVersion;
   friend class CompactedDBImpl;
 #ifndef NDEBUG
@@ -1508,9 +1502,7 @@ protected:
   // The options to access storage files
   const util::EnvOptions env_options_;
 
-#ifndef ROCKSDB_LITE
   WalManager wal_manager_;
-#endif  // ROCKSDB_LITE
 
   // A value of > 0 temporarily disables scheduling of background work
   int bg_work_paused_;

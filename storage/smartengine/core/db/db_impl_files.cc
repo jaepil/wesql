@@ -443,9 +443,7 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
     }
   }
 
-#ifndef ROCKSDB_LITE
   wal_manager_.PurgeObsoleteWALFiles();
-#endif  // ROCKSDB_LITE
 }
 
 void DBImpl::DeleteObsoleteFiles() {

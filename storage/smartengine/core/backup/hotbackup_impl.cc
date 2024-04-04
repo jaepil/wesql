@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#ifndef ROCKSDB_LITE
-
 #include "backup/hotbackup_impl.h"
 #include "util/file_util.h"
 #include "util/sync_point.h"
@@ -295,5 +293,3 @@ int BackupSnapshotImpl::do_cleanup(DB *db)
 
 } // namespace util
 } // namespace smartengine
-
-#endif // ROCKSDB_LITE

@@ -259,8 +259,6 @@ std::string trim(const std::string& str) {
   return std::string();
 }
 
-#ifndef ROCKSDB_LITE
-
 bool ParseBoolean(const std::string& type, const std::string& value) {
   if (value == "true" || value == "1") {
     return true;
@@ -278,8 +276,6 @@ uint32_t ParseUint32(const std::string& value) {
     throw std::out_of_range(value);
   }
 }
-
-#endif
 
 uint64_t ParseUint64(const std::string& value) {
   size_t endchar;

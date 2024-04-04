@@ -6,7 +6,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #pragma once
-#ifndef ROCKSDB_LITE
 
 #include <mutex>
 #include <queue>
@@ -148,4 +147,3 @@ class TransactionDBImpl : public util::TransactionDB {
 
 }  //  namespace util
 }  //  namespace smartengine
-#endif  // ROCKSDB_LITE

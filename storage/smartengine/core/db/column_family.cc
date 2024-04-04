@@ -78,14 +78,10 @@ const std::string& ColumnFamilyHandleImpl::GetName() const {
 }
 
 Status ColumnFamilyHandleImpl::GetDescriptor(ColumnFamilyDescriptor* desc) {
-#ifndef ROCKSDB_LITE
   // accessing mutable cf-options requires db mutex.
   InstrumentedMutexLock l(mutex_);
   *desc = ColumnFamilyDescriptor(cfd()->GetName(), cfd()->GetLatestCFOptions());
   return Status::OK();
-#else
-  return Status::NotSupported();
-#endif  // !ROCKSDB_LITE
 }
 
 const Comparator* ColumnFamilyHandleImpl::GetComparator() const {
@@ -1057,7 +1053,6 @@ void ColumnFamilyData::ResetThreadLocalSuperVersions() {
   }
 }
 
-#ifndef ROCKSDB_LITE
 Status ColumnFamilyData::SetOptions(
     const std::unordered_map<std::string, std::string>& options_map) {
   MutableCFOptions new_mutable_cf_options;
@@ -1128,7 +1123,6 @@ int ColumnFamilyData::release_memtable_resource()
 
   return ret;
 }
-#endif  // ROCKSDB_LITE
 
 ColumnFamilySet::ColumnFamilySet(GlobalContext *global_ctx)
     : column_families_(),

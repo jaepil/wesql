@@ -32,8 +32,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
     const ColumnFamilyOptions& ioptions,
     const MutableCFOptions& mutable_cf_options);
 
-#ifndef ROCKSDB_LITE
-
 Status GetMutableOptionsFromStrings(
     const MutableCFOptions& base_options,
     const std::unordered_map<std::string, std::string>& options_map,
@@ -489,8 +487,6 @@ static std::unordered_map<std::string, WALRecoveryMode>
         {"kPointInTimeRecovery", WALRecoveryMode::kPointInTimeRecovery},
         {"kSkipAnyCorruptedRecords",
          WALRecoveryMode::kSkipAnyCorruptedRecords}};
-
-#endif  // !ROCKSDB_LITE
 
 }  // namespace common
 }  // namespace smartengine

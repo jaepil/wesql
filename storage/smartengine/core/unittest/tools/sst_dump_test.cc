@@ -9,8 +9,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#ifndef ROCKSDB_LITE
-
 #include <stdint.h>
 #include "smartengine/sst_dump_tool.h"
 
@@ -219,13 +217,3 @@ int main(int argc, char** argv) {
 	smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();
 }
-
-#else
-#include <stdio.h>
-
-int main(int argc, char** argv) {
-  fprintf(stderr, "SKIPPED as SSTDumpTool is not supported in ROCKSDB_LITE\n");
-  return 0;
-}
-
-#endif  // !ROCKSDB_LITE  return RUN_ALL_TESTS();

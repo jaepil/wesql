@@ -13,6 +13,6 @@
 
 #include "cache/cache.h"
 
-#if defined(TBB) && !defined(ROCKSDB_LITE)
+#if defined(TBB)
 #define SUPPORT_CLOCK_CACHE
 #endif

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #pragma once
-#ifndef ROCKSDB_LITE
 
 namespace smartengine
 {
@@ -24,7 +23,6 @@ class DB;
 }
 namespace util
 {
-
 static const char *const BACKUP_TMP_DIR = "/hotbackup_tmp";
 static const char *const BACKUP_EXTENT_IDS_FILE = "/extent_ids.inc";
 static const char *const BACKUP_EXTENTS_FILE = "/extent.inc";
@@ -51,6 +49,4 @@ protected:
 };
 
 } // namespace util
-} // namespace xengien
-
-#endif
+} // namespace smartengine

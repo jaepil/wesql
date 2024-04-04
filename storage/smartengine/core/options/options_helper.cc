@@ -134,8 +134,6 @@ ColumnFamilyOptions BuildColumnFamilyOptions(
   return cf_opts;
 }
 
-#ifndef ROCKSDB_LITE
-
 namespace {
 template <typename T>
 bool ParseEnum(const std::unordered_map<std::string, T>& type_map,
@@ -402,8 +400,6 @@ Status ParseDBOption(const std::string& name, const std::string& org_value,
   }
   return Status::OK();
 }
-
-#endif  // !ROCKSDB_LITE
 
 }  // namespace common
 }  // namespace smartengine

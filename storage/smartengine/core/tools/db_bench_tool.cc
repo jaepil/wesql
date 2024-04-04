@@ -555,7 +555,6 @@ DEFINE_int64(max_num_range_tombstones, 0,
              "Maximum number of range tombstones "
              "to insert.");
 
-#ifndef ROCKSDB_LITE
 DEFINE_bool(optimistic_transaction_db, false,
             "Open a OptimisticTransactionDB instance. "
             "Required for randomtransaction benchmark.");
@@ -596,7 +595,6 @@ DEFINE_string(
 
 DEFINE_uint64(fifo_compaction_max_table_files_size_mb, 0,
               "The limit of total table file sizes to trigger FIFO compaction");
-#endif  // ROCKSDB_LITE
 
 static enum CompressionType StringToCompressionType(const char* ctype) {
   assert(ctype);
@@ -1020,9 +1018,7 @@ static void AppendWithSpace(std::string* str, Slice msg) {
 struct DBWithColumnFamilies {
   std::vector<ColumnFamilyHandle*> cfh;
   DB* db;
-#ifndef ROCKSDB_LITE
   OptimisticTransactionDB* opt_txn_db;
-#endif                              // ROCKSDB_LITE
   std::atomic<size_t> num_created;  // Need to be updated after all the
                                     // new entries in cfh are set.
   size_t num_hot;  // Number of column families to be queried at each moment.
@@ -1031,11 +1027,8 @@ struct DBWithColumnFamilies {
   port::Mutex create_cf_mutex;  // Only one thread can execute CreateNewCf()
 
   DBWithColumnFamilies()
-      : db(nullptr)
-#ifndef ROCKSDB_LITE
-        ,
+      : db(nullptr),
         opt_txn_db(nullptr)
-#endif  // ROCKSDB_LITE
   {
     cfh.clear();
     num_created = 0;
@@ -1045,9 +1038,7 @@ struct DBWithColumnFamilies {
   DBWithColumnFamilies(const DBWithColumnFamilies& other)
       : cfh(other.cfh),
         db(other.db),
-#ifndef ROCKSDB_LITE
         opt_txn_db(other.opt_txn_db),
-#endif  // ROCKSDB_LITE
         num_created(other.num_created.load()),
         num_hot(other.num_hot) {
   }
@@ -1056,7 +1047,6 @@ struct DBWithColumnFamilies {
     std::for_each(cfh.begin() + 1, cfh.end(),
                   [](ColumnFamilyHandle* cfhi) { MOD_DELETE_OBJECT(ColumnFamilyHandle, cfhi); });
     cfh.clear();
-#ifndef ROCKSDB_LITE
     if (opt_txn_db) {
       delete opt_txn_db;
       opt_txn_db = nullptr;
@@ -1064,10 +1054,6 @@ struct DBWithColumnFamilies {
       MOD_DELETE_OBJECT(DB, db);
       db = nullptr;
     }
-#else
-    delete db;
-    db = nullptr;
-#endif  // ROCKSDB_LITE
   }
 
   ColumnFamilyHandle* GetCfh(int64_t rand_num) {
@@ -2672,11 +2658,9 @@ class Benchmark {
         method = &Benchmark::Compress;
       } else if (name == "uncompress") {
         method = &Benchmark::Uncompress;
-#ifndef ROCKSDB_LITE
       } else if (name == "randomtransaction") {
         method = &Benchmark::RandomTransaction;
         post_process_method = &Benchmark::RandomTransactionVerify;
-#endif  // ROCKSDB_LITE
       } else if (name == "randomreplacekeys") {
         fresh_db = true;
         method = &Benchmark::RandomReplaceKeys;
@@ -3250,7 +3234,6 @@ class Benchmark {
       //  column_families.push_back(ColumnFamilyDescriptor(
       //      ColumnFamilyName(i), ColumnFamilyOptions(options)));
       //}
-#ifndef ROCKSDB_LITE
       if (FLAGS_optimistic_transaction_db) {
         s = OptimisticTransactionDB::Open(options,
                                           db_name,
@@ -3276,12 +3259,6 @@ class Benchmark {
                     &db->cfh,
                     &db->db);
       }
-#else
-      s = DB::Open(options,
-                   db_name,
-                   &db->cfh,
-                   &db->db);
-#endif  // ROCKSDB_LITE
       DBImpl *dbimpl = (reinterpret_cast<DBImpl *>(db->db));
       ColumnFamilyHandle *cf_handle = nullptr;
       if (!FLAGS_use_existing_db) {
@@ -3306,7 +3283,6 @@ class Benchmark {
       //db->cfh.resize(FLAGS_num_column_families);
       db->num_created = num_hot;
       db->num_hot = num_hot;
-#ifndef ROCKSDB_LITE
     } else if (FLAGS_optimistic_transaction_db) {
       std::vector<ColumnFamilyHandle *> cf_handles;
       s = OptimisticTransactionDB::Open(options, db_name, &cf_handles, &db->opt_txn_db);
@@ -3332,7 +3308,6 @@ class Benchmark {
       for (auto handle : cf_handles) {
         delete handle;
       }
-#endif  // ROCKSDB_LITE
     } else {
       std::vector<ColumnFamilyHandle *> cf_handles;
       s = DB::Open(options, db_name, &cf_handles, &db->db);
@@ -4626,7 +4601,6 @@ class Benchmark {
     }
   }
 
-#ifndef ROCKSDB_LITE
   // This benchmark stress tests Transactions.  For a given --duration (or
   // total number of --writes, a Transaction will perform a read-modify-write
   // to increment the value of a key in each of N(--transaction-sets) sets of
@@ -4724,7 +4698,6 @@ class Benchmark {
       fprintf(stdout, "RandomTransactionVerify FAILED!!\n");
     }
   }
-#endif  // ROCKSDB_LITE
 
   // Writes and deletes random keys without overwriting keys.
   //

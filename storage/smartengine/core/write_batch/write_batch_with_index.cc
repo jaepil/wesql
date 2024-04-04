@@ -5,8 +5,6 @@
 //  LICENSE file in the root directory of this source tree. An additional grant
 //  of patent rights can be found in the PATENTS file in the same directory.
 
-#ifndef ROCKSDB_LITE
-
 #include "write_batch_with_index.h"
 #include "write_batch_with_index_internal.h"
 
@@ -535,4 +533,3 @@ int BaseDeltaIterator::set_end_key(const common::Slice& end_key_slice) {
 
 }  //  namespace util
 }  //  namespace smartengine
-#endif  // !ROCKSDB_LITE

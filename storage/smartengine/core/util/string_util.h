@@ -111,11 +111,9 @@ std::string UnescapeOptionString(const std::string& escaped_string);
 
 std::string trim(const std::string& str);
 
-#ifndef ROCKSDB_LITE
 bool ParseBoolean(const std::string& type, const std::string& value);
 
 uint32_t ParseUint32(const std::string& value);
-#endif
 
 uint64_t ParseUint64(const std::string& value);
 

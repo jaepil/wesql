@@ -298,7 +298,6 @@ class DB {
   // use "snapshot" after this call.
   virtual void ReleaseSnapshot(const Snapshot* snapshot) = 0;
 
-#ifndef ROCKSDB_LITE
   // Contains all valid property arguments for GetProperty().
   //
   // NOTE: Property names cannot end in numbers since those are interpreted as
@@ -515,7 +514,6 @@ class DB {
 
     static const std::string kDBTotalMemoryAllocated;
   };
-#endif /* ROCKSDB_LITE */
 
   // DB implementations can export properties about their state via this method.
   // If "property" is a valid property understood by this DB implementation (see
@@ -699,8 +697,6 @@ class DB {
   // The sequence number of the most recent transaction.
   virtual common::SequenceNumber GetLatestSequenceNumber() const = 0;
 
-#ifndef ROCKSDB_LITE
-
   // Prevent file deletions. Compactions will continue to occur,
   // but no obsolete files will be deleted. Calling this multiple
   // times have the same effect as calling it once.
@@ -779,8 +775,6 @@ class DB {
     return nullptr;
   }
 
-#endif  // ROCKSDB_LITE
-
   // Returns default column family handle
   virtual ColumnFamilyHandle* DefaultColumnFamily() const = 0;
 
@@ -821,34 +815,6 @@ class DB {
 // Be very careful using this method.
 common::Status DestroyDB(const std::string& name,
                          const common::Options& options);
-
-#ifndef ROCKSDB_LITE
-// If a DB cannot be opened, you may attempt to call this method to
-// resurrect as much of the contents of the database as possible.
-// Some data may be lost, so be careful when calling this function
-// on a database that contains important information.
-//
-// With this API, we will warn and skip data associated with column families not
-// specified in column_families.
-//
-// @param column_families Descriptors for known column families
-common::Status RepairDB(
-    const std::string& dbname, const common::DBOptions& db_options,
-    const std::vector<ColumnFamilyDescriptor>& column_families);
-
-// @param unknown_cf_opts Options for column families encountered during the
-//                        repair that were not specified in column_families.
-common::Status RepairDB(
-    const std::string& dbname, const common::DBOptions& db_options,
-    const std::vector<ColumnFamilyDescriptor>& column_families,
-    const common::ColumnFamilyOptions& unknown_cf_opts);
-
-// @param options These options will be used for the database and for ALL column
-//                families encountered during the repair
-common::Status RepairDB(const std::string& dbname,
-                        const common::Options& options);
-
-#endif
 
 }  // namespace db
 }  // namespace smartengine

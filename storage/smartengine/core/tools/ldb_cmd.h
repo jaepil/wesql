@@ -8,9 +8,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 //
 #pragma once
-
-#ifndef ROCKSDB_LITE
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
@@ -281,5 +278,3 @@ private:
 
 }  // namespace tools
 }  // namespace smartengine
-
-#endif  // ROCKSDB_LITE

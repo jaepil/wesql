@@ -21,8 +21,6 @@
 #include "util/testharness.h"
 #include "util/testutil.h"
 
-#ifndef ROCKSDB_LITE
-
 namespace smartengine {
 using namespace common;
 
@@ -517,10 +515,3 @@ int main(int argc, char** argv) {
 	smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();
 }
-
-#else
-int main(int argc, char** argv) {
-  printf("DeleteScheduler is not supported in ROCKSDB_LITE\n");
-  return 0;
-}
-#endif  // ROCKSDB_LITE
