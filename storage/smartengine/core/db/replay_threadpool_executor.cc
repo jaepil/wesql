@@ -119,7 +119,7 @@ int ReplayThreadPoolExecutor<Deleter>::submit_task(util::CallbackBase *func,
   } else {
     bool stop_task = (func == nullptr);
     uint64_t full_queue_time = 0;
-    while(SUCC(ret)) {
+    while(SUCCED(ret)) {
       if (UNLIKELY(full_queue_time > WAIT_QUEUE_NOT_FULL_LOG_ROUND)) {
         SE_LOG(WARN, "wait thread pool not full for too long");
       }

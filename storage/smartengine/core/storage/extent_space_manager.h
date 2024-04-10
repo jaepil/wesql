@@ -24,20 +24,14 @@ namespace smartengine
 {
 namespace storage
 {
-class StorageLogger;
 struct ExtentMeta;
 struct CheckpointHeader;
-class ExtentMetaManager;
 class ExtentSpaceManager
 {
 public:
-  ExtentSpaceManager(util::Env *env,
-                     const util::EnvOptions &env_options,
-                     const common::DBOptions &db_options);
-  ~ExtentSpaceManager();
+  static ExtentSpaceManager &get_instance();
+  int init(util::Env *env, const util::EnvOptions &env_options, const common::DBOptions &db_options);
   void destroy();
-
-  int init(StorageLogger *storage_logger);
 
   //tablespace relative function
   int create_table_space(const int64_t table_space_id);
@@ -61,14 +55,6 @@ public:
                 const ExtentId extent_id);
   common::Status get_random_access_extent(ExtentId extent_id, RandomAccessExtent &);
 
-  //ExtentMeta wrapper relative function
-  int get_meta(const ExtentId &extent_id, ExtentMeta *&extent_meta);
-  int write_meta(const ExtentMeta &extent_meta, bool write_log);
-  int recycle_meta(const ExtentId extent_id);
-  int do_checkpoint(util::WritableFile *checkpoint_writer, CheckpointHeader *header);
-  int load_checkpoint(util::RandomAccessFile *checkpoint_reader, CheckpointHeader *header);
-  int replay(int64_t log_type, char *log_data, int64_t log_len);
-
   //shrink relative function
   int get_shrink_infos(const ShrinkCondition &shrink_condition, std::vector<ShrinkInfo> &shrink_infos);
   int get_shrink_infos(const int64_t table_space_id,
@@ -91,6 +77,10 @@ public:
   int rebuild();
 
 private:
+  ExtentSpaceManager();
+  ~ExtentSpaceManager();
+
+private:
   int internal_create_table_space(const int64_t table_space_id);
   TableSpace *get_table_space(int64_t table_space_id);
   int open_specific_directory(const std::string &dir_path);
@@ -104,8 +94,7 @@ private:
   bool is_inited_;
   util::Env *env_;
   util::EnvOptions env_options_;
-  const common::DBOptions db_options_;
-  ExtentMetaManager *extent_meta_mgr_;
+  common::DBOptions db_options_;
   //protect the map contain table space
   util::SpinRWLock table_space_lock_;
   std::atomic<int64_t> table_space_id_;

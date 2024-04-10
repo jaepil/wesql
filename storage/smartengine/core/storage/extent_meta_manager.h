@@ -28,16 +28,14 @@ namespace storage
 struct ExtentMeta;
 struct CheckpointHeader;
 struct CheckpointBlockHeader;
-class StorageLogger;
 
 class ExtentMetaManager
 {
 public:
-  ExtentMetaManager();
-  ~ExtentMetaManager();
+  static ExtentMetaManager &get_instance();
+  int init();
   void destroy();
 
-  int init(StorageLogger *storage_logger);
   int write_meta(const ExtentMeta &extent_meta, bool write_log);
   int recycle_meta(const ExtentId extent_id);
   ExtentMeta *get_meta(const ExtentId &extent_id);
@@ -53,13 +51,16 @@ private:
   int replay_write_meta(const ExtentMeta &extent_meta);
 
 private:
+  ExtentMetaManager();
+  ~ExtentMetaManager();
+
+private:
   typedef std::unordered_map<int64_t, ExtentMeta*, std::hash<int64_t>, std::equal_to<int64_t>,
       memory::stl_adapt_allocator<std::pair<const int64_t, ExtentMeta*>, memory::ModId::kExtentSpaceMgr>> ExtentMetaUnorderedMap;
   static const int64_t DEFAULT_BUFFER_SIZE = 2 * 1024 * 1024;
 
 private:
   bool is_inited_;
-  StorageLogger *storage_logger_;
   util::SpinRWLock meta_mutex_;
   ExtentMetaUnorderedMap extent_meta_map_;
 };

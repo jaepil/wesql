@@ -655,7 +655,7 @@ int ExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
     SE_LOG(WARN, "invalid argument", K(ret), KP(src_data_file), KP(extent_buf));
   } else if (FAILED(src_data_file->get_extent_io_info(origin_extent_id, origin_io_info))){
     SE_LOG(WARN, "fail to get extent io info", K(ret), K(origin_extent_id));
-  } else if (FAILED(origin_extent.init(origin_io_info, nullptr))) {
+  } else if (FAILED(origin_extent.init(origin_io_info))) {
     SE_LOG(WARN, "fail to init origin extent", K(ret), K(origin_io_info));
   } else if (FAILED(allocate_extent(new_io_info))) {
     SE_LOG(WARN, "fail to allocate new extent", K(ret));

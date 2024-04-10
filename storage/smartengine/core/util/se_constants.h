@@ -43,9 +43,8 @@ static const int64_t MAX_LOB_KV_SIZE = 36 * 1024;
 #endif
 
 #define IS_NULL(expr) (UNLIKELY(nullptr == (expr)))
-#define ISNULL(expr) (UNLIKELY(nullptr == (expr)))
+#define IS_NOTNULL(expr) (UNLIKELY(nullptr != (expr)))
 #define SUCCED(expr) (LIKELY(common::Status::kOk == (ret = (expr))))
-#define SUCC(expr) (LIKELY(common::Status::kOk == (ret = (expr))))
 #ifndef FAILED
 #define FAILED(expr) (UNLIKELY(common::Status::kOk != (ret = (expr))))
 #endif

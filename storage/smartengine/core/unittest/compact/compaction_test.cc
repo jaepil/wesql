@@ -27,6 +27,7 @@
 #include "logger/log_module.h"
 #include "memory/page_arena.h"
 #include "options/options_helper.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "storage/multi_version_extent_meta_layer.h"
@@ -178,7 +179,6 @@ class CompactionTest : public testing::Test {
  public:
   CompactionTest()
       : context_(nullptr),
-        space_manager_(nullptr),
         internal_comparator_(BytewiseComparator()),
         next_file_number_(2),
         shutting_down_(false),
@@ -187,7 +187,8 @@ class CompactionTest : public testing::Test {
   void reset() {
     names_.clear();
     keys_.clear();
-    space_manager_ = nullptr;
+    ExtentMetaManager::get_instance().destroy();
+    ExtentSpaceManager::get_instance().destroy();
     descriptor_log_.reset();
     db_dir = nullptr;
     mini_tables_.metas.clear();
@@ -215,33 +216,23 @@ class CompactionTest : public testing::Test {
     env_->NewDirectory(dbname_, db_dir);
     Status s;
 
-    // GlobalContext  is_valid will check or use these members
-    //    util::Env *env_;
-    //    cache::Cache *cache_;
-    //    WriteBufferManager *write_buf_mgr_;
-    //    storage::StorageLogger *storage_logger_;
-    //    storage::ExtentSpaceManager *extent_space_mgr_;
-
     GlobalContext *global_ctx = ALLOC_OBJECT(GlobalContext, alloc_, dbname_, *(const_cast<Options*>(context_->options_)));
     WriteBufferManager *write_buffer_manager = ALLOC_OBJECT(WriteBufferManager, alloc_, 0);
-    storage_logger_ = ALLOC_OBJECT(StorageLogger, alloc_);
-    space_manager_ = ALLOC_OBJECT(ExtentSpaceManager, alloc_, env_, context_->env_options_, context_->db_options_);
-    table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, context_->env_options_, cache_.get(), space_manager_);
+    table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, context_->env_options_, cache_.get());
     version_set_ = ALLOC_OBJECT(VersionSet, alloc_, dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager);
 
     global_ctx->env_ = env_;
     global_ctx->cache_ = cache_.get();
-    global_ctx->storage_logger_ = storage_logger_;
     global_ctx->write_buf_mgr_ = write_buffer_manager;
-    global_ctx->extent_space_mgr_ = space_manager_;
 
     // __thread int64_t StorageLogger::local_trans_id_ = 0;
-    storage_logger_->TEST_reset();
-    storage_logger_->init(env_, dbname_, context_->env_options_, context_->idb_options_, version_set_, space_manager_, 1 * 1024 * 1024 * 1024);
+    StorageLogger::get_instance().TEST_reset();
+    StorageLogger::get_instance().init(env_, dbname_, context_->env_options_, context_->idb_options_, version_set_, 1 * 1024 * 1024 * 1024);
     Options opt;
     version_set_->init(global_ctx);
-    space_manager_->init(storage_logger_);
-    space_manager_->create_table_space(0);
+    ExtentMetaManager::get_instance().init();
+    ExtentSpaceManager::get_instance().init(env_, context_->env_options_, context_->db_options_);
+    ExtentSpaceManager::get_instance().create_table_space(0);
 
     uint64_t file_number = 1;
     std::string manifest_filename =
@@ -257,12 +248,12 @@ class CompactionTest : public testing::Test {
       s = file_writer->init_multi_buffer();
       if (s.ok()) {
         db::log::Writer *log_writer = MOD_NEW_OBJECT(ModId::kTestMod, db::log::Writer, file_writer, 0, false);
-        storage_logger_->set_log_writer(log_writer);
+        StorageLogger::get_instance().set_log_writer(log_writer);
       }
     }
     ColumnFamilyData *sub_table = nullptr;
     storage_manager_ = ALLOC_OBJECT(StorageManager, alloc_, context_->env_options_, context_->icf_options_, context_->mutable_cf_options_);
-    storage_manager_->init(env_, space_manager_, cache_.get());
+    storage_manager_->init(env_, cache_.get());
 
     assert(s.ok());
     wb_ = ALLOC_OBJECT(WriteBufferManager, alloc_, context_->db_options_.db_write_buffer_size);
@@ -274,8 +265,9 @@ class CompactionTest : public testing::Test {
     storage_manager_->~StorageManager();
     version_set_->~VersionSet();
     table_cache_->~TableCache();
-    space_manager_->~ExtentSpaceManager();
-    storage_logger_->~StorageLogger();
+    ExtentMetaManager::get_instance().destroy();
+    ExtentSpaceManager::get_instance().destroy();
+    StorageLogger::get_instance().destroy();
   };
 
   void Close() {
@@ -296,7 +288,6 @@ class CompactionTest : public testing::Test {
     comp->data_comparator_ = BytewiseComparator();
     comp->internal_comparator_ = &internal_comparator_;
     comp->earliest_write_conflict_snapshot_ = 0;
-    comp->storage_logger_ = storage_logger_;
     comp->table_space_id_ = 0;
     // Default is minor task
     comp->task_type_ = db::TaskType::MINOR_COMPACTION_TASK;
@@ -513,17 +504,16 @@ class CompactionTest : public testing::Test {
         : LayerPosition(level, 0);
     if (begin_trax) {
       if (0 == level) {
-        ret = storage_logger_->begin(FLUSH);
+        ret = StorageLogger::get_instance().begin(FLUSH);
         ASSERT_EQ(Status::kOk, ret);
       } else if (1 == level) {
-        ret = storage_logger_->begin(MINOR_COMPACTION);
+        ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
         ASSERT_EQ(Status::kOk, ret);
       } else {
-        ret = storage_logger_->begin(MAJOR_COMPACTION);
+        ret = StorageLogger::get_instance().begin(MAJOR_COMPACTION);
         ASSERT_EQ(Status::kOk, ret);
       }
     }
-    mini_tables_.space_manager = space_manager_;
     mini_tables_.table_space_id_ = 0;
     
     common::CompressionType compression_type = get_compression_type(context_->icf_options_,
@@ -642,7 +632,7 @@ class CompactionTest : public testing::Test {
       extent_builder_->Finish();
       ASSERT_TRUE(extent_builder_->status().ok());
     }
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(Status::kOk, ret);
     meta_write(level, mini_tables_);
     mini_tables_.metas.clear();
@@ -710,9 +700,7 @@ class CompactionTest : public testing::Test {
     CompactionContext ct;
     build_compact_context(&ct);
     JobContext jct(0);
-    jct.storage_logger_ = storage_logger_;
     jct.task_type_ = db::TaskType::FLUSH_LEVEL1_TASK;
-    ct.space_manager_ = space_manager_;
     ct.task_type_ = db::TaskType::FLUSH_LEVEL1_TASK;
     ImmutableCFOptions &ioptions = context_->icf_options_;
     Options option;
@@ -735,7 +723,7 @@ class CompactionTest : public testing::Test {
     ASSERT_EQ(ret, 0);
 
     MtExtCompaction *compaction = flush_job.get_compaction();
-    ret = storage_logger_->begin(FLUSH);
+    ret = StorageLogger::get_instance().begin(FLUSH);
     ASSERT_EQ(ret, 0);
     ret = compaction->run();
     ASSERT_EQ(ret, 0);
@@ -750,21 +738,19 @@ class CompactionTest : public testing::Test {
     storage::CompactionJob job(arena);
     CompactionContext ct;
     build_compact_context(&ct);
-    ct.space_manager_ = space_manager_;
     ct.task_type_ = db::TaskType::STREAM_COMPACTION_TASK;
     // after removing the snapshot list check, minor no need the snapshot,
     // just set the max seq
     ct.earliest_write_conflict_snapshot_ = db::kMaxSequenceNumber;
     int ret =
-        job.init(ct, cf_desc_, storage_manager_,
-                 storage_manager_->get_current_version());
+        job.init(ct, cf_desc_, storage_manager_->get_current_version());
     if (nullptr != (storage_manager_->get_current_version()->get_extent_layer_version(0))) {
       storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     }
     ASSERT_EQ(ret, 0);
     ret = job.prepare();
     ASSERT_EQ(ret, 0);
-    ret = storage_logger_->begin(MINOR_COMPACTION);
+    ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
     ASSERT_EQ(ret, 0);
     ret = job.run();
     ASSERT_EQ(ret, 0);
@@ -774,7 +760,7 @@ class CompactionTest : public testing::Test {
       job.append_change_info(compaction->get_change_info());
     }
     int64_t commit_seq;
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(ret, 0);
     ret = storage_manager_->apply(job.get_change_info(), false);
     ASSERT_EQ(ret, 0);
@@ -790,15 +776,13 @@ class CompactionTest : public testing::Test {
     CompactionContext ct;
     build_compact_context(&ct);
     ct.task_type_ = db::TaskType::INTRA_COMPACTION_TASK;
-    ct.space_manager_ = space_manager_;
     int ret =
-        job.init(ct, cf_desc_, storage_manager_,
-                 storage_manager_->get_current_version());
+        job.init(ct, cf_desc_, storage_manager_->get_current_version());
     storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     ASSERT_EQ(ret, 0);
     ret = job.prepare();
     ASSERT_EQ(ret, 0);
-    ret = storage_logger_->begin(MINOR_COMPACTION);
+    ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
     ASSERT_EQ(ret, 0);
     ret = job.run();
     ASSERT_EQ(ret, 0);
@@ -807,7 +791,7 @@ class CompactionTest : public testing::Test {
       job.append_change_info(compaction->get_change_info());
     }
     int64_t commit_seq;
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(ret, 0);
     ret = storage_manager_->apply(job.get_change_info(), false);
     ASSERT_EQ(ret, 0);
@@ -822,7 +806,6 @@ class CompactionTest : public testing::Test {
     CompactionContext ct;
     build_compact_context(&ct);
     ct.task_type_ = db::TaskType::MAJOR_COMPACTION_TASK;
-    ct.space_manager_ = space_manager_;
     std::vector<common::SequenceNumber> existing_snapshots;
     //existing_snapshots.push_back(10);
     //existing_snapshots.push_back(20);
@@ -837,8 +820,7 @@ class CompactionTest : public testing::Test {
     snapshot->extent_layer_versions_[0]->ref();
     snapshot->extent_layer_versions_[1]->ref();
     snapshot->extent_layer_versions_[2]->ref();
-    int ret = job.init(ct, cf_desc_, storage_manager_,
-                       snapshot);
+    int ret = job.init(ct, cf_desc_, snapshot);
     /*
     if (storage_manager_->get_current_version()->get_level0() != nullptr) {
       storage_manager_->get_current_version()->get_level0()->ref();
@@ -850,7 +832,7 @@ class CompactionTest : public testing::Test {
     int64_t commit_seq;
     if (job.get_task_type() == db::TaskType::SPLIT_TASK) {
       storage::Compaction *task = job.get_next_task();
-      ret = storage_logger_->begin(MAJOR_COMPACTION);
+      ret = StorageLogger::get_instance().begin(MAJOR_COMPACTION);
       ASSERT_EQ(ret, 0);
       ret = task->run();
       ASSERT_EQ(ret, 0);
@@ -858,7 +840,7 @@ class CompactionTest : public testing::Test {
       ret = storage_manager_->apply(change_info, false);
       ASSERT_EQ(ret, 0);
       // We need manual commit here
-      ret = storage_logger_->commit(commit_seq);
+      ret = StorageLogger::get_instance().commit(commit_seq);
       ASSERT_EQ(ret, 0);
       fprintf(stderr, "\nAfter Split compaction\n");
       print_raw_meta();
@@ -877,7 +859,7 @@ class CompactionTest : public testing::Test {
     //ASSERT_EQ(ret, 0);
     storage::Compaction *compaction = nullptr;
     while (nullptr != (compaction = job.get_next_task())) {
-      ret = storage_logger_->begin(MAJOR_COMPACTION);
+      ret = StorageLogger::get_instance().begin(MAJOR_COMPACTION);
       ASSERT_EQ(ret, 0);
       // Note reuse case need to set
       static_cast<storage::GeneralCompaction*>(compaction)->set_delete_percent(10);
@@ -887,7 +869,7 @@ class CompactionTest : public testing::Test {
       ret = storage_manager_->apply(change_info, false);
       ASSERT_EQ(ret, 0);
       // We need manual commit here
-      ret = storage_logger_->commit(commit_seq);
+      ret = StorageLogger::get_instance().commit(commit_seq);
       ASSERT_EQ(ret, 0);
       fprintf(stderr, "after major compaction\n");
       print_raw_meta();
@@ -912,11 +894,8 @@ class CompactionTest : public testing::Test {
   std::string dbname_;
   // DB *db_ = nullptr;
   VersionSet *version_set_;
-  storage::StorageLogger *storage_logger_;
   StorageManager *storage_manager_;
-  //unique_ptr<ExtentSpaceManager> space_manager_;
   ChangeInfo change_info_;
-  ExtentSpaceManager* space_manager_;
   std::unique_ptr<db::log::Writer> descriptor_log_;
   Directory *db_dir;
   ColumnFamilyDesc cf_desc_;
@@ -1016,12 +995,8 @@ TEST_F(CompactionTest, test_get_all_l0_range) {
   storage::CompactionJob job(job_arena);
   CompactionContext ct;
   build_compact_context(&ct);
-  ct.space_manager_ = space_manager_;
-  //ct.space_manager_ = space_manager_.get();
-  //ct.table_cache_ = table_cache_.get();
 
-  int ret = job.init(ct, cf_desc_, storage_manager_,
-        storage_manager_->get_current_version());
+  int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
   storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
   ASSERT_EQ(ret, 0);
 
@@ -1181,9 +1156,7 @@ TEST_F(CompactionTest, test_intra_l0_overflow_layer) {
   build_compact_context(&ct);
   ct.task_type_ = db::TaskType::INTRA_COMPACTION_TASK;
 
-  ct.space_manager_ = space_manager_;
-  int ret =
-    job.init(ct, cf_desc_, storage_manager_, storage_manager_->get_current_version());
+  int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
   storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
   ASSERT_EQ(ret, 0);
   // IntraL0 only support 1 task
@@ -1191,7 +1164,7 @@ TEST_F(CompactionTest, test_intra_l0_overflow_layer) {
   ret = job.prepare_minor_task(db::kMaxSequenceNumber);
   ASSERT_EQ(ret, 0);
 
-  ret = storage_logger_->begin(MINOR_COMPACTION);
+  ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
   ASSERT_EQ(ret, 0);
   while (job.get_task_size() > 0) {
     storage::Compaction *compaction = job.get_next_task();
@@ -1201,7 +1174,7 @@ TEST_F(CompactionTest, test_intra_l0_overflow_layer) {
     job.destroy_compaction(compaction);
   }
   int64_t commit_seq = 0;
-  ret = storage_logger_->commit(commit_seq);
+  ret = StorageLogger::get_instance().commit(commit_seq);
   ASSERT_EQ(ret, 0);
   ret = storage_manager_->apply(job.get_change_info(), false);
   ASSERT_EQ(ret, 0);
@@ -1274,16 +1247,14 @@ TEST_F(CompactionTest, test_intra_l0_muliple_task) {
     build_compact_context(&ct);
     ct.task_type_ = db::TaskType::INTRA_COMPACTION_TASK;
 
-    ct.space_manager_ = space_manager_;
-    int ret =
-      job.init(ct, cf_desc_, storage_manager_, storage_manager_->get_current_version());
+    int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
     storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     ASSERT_EQ(ret, 0);
     // Intra L0 only split 1 task, so we use a big int
     ret = job.prepare_minor_task(db::kMaxSequenceNumber);
     ASSERT_EQ(ret, 0);
 
-    ret = storage_logger_->begin(MINOR_COMPACTION);
+    ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
     ASSERT_EQ(ret, 0);
     while (job.get_task_size() > 0) {
       storage::Compaction *compaction = job.get_next_task();
@@ -1294,7 +1265,7 @@ TEST_F(CompactionTest, test_intra_l0_muliple_task) {
       job.destroy_compaction(compaction);
     }
     int64_t commit_seq = 0;
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(ret, 0);
     ret = storage_manager_->apply(job.get_change_info(), false);
     ASSERT_EQ(ret, 0);
@@ -1898,16 +1869,12 @@ TEST_F(CompactionTest, test_muliple_task) {
     storage::CompactionJob job(arena);
     CompactionContext ct;
     build_compact_context(&ct);
-    //ct.space_manager_ = space_manager_.get();
-    ct.space_manager_ = space_manager_;
-    int ret =
-        job.init(ct, cf_desc_, storage_manager_,
-                 storage_manager_->get_current_version());
+    int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
     storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     ASSERT_EQ(ret, 0);
     ret = job.prepare_minor_task(5);
     ASSERT_EQ(ret, 0);
-    ret = storage_logger_->begin(MINOR_COMPACTION);
+    ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
     ASSERT_EQ(ret, 0);
 
     while (job.get_task_size() > 0) {
@@ -1919,7 +1886,7 @@ TEST_F(CompactionTest, test_muliple_task) {
       job.destroy_compaction(compaction);
     }
     int64_t commit_seq = 0;
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(ret, 0);
 
     ret = storage_manager_->apply(job.get_change_info(), false);
@@ -1947,16 +1914,12 @@ TEST_F(CompactionTest, test_mp) {
     storage::CompactionJob job(arena);
     CompactionContext ct;
     build_compact_context(&ct);
-    //ct.space_manager_ = space_manager_.get();
-    ct.space_manager_ = space_manager_;
-    int ret =
-        job.init(ct, cf_desc_, storage_manager_,
-                 storage_manager_->get_current_version());
+    int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
     storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     ASSERT_EQ(ret, 0);
     ret = job.prepare_minor_task(5);
     ASSERT_EQ(ret, 0);
-    ret = storage_logger_->begin(MINOR_COMPACTION);
+    ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
     ASSERT_EQ(ret, 0);
 
     while (job.get_task_size() > 0) {
@@ -1968,7 +1931,7 @@ TEST_F(CompactionTest, test_mp) {
       job.destroy_compaction(compaction);
     }
     int64_t commit_seq = 0;
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(ret, 0);
     ret = storage_manager_->apply(job.get_change_info(), false);
     ASSERT_EQ(ret, 0);
@@ -2000,16 +1963,12 @@ TEST_F(CompactionTest, test_no_intersect_l0) {
     storage::CompactionJob job(arena);
     CompactionContext ct;
     build_compact_context(&ct);
-    //ct.space_manager_ = space_manager_.get();
-    ct.space_manager_ = space_manager_;
-    int ret =
-        job.init(ct, cf_desc_, storage_manager_,
-                 storage_manager_->get_current_version());
+    int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
     storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     ASSERT_EQ(ret, 0);
     ret = job.prepare_minor_task(10);
     ASSERT_EQ(ret, 0);
-    ret = storage_logger_->begin(MINOR_COMPACTION);
+    ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
     ASSERT_EQ(ret, 0);
 
     while (job.get_task_size() > 0) {
@@ -2021,7 +1980,7 @@ TEST_F(CompactionTest, test_no_intersect_l0) {
       job.destroy_compaction(compaction);
     }
     int64_t commit_seq = 0;
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(ret, 0);
     ret = storage_manager_->apply(job.get_change_info(), false);
     ASSERT_EQ(ret, 0);
@@ -2042,8 +2001,6 @@ TEST_F(CompactionTest, test_minor_rate_limiter) {
     storage::CompactionJob job(arena);
     CompactionContext ct;
     build_compact_context(&ct);
-    ct.space_manager_ = space_manager_;
-    //ct.table_cache_ = table_cache_.get();
     if (cnt == 0) {
       context_->icf_options_.rate_limiter = NewGenericRateLimiter(100 << 20, 100 * 1000, 10);
       ct.cf_options_ = &context_->icf_options_;
@@ -2052,14 +2009,12 @@ TEST_F(CompactionTest, test_minor_rate_limiter) {
       ct.cf_options_ = &context_->icf_options_;
     }
 
-    int ret =
-        job.init(ct, cf_desc_, storage_manager_,
-                 storage_manager_->get_current_version());
+    int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
     storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     ASSERT_EQ(ret, 0);
     ret = job.prepare();
     ASSERT_EQ(ret, 0);
-    ret = storage_logger_->begin(MINOR_COMPACTION);
+    ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
     ASSERT_EQ(ret, 0);
 
     while (job.get_task_size() > 0) {
@@ -2084,7 +2039,7 @@ TEST_F(CompactionTest, test_minor_rate_limiter) {
       job.destroy_compaction(compaction);
     }
     int64_t commit_seq = 0;
-    ret = storage_logger_->commit(commit_seq);
+    ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(ret, 0);
 
     ret = storage_manager_->apply(job.get_change_info(), false);

@@ -68,7 +68,7 @@ Status SequentialFileReader::Read(size_t n, Slice* result, char* scratch) {
 
 int SequentialFileReader::prefetch(size_t n, AIOHandle *aio_handle) {
   int ret = Status::kOk;
-  if (ISNULL(aio_handle)) {
+  if (IS_NULL(aio_handle)) {
     SE_LOG(WARN, "aio handle is null");
     ret = Status::kInvalidArgument;
   } else {
@@ -89,7 +89,7 @@ int SequentialFileReader::prefetch(size_t n, AIOHandle *aio_handle) {
 int SequentialFileReader::read(size_t n, common::Slice* result,
                                   char* scratch, AIOHandle *aio_handle) {
   int ret = Status::kOk;
-  if (ISNULL(aio_handle)) {
+  if (IS_NULL(aio_handle)) {
     SE_LOG(WARN, "aio handle is null");
     ret = Status::kInvalidArgument;
   } else {
@@ -153,7 +153,7 @@ int RandomAccessFileReader::prefetch(const int64_t offset,
                                      AIOHandle *aio_handle)
 {
   int ret = Status::kOk;
-  if (ISNULL(aio_handle)) {
+  if (IS_NULL(aio_handle)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "aio handle is nullptr", K(ret));
   } else {

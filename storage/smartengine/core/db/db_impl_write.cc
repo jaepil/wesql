@@ -1022,7 +1022,7 @@ Status DBImpl::HandleWALFull(WriteContext* write_context) {
 
   // no need to refcount because drop is happening in write thread, so can't
   // happen while we're in the write thread
-  if ((SUCC(ret))) {
+  if ((SUCCED(ret))) {
     if (FAILED(find_subtables_to_switch(oldest_alive_log, write_context))) {
       SE_LOG(WARN, "failed to find subtables to switch", K(oldest_alive_log), K(ret));
     }

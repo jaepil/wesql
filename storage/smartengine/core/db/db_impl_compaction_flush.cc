@@ -123,7 +123,7 @@ int DBImpl::dump_memtable_to_outputfile(
   } else if (Status::kCancelTask == ret) {
     ret = Status::kOk; // by design
     SE_LOG(INFO, "just cancel the dump task", K(sub_table->GetID()));
-  } else if (!SUCC(ret)) {
+  } else if (FAILED(ret)) {
     // if a bad error happened (not ShutdownInProgress) mark DB read-only
     SE_LOG(ERROR, "flush memtable error set bg_error_", K(ret));
     bg_error_ = Status(ret);
@@ -149,7 +149,6 @@ int DBImpl::run_one_flush_task(ColumnFamilyData *sub_table,
   }
   if (storage::INVALID_EVENT != event) {
     MiniTables mtables;
-    mtables.space_manager = sub_table->get_extent_space_manager();
     if (FAILED(flush_job->prepare_flush_task(mtables))){
       SE_LOG(WARN, "failed to prepare flush task", K(ret));
     } else {
@@ -172,9 +171,6 @@ int DBImpl::run_one_flush_task(ColumnFamilyData *sub_table,
     }
     if (FAILED(ret)) {
       flush_job->cancel();
-    } else if (IS_NULL(context.storage_logger_)) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "storage logger is null", K(ret));
     } else {
       // unlock when flush task run
       mutex_.Unlock();
@@ -182,17 +178,17 @@ int DBImpl::run_one_flush_task(ColumnFamilyData *sub_table,
     TEST_SYNC_POINT_CALLBACK("DBImpl::wait_create_backup_snapshot", this);
 #endif
       int64_t dummy_log_seq = 0;
-      if (FAILED(context.storage_logger_->begin(event))) {
+      if (FAILED(StorageLogger::get_instance().begin(event))) {
         SE_LOG(WARN, "failed to begin flush event", K(ret), K((int)task_type));
       } 
       AutoThreadOperationStageUpdater stage_run(ThreadStatus::STAGE_FLUSH_RUN);
-      if (SUCC(ret) && FAILED(flush_job->run(mtables))) {
+      if (SUCCED(ret) && FAILED(flush_job->run(mtables))) {
         SE_LOG(WARN, "failed to run flush task", K(ret));
       }
       mutex_.Lock();
       if (FAILED(flush_job->after_run_flush(mtables, ret))) {
         SE_LOG(WARN, "failed to do func after run flush", K(ret));
-      } else if (FAILED(context.storage_logger_->commit(dummy_log_seq))) {
+      } else if (FAILED(StorageLogger::get_instance().commit(dummy_log_seq))) {
         SE_LOG(WARN, "fail to commit flush trans", K(ret));
       }
     }
@@ -221,11 +217,9 @@ Status DBImpl::FlushMemTableToOutputFile(
   context.env_options_ = sub_table->soptions();
   context.data_comparator_ = sub_table->ioptions()->user_comparator;
   context.internal_comparator_ = &sub_table->internal_comparator();
-  context.space_manager_ = extent_space_manager_;
   context.table_space_id_ = sub_table->get_table_space_id();
   context.existing_snapshots_ = GetAll(&context.earliest_write_conflict_snapshot_);
   context.task_type_ = st_flush_job.get_task_type();
-  context.storage_logger_ = storage_logger_;
   context.enable_thread_tracking_ = immutable_db_options_.enable_thread_tracking;
   context.output_level_  = FLUSH_LEVEL1_TASK == st_flush_job.get_task_type() ? 1 : 0;
   job_context.task_type_ = st_flush_job.get_task_type();
@@ -278,7 +272,7 @@ Status DBImpl::FlushMemTableToOutputFile(
   } else if (Status::kCancelTask == ret) {
     ret = Status::kOk; // by design
     SE_LOG(INFO, "just cancel the task", K(get_task_type_name(st_flush_job.get_task_type())));
-  } else if (!SUCC(ret)) {
+  } else if (FAILED(ret)) {
     // if a bad error happened (not ShutdownInProgress) mark DB read-only
     SE_LOG(ERROR, "flush memtable error set bg_error_", K(ret));
     bg_error_ = Status(ret);
@@ -670,7 +664,7 @@ int DBImpl::schedule_shrink()
     } else if (IS_NULL(shrink_args = MOD_NEW_OBJECT(ModId::kShrinkJob, ShrinkArgs))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for ShrinkArgs", K(ret));
-    } else if (FAILED(extent_space_manager_->get_shrink_infos(shrink_condition, shrink_args->shrink_infos_))) {
+    } else if (FAILED(ExtentSpaceManager::get_instance().get_shrink_infos(shrink_condition, shrink_args->shrink_infos_))) {
       SE_LOG(WARN, "fail to get shrink infos", K(ret));
     } else if (0 == shrink_args->shrink_infos_.size()) {
       //no need do shrink
@@ -698,7 +692,7 @@ int DBImpl::schedule_shrink()
   }
 
   if (SUCCED(ret)) {
-    if (FAILED(extent_space_manager_->recycle_dropped_table_space())) {
+    if (FAILED(ExtentSpaceManager::get_instance().recycle_dropped_table_space())) {
       SE_LOG(WARN, "fail to recycle dropped table space", K(ret));
     } else {
       SE_LOG(DEBUG, "success to recycle dopped table space");
@@ -1252,7 +1246,7 @@ int DBImpl::background_dump(bool* madeProgress, JobContext* job_context) {
     return ret;
   }
   STDumpJob *dump_job = nullptr;
-  while(!dump_queue_.empty() && SUCC(ret)) {
+  while(!dump_queue_.empty() && SUCCED(ret)) {
     STDumpJob *front_dump_job = pop_front_dump_job();
     ColumnFamilyData *sub_table = nullptr;
     if (IS_NULL(front_dump_job) || IS_NULL(sub_table = front_dump_job->sub_table_)) {
@@ -1276,7 +1270,7 @@ int DBImpl::background_dump(bool* madeProgress, JobContext* job_context) {
     }
   }
 
-  if (SUCC(ret) && nullptr != dump_job && nullptr != job_context) {
+  if (SUCCED(ret) && nullptr != dump_job && nullptr != job_context) {
     ColumnFamilyData *sub_table = dump_job->get_subtable();
     job_context->task_type_ = TaskType::DUMP_TASK;
     job_context->output_level_ = 0;
@@ -1319,10 +1313,10 @@ int DBImpl::background_gc()
       index_id = gc_job->sub_table_->GetID();
       if (FAILED(gc_job->sub_table_->release_resource(false /*for_recovery*/))) {
         SE_LOG(WARN, "fail to release resource", K(ret));
-      } else if (FAILED(extent_space_manager_->unregister_subtable(
-                gc_job->sub_table_->get_table_space_id(), index_id))) {
-          SE_LOG(WARN, "fail to unregister subtable", K(ret), K(index_id),
-              "table_space_id", gc_job->sub_table_->get_table_space_id());
+      } else if (FAILED(ExtentSpaceManager::get_instance().unregister_subtable(
+          gc_job->sub_table_->get_table_space_id(), index_id))) {
+        SE_LOG(WARN, "fail to unregister subtable", K(ret), K(index_id),
+            "table_space_id", gc_job->sub_table_->get_table_space_id());
       } else {
         SE_LOG(INFO, "success to recycle dropped subtable", K(index_id),
             "table_space_id", gc_job->sub_table_->get_table_space_id());
@@ -1392,7 +1386,7 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context)
 
 void DBImpl::background_call_dump() {
   bool made_progress = false;
-  JobContext job_context(next_job_id_.fetch_add(1), storage_logger_, true);
+  JobContext job_context(next_job_id_.fetch_add(1), true);
   assert(bg_dump_scheduled_);
   TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:dump");
   {
@@ -1497,7 +1491,7 @@ void DBImpl::background_call_ebr() {
 
 void DBImpl::BackgroundCallFlush() {
   bool made_progress = false;
-  JobContext job_context(next_job_id_.fetch_add(1), storage_logger_, true);
+  JobContext job_context(next_job_id_.fetch_add(1), true);
   assert(bg_flush_scheduled_);
 
   TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:start");
@@ -1553,7 +1547,7 @@ void DBImpl::BackgroundCallFlush() {
 void DBImpl::BackgroundCallCompaction()
 {
   bool made_progress = false;
-  JobContext job_context(next_job_id_.fetch_add(1), storage_logger_, true);
+  JobContext job_context(next_job_id_.fetch_add(1), true);
   TEST_SYNC_POINT("BackgroundCallCompaction:0");
   {
     InstrumentedMutexLock l(&mutex_);
@@ -1642,17 +1636,15 @@ Status DBImpl::build_compaction_job(ColumnFamilyData* cfd,
   context.env_options_ = cfd->soptions();
   context.data_comparator_ = cfd->ioptions()->user_comparator;
   context.internal_comparator_ = &cfd->internal_comparator();
-  context.space_manager_ = extent_space_manager_;
   context.table_space_id_ = cfd->get_table_space_id();
   context.existing_snapshots_ = GetAll(&context.earliest_write_conflict_snapshot_);
   context.task_type_ = cf_job.task_info_.task_type_;
-  context.storage_logger_ = storage_logger_;
   context.enable_thread_tracking_ = immutable_db_options_.enable_thread_tracking;
   context.need_check_snapshot_ = cf_job.need_check_snapshot_;
   storage::ColumnFamilyDesc cf_desc((int32_t)cfd->GetID(), cfd->GetName());
   const CompactionTasksPicker &task_picker = cfd->get_task_picker();
   CompactionTasksPicker::TaskInfo &task_info = cf_job.task_info_;
-  if (FAILED(job->init(context, cf_desc, cfd->get_storage_manager(), snapshot))) {
+  if (FAILED(job->init(context, cf_desc, snapshot))) {
     SE_LOG(WARN,  "init compaction job failed.", K(ret));
   } else if (is_major_self_task(context.task_type_)) {
     // Case 1, MajorSelf or AutoMajorSelf or DeleteMajorSelf
@@ -1739,7 +1731,7 @@ Status DBImpl::run_one_compaction_task(ColumnFamilyData* sub_table,
     if (storage::INVALID_EVENT != event) {
       // unlock meta allows other compaction threads run before run compaction
       mutex_.Unlock();
-      if (FAILED(storage_logger_->begin(event))) {
+      if (FAILED(StorageLogger::get_instance().begin(event))) {
         SE_LOG(WARN, "fail to begin minor compaction", K(ret));
       } else {
         AutoThreadOperationStageUpdater stage_updater(ThreadStatus::STAGE_COMPACTION_RUN);
@@ -1773,8 +1765,8 @@ Status DBImpl::run_one_compaction_task(ColumnFamilyData* sub_table,
       // We handle shuttdown and bg_stopped under the mutex
       int64_t commit_log_seq = 0;
       if (Status::kOk != ret
-          || FAILED(storage_logger_->commit(commit_log_seq))) {
-        storage_logger_->abort();
+          || FAILED(StorageLogger::get_instance().commit(commit_log_seq))) {
+        StorageLogger::get_instance().abort();
         compaction->cleanup();
         if (Status::kShutdownInProgress == ret || Status::kCancelTask == ret) {
           SE_LOG(INFO, "has been shutting down or canceling", K(ret));
@@ -1820,11 +1812,11 @@ Status DBImpl::run_one_compaction_task(ColumnFamilyData* sub_table,
           mutex_.Unlock();
           int64_t dummy_log_seq = 0;
           storage::ChangeInfo& change_info = compaction->get_change_info();
-          if (FAILED(storage_logger_->begin(storage::SeEvent::MAJOR_COMPACTION))) {
+          if (FAILED(StorageLogger::get_instance().begin(storage::SeEvent::MAJOR_COMPACTION))) {
             SE_LOG(WARN, "fail to begin install major compaction", K(ret));
           } else if (FAILED(sub_table->apply_change_info(change_info, true))) {
             SE_LOG(WARN, "fail to apply change info", K(ret));
-          } else if (FAILED(storage_logger_->commit(dummy_log_seq))) {
+          } else if (FAILED(StorageLogger::get_instance().commit(dummy_log_seq))) {
             SE_LOG(WARN, "fail to commit trans", K(ret));
           }
 
@@ -1952,11 +1944,11 @@ Status DBImpl::BackgroundCompaction(bool* made_progress, JobContext* job_context
           int64_t dummy_log_seq = 0;
           AutoThreadOperationStageUpdater stage_updater(ThreadStatus::STAGE_COMPACTION_INSTALL);
           mutex_.Unlock();
-          if (FAILED(storage_logger_->begin(storage::MINOR_COMPACTION))) {
+          if (FAILED(StorageLogger::get_instance().begin(storage::MINOR_COMPACTION))) {
             SE_LOG(WARN, "fail to begin minor compaction", K(ret));
           } else if (FAILED(cfd->apply_change_info(cf_job->job_->get_change_info(), true))) {
             SE_LOG(WARN, "fail to apply change info", K(ret));
-          } else if (FAILED(storage_logger_->commit(dummy_log_seq))) {
+          } else if (FAILED(StorageLogger::get_instance().commit(dummy_log_seq))) {
             SE_LOG(WARN, "fail to commit compaction trans", K(ret));
           }
 

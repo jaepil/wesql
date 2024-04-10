@@ -116,7 +116,6 @@ Status SstFileWriter::Open(const std::string& file_path) {
   auto column_family = reinterpret_cast<ColumnFamilyHandleImpl*>(r->cfh);
   cfd = column_family->cfd();
 
-  mtables_->space_manager = cfd->get_extent_space_manager();
   mtables_->table_space_id_ = cfd->get_table_space_id();
 
   //TODO:yuanfen, temp adapt here

@@ -42,8 +42,7 @@ extern Iterator* NewDBIterator(util::Env* env,
                                table::InternalIterator* internal_iter,
                                const common::SequenceNumber& sequence,
                                uint64_t max_sequential_skip_in_iterations,
-                               util::Arena* arena = nullptr,
-                               storage::ExtentSpaceManager* space_manager = nullptr);
+                               util::Arena* arena = nullptr);
 
 extern Iterator* NewDBIterator(util::Env* env,
                                const common::ReadOptions& read_options,
@@ -53,8 +52,7 @@ extern Iterator* NewDBIterator(util::Env* env,
                                const common::SequenceNumber& sequence,
                                bool use_arena,  // using a outer arena
                                uint64_t max_sequential_skip_in_iterations,
-                               util::Arena* arena = nullptr,
-                               storage::ExtentSpaceManager* space_manager = nullptr);
+                               util::Arena* arena = nullptr);
 
 // A wrapper iterator which wraps DB Iterator and the arena, with which the DB
 // iterator is supposed be allocated. This class is used as an entry point of
@@ -105,7 +103,6 @@ extern ArenaWrappedDBIter* NewArenaWrappedDbIterator(
     const common::ReadOptions& read_options,
     const common::ImmutableCFOptions& cf_options,
     const util::Comparator* user_key_comparator,
-    const common::SequenceNumber& sequence,
-    storage::ExtentSpaceManager* space_manager = nullptr);
+    const common::SequenceNumber& sequence);
 }
 }  // namespace smartengine

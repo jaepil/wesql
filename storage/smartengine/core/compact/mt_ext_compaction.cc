@@ -67,11 +67,11 @@ int MtExtCompaction::update_row_cache() {
   int ret = Status::kOk;
   uint64_t start_micros = context_.cf_options_->env->NowMicros();
   if (nullptr != context_.cf_options_ && nullptr != context_.cf_options_->row_cache) {
-    for (int64_t i = 0; i < (int64_t)mem_iterators_.size() && SUCC(ret); ++i) {
+    for (int64_t i = 0; i < (int64_t)mem_iterators_.size() && SUCCED(ret); ++i) {
       InternalIterator *mem_iter = mem_iterators_.at(i);
       if (nullptr != mem_iter) {
         mem_iter->SeekToFirst();
-        while(mem_iter->Valid() && SUCC(ret)) {
+        while(mem_iter->Valid() && SUCCED(ret)) {
           if (FAILED(ExtentBasedTableBuilder::update_row_cache(
               cf_desc_.column_family_id_, mem_iter->key(), mem_iter->value(), *context_.cf_options_))) {
             SE_LOG(WARN, "failed to update row cache", K(ret), K(mem_iter->key()), K(mem_iter->value()));
@@ -109,7 +109,7 @@ int MtExtCompaction::run() {
       }
       stats_.record_stats_.total_input_extents += (batch.second - batch.first);
     }
-    if (SUCC(ret)) {
+    if (SUCCED(ret)) {
       NewCompactionIterator *compactor = nullptr;
       if (FAILED(build_mem_merge_iterator(merge_iterator))) {
         COMPACTION_LOG(WARN, "failed to build mem merge iterator", K(ret));
@@ -123,7 +123,7 @@ int MtExtCompaction::run() {
     clear_current_readers();
   }
   // merge extents end
-  if (SUCC(ret) && FAILED(close_extent(&flush_minitables_))) {
+  if (SUCCED(ret) && FAILED(close_extent(&flush_minitables_))) {
     COMPACTION_LOG(WARN, "close extent failed.", K(ret));
   }
   if (nullptr != mini_tables_.change_info_) {
@@ -174,7 +174,7 @@ int MtExtCompaction::build_mem_se_iterators() {
     ret = Status::kMemoryLimit;
     COMPACTION_LOG(WARN, "alloc memory for se_iterators failed", K(ret), K(mem_num));
   }
-  for (int64_t  i = 0; i < mem_num && SUCC(ret); ++i) {
+  for (int64_t  i = 0; i < mem_num && SUCCED(ret); ++i) {
     new(mem_se_iterators_ + i) MemSEIterator();
     mem_se_iterators_[i].set_mem_iter(mem_iterators_.at(i));
   }

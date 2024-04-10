@@ -58,17 +58,11 @@ class WalManagerTest : public testing::Test {
     versions_.reset(new VersionSet(dbname_, &db_options_, env_options_,
                                    table_cache_.get(), &write_buffer_manager_));
     GlobalContext *global_ctx = new GlobalContext();
-    StorageLogger *storage_logger = new StorageLogger();
     DBOptions dboption;
     db::FileNumber next_file_number(0);
-    //TODO:yuanfeng
-    //ExtentSpaceManager *space_manager = new ExtentSpaceManager(dboption, next_file_number);
-    ExtentSpaceManager *space_manager = nullptr;
     global_ctx->env_ = env_.get();
     global_ctx->cache_ = table_cache_.get();
-    global_ctx->storage_logger_ = storage_logger;
     global_ctx->write_buf_mgr_ = &write_buffer_manager_;
-    global_ctx->extent_space_mgr_ = space_manager;
 
     versions_->init(global_ctx);
     wal_manager_.reset(new WalManager(db_options_, env_options_));

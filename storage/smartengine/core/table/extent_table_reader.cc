@@ -1366,24 +1366,24 @@ Status ExtentBasedTable::Get(const ReadOptions& read_options, const Slice& key,
             if ((get_context->State() == GetContext::kFound) && (parsed_key.type == kTypeValueLarge)) {
               storage::RandomAccessExtent *file = dynamic_cast<storage::RandomAccessExtent *>(rep_->file->file());
               assert(file);
-              storage::ExtentSpaceManager *space_manager = file->space_manager();
-
               Slice result;
               LargeValue large_value;
               std::unique_ptr<char[], ptr_delete<char>> unzip_buf;
               size_t unzip_buf_size = 0;
               std::unique_ptr<char[], void(&)(void *)> oob_uptr(nullptr, base_memalign_free);
-              size_t oob_size = 0;
+              int64_t oob_size = 0;
               int ret = Status::kOk;
-              if (Status::kOk != (ret = get_oob_large_value(biter.value(), space_manager, large_value, oob_uptr, oob_size))) {
+              if (FAILED(get_oob_large_value(biter.value(), large_value, oob_uptr, oob_size))) {
                 __SE_LOG(ERROR, "fail to get content of large value\n");
                 s = Status::kCorruption;
               } else if (kNoCompression == large_value.compression_type_) {
                 get_context->SaveLargeValue(Slice(oob_uptr.get(), large_value.size_));
-              } else if (Status::kOk != (ret = unzip_data(oob_uptr.get(), large_value.size_,
-                      LargeValue::COMPRESSION_FORMAT_VERSION,
-                      static_cast<CompressionType>(large_value.compression_type_),
-                      unzip_buf, unzip_buf_size))) {
+              } else if (FAILED(unzip_data(oob_uptr.get(),
+                                           large_value.size_,
+                                           LargeValue::COMPRESSION_FORMAT_VERSION,
+                                           static_cast<CompressionType>(large_value.compression_type_),
+                                           unzip_buf,
+                                           unzip_buf_size))) {
                 __SE_LOG(ERROR, "fail to unzip large value\n");
                 s = Status::kCorruption;
               } else {
@@ -2094,7 +2094,7 @@ int ExtentBasedTable::do_io_prefetch(const int64_t offset,
                                      AIOHandle *aio_handle)
 {
   int ret = Status::kOk;
-  if (ISNULL(aio_handle)) {
+  if (IS_NULL(aio_handle)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "aio handle is nullptr", K(ret));
   } else if (FAILED(rep_->file->prefetch(offset, size, aio_handle))) {
@@ -2116,7 +2116,7 @@ int ExtentBasedTable::new_index_iterator(const ReadOptions &read_options,
       IndexReader* index_reader = nullptr;
       if (FAILED(CreateIndexReader(&index_reader, &handle.aio_handle_).code())) {
         SE_LOG(WARN, "failed to create index reader", K(ret));
-      } else if (ISNULL(index_reader)) {
+      } else if (IS_NULL(index_reader)) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "index reader is nullptr", K(ret));
       } else {
@@ -2153,7 +2153,7 @@ int ExtentBasedTable::new_index_iterator(const ReadOptions &read_options,
     }
   }
   if (SUCCED(ret)) {
-    if (ISNULL(handle.block_entry_.value)) {
+    if (IS_NULL(handle.block_entry_.value)) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "block cache value is nullptr", K(ret));
     } else {
@@ -2251,7 +2251,7 @@ int ExtentBasedTable::new_data_block_iterator(const ReadOptions &read_options,
     }
   }
   if (SUCCED(ret)) {
-    if (ISNULL(handle.block_entry_.value)) {
+    if (IS_NULL(handle.block_entry_.value)) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "block cache value is nullptr", K(ret));
     } else {

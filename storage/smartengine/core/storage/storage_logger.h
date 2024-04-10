@@ -113,17 +113,15 @@ private:
     int append_log(int64_t trans_id, ManifestRedoLogType log_type, ManifestLogEntry &log_entry);
   };
 public:
-  StorageLogger();
-  ~StorageLogger();
-
+  static StorageLogger &get_instance();
   int init(util::Env *env,
            std::string db_name,
            util::EnvOptions env_options,
            common::ImmutableDBOptions db_options,
            db::VersionSet *version_set,
-           ExtentSpaceManager *extent_space_manager,
            int64_t max_manifest_log_file_size);
   void destroy();
+
   int begin(enum SeEvent event);
   int commit(int64_t &log_number);
   int abort();
@@ -138,8 +136,6 @@ public:
   int manifest_file_range(int32_t &begin, int32_t &end, int64_t &end_pos);
   int32_t current_manifest_file_number() const { return current_manifest_file_number_; }
   uint64_t current_manifest_file_size() const { return log_writer_->file()->get_file_size(); }
-  // information schema
-  ExtentSpaceManager *get_extent_space_manager() const { return extent_space_manager_; }
   int record_incremental_extent_ids(const int32_t first_manifest_file_num,
                                     const int32_t last_manifest_file_num,
                                     const uint64_t last_manifest_file_size);
@@ -208,6 +204,11 @@ private:
     return active_trans_cnt_.load();
   }
   void wait_trans_barrier();
+
+private:
+  StorageLogger();
+  ~StorageLogger();
+
 public:
   static const int64_t DEFAULT_TRANS_CONTEXT_COUNT = 4;
   static const int64_t MAX_LOG_SIZE = 2 * 1024 * 1024; //2MB
@@ -224,7 +225,6 @@ private:
   common::ImmutableDBOptions db_options_;
   int64_t log_file_number_; //checkpoint file, manifest file
   db::VersionSet *version_set_;
-  ExtentSpaceManager *extent_space_manager_;
   std::atomic<int64_t> curr_manifest_log_size_;
   db::log::Writer *log_writer_;
   int64_t max_manifest_log_file_size_;

@@ -55,9 +55,6 @@ class BlockIter;
 }
 
 namespace storage {
-
-class ExtentSpaceManager;
-class StorageLogger;
 class NewCompactionIterator;
 
 struct CompactionContext {
@@ -70,7 +67,6 @@ struct CompactionContext {
   // user Comparator in data block level;
   const util::Comparator *data_comparator_;
   const db::InternalKeyComparator *internal_comparator_;
-  ExtentSpaceManager *space_manager_;
   int64_t table_space_id_;
   common::SequenceNumber earliest_write_conflict_snapshot_;
   std::vector<common::SequenceNumber> existing_snapshots_;
@@ -83,7 +79,6 @@ struct CompactionContext {
   // We use smallest (Extent.type_.sequence_-1) as the selected layer sequence.
   // Default: -1, means have not been set.
   int64_t force_layer_sequence_;
-  storage::StorageLogger *storage_logger_;
   bool enable_thread_tracking_;
   bool need_check_snapshot_;
 
@@ -96,13 +91,11 @@ struct CompactionContext {
         env_options_(nullptr),
         data_comparator_(nullptr),
         internal_comparator_(nullptr),
-        space_manager_(nullptr),
         table_space_id_(-1),
         earliest_write_conflict_snapshot_(0),
         output_level_(1),
         task_type_(db::TaskType::INVALID_TYPE_TASK),
         force_layer_sequence_(-1),
-        storage_logger_(nullptr),
         enable_thread_tracking_(false),
         need_check_snapshot_(true)
   {
@@ -114,8 +107,7 @@ struct CompactionContext {
            nullptr != cf_options_ &&
            nullptr != mutable_cf_options_ && nullptr != env_options_ &&
            nullptr != data_comparator_ && nullptr != internal_comparator_ &&
-           nullptr != space_manager_ && table_space_id_ >= 0 &&
-           nullptr != storage_logger_;
+           table_space_id_ >= 0;
   }
 };
 

@@ -89,7 +89,6 @@ void createSST(MiniTables& mtables,
 class BackupCheckToolTest : public testing::Test {
  public:
   std::string dbname_;
-  ExtentSpaceManager *spacemanager;
   BlockBasedTableOptions table_options_;
   DBOptions options;
   FileNumber next_file_number_;
@@ -99,8 +98,6 @@ class BackupCheckToolTest : public testing::Test {
   {
     dbname_ = test::TmpDir(Env::Default()) + "/backup_check_test";
     options.db_paths.emplace_back(dbname_, 0);
-    spacemanager = new ExtentSpaceManager(options, next_file_number_);
-    mtables.space_manager = spacemanager;
   }
 
   void test_check_extent(tools::BackupCheckTool &tool) {

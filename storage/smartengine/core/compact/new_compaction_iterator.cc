@@ -149,11 +149,11 @@ int NewCompactionIterator::next() {
     at_next_ = false;
     output_level_ = cur_iterator_->get_output_level();
   }
-  if (SUCC(ret) && SEIterator::kKVLevel == output_level_) {
+  if (SUCCED(ret) && SEIterator::kKVLevel == output_level_) {
     ret = process_next_item();
   }
 
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     if (valid_) {
       has_outputted_key_ = true;
     }
@@ -301,7 +301,7 @@ int NewCompactionIterator::deal_with_kv_with_snapshot() {
   } else {
     valid_ = true;
   }
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     lastkey_seq_ = ikey_.sequence;
     lastkey_snapshot_ = curkey_snapshot;
   }
@@ -340,7 +340,7 @@ int NewCompactionIterator::deal_with_kv_without_snapshot(const bool is_equal) {
   } else {
     valid_ = true;
   }
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     lastkey_seq_ = ikey_.sequence;
   }
   return ret;
@@ -352,7 +352,7 @@ int NewCompactionIterator::process_next_item() {
   valid_ = false;
   while (!valid_
          && SEIterator::kKVLevel == output_level_
-         && SUCC(ret)
+         && SUCCED(ret)
          && !IsShuttingDown()
          && !is_bg_stopped()) {
     key_ = cur_iterator_->get_key();
@@ -402,11 +402,11 @@ int NewCompactionIterator::process_next_item() {
     }
   }
 
-  if (SUCC(ret) && !valid_ && (IsShuttingDown() || is_bg_stopped())) {
+  if (SUCCED(ret) && !valid_ && (IsShuttingDown() || is_bg_stopped())) {
     ret = Status::kShutdownInProgress;
     COMPACTION_LOG(WARN, "invalid shutdown or bg_stopped.", K(ret));
   }
-  if (SUCC(ret) && is_canceled()) {
+  if (SUCCED(ret) && is_canceled()) {
     ret = Status::kCancelTask;
     COMPACTION_LOG(INFO, "task has been canceled", K(ret), K(get_task_type_name(change_info_.task_type_)));
   }
@@ -443,7 +443,7 @@ int NewCompactionIterator::earliest_visible_snapshot(
     SequenceNumber prev = kMaxSequenceNumber;
     SequenceNumber cur = prev;
     out = kMaxSequenceNumber;
-    for (size_t idx = 0; idx < snapshots_->size() && SUCC(ret);
+    for (size_t idx = 0; idx < snapshots_->size() && SUCCED(ret);
          ++idx) {
       cur = snapshots_->at(idx);
       if (prev != kMaxSequenceNumber && prev > cur) {
@@ -454,11 +454,11 @@ int NewCompactionIterator::earliest_visible_snapshot(
         out = cur;
         return ret;
       }
-      if (SUCC(ret)) {
+      if (SUCCED(ret)) {
         prev = cur;
       }
     }
-    if (SUCC(ret)) {
+    if (SUCCED(ret)) {
       prev_snapshot = prev;
     }
   }

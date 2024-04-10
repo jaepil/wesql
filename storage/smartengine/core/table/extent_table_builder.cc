@@ -24,6 +24,7 @@
 #include "db/dbformat.h"
 #include "db/version_set.h"
 #include "memory/base_malloc.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_manager.h"
 #include "table/index_builder.h"
@@ -47,11 +48,12 @@
 
 namespace smartengine {
 using namespace util;
+using namespace cache;
 using namespace common;
 using namespace db;
 using namespace monitor;
-using namespace cache;
 using namespace memory;
+using namespace storage;
 
 namespace table {
 
@@ -214,8 +216,9 @@ int ExtentBasedTableBuilder::init_one_sst() {
     return Status::kNoSpace;
   }
 
-  ret = mtables_->space_manager->allocate(mtables_->table_space_id_,
-      storage::HOT_EXTENT_SPACE, rep_->extent_);
+  ret = ExtentSpaceManager::get_instance().allocate(mtables_->table_space_id_,
+                                                    storage::HOT_EXTENT_SPACE,
+                                                    rep_->extent_);
 #ifndef NDEBUG
   if (TEST_is_ignore_flush_data()) {
     return Status::kOk;
@@ -603,9 +606,9 @@ int ExtentBasedTableBuilder::Add(const Slice& key, const Slice& value) {
 
   for (size_t off = 0; SUCCED(ret) && off < size_on_disk; off += EXTENT_SIZE) {
     oob_extent.reset();
-    FAIL_RETURN_MSG(mtables_->space_manager->allocate(mtables_->table_space_id_,
-                                                      storage::HOT_EXTENT_SPACE,
-                                                      oob_extent),
+    FAIL_RETURN_MSG(ExtentSpaceManager::get_instance().allocate(mtables_->table_space_id_,
+                                                                storage::HOT_EXTENT_SPACE,
+                                                                oob_extent),
                     "Could not allocate extent(%d)", ret);
     not_flushed_lob_extent_id_ = oob_extent.get_extent_id();
     size_t count = EXTENT_SIZE;
@@ -987,9 +990,9 @@ int ExtentBasedTableBuilder::write_sst(Footer& footer) {
       //must not enter this branch
       SE_LOG(ERROR, "unexpected error, extent size more than 2M", K(remain_size), K(footer_size));
       abort();
-      s = mtables_->space_manager->allocate(mtables_->table_space_id_,
-                                            storage::HOT_EXTENT_SPACE,
-                                            next_extent);
+      s = ExtentSpaceManager::get_instance().allocate(mtables_->table_space_id_,
+                                                      storage::HOT_EXTENT_SPACE,
+                                                      next_extent);
       if (!s.ok()) {
         __SE_LOG(ERROR, "Could not allocate extent");
         return s.code();
@@ -1280,10 +1283,10 @@ int ExtentBasedTableBuilder::Abandon() {
     /**recycle normal extent has flushed to disk*/
     for (uint32_t i = 0; SUCCED(ret) && i < mtables_->metas.size(); ++i) {
       extent_id = mtables_->metas[i].fd.extent_id;
-      if (FAILED(mtables_->space_manager->recycle(
-              mtables_->table_space_id_, storage::HOT_EXTENT_SPACE, extent_id))) {
-        SE_LOG(WARN, "fail to recycle flushed normal extent", K(ret),
-                    K(extent_id));
+      if (FAILED(ExtentSpaceManager::get_instance().recycle(mtables_->table_space_id_,
+                                                            storage::HOT_EXTENT_SPACE,
+                                                            extent_id))) {
+        SE_LOG(WARN, "fail to recycle flushed normal extent", K(ret), K(extent_id));
       }
     }
     mtables_->metas.clear();
@@ -1293,11 +1296,10 @@ int ExtentBasedTableBuilder::Abandon() {
       for (uint32_t i = 0; SUCCED(ret) && i < flushed_lob_extent_ids_.size();
            ++i) {
         extent_id = flushed_lob_extent_ids_.at(i);
-        if (FAILED(mtables_->space_manager->recycle(mtables_->table_space_id_,
-                                                    storage::HOT_EXTENT_SPACE,
-                                                    extent_id))) {
-          SE_LOG(WARN, "fail to recycle flushed lob extent", K(ret),
-                      K(extent_id));
+        if (FAILED(ExtentSpaceManager::get_instance().recycle(mtables_->table_space_id_,
+                                                              storage::HOT_EXTENT_SPACE,
+                                                              extent_id))) {
+          SE_LOG(WARN, "fail to recycle flushed lob extent", K(ret), K(extent_id));
         }
       }
     }
@@ -1305,19 +1307,21 @@ int ExtentBasedTableBuilder::Abandon() {
 
     /**recycle not flushed normal extent*/
     if (SUCCED(ret) && 0 != not_flushed_normal_extent_id_.id()) {
-      if (FAILED(mtables_->space_manager->recycle(
-              mtables_->table_space_id_, storage::HOT_EXTENT_SPACE,
-              not_flushed_normal_extent_id_, false /*no extent meta*/))) {
+      if (FAILED(ExtentSpaceManager::get_instance().recycle(mtables_->table_space_id_,
+                                                            storage::HOT_EXTENT_SPACE,
+                                                            not_flushed_normal_extent_id_,
+                                                            false /**has_meta*/))) {
         SE_LOG(WARN, "fail to recycle not flushed normal extent", K(ret),
-                    K(not_flushed_normal_extent_id_));
+            K(not_flushed_normal_extent_id_));
       }
     }
 
     /**recycle not flushed lob extent*/
     if (SUCCED(ret) && 0 != not_flushed_lob_extent_id_.id()) {
-      if (FAILED(mtables_->space_manager->recycle(
-          mtables_->table_space_id_, storage::HOT_EXTENT_SPACE,
-          not_flushed_lob_extent_id_, false /*no extent meta*/))) {
+      if (FAILED(ExtentSpaceManager::get_instance().recycle(mtables_->table_space_id_,
+                                                            storage::HOT_EXTENT_SPACE,
+                                                            not_flushed_lob_extent_id_,
+                                                            false /**has_meta*/))) {
         SE_LOG(WARN, "fail to recycle the extent", K(ret), K(not_flushed_lob_extent_id_));
       } else {
         SE_LOG(INFO, "success to recycle thr not flushed lob extent", K_(not_flushed_lob_extent_id));
@@ -1374,7 +1378,7 @@ int ExtentBasedTableBuilder::write_extent_meta(const storage::ExtentMeta &extent
 {
   int ret = Status::kOk;
 
-  if (FAILED(mtables_->space_manager->write_meta(extent_meta, true))) {
+  if (FAILED(ExtentMetaManager::get_instance().write_meta(extent_meta, true /**write_log*/))) {
     SE_LOG(WARN, "fail to write extent meta", K(ret));
   } else {
     if (is_large_object_extent) {

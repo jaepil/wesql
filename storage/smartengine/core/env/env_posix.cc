@@ -539,7 +539,7 @@ class PosixEnv : public Env {
     } else {
       CreateDir("./tmp");
       char buf[100];
-      snprintf(buf, sizeof(buf), "./tmp/rocksdbtest-%d", int(geteuid()));
+      snprintf(buf, sizeof(buf), "./tmp/smartengine-test-%d", int(geteuid()));
       *result = buf;
     }
     // Directory may already exist

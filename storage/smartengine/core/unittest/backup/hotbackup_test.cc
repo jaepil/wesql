@@ -324,9 +324,9 @@ TEST_F(HotbackupTest, delete_cf)
   ASSERT_TRUE(gc_job != nullptr);
   int64_t index_id = gc_job->sub_table_->GetID();
   ASSERT_OK(gc_job->sub_table_->release_resource(false));
-  ASSERT_OK(dbfull()->extent_space_manager_->unregister_subtable(gc_job->sub_table_->get_table_space_id(), index_id));
+  ASSERT_OK(ExtentSpaceManager::get_instance().unregister_subtable(gc_job->sub_table_->get_table_space_id(), index_id));
   // delete sst file
-  dbfull()->extent_space_manager_->recycle_dropped_table_space();
+  ExtentSpaceManager::get_instance().recycle_dropped_table_space();
 
   ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));

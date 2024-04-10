@@ -15,6 +15,7 @@
  */
 
 #include "storage/multi_version_extent_meta_layer.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "util/arena.h"
 
@@ -25,9 +26,8 @@ using namespace common;
 using namespace monitor;
 namespace storage
 {
-ExtentLayer::ExtentLayer(ExtentSpaceManager *extent_space_mgr, const util::Comparator *cmp)
-    : extent_space_mgr_(extent_space_mgr),
-      cmp_(cmp),
+ExtentLayer::ExtentLayer(const util::Comparator *cmp)
+    : cmp_(cmp),
       sequence_number_(0),
       extent_meta_arr_(DEFAULT_EXTENT_META_SIZE, nullptr, memory::ModId::kStorageMgr),
       lob_extent_arr_(DEFAULT_EXTENT_META_SIZE, nullptr, memory::ModId::kStorageMgr),
@@ -215,9 +215,9 @@ int ExtentLayer::recover_reference_extents()
     if (IS_NULL(extent_meta = *iter)) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret));
-    } else if (FAILED(extent_space_mgr_->reference(extent_meta->table_space_id_,
-                                                   extent_meta->extent_space_type_,
-                                                   extent_meta->extent_id_))) {
+    } else if (FAILED(ExtentSpaceManager::get_instance().reference(extent_meta->table_space_id_,
+                                                                   extent_meta->extent_space_type_,
+                                                                   extent_meta->extent_id_))) {
       SE_LOG(WARN, "fail to reference extent", K(ret), K(*extent_meta));
     } else {
       SE_LOG(INFO, "success to reference extent", K(*extent_meta));
@@ -249,16 +249,12 @@ int ExtentLayer::build_extent_meta_arr(const util::autovector<ExtentId> &extent_
   int ret = Status::kOk;
   ExtentMeta *extent_meta = nullptr;
 
-  if (IS_NULL(extent_space_mgr_)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(extent_space_mgr_));
-  } else {
-    for (uint64_t i = 0; SUCCED(ret) && i < extent_ids.size(); ++i) {
-      if (FAILED(extent_space_mgr_->get_meta(extent_ids.at(i), extent_meta))) {
-        SE_LOG(WARN, "fail to get extent meta", K(ret), "extent_id", extent_ids.at(i));
-      } else if (FAILED(add_extent(extent_meta, true /*sorted*/))) {
-        SE_LOG(WARN, "fail to add extent", K(ret), "extent_id", extent_ids.at(i));
-      }
+  for (uint64_t i = 0; SUCCED(ret) && i < extent_ids.size(); ++i) {
+    if (IS_NULL(extent_meta = ExtentMetaManager::get_instance().get_meta(extent_ids.at(i)))) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(WARN, "fail to get extent meta", K(ret), "extent_id", extent_ids.at(i));
+    } else if (FAILED(add_extent(extent_meta, true /*sorted*/))) {
+      SE_LOG(WARN, "fail to add extent", K(ret), "extent_id", extent_ids.at(i));
     }
   }
 
@@ -270,16 +266,12 @@ int ExtentLayer::build_lob_extent_meta_arr(const util::autovector<ExtentId> &ext
   int ret = Status::kOk;
   ExtentMeta *extent_meta = nullptr;
 
-  if (IS_NULL(extent_space_mgr_)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(extent_space_mgr_));
-  } else {
-    for (uint64_t i = 0; SUCCED(ret) && i < extent_ids.size(); ++i) {
-      if (FAILED(extent_space_mgr_->get_meta(extent_ids.at(i), extent_meta))) {
-        SE_LOG(WARN, "fail to get extent meta", K(ret), "extent_id", extent_ids.at(i));
-      } else if (FAILED(add_lob_extent(extent_meta))) {
-        SE_LOG(WARN, "fail to add lob extent", K(ret), "extent_id", extent_ids.at(i));
-      }
+  for (uint64_t i = 0; SUCCED(ret) && i < extent_ids.size(); ++i) {
+    if (IS_NULL(extent_meta = ExtentMetaManager::get_instance().get_meta(extent_ids.at(i)))) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(WARN, "fail to get extent meta", K(ret), "extent_id", extent_ids.at(i));
+    } else if (FAILED(add_lob_extent(extent_meta))) {
+      SE_LOG(WARN, "fail to add lob extent", K(ret), "extent_id", extent_ids.at(i));
     }
   }
 
@@ -547,10 +539,9 @@ common::Status ExtentLayerIterator::status() const
   return common::Status::OK();
 }
 
-ExtentLayerVersion::ExtentLayerVersion(int32_t level, ExtentSpaceManager *extent_space_mgr, const util::Comparator *cmp)
+ExtentLayerVersion::ExtentLayerVersion(int32_t level, const util::Comparator *cmp)
     : refs_(0),
       level_(level),
-      extent_space_mgr_(extent_space_mgr),
       cmp_(cmp),
       extent_layer_arr_(DEFAULT_EXTENT_LAYER_COUNT, nullptr, memory::ModId::kStorageMgr),
       dump_extent_layer_(nullptr),
@@ -852,7 +843,7 @@ int ExtentLayerVersion::deserialize(const char *buf, int64_t buf_length, int64_t
         extent_layer_arr_.clear();
       }
       for (int64_t layer_index = 0; SUCCED(ret) && layer_index < extent_layer_count; ++layer_index) {
-        if (IS_NULL(extent_layer = MOD_NEW_OBJECT(memory::ModId::kStorageMgr, ExtentLayer, extent_space_mgr_, cmp_))) {
+        if (IS_NULL(extent_layer = MOD_NEW_OBJECT(memory::ModId::kStorageMgr, ExtentLayer, cmp_))) {
           ret = Status::kMemoryLimit;
           SE_LOG(WARN, "fail to allocate memory for ExtentLayer", K(ret), K(layer_index), K(extent_layer_count));
         } else if (FAILED(extent_layer->deserialize(buf, buf_length, pos))) {
@@ -869,7 +860,7 @@ int ExtentLayerVersion::deserialize(const char *buf, int64_t buf_length, int64_t
         SE_LOG(WARN, "fail to deserialize dump extent layer count", K(ret));
       } else {
         if (1 == dump_extent_layer_count) {
-          if (IS_NULL(dump_extent_layer_ = MOD_NEW_OBJECT(memory::ModId::kStorageMgr, ExtentLayer, extent_space_mgr_, cmp_))) {
+          if (IS_NULL(dump_extent_layer_ = MOD_NEW_OBJECT(memory::ModId::kStorageMgr, ExtentLayer, cmp_))) {
             ret = Status::kMemoryLimit;
             SE_LOG(WARN, "fail to allocate memory for dump ExtentLayer", K(ret));
           } else if (FAILED(dump_extent_layer_->deserialize(buf, buf_length, pos))) {

@@ -24,9 +24,9 @@ namespace smartengine
 using namespace common;
 namespace storage
 {
+
 ExtentMetaManager::ExtentMetaManager()
     : is_inited_(false),
-      storage_logger_(nullptr),
       meta_mutex_(),
       extent_meta_map_()
 {
@@ -35,6 +35,12 @@ ExtentMetaManager::ExtentMetaManager()
 ExtentMetaManager::~ExtentMetaManager()
 {
   destroy();
+}
+
+ExtentMetaManager &ExtentMetaManager::get_instance()
+{
+  static ExtentMetaManager extent_meta_manager;
+  return extent_meta_manager;
 }
 
 void ExtentMetaManager::destroy()
@@ -48,18 +54,15 @@ void ExtentMetaManager::destroy()
   }
 }
 
-int ExtentMetaManager::init(StorageLogger *storage_logger)
+// TODO(Zhao Dongsheng): the init function do nothing now
+int ExtentMetaManager::init()
 {
   int ret = Status::kOk;
 
   if (UNLIKELY(is_inited_)) {
     ret = Status::kInitTwice;
     SE_LOG(WARN, "ExtentMetaManager has been inited", K(ret));
-  } else if (IS_NULL(storage_logger)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(storage_logger));
   } else {
-    storage_logger_ = storage_logger;
     is_inited_ = true;
   }
 
@@ -72,7 +75,7 @@ int ExtentMetaManager::write_meta(const ExtentMeta &extent_meta, bool write_log)
   ExtentMeta *extent_meta_ptr = nullptr;
   ModifyExtentMetaLogEntry log_entry(extent_meta);
 
-  if (write_log && FAILED(storage_logger_->write_log(REDO_LOG_MODIFY_EXTENT_META, log_entry))) {
+  if (write_log && FAILED(StorageLogger::get_instance().write_log(REDO_LOG_MODIFY_EXTENT_META, log_entry))) {
     SE_LOG(WARN, "fail to write change extent meta log", K(ret));
   } else if (FAILED(extent_meta.deep_copy(extent_meta_ptr))) {
     SE_LOG(WARN, "fail to deep copy extent_meta", K(ret));

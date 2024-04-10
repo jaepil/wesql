@@ -714,8 +714,7 @@ set(TESTS
 set(BENCHMARKS
   cache/cache_bench.cc
   memtable/memtablerep_bench.cc
-  tools/db_bench.cc
-  tools/perf_memtable_search.cc)
+  tools/db_bench.cc)
 add_library(testharness OBJECT unittest/util/testharness.cc)
 add_library(testutil OBJECT unittest/util/testutil.cc)
 foreach(sourcefile ${BENCHMARKS})

@@ -128,7 +128,7 @@ private:
     if (UNLIKELY(!is_aligned(offset)) || UNLIKELY(!is_aligned(size))) {
       ret = common::Status::kInvalidArgument;
       SE_LOG(WARN, "not aligned", K(ret), K(size), K(offset));
-    } else if (ISNULL(io_buf_ = static_cast<char *>(memory::base_memalign(DIO_ALIGN_SIZE, size, memory::ModId::kAIOBuffer)))) {
+    } else if (IS_NULL(io_buf_ = static_cast<char *>(memory::base_memalign(DIO_ALIGN_SIZE, size, memory::ModId::kAIOBuffer)))) {
       ret = common::Status::kNoSpace;
       SE_LOG(WARN, "failed to alloc io buf", K(ret), K(aligned_size_));
     } else if (UNLIKELY(!is_aligned(uintptr_t(io_buf_)))) {
@@ -232,7 +232,7 @@ struct AIOReq
   int prepare_write(const AIOInfo &aio_info, const char *data)
   {
     int ret = common::Status::kOk;
-    if (UNLIKELY(!aio_info.is_valid()) || ISNULL(data)) {
+    if (UNLIKELY(!aio_info.is_valid()) || IS_NULL(data)) {
       ret = common::Status::kInvalidArgument;
       SE_LOG(WARN, "invalid argument", K(ret), K(aio_info), KP(data));
     } else {
@@ -328,7 +328,7 @@ public:
         }
         ret = common::Status::kIOError;
         __SE_LOG(ERROR, "aio init failed, ret=%d, max_events=%lu, aio-nr=%s", ret, max_events_, p != NULL ? p : "");
-      } else if (ISNULL(events_ = new io_event[max_events_])) {
+      } else if (IS_NULL(events_ = new io_event[max_events_])) {
         ret = common::Status::kMemoryLimit;
         SE_LOG(WARN, "alloc events failed", K(ret), K(max_events_));
       } else {
@@ -358,7 +358,7 @@ public:
     if (UNLIKELY(!inited_)) {
       ret = common::Status::kNotInit;
       SE_LOG(WARN, "aio not inited", K(ret));
-    } else if (ISNULL(reqs) || UNLIKELY(count > max_events_)) {
+    } else if (IS_NULL(reqs) || UNLIKELY(count > max_events_)) {
       ret = common::Status::kInvalidArgument;
       SE_LOG(WARN, "invalid argument", K(ret), KP(reqs), K(count));
       // these reqs won't be submitted,
@@ -394,7 +394,7 @@ public:
     if (UNLIKELY(!inited_)) {
       ret = common::Status::kNotInit;
       SE_LOG(WARN, "aio not inited", K(ret));
-    } else if (ISNULL(req)) {
+    } else if (IS_NULL(req)) {
       ret = common::Status::kInvalidArgument;
       SE_LOG(WARN, "invalid argument", K(ret), KP(req));
     } else if (common::Status::kOk == req->status_) {
@@ -440,7 +440,7 @@ public:
     if (UNLIKELY(!inited_)) {
       ret = common::Status::kNotInit;
       SE_LOG(WARN, "aio not inited", K(ret));
-    } else if (ISNULL(req)) {
+    } else if (IS_NULL(req)) {
       ret = common::Status::kInvalidArgument;
       SE_LOG(WARN, "invalid argument", K(ret), KP(req));
     } else if (common::Status::kOk == req->status_) {
@@ -555,7 +555,7 @@ struct AIOHandle
   int prefetch(const AIOInfo &aio_info) {
     int ret = common::Status::kOk;
     AIO *aio_instance = AIO::get_instance();
-    if (ISNULL(aio_req_.get()) || ISNULL(aio_instance)) {
+    if (IS_NULL(aio_req_.get()) || IS_NULL(aio_instance)) {
       ret = common::Status::kErrorUnexpected;
       SE_LOG(WARN, "aio req or aio instance is nullptr", K(ret), KP(aio_req_.get()), KP(aio_instance));
     } else if (FAILED(aio_req_->prepare_read(aio_info))) {
@@ -569,7 +569,7 @@ struct AIOHandle
   int read(int64_t offset, int64_t size, common::Slice *result, char *scratch) {
     int ret = common::Status::kOk;
     AIO *aio_instance = AIO::get_instance();
-    if (ISNULL(aio_req_.get()) || ISNULL(aio_instance)) {
+    if (IS_NULL(aio_req_.get()) || IS_NULL(aio_instance)) {
       ret = common::Status::kErrorUnexpected;
       SE_LOG(WARN, "aio req or aio instance is nullptr", K(ret), KP(aio_req_.get()), KP(aio_instance));
     } else if (common::Status::kOk == aio_req_->status_) {
@@ -604,7 +604,7 @@ struct AIOHandle
   int read_by_actual_size(int64_t offset, int64_t size, common::Slice *result, char *scratch) {
     int ret = common::Status::kOk;
     AIO *aio_instance = AIO::get_instance();
-    if (ISNULL(aio_req_.get()) || ISNULL(aio_instance)) {
+    if (IS_NULL(aio_req_.get()) || IS_NULL(aio_instance)) {
       ret = common::Status::kErrorUnexpected;
       SE_LOG(WARN, "aio req or aio instance is nullptr", K(ret), KP(aio_req_.get()), KP(aio_instance));
     } else if (common::Status::kOk == aio_req_->status_) {

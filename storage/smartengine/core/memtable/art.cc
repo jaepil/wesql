@@ -34,7 +34,7 @@ void ART::calc_prefix(Slice &lhs, Slice &rhs, uint32_t &byte_pos, uint32_t limit
 
 int ART::alloc_newnode(ARTNodeBase *&new_node, const uint8_t *prefix, uint16_t prefix_len) {
   int ret = Status::kOk;
-  if (ISNULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode4))) { // TODO(nanlong.ynl): use memory pool for alloc
+  if (IS_NULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode4))) { // TODO(nanlong.ynl): use memory pool for alloc
     SE_LOG(ERROR, "failed to alloc memory for new node", KP(new_node));
     ret = Status::kMemoryLimit;
   } else if (FAILED(new_node->init(prefix, prefix_len))) {
@@ -131,7 +131,7 @@ int ART::largest_artvalue_in_subtrie(void *root, ARTValue *&largest_artvalue,
   uint64_t parent_version_snapshot = 0;
 
   while (IS_ARTVALUE(next_node) == false) {
-    if (ISNULL(next_node)) {
+    if (IS_NULL(next_node)) {
       SE_LOG(ERROR, "next node should never be null");
       ret = Status::kErrorUnexpected;
       break;
@@ -174,7 +174,7 @@ int ART::smallest_artvalue_in_subtrie(void *root, ARTValue *&smallest_artvalue,
   uint64_t parent_version_snapshot = 0;
 
   while (IS_ARTVALUE(next_node) == false) {
-    if (ISNULL(next_node)) {
+    if (IS_NULL(next_node)) {
       SE_LOG(ERROR, "next node should never be null");
       ret = Status::kErrorUnexpected;
       break;
@@ -251,7 +251,7 @@ int ART::insert_maybe_overflow(uint8_t curr_key, ARTValue *insert_artvalue, ARTN
     // and scan backward to find the max artvalue which is less than 'insert_artvalue'.
     if (child_less_than_curr_key == nullptr) {
       void *minimum_child = curr_node->minimum();
-      if (ISNULL(minimum_child)) {
+      if (IS_NULL(minimum_child)) {
         precursor = &dummy_node_;
       } else if (FAILED(smallest_artvalue_in_subtrie_wrap(minimum_child, successor))) {
         SE_LOG(ERROR, "failed to find smallest artvalue in subtrie", KP(minimum_child), KP(successor));
@@ -911,7 +911,7 @@ int ART::lower_bound_inner(const Slice &target, ARTValue *&smallest_successor) c
           void *minimum_child = curr_node->minimum();
           if (FAILED(curr_node->check_version(curr_version_snapshot))) {
             continue;
-          } else if (ISNULL(minimum_child)) {
+          } else if (IS_NULL(minimum_child)) {
             smallest_successor = scan_forward_for_greater_than_or_equal(dummy_node_.next(), target);
             break;
           } else if (FAILED(smallest_artvalue_in_subtrie(minimum_child, precursor, curr_node, curr_version_snapshot))) {
@@ -972,7 +972,7 @@ int ART::lower_bound_inner(const Slice &target, ARTValue *&smallest_successor) c
 
 int ART::init() {
   int ret = Status::kOk;
-  if (ISNULL(root_ = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode256))) { // TODO(nanlong.ynl): use memory pool for alloc
+  if (IS_NULL(root_ = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode256))) { // TODO(nanlong.ynl): use memory pool for alloc
     SE_LOG(ERROR, "failed to alloc memory for root", KP(root_));
   } else if (FAILED(root_->init(nullptr, 0))) {
     SE_LOG(ERROR, "failed to init root");
@@ -989,7 +989,7 @@ void ART::insert(ARTValue *art_value) {
   ENTER_CRITICAL;
   int ret = Status::kTryAgain;
   int restart_count = 0;
-  if (ISNULL(art_value)) {
+  if (IS_NULL(art_value)) {
     SE_LOG(ERROR, "invalid argument");
     ret = Status::kInvalidArgument;
   } else {

@@ -51,8 +51,9 @@ class CompactionJob {
   CompactionJob(memory::ArenaAllocator &arena);
   ~CompactionJob();
 
-  int init(const CompactionContext &context, const ColumnFamilyDesc &cf,
-           StorageManager *sm, const db::Snapshot* meta_snapshot);
+  int init(const CompactionContext &context,
+           const ColumnFamilyDesc &cf,
+           const db::Snapshot* meta_snapshot);
   void destroy();
   void destroy_compaction(Compaction *compaction);
 
@@ -194,7 +195,6 @@ class CompactionJob {
   memory::ArenaAllocator &arena_;
   CompactionContext context_;
   ColumnFamilyDesc cf_desc_;
-  StorageManager *storage_manager_;       // meta data store.
   const db::Snapshot* meta_snapshot_;     // current snapshot for meta data.
   CompactionTask compaction_tasks_;
   bool priority_layer_compacted_;         // priority L0 layer is compacted

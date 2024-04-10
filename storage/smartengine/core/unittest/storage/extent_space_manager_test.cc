@@ -68,7 +68,6 @@ class ExtentSpaceManagerTest : public testing::Test {
   DBOptions options;
   ColumnFamilyOptions cf_options;
 
-  ExtentSpaceManager *spacemanager;
   WritableExtent write_extent;
   RandomAccessExtent read_extent;
   FileNumber next_file_number_;

@@ -118,7 +118,7 @@ static int se_hotbackup(THD *const thd MY_ATTRIBUTE((__unused__)),
   if (!my_core::thd_test_options(thd, OPTION_BEGIN)) {
     ret = smartengine::common::Status::kNotSupported;
     my_printf_error(ER_UNKNOWN_ERROR, "SE: should begin a trx first", MYF(0));
-  } else if (ISNULL(backup_instance)) {
+  } else if (IS_NULL(backup_instance)) {
     XHANDLER_LOG(WARN, "backup_instance is nullptr", K(tx->get_backup_running()));
     if (tx->get_backup_running()) {
       ret = smartengine::common::Status::kErrorUnexpected;

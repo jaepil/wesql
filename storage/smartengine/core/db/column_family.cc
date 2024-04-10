@@ -247,14 +247,12 @@ ColumnFamilyData::ColumnFamilyData(Options &options)
       compaction_priority_(CompactionPriority::LOW),
       allow_2pc_(options.allow_2pc),
       meta_snapshots_(),
-      extent_space_manager_(nullptr),
       storage_manager_(env_options_, ioptions_, mutable_cf_options_),
       imm_largest_seq_(0),
       allocator_(nullptr),
       subtable_structure_mutex_(),
       sub_table_meta_(),
       commit_log_seq_(0),
-      storage_logger_(nullptr),
       sst_largest_seq_(0),
       task_picker_(mutable_cf_options_, 0, options.level_compaction_dynamic_level_bytes),
       dcfd_(nullptr),
@@ -281,14 +279,17 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
           global_ctx->env_, this))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for internal_stats", K(ret));
-  } else if (IS_NULL(table_cache = MOD_NEW_OBJECT(memory::ModId::kSubTable, TableCache,
-          ioptions_, global_ctx->env_options_, global_ctx->cache_, global_ctx->extent_space_mgr_))) {
+  } else if (IS_NULL(table_cache = MOD_NEW_OBJECT(memory::ModId::kSubTable,
+                                                  TableCache,
+                                                  ioptions_,
+                                                  global_ctx->env_options_,
+                                                  global_ctx->cache_))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for table_cache", K(ret));
   } else if (IS_NULL(local_sv= MOD_NEW_OBJECT(memory::ModId::kSubTable, ThreadLocalPtr, &SuperVersionUnrefHandle))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for local_sv", K(ret));
-  } else if (FAILED(storage_manager_.init(global_ctx->env_, global_ctx->extent_space_mgr_, global_ctx->cache_))) {
+  } else if (FAILED(storage_manager_.init(global_ctx->env_, global_ctx->cache_))) {
     SE_LOG(WARN, "fail to init storage manager", K(ret));
   } else {
     sub_table_meta_.index_id_ = args.index_id_;
@@ -298,8 +299,6 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
     table_cache_.reset(table_cache);
     local_sv_.reset(local_sv);
     write_buffer_manager_ = global_ctx->write_buf_mgr_;
-    extent_space_manager_ = global_ctx->extent_space_mgr_;
-    storage_logger_ = global_ctx->storage_logger_;
     column_family_set_ = column_family_set;
     mutable_cf_options_ = MutableCFOptions(SanitizeOptions(ImmutableDBOptions(DBOptions(global_ctx->options_)), args.cf_options_));
     CreateNewMemtable(mutable_cf_options_, 1);
@@ -719,7 +718,7 @@ int ColumnFamilyData::recover_m0_to_l0() {
     change_info.task_type_ = TaskType::SWITCH_M02L0_TASK;
     table::InternalIterator *meta_iter = nullptr;
     MetaDataSingleIterator *range_iter = nullptr;
-    if (FAILED(storage_logger_->begin(storage::SeEvent::FLUSH))) {
+    if (FAILED(StorageLogger::get_instance().begin(storage::SeEvent::FLUSH))) {
       SE_LOG(WARN, "failed to begin flush event", K(ret));
     } else if (FAILED(CompactionJob::create_meta_iterator(arena, &internal_comparator_, current_snapshot, layer_position, meta_iter))) {
       SE_LOG(WARN, "failed to create meta iterator");
@@ -732,7 +731,7 @@ int ColumnFamilyData::recover_m0_to_l0() {
         SE_LOG(WARN, "range iter is nullptr", K(ret), "index_id", sub_table_meta_.index_id_);
       } else {
         range_iter->seek_to_first();
-        while (range_iter->valid() && SUCC(ret)) {
+        while (range_iter->valid() && SUCCED(ret)) {
           MetaDescriptor extent_meta = range_iter->get_meta_descriptor().deep_copy(arena);
           SE_LOG(INFO, "delete extent, recovry m0 to l0", K(GetID()), K(extent_meta));
           if (FAILED(change_info.delete_extent(extent_meta.layer_position_, extent_meta.extent_id_))) {
@@ -746,10 +745,10 @@ int ColumnFamilyData::recover_m0_to_l0() {
       }
     }
 
-    if (SUCC(ret)) {
+    if (SUCCED(ret)) {
       if (FAILED(apply_change_info(change_info, true, true))) {
         SE_LOG(WARN, "failed to apply change info for dump", K(ret));
-      } else if (FAILED(storage_logger_->commit(dummy_log_seq))) {
+      } else if (FAILED(StorageLogger::get_instance().commit(dummy_log_seq))) {
         SE_LOG(WARN, "fail to commit trans", K(ret));
       } else {
         SE_LOG(INFO, "success to recover dump extent layer to level0", "index_id", sub_table_meta_.index_id_);
@@ -785,7 +784,7 @@ int ColumnFamilyData::apply_change_info(storage::ChangeInfo &change_info,
       SE_LOG(INFO, "the subtable has been dropped, no need write log any more", K_(sub_table_meta));
       //only commit the trans, no actual modify
     } else {
-      if (FAILED(storage_logger_->write_log(REDO_LOG_MODIFY_SSTABLE, log_entry))) {
+      if (FAILED(StorageLogger::get_instance().write_log(REDO_LOG_MODIFY_SSTABLE, log_entry))) {
         SE_LOG(WARN, "fail to write modify subtable log", K(ret));
       }
     }
@@ -801,7 +800,7 @@ int ColumnFamilyData::apply_change_info(storage::ChangeInfo &change_info,
     }
   }
 
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     if (FAILED(storage_manager_.apply(change_info, is_replay))) {
       SE_LOG(WARN, "fail to apply change info to storage manager", K(ret));
     } else if (nullptr != flushed_memtables) {
@@ -827,7 +826,7 @@ int ColumnFamilyData::apply_change_info(storage::ChangeInfo &change_info,
         }
       }
       SE_LOG(INFO, "update sst_largest_seq for row cache end", K(sst_largest_seq_), K(GetID()));
-      if (SUCC(ret) && FAILED(imm_.purge_flushed_memtable(*flushed_memtables, to_delete))) {
+      if (SUCCED(ret) && FAILED(imm_.purge_flushed_memtable(*flushed_memtables, to_delete))) {
         SE_LOG(WARN, "fail to purge flushed memtable", K(ret));
       }
     }

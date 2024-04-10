@@ -48,15 +48,10 @@ public:
   //common::Options options_;
   db::ColumnFamilyData *sub_table_;
   cache::Cache *table_cache_;
-  StorageLogger *storage_logger_;
-  ExtentSpaceManager *extent_space_manager_;
-  StorageManager *storage_manager_;
 };
 StorageManagerTest::StorageManagerTest()
     : sub_table_(nullptr),
       table_cache_(nullptr),
-      storage_logger_(nullptr),
-      extent_space_manager_(nullptr),
       storage_manager_(nullptr)
 {
 }
@@ -73,7 +68,6 @@ void StorageManagerTest::SetUp()
   //table_cache_ = new db::TableCache(DEFAULT_TABLE_CACHE_SIZE, DEFAULT_TABLE_CACHE_NUMSHARDBITS);
   //table_cache_ = NewLRUCache(DEFAULT_TABLE_CACHE_SIZE, DEFAULT_TABLE_CACHE_NUMSHARDBITS);
   table_cache_ = new cache::LRUCache(0, DEFAULT_TABLE_CACHE_SIZE, DEFAULT_TABLE_CACHE_NUMSHARDBITS, false, 0.0, 0.0, false);
-  extent_space_manager_ = new ExtentSpaceManager(common::DBOptions(options), file_number);
   storage_manager_ = new StorageManager(common::DBOptions(options), common::ColumnFamilyOptions(options), sub_table_);
 }
 
@@ -82,7 +76,6 @@ void StorageManagerTest::TearDown()
   sub_table_->Unref();
   delete sub_table_;
   delete table_cache_;
-  delete extent_space_manager_;
   delete storage_manager_;
 }
 
@@ -147,11 +140,11 @@ TEST_F(StorageManagerTest, apply)
   ExtentMeta extent_meta_1;
   ExtentId extent_id_1(0, 1);
   build_extent_meta(1, 1, 100, 1, 100, extent_id_1, extent_meta_1);
-  extent_space_manager_->write_meta(&extent_meta_1);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_1);
   ExtentMeta extent_meta_2;
   ExtentId extent_id_2(0, 2);
   build_extent_meta(1, 101, 200, 101, 200, extent_id_2, extent_meta_2);
-  extent_space_manager_->write_meta(&extent_meta_2);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_2);
   ret = change_info.add_extent(0, extent_id_1, false, &extent_meta_1);
   ASSERT_EQ(Status::kOk, ret);
   ret = change_info.add_extent(0, extent_id_2, false, &extent_meta_2);
@@ -167,11 +160,11 @@ TEST_F(StorageManagerTest, apply)
   ExtentMeta extent_meta_3;
   ExtentId extent_id_3(0, 3);
   build_extent_meta(1, 201, 300, 201, 300, extent_id_3, extent_meta_3);
-  extent_space_manager_->write_meta(&extent_meta_3);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_3);
   ExtentMeta extent_meta_4;
   ExtentId extent_id_4(0, 4);
   build_extent_meta(1, 301, 400, 301, 400, extent_id_4, extent_meta_4);
-  extent_space_manager_->write_meta(&extent_meta_4);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_4);
   ret = change_info.add_extent(0, extent_id_3, false, &extent_meta_3);
   ASSERT_EQ(Status::kOk, ret);
   ret = change_info.add_extent(0, extent_id_4, false, &extent_meta_4);
@@ -185,7 +178,7 @@ TEST_F(StorageManagerTest, apply)
   ExtentMeta extent_meta_5;
   ExtentId extent_id_5(0, 5);
   build_extent_meta(1, 401, 500, 401, 500, extent_id_5, extent_meta_5);
-  extent_space_manager_->write_meta(&extent_meta_5);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_5);
   change_info.delete_extent(0, extent_id_1, extent_meta_1.largest_key_.Encode(), false);
   change_info.delete_extent(0, extent_id_2, extent_meta_2.largest_key_.Encode(), false);
   change_info.delete_extent(0, extent_id_3, extent_meta_3.largest_key_.Encode(), false);
@@ -237,11 +230,11 @@ TEST_F(StorageManagerTest, get)
   ExtentMeta extent_meta_2;
   ExtentId extent_id_2(0, 2);
   build_extent_meta(1, 201, 300, 201, 300, extent_id_2, extent_meta_2);
-  extent_space_manager_->write_meta(&extent_meta_2);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_2);
   ExtentMeta extent_meta_3;
   ExtentId extent_id_3(0, 3);
   build_extent_meta(1, 301, 400, 301, 400, extent_id_3, extent_meta_3);
-  extent_space_manager_->write_meta(&extent_meta_3);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_3);
   ret = change_info.add_extent(0, extent_id_2, false, &extent_meta_2);
   ASSERT_EQ(Status::kOk, ret);
   ret = change_info.add_extent(0, extent_id_3, false, &extent_meta_3);
@@ -291,11 +284,11 @@ TEST_F(StorageManagerTest, add_iterators)
   ExtentMeta extent_meta_1;
   ExtentId extent_id_1(0, 1);
   build_extent_meta(1, 100, 200, 100, 200, extent_id_1, extent_meta_1);
-  extent_space_manager_->write_meta(&extent_meta_1);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_1);
   ExtentMeta extent_meta_2;
   ExtentId extent_id_2(0, 2);
   build_extent_meta(1, 201, 300, 201, 300, extent_id_2, extent_meta_2);
-  extent_space_manager_->write_meta(&extent_meta_2);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_2);
   ret = change_info.add_extent(0, extent_id_1, false, &extent_meta_1);
   ASSERT_EQ(Status::kOk, ret);
   ret = change_info.add_extent(0, extent_id_2, false, &extent_meta_2);
@@ -335,11 +328,11 @@ TEST_F(StorageManagerTest, serialize_and_deserialize)
   ExtentMeta extent_meta_1;
   ExtentId extent_id_1(0, 1);
   build_extent_meta(1, 100, 200, 100, 200, extent_id_1, extent_meta_1);
-  extent_space_manager_->write_meta(&extent_meta_1);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_1);
   ExtentMeta extent_meta_2;
   ExtentId extent_id_2(0, 2);
   build_extent_meta(1, 201, 300, 201, 300, extent_id_2, extent_meta_2);
-  extent_space_manager_->write_meta(&extent_meta_2);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_2);
   ret = change_info.add_extent(0, extent_id_1, false, &extent_meta_1);
   ASSERT_EQ(Status::kOk, ret);
   ret = change_info.add_extent(0, extent_id_2, false, &extent_meta_2);
@@ -353,11 +346,11 @@ TEST_F(StorageManagerTest, serialize_and_deserialize)
   ExtentMeta extent_meta_3;
   ExtentId extent_id_3(0, 3);
   build_extent_meta(1, 301, 400, 301, 400, extent_id_3, extent_meta_3);
-  extent_space_manager_->write_meta(&extent_meta_3);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_3);
   ExtentMeta extent_meta_4;
   ExtentId extent_id_4(0, 4);
   build_extent_meta(1, 401, 500, 401, 500, extent_id_4, extent_meta_4);
-  extent_space_manager_->write_meta(&extent_meta_4);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_4);
   ret = change_info.add_extent(1, extent_id_3, false);
   ASSERT_EQ(Status::kOk, ret);
   ret = change_info.add_extent(1, extent_id_4, false);
@@ -370,11 +363,11 @@ TEST_F(StorageManagerTest, serialize_and_deserialize)
   ExtentMeta extent_meta_5;
   ExtentId extent_id_5(0, 5);
   build_extent_meta(1, 501, 600, 501, 600, extent_id_5, extent_meta_5);
-  extent_space_manager_->write_meta(&extent_meta_5);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_5);
   ExtentMeta extent_meta_6;
   ExtentId extent_id_6(0, 6);
   build_extent_meta(1, 601, 700, 601, 700, extent_id_6, extent_meta_6);
-  extent_space_manager_->write_meta(&extent_meta_6);
+  ExtentMetaManager::get_instance().write_meta(&extent_meta_6);
   ret = change_info.add_extent(2, extent_id_5, false);
   ASSERT_EQ(Status::kOk, ret);
   ret = change_info.add_extent(2, extent_id_6, false);

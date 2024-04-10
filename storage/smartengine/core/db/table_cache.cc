@@ -27,11 +27,12 @@
 #include "util/sync_point.h"
 
 namespace smartengine {
-using namespace table;
 using namespace cache;
-using namespace util;
 using namespace common;
 using namespace monitor;
+using namespace storage;
+using namespace table;
+using namespace util;
 
 namespace db {
 namespace {
@@ -57,16 +58,17 @@ static Slice GetSliceForFileNumber(const uint64_t* file_number) {
 }  // namespace
 
 TableCache::TableCache(const ImmutableCFOptions& ioptions,
-                       const EnvOptions& env_options, Cache* const cache,
-                       storage::ExtentSpaceManager* space_manager)
+                       const EnvOptions& env_options,
+                       Cache* const cache)
     : ioptions_(ioptions),
       env_options_(env_options),
-      cache_(cache),
-      space_manager_(space_manager) {
+      cache_(cache)
+{
+  //TODO(Zhao Dongsheng): useless code?
   if (ioptions_.row_cache) {
     // If the same cache is shared by multiple instances, we need to
     // disambiguate its entries.
-//    PutVarint64(&row_cache_id_, ioptions_.row_cache->NewId()); // nouse
+    // PutVarint64(&row_cache_id_, ioptions_.row_cache->NewId()); // nouse
   }
 }
 
@@ -97,7 +99,7 @@ Status TableCache::GetTableReader(const EnvOptions& env_options,
                    __func__);
     return Status::MemoryLimit();
   }
-  Status s = space_manager_->get_random_access_extent(eid, *extent);
+  Status s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, *extent);
   if (s.ok()) {
     RandomAccessFileReader *file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader,
         extent, ioptions_.env, record_read_stats ? ioptions_.statistics : nullptr, SST_READ_MICROS,

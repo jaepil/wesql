@@ -51,7 +51,6 @@ public:
     options.flush_delete_percent = 0;
     CreateAndReopenWithCF({"tb", "tm"}, options);
     auto cfh0 = reinterpret_cast<ColumnFamilyHandleImpl*>(get_column_family_handle(0));
-    //auto space_manager = dbfull()->storage_logger_->get_extent_space_manager();
     DBImpl *db_impl = dynamic_cast<DBImpl*>(db_);
     InstrumentedMutex *db_mutex = &(db_impl->mutex_);
     {

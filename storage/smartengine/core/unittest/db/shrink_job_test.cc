@@ -114,6 +114,8 @@ TEST_F(ShrinkJobTest, shrink_failed)
   ASSERT_EQ(1, data_file_stats.size());
   ASSERT_EQ(3, data_file_stats[0].total_extent_count_);
   ASSERT_EQ(0, data_file_stats[0].free_extent_count_);
+
+  Destroy(options);
 }
 
 TEST_F(ShrinkJobTest, shrink_success)
@@ -170,6 +172,8 @@ TEST_F(ShrinkJobTest, shrink_success)
   ASSERT_EQ(1, data_file_stats.size());
   ASSERT_EQ(2, data_file_stats[0].total_extent_count_);
   ASSERT_EQ(0, data_file_stats[0].free_extent_count_);
+
+  Destroy(options);
 }
 
 } // namespace 

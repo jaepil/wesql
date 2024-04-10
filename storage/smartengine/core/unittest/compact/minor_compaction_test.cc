@@ -217,13 +217,9 @@ class MinorCompactionTest : public testing::Test {
     env_->NewDirectory(dbname_, &db_dir);
     Status s;
 
-    //space_manager_.reset(
-    //    new ExtentSpaceManager(context_->db_options_, next_file_number_));
-    space_manager_ = new ExtentSpaceManager(context_->db_options_, next_file_number_);
     table_cache_.reset(new TableCache(context_->icf_options_,
-                                      context_->env_options_, cache_.get(),
-                                      //space_manager_.get()));
-                                      space_manager_));
+                                      context_->env_options_,
+                                      cache_.get()));
 
     uint64_t file_number = 1;
     std::string manifest_filename =
@@ -817,8 +813,6 @@ class MinorCompactionTest : public testing::Test {
   std::string dbname_;
   // DB *db_ = nullptr;
   unique_ptr<StorageManager> storage_manager_;
-  //unique_ptr<ExtentSpaceManager> space_manager_;
-  ExtentSpaceManager* space_manager_;
   std::unique_ptr<db::log::Writer> descriptor_log_;
   std::unique_ptr<Directory> db_dir;
   std::vector<std::unique_ptr<db::IntTblPropCollectorFactory>> props_;

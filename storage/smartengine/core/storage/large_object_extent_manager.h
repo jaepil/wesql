@@ -24,7 +24,6 @@ namespace smartengine
 {
 namespace storage
 {
-class ExtentSpaceManager;
 struct ChangeInfo;
 struct ExtentMeta;
 
@@ -34,7 +33,7 @@ public:
   LargeObjectExtentMananger();
   ~LargeObjectExtentMananger();
   void destroy();
-  int init(ExtentSpaceManager *extent_space_mgr);
+  int init();
 
   int apply(const ChangeInfo &change_info, common::SequenceNumber sequence_number);
   int recycle(common::SequenceNumber sequence_number, bool for_recovery);
@@ -57,7 +56,6 @@ private:
     static const int64_t LARGE_OBJECT_EXTENT_MANAGER_VERSION = 1;
 private:
   bool is_inited_;
-  ExtentSpaceManager *extent_space_mgr_;
   std::unordered_map<int64_t, ExtentMeta*> lob_extent_;
   std::vector<ExtentMeta *> delete_lob_extent_;
   std::unordered_map<common::SequenceNumber, std::vector<ExtentMeta *>> lob_extent_wait_to_recycle_;

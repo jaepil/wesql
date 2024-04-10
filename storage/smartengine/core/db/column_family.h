@@ -32,12 +32,6 @@
 
 namespace smartengine
 {
-namespace storage
-{
-class ExtentSpaceManager;
-class StorageLogger;
-}
-
 namespace monitor
 {
 class InstrumentedMutex;
@@ -385,10 +379,6 @@ public:
         monitor::InstrumentedMutex* db_mutex = nullptr);
   void release_meta_snapshot(const Snapshot* snapshot,
         monitor::InstrumentedMutex* db_mutex = nullptr);
-  //TODO(Zhao Dongsheng), this function is inproper here.
-  storage::ExtentSpaceManager* get_extent_space_manager() const {
-    return extent_space_manager_;
-  }
 
   //TODO(Zhao Dongsheng), this function is inproper.
   storage::StorageManager* get_storage_manager()
@@ -554,8 +544,6 @@ public:
 
   // manage the current used meta version number
   SnapshotList meta_snapshots_;
-  // manage the lower space usage
-  storage::ExtentSpaceManager* extent_space_manager_;
   // one storage manager for one column family
   storage::StorageManager storage_manager_;
   // before it the meta is recycled
@@ -564,7 +552,6 @@ public:
   mutable std::mutex subtable_structure_mutex_;
   storage::SubTableMeta sub_table_meta_;
   int64_t commit_log_seq_;
-  storage::StorageLogger *storage_logger_;
   common::SequenceNumber sst_largest_seq_;
   CompactionTasksPicker task_picker_;
   DumpCfd *dcfd_;
@@ -752,17 +739,6 @@ typedef std::unordered_map<int64_t, SubTable *> SubTableMap;
 // memtables of different column families (specified by ID in the write batch)
 class ColumnFamilyMemTablesImpl : public ColumnFamilyMemTables {
  public:
-
-/*
-  explicit ColumnFamilyMemTablesImpl(ColumnFamilySet* column_family_set)
-      : column_family_set_(column_family_set), current_(nullptr) {}
-
-  // Constructs a ColumnFamilyMemTablesImpl equivalent to one constructed
-  // with the arguments used to construct *orig.
-  explicit ColumnFamilyMemTablesImpl(ColumnFamilyMemTablesImpl* orig)
-      : column_family_set_(orig->column_family_set_), current_(nullptr) {}
-*/
-
   explicit ColumnFamilyMemTablesImpl(SubTableMap &sub_table_map, ColumnFamilySet* column_family_set)
       : column_family_set_(column_family_set), sub_table_map_(sub_table_map) {}
 

@@ -125,7 +125,7 @@ template<typename DataFileChecker, typename WalFileChecker>
 int BackupSnapshotImpl::link_files(db::DB *db, DataFileChecker *data_file_checker, WalFileChecker *wal_file_checker)
 {
   int ret = common::Status::kOk;
-  if (ISNULL(db)) {
+  if (IS_NULL(db)) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else {
@@ -153,13 +153,13 @@ int BackupSnapshotImpl::link_dir_files(db::DB *db, const std::string &dir_path,
     const std::vector<std::string> &files, FileChecker *file_checker)
 {
   int ret = common::Status::kOk;
-  if (ISNULL(db) || ISNULL(file_checker)) {
+  if (IS_NULL(db) || IS_NULL(file_checker)) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "db or file_checker is nullptr", K(ret), KP(db), KP(file_checker));
   } else {
     uint64_t file_num = 0;
     util::FileType type;
-    for (size_t i = 0; SUCC(ret) && i < files.size(); i++) {
+    for (size_t i = 0; SUCCED(ret) && i < files.size(); i++) {
       if (ParseFileName(files[i], &file_num, &type) && file_checker->operator()(type, file_num)) {
         std::string file_path = dir_path + "/" + files[i];
         std::string link_file_path = backup_tmp_dir_path_ + "/" + files[i];

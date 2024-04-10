@@ -75,7 +75,6 @@
 #include "util/autovector.h"
 #include "util/build_version.h"
 #include "util/coding.h"
-#include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
 #include "util/defer.h"
@@ -88,17 +87,18 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/storage_logger.h"
 #include "write_batch/write_batch_internal.h"
 
 namespace smartengine {
-using namespace common;
-using namespace util;
-using namespace monitor;
 using namespace cache;
-using namespace table;
-using namespace storage;
+using namespace common;
 using namespace memory;
+using namespace monitor;
+using namespace storage;
+using namespace table;
+using namespace util;
 
 namespace db {
 
@@ -167,8 +167,6 @@ GlobalContext::GlobalContext()
       env_(nullptr),
       cache_(nullptr),
       write_buf_mgr_(nullptr),
-      storage_logger_(nullptr),
-      extent_space_mgr_(nullptr),
       all_sub_table_mutex_(),
       version_number_(0),
       local_all_sub_table_(nullptr),
@@ -188,8 +186,6 @@ GlobalContext::GlobalContext(const std::string &db_name, const common::Options &
       env_(nullptr),
       cache_(nullptr),
       write_buf_mgr_(nullptr),
-      storage_logger_(nullptr),
-      extent_space_mgr_(nullptr),
       all_sub_table_mutex_(),
       version_number_(0),
       local_all_sub_table_(nullptr),
@@ -212,7 +208,7 @@ GlobalContext::~GlobalContext()
 
 bool GlobalContext::is_valid()
 {
-  return nullptr != cache_ && nullptr != write_buf_mgr_ && nullptr != storage_logger_ && nullptr != extent_space_mgr_;
+  return nullptr != cache_ && nullptr != write_buf_mgr_;
 }
 
 void GlobalContext::reset()
@@ -220,8 +216,6 @@ void GlobalContext::reset()
   env_ = nullptr;
   cache_ = nullptr;
   write_buf_mgr_ = nullptr;
-  storage_logger_ = nullptr;
-  extent_space_mgr_ = nullptr;
   all_sub_table_->reset();
   db_dir_ = nullptr;
 }
@@ -318,8 +312,6 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
       mutable_db_options_(initial_db_options_),
       stats_dump_period_sec_(mutable_db_options_.stats_dump_period_sec),
       stats_(immutable_db_options_.statistics.get()),
-      extent_space_manager_(nullptr),
-      storage_logger_(nullptr),
       bg_recycle_scheduled_(0),
       master_thread_running_(false),
       db_lock_(nullptr),
@@ -564,10 +556,9 @@ DBImpl::~DBImpl() {
 //    MOD_DELETE_OBJECT(TimerService, timer_service_);
 //  }
 
-  if (nullptr != storage_logger_) {
-    MOD_DELETE_OBJECT(StorageLogger, storage_logger_);
-  }
-  MOD_DELETE_OBJECT(ExtentSpaceManager, extent_space_manager_);
+  StorageLogger::get_instance().destroy();
+  ExtentMetaManager::get_instance().destroy();
+  ExtentSpaceManager::get_instance().destroy();
   if (nullptr != global_ctx) {
     MOD_DELETE_OBJECT(GlobalContext, global_ctx);
   }
@@ -651,7 +642,7 @@ void DBImpl::bg_master_thread_func() {
       // do switch
       WriteContext write_context;
       SE_LOG(INFO, "BG_TASK: force handle wal full", K(env_->NowMicros()));
-      if (SUCC(ret) && FAILED(force_handle_wal_full(&write_context))) {
+      if (SUCCED(ret) && FAILED(force_handle_wal_full(&write_context))) {
         SE_LOG(WARN, "failed to handle wal", K(ret), K(total_log_size_));
       }
     }
@@ -672,7 +663,7 @@ void DBImpl::bg_master_thread_func() {
     last_seq = cur_seq;
     if (auto_compaction_ms > 0
         && env_->NowMicros() / 1000 > last_auto_compaction_ts + auto_compaction_ms
-        && SUCC(ret)) {
+        && SUCCED(ret)) {
       last_auto_compaction_ts = env_->NowMicros() / 1000;
       if (idle_flag) {
         if (FAILED(master_schedule_compaction(CompactionScheduleType::MASTER_IDLE))) {
@@ -686,7 +677,7 @@ void DBImpl::bg_master_thread_func() {
     }
     // (4) schedule auto compaction task
     if (env_->NowMicros() / 1000 > last_auto_compaction_ts + auto_compaction_ms
-        && SUCC(ret)) {
+        && SUCCED(ret)) {
       last_auto_compaction_ts = env_->NowMicros() / 1000;
       SE_LOG(DEBUG, "BG_TASK: schedule compaction", K(env_->NowMicros()));
       if (FAILED(master_schedule_compaction(CompactionScheduleType::MASTER_AUTO))) {
@@ -695,13 +686,13 @@ void DBImpl::bg_master_thread_func() {
     }
     // (5) shrink task
     if ((env_->NowMicros() / 1000) > (last_shrink_ts + mutable_db_options_.auto_shrink_schedule_interval * 1000)
-        && SUCC(ret)) {
+        && SUCCED(ret)) {
       last_shrink_ts = env_->NowMicros() / 1000;
       SE_LOG(INFO, "BG_TASK: shrink task", K(env_->NowMicros()));
       schedule_shrink();
     }
     // (6) epoch based reclaim task
-    if (env_->NowMicros() / 1000 > last_ebr_ts + ebr_ms && SUCC(ret)) {
+    if (env_->NowMicros() / 1000 > last_ebr_ts + ebr_ms && SUCCED(ret)) {
       last_ebr_ts = env_->NowMicros() / 1000;
       SE_LOG(INFO, "BG_TASK: ebr task", K(env_->NowMicros()));
       schedule_ebr();
@@ -1345,22 +1336,20 @@ Status DBImpl::CreateColumnFamily(CreateSubTableArgs &args, ColumnFamilyHandle *
   if (UNLIKELY(!args.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(args));
-  } else if (FAILED(storage_logger_->begin(CREATE_INDEX))) {
+  } else if (FAILED(StorageLogger::get_instance().begin(CREATE_INDEX))) {
     //TODO:yuanfeng fail?abort?
     SE_LOG(WARN, "fail to begin trans", K(ret));
   } else {
     if (args.create_table_space_) {
-      args.table_space_id_ = extent_space_manager_->allocate_table_space_id();
+      args.table_space_id_ = ExtentSpaceManager::get_instance().allocate_table_space_id();
     }
     InstrumentedMutexLock guard(&mutex_);
     if (FAILED(versions_->add_sub_table(args, true, false /*is replay*/, cfd))) {
       SE_LOG(WARN, "fail to add sub table", K(args));
-    } else if (FAILED(storage_logger_->commit(dummy_commit_lsn))) {
+    } else if (FAILED(StorageLogger::get_instance().commit(dummy_commit_lsn))) {
       SE_LOG(WARN, "fail to commit trans", K(ret));
       abort();
     } else {
-      //install new super version
-//      delete
       SuperVersion *old_sv = InstallSuperVersionAndScheduleWork(cfd, nullptr, *cfd->GetLatestMutableCFOptions());
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
       auto *table_factory =  dynamic_cast<table::ExtentBasedTableFactory*>(cfd->ioptions()->table_factory);
@@ -1380,9 +1369,9 @@ Status DBImpl::CreateColumnFamily(CreateSubTableArgs &args, ColumnFamilyHandle *
 
   if (SUCCED(ret)) {
     if (args.create_table_space_
-        && FAILED(extent_space_manager_->create_table_space(args.table_space_id_))) {
+        && FAILED(ExtentSpaceManager::get_instance().create_table_space(args.table_space_id_))) {
       SE_LOG(WARN, "fail to create table space", K(args));
-    } else if (FAILED(extent_space_manager_->register_subtable(args.table_space_id_, cfd->GetID()))) {
+    } else if (FAILED(ExtentSpaceManager::get_instance().register_subtable(args.table_space_id_, cfd->GetID()))) { 
       SE_LOG(WARN, "fail to regirster subtable", K(ret), K(args));
     } else if (IS_NULL(*handle = MOD_NEW_OBJECT(ModId::kDBImpl, ColumnFamilyHandleImpl, cfd, this, &mutex_))) {
       ret = Status::kMemoryLimit;
@@ -1407,14 +1396,14 @@ Status DBImpl::DropColumnFamily(ColumnFamilyHandle *column_family)
   } else if (IS_NULL(cfd = (reinterpret_cast<ColumnFamilyHandleImpl *>(column_family))->cfd())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, cfd must not nullptr", K(ret));
-  } else if (FAILED(storage_logger_->begin(DROP_INDEX))) {
+  } else if (FAILED(StorageLogger::get_instance().begin(DROP_INDEX))) {
     //TODO:yuanfeng abort?
     SE_LOG(WARN, "fail to begin manifest trans", K(ret));
   } else {
     InstrumentedMutexLock guard(&mutex_);
     if (FAILED(versions_->remove_sub_table(cfd, true, false /*is replay*/))) {
       SE_LOG(WARN, "fail to remove subtable", K(ret), "index_id", cfd->GetID());
-    } else if (FAILED(storage_logger_->commit(dummy_commit_lsn))) {
+    } else if (FAILED(StorageLogger::get_instance().commit(dummy_commit_lsn))) {
       SE_LOG(WARN, "fail to commit trans", K(ret));
       abort();
     } else {
@@ -1493,8 +1482,7 @@ Iterator* DBImpl::NewIterator(const ReadOptions& read_options,
       read_options,
       *cfd->ioptions(),
       cfd->user_comparator(),
-      snapshot,
-      extent_space_manager_);
+      snapshot);
   QUERY_TRACE_END();
 
   InternalIterator* internal_iter =
@@ -2247,11 +2235,11 @@ Status DBImpl::InstallSstExternal(ColumnFamilyHandle* column_family,
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   cfd = cfh->cfd();
 
-  if (FAILED(storage_logger_->begin(smartengine::storage::SeEvent::CREATE_INDEX))) {
+  if (FAILED(StorageLogger::get_instance().begin(smartengine::storage::SeEvent::CREATE_INDEX))) {
     SE_LOG(WARN, "fail to begin create index trans", K(ret));
   } else if (FAILED(cfd->apply_change_info(*(mtables->change_info_), true))) {
     SE_LOG(WARN, "fail to apply change info", K(ret));
-  } else if (FAILED(storage_logger_->commit(dummy_log_seq))) {
+  } else if (FAILED(StorageLogger::get_instance().commit(dummy_log_seq))) {
     SE_LOG(WARN, "fail to commit cerate index trans", K(ret));
   } else {
     auto mutable_cf_options = cfd->GetLatestMutableCFOptions();
@@ -2363,11 +2351,11 @@ bool DBImpl::snapshot_empty() {
 
 int DBImpl::do_manual_checkpoint(int32_t &start_manifest_file_num) {
   int ret = Status::kOk;
-  if (FAILED(storage_logger_->external_write_checkpoint())) {
+  if (FAILED(StorageLogger::get_instance().external_write_checkpoint())) {
     SE_LOG(ERROR, "Do a manual checkpoint failed", K(ret));
   } else {
     // should record the file number of checkpoint
-    start_manifest_file_num = storage_logger_->current_manifest_file_number();
+    start_manifest_file_num = StorageLogger::get_instance().current_manifest_file_number();
   }
   return ret;
 }
@@ -2398,8 +2386,8 @@ int DBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
         true /* force create new wal file*/).code())) {
       SE_LOG(WARN, "Failed to switch memtable", K(ret));
     } else {
-      last_manifest_file_num = storage_logger_->current_manifest_file_number();
-      last_manifest_file_size = storage_logger_->current_manifest_file_size();
+      last_manifest_file_num = StorageLogger::get_instance().current_manifest_file_number();
+      last_manifest_file_size = StorageLogger::get_instance().current_manifest_file_size();
       last_wal_file_num = logfile_number_;
       SE_LOG(INFO, "Create a backup snapshot", K(ret),
                   K(last_manifest_file_num), K(last_manifest_file_size),
@@ -2416,9 +2404,10 @@ int DBImpl::record_incremental_extent_ids(const int32_t first_manifest_file_num,
                                           const uint64_t last_manifest_file_size)
 {
   int ret = Status::kOk;
-  if (FAILED(storage_logger_->record_incremental_extent_ids(first_manifest_file_num,
-                                                            last_manifest_file_num,
-                                                            last_manifest_file_size))) {
+  if (FAILED(StorageLogger::get_instance().record_incremental_extent_ids(
+      first_manifest_file_num,
+      last_manifest_file_num,
+      last_manifest_file_size))) {
     SE_LOG(WARN, "Failed to record incremental extent ids", K(ret),
         K(first_manifest_file_num), K(last_manifest_file_num), K(last_manifest_file_size));
   }
@@ -2431,7 +2420,7 @@ int DBImpl::release_backup_snapshot(MetaSnapshotMap &meta_snapshot)
   ColumnFamilyData *cfd = nullptr;
   for (auto sn : meta_snapshot) {
     cfd = sn.first;
-    if (ISNULL(cfd)) {
+    if (IS_NULL(cfd)) {
       SE_LOG(ERROR, "The cfd is nullptr, unexpected", KP(cfd));
     } else {
       cfd->release_meta_snapshot(sn.second);
@@ -2458,9 +2447,9 @@ int DBImpl::shrink_table_space(int32_t table_space_id) {
   SE_LOG(INFO, "begin to do shrink table space", K(table_space_id));
   if (!shrink_running_.compare_exchange_strong(expect_shrink_running, true)) {
     SE_LOG(INFO, "another shrink job is running");
-  } else if (FAILED(extent_space_manager_->get_shrink_infos(table_space_id,
-                                                            shrink_condition,
-                                                            shrink_infos))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().get_shrink_infos(table_space_id,
+                                                                        shrink_condition,
+                                                                        shrink_infos))) {
     SE_LOG(WARN, "fail to get shrink infos", K(ret), K(table_space_id));
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < shrink_infos.size(); ++i) {
@@ -2617,7 +2606,7 @@ void DBImpl::background_pull_gauge_statistics() {
   GlobalContext *global_ctx = nullptr;
   AllSubTable *all_sub_table = nullptr;
   auto defer_release_all_sub_table = util::defer([&global_ctx, &all_sub_table] {
-    if (ISNULL(global_ctx)) {
+    if (IS_NULL(global_ctx)) {
       return;
     }
     global_ctx->release_thread_local_all_sub_table(all_sub_table);
@@ -2645,7 +2634,7 @@ void DBImpl::background_pull_gauge_statistics() {
   // 2. Traverse all sub tables, update the gauge value we need
   for (auto iter = all_sub_tables.begin(); iter != all_sub_tables.end();
        ++iter) {
-    if (ISNULL(sub_table = iter->second) || sub_table->IsDropped()) {
+    if (IS_NULL(sub_table = iter->second) || sub_table->IsDropped()) {
       SE_LOG(WARN, "sub table is nullptr or dropped", K(iter->first));
       continue;
     }

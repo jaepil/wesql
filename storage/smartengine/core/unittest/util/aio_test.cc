@@ -356,16 +356,11 @@ TEST(AIO, DISABLED_extent) {
   std::string dbname = test::TmpDir() + "/aio_test";
   DBOptions options;
   options.env->CreateDir(dbname);
-  StorageLogger storage_logger;
   options.db_paths.emplace_back(dbname, 0);
-  unique_ptr<storage::ExtentSpaceManager> space_manager;
   FileNumber file_number(2000);
-  space_manager.reset(new storage::ExtentSpaceManager(options.env, EnvOptions(options), options));
 
-  Status s = space_manager->init(&storage_logger);
-  EXPECT_TRUE(s.ok()) << s.ToString();
   WritableExtent we;
-  s = space_manager->allocate(0, storage::HOT_EXTENT_SPACE, we);
+  Status s = ExtentSpaceManager::get_instance().allocate(0, storage::HOT_EXTENT_SPACE, we);
   EXPECT_TRUE(s.ok()) << s.ToString();
 
   const int size = MAX_EXTENT_SIZE;
@@ -389,7 +384,7 @@ TEST(AIO, DISABLED_extent) {
   ASSERT_TRUE(extent.get());
   ExtentId eid(we.get_extent_id());
   AsyncRandomAccessExtent re;
-  s = space_manager->get_random_access_extent(eid, re);
+  s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, re);
   EXPECT_TRUE(s.ok()) << s.ToString();
 
   re.prefetch();

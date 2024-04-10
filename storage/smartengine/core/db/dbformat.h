@@ -97,10 +97,9 @@ struct LargeObject {
 // oob_size: [in] buffer size in oob_uptr;
 //           [out] resize buffer size if necessary
 extern int get_oob_large_value(const common::Slice& value_in_kv,
-                           storage::ExtentSpaceManager *space_manager,
-                           db::LargeValue& large_value,
-                           std::unique_ptr<char[], void(&)(void *)>& oob_uptr,
-                           size_t& oob_size);
+                               db::LargeValue& large_value,
+                               std::unique_ptr<char[], void(&)(void *)>& oob_uptr,
+                               int64_t &oob_size);
 
 static const int MAX_SNAP = 32;
 
@@ -739,7 +738,6 @@ struct FileMetaData {
 };
 
 struct MiniTables {
-  storage::ExtentSpaceManager* space_manager = nullptr;
   util::Env::IOPriority io_priority;
   std::vector<FileMetaData> metas;
   std::vector<table::TableProperties> props;

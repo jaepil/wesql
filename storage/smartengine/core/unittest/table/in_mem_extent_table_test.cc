@@ -15,6 +15,7 @@
  */
 #include "db/version_set.h"
 #include "options/cf_options.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "storage/storage_logger.h"
@@ -24,16 +25,17 @@
 #include "util/aio_wrapper.h"
 #include "util/testharness.h"
 
-using namespace smartengine;
-using namespace storage;
-using namespace util;
-using namespace common;
-using namespace db;
-
 static const std::string test_dir = smartengine::util::test::TmpDir() + "/in_mem_extent_table_test";
 
-namespace smartengine {
-namespace table {
+namespace smartengine
+{
+using namespace common;
+using namespace db;
+using namespace storage;
+using namespace util;
+
+namespace table
+{
 
 static std::string GetFromFile(TableReader* table_reader,
                                const std::string& key, ReadOptions& ro,
@@ -100,23 +102,20 @@ TEST(InMemExtent, sim) {
   std::string dbname = test_dir;
   Status s;
   EXPECT_TRUE(s.ok()) << s.ToString();
-  unique_ptr<ExtentSpaceManager> space_manager;
   FileNumber file_number(2000);
   options.db_paths.emplace_back(dbname, 0);
-  space_manager.reset(new ExtentSpaceManager(env, soptions, options));
-  StorageLogger *storage_logger = new StorageLogger();
   ImmutableDBOptions doption;
   VersionSet *vs = nullptr;
   vs = new VersionSet(dbname, &doption, soptions, nullptr, nullptr);
 
-  storage_logger->init(env, dbname, soptions, doption, vs, space_manager.get(), 1 * 1024 * 1024 * 1024);
-  space_manager->init(storage_logger);
+  StorageLogger::get_instance().init(env, dbname, soptions, doption, vs, 1 * 1024 * 1024 * 1024);
+  ExtentMetaManager::get_instance().init();
+  ExtentSpaceManager::get_instance().init(env, soptions, options);
   int ret = Status::kOk;
-  ret = space_manager->create_table_space(0);
+  ret = ExtentSpaceManager::get_instance().create_table_space(0);
   ASSERT_EQ(Status::kOk, ret);
-  mtables.space_manager = space_manager.get();
   mtables.table_space_id_ = 0;
-  storage_logger->begin(storage::SeEvent::FLUSH);
+  StorageLogger::get_instance().begin(storage::SeEvent::FLUSH);
   builder.reset(ioptions.table_factory->NewTableBuilderExt(
       TableBuilderOptions(
           ioptions, internal_comparator,
@@ -140,7 +139,7 @@ TEST(InMemExtent, sim) {
   {
     // method 1: read it normally
     RandomAccessExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessExtent);
-    s = space_manager->get_random_access_extent(eid, *extent);
+    s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, *extent);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
     RandomAccessFileReader *file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent);
@@ -167,9 +166,8 @@ TEST(InMemExtent, sim) {
   {
     // method 2: read it using the new added mem interface
     const int size = MAX_EXTENT_SIZE;
-
     AsyncRandomAccessExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, AsyncRandomAccessExtent);
-    s = space_manager->get_random_access_extent(eid, *extent);
+    s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, *extent);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
     // async read it
@@ -201,18 +199,17 @@ TEST(InMemExtent, sim) {
   ASSERT_EQ(size1, size2);
   ASSERT_EQ(memcmp(block1.get(), block2.get(), size1), 0);
   delete vs;
-  delete storage_logger;
+  StorageLogger::get_instance().destroy();
 }
 
 }  // table
 }  // smartengine
 
 int main(int argc, char** argv) {
-   std::string log_path = smartengine::util::test::TmpDir() + "/in_mem_extent_table_test.log";
-   smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::DEBUG_LEVEL);
-   smartengine::util::test::remove_dir(test_dir.c_str());
-   smartengine::util::Env::Default()->CreateDir(test_dir);
+  std::string log_path = smartengine::util::test::TmpDir() + "/in_mem_extent_table_test.log";
+  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::DEBUG_LEVEL);
+  smartengine::util::test::remove_dir(test_dir.c_str());
+  smartengine::util::Env::Default()->CreateDir(test_dir);
   ::testing::InitGoogleTest(&argc, argv);
-//	smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();
 }

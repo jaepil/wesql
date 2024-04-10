@@ -91,7 +91,7 @@ int ARTNodeBase::set_prefix(const uint8_t *prefix, uint64_t len) {
   int ret = Status::kOk;
   if (alloc_ptr_ == nullptr) {
     if (len > PREFIX_BUF_SIZE) {
-      if (ISNULL(alloc_ptr_ = reinterpret_cast<uint8_t *>(base_memalign(PREFIX_ALIGN_SIZE, len, ModId::kMemtable)))) {
+      if (IS_NULL(alloc_ptr_ = reinterpret_cast<uint8_t *>(base_memalign(PREFIX_ALIGN_SIZE, len, ModId::kMemtable)))) {
         SE_LOG(ERROR, "failed to alloc memory for prefix", K(alloc_ptr_));
         ret = Status::kMemoryLimit;
         return ret;
@@ -145,7 +145,7 @@ void ARTNode256::release() {
 
 int ARTNode256::insert(uint8_t key, void *child) {
   int ret = Status::kOk;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
   } else if (UNLIKELY(children_[key] != nullptr)) {
@@ -160,10 +160,10 @@ int ARTNode256::insert(uint8_t key, void *child) {
 
 int ARTNode256::update(uint8_t key, void *child) {
   int ret = Status::kOk;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
-  } else if (ISNULL(children_[key])) {
+  } else if (IS_NULL(children_[key])) {
     SE_LOG(ERROR, "child at update position dose not exist", K(key), KP(child));
     ret = Status::kErrorUnexpected;
   } else {
@@ -310,7 +310,7 @@ void ARTNode48::release() {
 
 int ARTNode48::insert(uint8_t key, void *child) {
   int ret = Status::kOk;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
   } else if (UNLIKELY(children_map_[key] != EMPTY_FLAG)) {
@@ -326,7 +326,7 @@ int ARTNode48::insert(uint8_t key, void *child) {
 
 int ARTNode48::update(uint8_t key, void *child) {
   int ret = Status::kOk;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
   } else if (UNLIKELY(children_map_[key] == EMPTY_FLAG)) {
@@ -358,7 +358,7 @@ void *ARTNode48::get_with_less_than_percent(uint8_t key, double &percent) {
 
 int ARTNode48::expand(ARTNodeBase *&new_node) {
   int ret = Status::kOk;
-  if (ISNULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode256))) { // TODO(nanlong.ynl): use memory pool for alloc
+  if (IS_NULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode256))) { // TODO(nanlong.ynl): use memory pool for alloc
     SE_LOG(ERROR, "failed to alloc memory for ARTNode256");
     ret = Status::kMemoryLimit;
   } else if (FAILED(new_node->init(prefix(), prefix_len()))) {
@@ -520,7 +520,7 @@ void ARTNode16::release() {
 int ARTNode16::insert(uint8_t key, void *child) {
   int ret = Status::kOk;
   int32_t pos = 0;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
   } else if (UNLIKELY(find_pos(key, pos))) {
@@ -539,7 +539,7 @@ int ARTNode16::insert(uint8_t key, void *child) {
 int ARTNode16::update(uint8_t key, void *child) {
   int ret = Status::kOk;
   int32_t pos = 0;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
   } else if (UNLIKELY(find_pos(key, pos) == false)) {
@@ -570,7 +570,7 @@ void *ARTNode16::get_with_less_than_percent(uint8_t key, double &percent) {
 
 int ARTNode16::expand(ARTNodeBase *&new_node) {
   int ret = Status::kOk;
-  if (ISNULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode48))) { // TODO(nanlong.ynl): use memory pool for alloc
+  if (IS_NULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode48))) { // TODO(nanlong.ynl): use memory pool for alloc
     SE_LOG(ERROR, "failed to alloc memory for ARTNode16");
     ret = Status::kMemoryLimit;
   } else if (FAILED(new_node->init(prefix(), prefix_len()))) {
@@ -685,7 +685,7 @@ void ARTNode4::release() {
 int ARTNode4::insert(uint8_t key, void *child) {
   int ret = Status::kOk;
   int32_t pos = 0;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
   } else if (UNLIKELY(find_pos(key, pos))) {
@@ -704,7 +704,7 @@ int ARTNode4::insert(uint8_t key, void *child) {
 int ARTNode4::update(uint8_t key, void *child) {
   int ret = Status::kOk;
   int32_t pos = 0;
-  if (ISNULL(child)) {
+  if (IS_NULL(child)) {
     SE_LOG(ERROR, "invalid argument", KP(child));
     ret = Status::kInvalidArgument;
   } else if (UNLIKELY(find_pos(key, pos) == false)) {
@@ -735,7 +735,7 @@ void *ARTNode4::get_with_less_than_percent(uint8_t key, double &percent) {
 
 int ARTNode4::expand(ARTNodeBase *&new_node) {
   int ret = Status::kOk;
-  if (ISNULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode16))) { // TODO(nanlong.ynl): use memory pool for alloc
+  if (IS_NULL(new_node = MOD_NEW_OBJECT(ModId::kMemtable, ARTNode16))) { // TODO(nanlong.ynl): use memory pool for alloc
     SE_LOG(ERROR, "failed to alloc memory for ARTNode16");
     ret = Status::kMemoryLimit;
   } else if (FAILED(new_node->init(prefix(), prefix_len()))) {

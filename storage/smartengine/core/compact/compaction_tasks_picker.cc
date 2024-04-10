@@ -498,7 +498,7 @@ int CompactionTasksPicker::pick_one_task(const SnapshotImpl* snapshot,
         COMPACTION_LOG(INFO, "PICK_TASK: auto task check into", K(delete_extents_size_), K(cf_id_));
       }
     }
-    if (SUCC(ret) && task_list.size() > 0) {
+    if (SUCCED(ret) && task_list.size() > 0) {
       std::sort(task_list.begin(), task_list.end(), TaskInfo::greater);
       if (task_list.at(0).priority_value_ > 1) {
         pick_task = task_list.at(0);
@@ -515,7 +515,7 @@ int CompactionTasksPicker::pick_one_task(const SnapshotImpl* snapshot,
         K(last_pick_task_.extents_size_), K((int)last_pick_task_.task_type_),
         K(pick_task.priority_value_), K(pick_task.extents_size_), K((int)pick_task.task_type_));
   }
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     last_pick_task_ = pick_task;
     if (pick_task.priority_value_ > L0MaxLayer - 1) {
       priority = HIGH;

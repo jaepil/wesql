@@ -352,7 +352,6 @@ void DBTestBase::Close() {
     }
   }
   cfh_map_.clear();
-//  delete db_;
   MOD_DELETE_OBJECT(DB, db_);
   db_ = nullptr;
 }

@@ -19,6 +19,7 @@
 #include "db/log_reader.h"
 #include "db/version_set.h"
 #include "logger/log_module.h"
+#include "storage/extent_meta_manager.h"
 #include "util/file_reader_writer.h"
 #include "util/string_util.h"
 
@@ -237,7 +238,6 @@ StorageLogger::StorageLogger()
       db_options_(),
       log_file_number_(0),
       version_set_(nullptr),
-      extent_space_manager_(nullptr),
       curr_manifest_log_size_(0),
       log_writer_(nullptr),
       max_manifest_log_file_size_(0),
@@ -261,12 +261,17 @@ StorageLogger::~StorageLogger()
   destroy();
 }
 
+StorageLogger &StorageLogger::get_instance()
+{
+  static StorageLogger storage_logger;
+  return storage_logger;
+}
+
 int StorageLogger::init(Env *env,
                         std::string db_name,
                         EnvOptions env_options,
                         ImmutableDBOptions db_options,
                         db::VersionSet *version_set,
-                        ExtentSpaceManager *extent_space_manager,
                         int64_t max_manifest_log_file_size)
 {
   int ret = Status::kOk;
@@ -278,11 +283,9 @@ int StorageLogger::init(Env *env,
     SE_LOG(WARN, "StorageLogger has been inited.", K(ret));
   } else if (IS_NULL(env)
              || IS_NULL(version_set)
-             || IS_NULL(extent_space_manager)
              || 0 >= max_manifest_log_file_size) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(env), KP(version_set),
-        KP(extent_space_manager), K(max_manifest_log_file_size));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(env), KP(version_set), K(max_manifest_log_file_size));
   } else if (IS_NULL(tmp_buf = reinterpret_cast<char *>(allocator_.alloc(sizeof(TransContext *) * DEFAULT_TRANS_CONTEXT_COUNT)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for trans ctxs buf", K(ret));
@@ -310,7 +313,6 @@ int StorageLogger::init(Env *env,
     env_options_ = env_options;
     db_options_ = db_options;
     version_set_ = version_set;
-    extent_space_manager_ = extent_space_manager;
     max_manifest_log_file_size_ = max_manifest_log_file_size;
     is_inited_ = true;
   }
@@ -326,11 +328,14 @@ void StorageLogger::destroy()
     while (Status::kOk == trans_ctxs_.pop(trans_ctx)) {
       deconstruct_trans_context(trans_ctx);
     }
+    trans_ctxs_.destroy();
     allocator_.free(log_buf_);
     destroy_log_writer(log_writer_);
+    log_file_number_ = 0;
     is_inited_ = false;
   }
 }
+
 int StorageLogger::begin(enum SeEvent event)
 {
   int ret = Status::kOk;
@@ -816,7 +821,7 @@ int StorageLogger::load_checkpoint(memory::ArenaAllocator &arena)
     SE_LOG(WARN, "fail to create checkpoint reader", K(ret));
   } else if (FAILED(checkpoint_reader->Read(file_offset, DEFAULT_BUFFER_SIZE, &result, header_buffer).code())) {
     SE_LOG(WARN, "fail to read checkpoint header", K(ret), K(file_offset));
-  } else if (FAILED(extent_space_manager_->load_checkpoint(checkpoint_reader, header))) {
+  } else if (FAILED(ExtentMetaManager::get_instance().load_checkpoint(checkpoint_reader, header))) {
     SE_LOG(WARN, "fail to load extent meta checkpoint", K(ret));
   } else if (FAILED(version_set_->load_checkpoint(checkpoint_reader, header))) {
     SE_LOG(WARN, "fail to load partition group meta checkpoint", K(ret));
@@ -904,7 +909,7 @@ int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
                     SE_LOG(WARN, "fail to replay partition log", K(ret), K(log_entry_header));
                   }
                 } else if (is_extent_log(log_entry_header.log_entry_type_)) {
-                  if (FAILED(extent_space_manager_->replay(log_entry_header.log_entry_type_, log_data, log_len))) {
+                  if (FAILED(ExtentMetaManager::get_instance().replay(log_entry_header.log_entry_type_, log_data, log_len))) {
                     SE_LOG(WARN, "fail to replay extent meta log", K(ret), K(log_entry_header));
                   }
                 } else {
@@ -961,7 +966,7 @@ int StorageLogger::internal_write_checkpoint()
       SE_LOG(WARN, "fail to create checkpoint writer", K(ret));
     } else if (FAILED(checkpoint_writer->PositionedAppend(Slice(header_buffer, DEFAULT_BUFFER_SIZE), 0).code())) {
       SE_LOG(WARN, "fail to write checkpoint header", K(ret));
-    } else if (FAILED(extent_space_manager_->do_checkpoint(checkpoint_writer, header))) {
+    } else if (FAILED(ExtentMetaManager::get_instance().do_checkpoint(checkpoint_writer, header))) {
       SE_LOG(WARN, "fail to do extent checkpoint", K(ret));
     } else if (FAILED(version_set_->do_checkpoint(checkpoint_writer, header))) {
       SE_LOG(WARN, "fail to do partition group checkpoint", K(ret));
@@ -1298,7 +1303,7 @@ int StorageLogger::check_manifest_for_backup(const std::string &backup_tmp_dir_p
     // check all MANIFEST files exist and build hard links
     manifest_file_nums.clear();
     int32_t log_file_num = 0;
-    for (log_file_num = first_manifest_file_num; SUCC(ret) && log_file_num <= last_manifest_file_num; log_file_num++) {
+    for (log_file_num = first_manifest_file_num; SUCCED(ret) && log_file_num <= last_manifest_file_num; log_file_num++) {
       std::string manifest_path = DescriptorFileName(backup_tmp_dir_path, log_file_num);
       std::string checkpoint_path = checkpoint_name(backup_tmp_dir_path, log_file_num);
       if (FAILED(env_->FileExists(manifest_path).code())) {
@@ -1328,7 +1333,7 @@ int StorageLogger::get_commited_trans_for_backup(const std::string &backup_tmp_d
   } else {
     std::string manifest_name;
     commited_trans_ids.clear();
-    for (size_t i = 0; SUCC(ret) && i < manifest_file_nums.size(); i++) {
+    for (size_t i = 0; SUCCED(ret) && i < manifest_file_nums.size(); i++) {
       manifest_name = DescriptorFileName(backup_tmp_dir_path, manifest_file_nums[i]);
       if (FAILED(env_->FileExists(manifest_name).code())) {
         SE_LOG(ERROR, "MANIFEST file not exist", K(ret), K(manifest_name));
@@ -1367,7 +1372,7 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
 
     // parse MANIFEST files and record all modified extent ids
     memory::ArenaAllocator arena(8 * 1024, memory::ModId::kStorageLogger);
-    for (size_t i = 0; SUCC(ret) && i < manifest_file_nums.size(); i++) {
+    for (size_t i = 0; SUCCED(ret) && i < manifest_file_nums.size(); i++) {
       // parse one MANIFEST file
       std::string manifest_name = DescriptorFileName(backup_tmp_dir_path, manifest_file_nums[i]);
       if (FAILED(env_->FileExists(manifest_name).code())) {
@@ -1375,7 +1380,7 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
       } else if (FAILED(create_log_reader(manifest_name, log_reader, arena))) {
         SE_LOG(WARN, "fail to create log reader", K(ret));
       } else {
-        while (SUCC(ret) && log_reader->ReadRecord(&record, &scrath)) {
+        while (SUCCED(ret) && log_reader->ReadRecord(&record, &scrath)) {
           // parse one record in MANIFEST file
           pos = 0;
           log_buf = const_cast<char *>(record.data());
@@ -1386,7 +1391,7 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
             SE_LOG(WARN, "fail to deserialize log header", K(ret));
           } else {
             log_buffer.assign(log_buf + pos, log_header.log_length_);
-            while(SUCC(ret) && SUCC(log_buffer.read_log(log_entry_header, log_data, log_len))) {
+            while(SUCCED(ret) && SUCCED(log_buffer.read_log(log_entry_header, log_data, log_len))) {
               // parse one log entry in record
               if (commited_trans_ids.end() == commited_trans_ids.find(log_entry_header.trans_id_)) {
                 SE_LOG(DEBUG, "this log not commited, ignore it", K(ret), K(log_entry_header));
@@ -1432,7 +1437,7 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
       destroy_log_reader(log_reader, &arena);
     }
     // write all extent ids to the file
-    if (SUCC(ret)) {
+    if (SUCCED(ret)) {
 //      std::unique_ptr<WritableFile> extent_ids_writer;
       WritableFile *extent_ids_writer = nullptr;
       EnvOptions opt_env_opts = env_options_;
@@ -1441,7 +1446,7 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
         SE_LOG(WARN, "Failed to create extent ids writer", K(ret), K(extent_ids_path));
       } else {
         int64_t extent_ids_size = 0;
-        for (auto iter = extent_ids_map.begin(); SUCC(ret) && iter != extent_ids_map.end(); iter++) {
+        for (auto iter = extent_ids_map.begin(); SUCCED(ret) && iter != extent_ids_map.end(); iter++) {
           for (int64_t extent_id : iter->second) {
             SE_LOG(INFO, "backup write incremental extent", K(ExtentId(extent_id)));
             if (FAILED(extent_ids_writer->Append(Slice(reinterpret_cast<char *>(&extent_id), sizeof(extent_id))).code())) {
@@ -1475,7 +1480,7 @@ int StorageLogger::process_change_info_for_backup(ChangeInfo &change_info,
     // we should iterate the change_info.extent_change_info_ from level 0 to
     // level 2 in order, since there might be some reused extents
     const ExtentChangeArray &extent_changes = change_info.extent_change_info_[level];
-    for (size_t i = 0; SUCC(ret) && i < extent_changes.size(); ++i) {
+    for (size_t i = 0; SUCCED(ret) && i < extent_changes.size(); ++i) {
       const ExtentChange ec = extent_changes.at(i);
       if (ec.is_add()) {
         extent_ids.insert(ec.extent_id_.id());
@@ -1491,7 +1496,7 @@ int StorageLogger::process_change_info_for_backup(ChangeInfo &change_info,
   }
 
   // process large object change info
-  for (size_t i = 0; SUCC(ret) && i < change_info.lob_extent_change_info_.size(); ++i) {
+  for (size_t i = 0; SUCCED(ret) && i < change_info.lob_extent_change_info_.size(); ++i) {
     const ExtentChange ec = change_info.lob_extent_change_info_.at(i);
     if (ec.is_add()) {
       extent_ids.insert(ec.extent_id_.id());
@@ -1529,14 +1534,14 @@ int StorageLogger::get_commited_trans_from_file(const std::string &manifest_name
   } else if (FAILED(create_log_reader(manifest_name, log_reader, arena))) {
     SE_LOG(WARN, "fail to create log reader", K(ret), K(manifest_name));
   } else {
-    while (SUCC(ret) && log_reader->ReadRecord(&record, &scrath)) {
+    while (SUCCED(ret) && log_reader->ReadRecord(&record, &scrath)) {
       pos = 0;
       record_buf = const_cast<char *>(record.data());
       if (FAILED(log_header.deserialize(record_buf, record.size(), pos))) {
         SE_LOG(WARN, "fail to deserialize log header", K(ret), K(pos));
       } else {
         log_buffer.assign(record_buf + pos, log_header.log_length_);
-        while (SUCC(ret) && SUCC(log_buffer.read_log(log_entry_header, log_data, log_length))) {
+        while (SUCCED(ret) && SUCCED(log_buffer.read_log(log_entry_header, log_data, log_length))) {
           SE_LOG(DEBUG, "read one manifest log", K(log_entry_header), K(pos));
           if (REDO_LOG_BEGIN == log_entry_header.log_entry_type_) {
             if (!(begin_trans_ids.insert(log_entry_header.trans_id_).second)) {

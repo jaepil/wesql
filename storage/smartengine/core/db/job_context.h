@@ -69,18 +69,15 @@ struct JobContext {
   uint64_t size_log_to_delete = 0;
 
   //TODO(Zhao Dongsheng) the follow member variables should not be here.
-  storage::StorageLogger *storage_logger_;
   TaskType task_type_;
   int64_t output_level_;
 
-  explicit JobContext(int _job_id,
-                      storage::StorageLogger *storage_logger = nullptr,
-                      bool create_superversion = false) {
+  explicit JobContext(int _job_id, bool create_superversion = false)
+  {
     job_id = _job_id;
     log_number = 0;
     prev_log_number = 0;
     new_superversion = create_superversion ? MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion) : nullptr;
-    storage_logger_ = storage_logger;
     task_type_ = TaskType::FLUSH_TASK;
     output_level_ = 0;
   }

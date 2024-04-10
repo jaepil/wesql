@@ -152,7 +152,7 @@ int TablePrefetchHelper::do_prefetch_index_block()
   if (FAILED(load_table_reader(meta_handle, handle))) {
     SE_LOG(WARN, "failed to get table reader", K(ret), K(meta_handle),
         K(table_reader_prefetch_pos_), K(index_block_cur_pos_));
-  } else if (ISNULL(handle.reader())) {
+  } else if (IS_NULL(handle.reader())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "table reader is nullptr", K(ret), K(table_reader_prefetch_pos_),
         K(index_block_cur_pos_));
@@ -186,7 +186,7 @@ int TablePrefetchHelper::load_table_reader(const Slice &meta_handle, TableReader
                                                          scan_param_->layer_position_.get_level(),
                                                          true /* TODO: prefetch_index_and_filter_in_cache */).code())) {
     SE_LOG(WARN, "failed to find table from table cache", K(ret));
-  } else if (ISNULL(table_reader_handle.cache_handle_)) {
+  } else if (IS_NULL(table_reader_handle.cache_handle_)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "handle is nullptr", K(ret));
   } else {
@@ -222,7 +222,7 @@ int TablePrefetchHelper::init_index_block_iter(BlockIter &index_block_iter)
   ExtentBasedTable *table_reader = get_table_reader_handle(index_block_cur_pos_).reader();
   BlockDataHandle<ExtentBasedTable::IndexReader> &index_handle = get_index_handle(index_block_cur_pos_);
   index_block_iter.reset();
-  if (ISNULL(table_reader)) {
+  if (IS_NULL(table_reader)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "current table reader is nullptr", K(ret));
   } else if (FAILED(table_reader->new_index_iterator(*(scan_param_->read_options_),
@@ -514,7 +514,7 @@ int BlockPrefetchHelper::init_data_block_iter(BlockIter &data_block_iter)
   BlockDataHandle<Block> &block_handle = get_block_handle(data_block_cur_pos_);
   if (FAILED(get_table_reader(block_handle.extent_id_, table_reader))) {
     SE_LOG(WARN, "failed to get table reader", K(ret));
-  } else if (ISNULL(table_reader)) {
+  } else if (IS_NULL(table_reader)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "current table reader is nullptr", K(ret));
   } else if (FAILED(table_reader->new_data_block_iterator(*(scan_param_->read_options_),

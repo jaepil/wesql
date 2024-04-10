@@ -34,9 +34,6 @@ class AIOInfo;
 }
 
 namespace storage {
-
-class ExtentSpaceManager;
-
 // change system error number to string
 extern const size_t PAGE_SIZE;
 extern size_t upper(const size_t size, const size_t fac);
@@ -101,19 +98,17 @@ public:
   RandomAccessExtent();
   virtual ~RandomAccessExtent();
   void destroy();
-  virtual int init(const ExtentIOInfo &io_info, ExtentSpaceManager *space_manager);
+  virtual int init(const ExtentIOInfo &io_info);
   // read n byte from the offset of the extent
   common::Status Read(uint64_t offset, size_t n, common::Slice *result,
                       char *scratch) const override;
   size_t GetUniqueId(char *id, size_t max_size) const override;
-  ExtentSpaceManager *space_manager() { return space_manager_; }
 
   // convert the offset in the extent to the offset in the file
   virtual int fill_aio_info(const int64_t offset, const int64_t size, util::AIOInfo &aio_info) const override;
 
 protected:
   ExtentIOInfo io_info_;
-  ExtentSpaceManager *space_manager_;
 };
 
 class AsyncRandomAccessExtent : public RandomAccessExtent {
@@ -121,7 +116,7 @@ class AsyncRandomAccessExtent : public RandomAccessExtent {
   AsyncRandomAccessExtent();
   ~AsyncRandomAccessExtent();
 
-  virtual int init(const ExtentIOInfo &io_info, ExtentSpaceManager *space_manager) override;
+  virtual int init(const ExtentIOInfo &io_info) override;
   void set_rate_limiter(util::RateLimiter *rate_limiter) {
     rate_limiter_ = rate_limiter;
   }

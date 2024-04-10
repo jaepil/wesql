@@ -73,7 +73,7 @@ void EBRManager::add_to_limbo_list(EBRNode *head, EBRNode *tail, uint64_t remove
 
 int EBRManager::thread_register(LocalEBR *&e) {
   int ret = Status::kOk;
-  if (ISNULL(e = new (std::nothrow) LocalEBR(this))) {
+  if (IS_NULL(e = new (std::nothrow) LocalEBR(this))) {
     SE_LOG(ERROR, "failed to alloc memory for local ebr", KP(e));
     ret = Status::kMemoryLimit;
   } else if (pthread_setspecific(local_epoch_, e) != 0) {
@@ -110,7 +110,7 @@ void EBRManager::thread_exit(void *ptr) {
 void EBRManager::enter_critical_area() {
   int ret = Status::kOk;
   LocalEBR *e = get_local_ebr();
-  if (ISNULL(e) && FAILED(thread_register(e))) {
+  if (IS_NULL(e) && FAILED(thread_register(e))) {
     SE_LOG(ERROR, "failed to register thread into ebr manager");
     abort();
   }

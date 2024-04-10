@@ -46,6 +46,7 @@ namespace smartengine
 namespace storage
 {
 struct CheckpointBlockHeader;
+struct CheckpointHeader;
 }
 
 namespace db
@@ -223,8 +224,6 @@ private:
 
   // env options for all reads and writes except compactions
   const util::EnvOptions& env_options_;
-
-  storage::StorageLogger *storage_logger_;
 
   // No copying allowed
   VersionSet(const VersionSet&);

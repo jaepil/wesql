@@ -32,7 +32,7 @@ int BackupSnapshot::create(BackupSnapshot *&backup_instance)
 {
   int ret = Status::kOk;
   backup_instance = new BackupSnapshotImpl();
-  if (ISNULL(backup_instance)) {
+  if (IS_NULL(backup_instance)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(ERROR, "Failed to allocate backup_instance", K(ret));
   }
@@ -72,7 +72,7 @@ int BackupSnapshotImpl::init(DB *db, const char *backup_tmp_dir_path)
   if (!process_tid_.compare_exchange_strong(free_tid, tid)) {
     ret = Status::kInitTwice;
     SE_LOG(WARN, "There is another backup job still running!", K(ret));
-  } else if (ISNULL(db)) {
+  } else if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else {
@@ -119,7 +119,7 @@ int BackupSnapshotImpl::do_checkpoint(DB *db)
   WalDirFileChecker *wal_file_checker = nullptr;
   if (FAILED(check_status())) {
     SE_LOG(WARN, "Failed to check status", K(ret));
-  } else if (ISNULL(db)) {
+  } else if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else if (FAILED(db->do_manual_checkpoint(first_manifest_file_num_))) {
@@ -143,7 +143,7 @@ int BackupSnapshotImpl::acquire_snapshots(DB *db)
   int ret = Status::kOk;
   if (FAILED(check_status())) {
     SE_LOG(WARN, "Failed to check status", K(ret));
-  } else if (ISNULL(db)) {
+  } else if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else {
@@ -190,7 +190,7 @@ int BackupSnapshotImpl::record_incremental_extent_ids(DB *db)
   int ret = Status::kOk;
   if (FAILED(check_status())) {
     SE_LOG(WARN, "Failed to check status", K(ret));
-  } else if (ISNULL(db)) {
+  } else if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else if (FAILED(db->record_incremental_extent_ids(first_manifest_file_num_,
@@ -214,7 +214,7 @@ int BackupSnapshotImpl::release_snapshots(DB *db)
     if (Status::kInitTwice == ret) {
       SE_LOG(WARN, "There is another backup job still running!", K(ret));
     }
-  } else if (ISNULL(db)) {
+  } else if (IS_NULL(db)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else if (FAILED(db->release_backup_snapshot(meta_snapshots_))) {
@@ -230,7 +230,7 @@ int BackupSnapshotImpl::release_snapshots(DB *db)
 int BackupSnapshotImpl::create_tmp_dir(DB *db)
 {
   int ret = Status::kOk;
-  if (ISNULL(db)) {
+  if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else if (Status::kOk == (ret = db->GetEnv()->FileExists(backup_tmp_dir_path_).code())) {
@@ -250,7 +250,7 @@ int BackupSnapshotImpl::create_tmp_dir(DB *db)
 int BackupSnapshotImpl::do_cleanup(DB *db)
 {
   int ret = Status::kOk;
-  if (ISNULL(db)) {
+  if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else {

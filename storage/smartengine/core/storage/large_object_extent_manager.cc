@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#include "large_object_extent_manager.h"
-#include "change_info.h"
-#include "extent_space_manager.h"
-#include "storage_meta_struct.h"
+#include "storage/large_object_extent_manager.h"
+#include "storage/change_info.h"
+#include "storage/extent_meta_manager.h"
+#include "storage/extent_space_manager.h"
+#include "storage/storage_meta_struct.h"
 #include "port/likely.h"
 #include "logger/log_module.h"
 
@@ -49,18 +50,15 @@ void LargeObjectExtentMananger::destroy()
   }
 }
 
-int LargeObjectExtentMananger::init(ExtentSpaceManager *extent_space_mgr)
+//TODO(Zhao Dongsheng): the init function do nothing now.
+int LargeObjectExtentMananger::init()
 {
   int ret = Status::kOk;
 
   if (UNLIKELY(is_inited_)) {
     ret = Status::kInitTwice;
     SE_LOG(WARN, "init twice", K(ret));
-  } else if (IS_NULL(extent_space_mgr)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(extent_space_mgr));
   } else {
-    extent_space_mgr_ = extent_space_mgr;
     is_inited_ = true;
   }
 
@@ -79,11 +77,9 @@ int LargeObjectExtentMananger::apply(const ChangeInfo &change_info, common::Sequ
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < extent_changes.size(); ++i) {
       ExtentChange extent_change = extent_changes.at(i);
-      if (FAILED(extent_space_mgr_->get_meta(extent_change.extent_id_, extent_meta))) {
-        SE_LOG(WARN, "fail to get extent_meta", K(ret), K(extent_change));
-      } else if (IS_NULL(extent_meta)) {
+      if (IS_NULL(extent_meta = ExtentMetaManager::get_instance().get_meta(extent_change.extent_id_))) {
         ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(extent_change));
+        SE_LOG(WARN, "fail to get extent_meta", K(ret), K(extent_change));
       } else {
         if (extent_change.is_add()) {
           if (FAILED(add_extent(extent_meta))) {
@@ -170,8 +166,9 @@ int LargeObjectExtentMananger::recover_extent_space()
       if (IS_NULL(extent_meta = iter->second)) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, ExtentMeta must not nullptr", K(ret), K(extent_id));
-      } else if (FAILED(extent_space_mgr_->reference(extent_meta->table_space_id_,
-          extent_meta->extent_space_type_, extent_id))) {
+      } else if (FAILED(ExtentSpaceManager::get_instance().reference(extent_meta->table_space_id_,
+                                                                     extent_meta->extent_space_type_,
+                                                                     extent_id))) {
         SE_LOG(WARN, "fail to to reference lob extent", K(ret), K(extent_id));
       } else {
         SE_LOG(INFO, "success to refrence lob extent", K(*extent_meta));
@@ -366,15 +363,15 @@ int LargeObjectExtentMananger::recycle_extent(ExtentMeta *extent_meta, bool for_
     if (extent_meta->unref()) {
       ExtentId extent_id = extent_meta->extent_id_;
       if (!for_recovery) {
-        if (FAILED(extent_space_mgr_->recycle(extent_meta->table_space_id_,
-                                              extent_meta->extent_space_type_,
-                                              extent_id))) {
+        if (FAILED(ExtentSpaceManager::get_instance().recycle(extent_meta->table_space_id_,
+                                                              extent_meta->extent_space_type_,
+                                                              extent_id))) {
           SE_LOG(WARN, "fail to recycle extent", K(ret), K(extent_id));
         } else {
           SE_LOG(INFO, "success to recycle lob extent", K(extent_id));
         }
       } else {
-        if (FAILED(extent_space_mgr_->recycle_meta(extent_id))) {
+        if (FAILED(ExtentMetaManager::get_instance().recycle_meta(extent_id))) {
           SE_LOG(WARN, "fail to recycle lob extent", K(ret), K(extent_id));
         } else {
           SE_LOG(INFO, "success to recycle lob extent", K(extent_id));
@@ -416,11 +413,9 @@ int LargeObjectExtentMananger::build_lob_extent(std::vector<ExtentId> &extent_id
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < extent_ids.size(); ++i) {
       ExtentId extent_id = extent_ids.at(i);
-      if (FAILED(extent_space_mgr_->get_meta(extent_id, extent_meta))) {
-        SE_LOG(WARN, "fail to get meta", K(ret), K(i), K(extent_id));
-      } else if (IS_NULL(extent_meta)) {
+      if (IS_NULL(extent_meta = ExtentMetaManager::get_instance().get_meta(extent_id))) {
         ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(i), K(extent_id));
+        SE_LOG(WARN, "fail to get meta", K(ret), K(i), K(extent_id));
       } else if (!(lob_extent_.emplace(extent_id.id(), extent_meta).second)) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "fail to emplace to lob extent", K(ret), K(i), K(extent_id), K(*extent_meta));

@@ -10,7 +10,7 @@
 #include "memory/mod_info.h"
 #include "monitoring/thread_status_util.h"
 #include "options/options.h"
-#include "storage/storage_manager.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/multi_version_extent_meta_layer.h"
 #include "util/to_string.h"
 
@@ -25,7 +25,6 @@ using namespace memory;
 namespace storage {
 CompactionJob::CompactionJob(ArenaAllocator &arena)
     : arena_(arena),
-      storage_manager_(nullptr),
       meta_snapshot_(nullptr),
       priority_layer_compacted_(false),
       task_to_run_(0),
@@ -37,20 +36,18 @@ CompactionJob::~CompactionJob() { destroy(); }
 
 int CompactionJob::init(const CompactionContext &context,
                         const ColumnFamilyDesc &cf,
-                        StorageManager *sm,
                         const Snapshot* meta_snapshot) {
   int ret = Status::kOk;
   if (!context.valid()) {
     ret = Status::kInvalidArgument;
     COMPACTION_LOG(WARN, "invalid context", K(ret));
-  } else if (nullptr == sm || nullptr == meta_snapshot) {
-    COMPACTION_LOG(ERROR, "invalid arguments", KP(sm), KP(meta_snapshot));
+  } else if (nullptr == meta_snapshot) {
     ret = Status::kInvalidArgument;
+    COMPACTION_LOG(ERROR, "invalid arguments", K(ret), KP(meta_snapshot));
   } else {
     context_ = context;
     // We set change_info_.task_type_ here
     //change_info_.task_type_ = context_.task_type_;
-    storage_manager_ = sm;
     cf_desc_ = cf;
     meta_snapshot_ = meta_snapshot;
     inited_ = true;
@@ -200,7 +197,7 @@ int CompactionJob::build_delete_major_self_compaction(
     storage::RangeIterator *iterator2) {
   int ret = 0;
   const Comparator *cmp = context_.data_comparator_;
-  if (nullptr == iterator2 || nullptr == storage_manager_) {
+  if (nullptr == iterator2) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "iterator2 or storage_manager is null", K(ret));
     return ret;
@@ -217,7 +214,7 @@ int CompactionJob::build_delete_major_self_compaction(
   while (Status::kOk == ret && iterator2->valid()) {
     MetaDescriptor md = iterator2->get_meta_descriptor();
     ExtentId extent_id = ExtentId(md.block_position_.first);
-    const ExtentMeta *meta = storage_manager_->get_extent_meta(extent_id);
+    const ExtentMeta *meta = ExtentMetaManager::get_instance().get_meta(extent_id);
     int cmp_val = 1;
     if (last_userkey.size() > 0) {
       cmp_val = cmp->Compare(last_userkey, md.get_start_user_key());
@@ -292,8 +289,7 @@ int CompactionJob::pick_extents(
       ret = Status::kShutdownInProgress;
       break;
     }
-    const ExtentMeta *meta =
-        storage_manager_->get_extent_meta(ExtentId(md.block_position_.first));
+    const ExtentMeta *meta = ExtentMetaManager::get_instance().get_meta(ExtentId(md.block_position_.first));
     if (nullptr == meta) {
       ret = Status::kAborted;
       SE_LOG(WARN, "get extent meta failed", K(ret), K(md));
@@ -1040,7 +1036,7 @@ int CompactionJob::build_multiple_major_self_compaction(
       COMPACTION_LOG(WARN, "process shutting down, break compaction.", K(ret));
       break;
     }
-    const ExtentMeta *meta = storage_manager_->get_extent_meta(ExtentId(md.block_position_.first));
+    const ExtentMeta *meta = ExtentMetaManager::get_instance().get_meta(ExtentId(md.block_position_.first));
     if (nullptr != meta && meta->num_entries_) {
       md.delete_percent_ = meta->num_deletes_ * 100 / meta->num_entries_;
     }

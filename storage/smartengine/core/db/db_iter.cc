@@ -22,7 +22,6 @@
 #include "monitoring/query_perf_context.h"
 #include "options/options.h"
 #include "port/port.h"
-#include "storage/extent_space_manager.h"
 #include "table/internal_iterator.h"
 #include "util/arena.h"
 #include "util/filename.h"
@@ -60,8 +59,7 @@ public:
         InternalIterator* iter,
         SequenceNumber s,
         bool arena_mode,
-        uint64_t max_sequential_skip_in_iterations,
-        storage::ExtentSpaceManager* space_manager)
+        uint64_t max_sequential_skip_in_iterations)
      : arena_mode_(arena_mode),
        env_(env),
        user_comparator_(cmp),
@@ -76,7 +74,6 @@ public:
        statistics_(cf_options.statistics),
        iterate_upper_bound_(read_options.iterate_upper_bound),
        pin_thru_lifetime_(read_options.pin_data),
-       space_manager_(space_manager),
        key_sequence_(kMaxSequenceNumber),
        skip_del_(read_options.skip_del_),
        is_art_based_memtable_(std::string(cf_options.memtable_factory->Name()) == "ARTFactory") {
@@ -130,8 +127,10 @@ public:
    Slice result;
    LargeValue large_value;
    int ret = Status::kOk;
-   if (Status::kOk != (ret = get_oob_large_value(plain_value, space_manager_,
-           large_value, oob_aligned_buf_, oob_aligned_size_))) {
+   if (Status::kOk != (ret = get_oob_large_value(plain_value,
+                                                 large_value,
+                                                 oob_aligned_buf_,
+                                                 oob_aligned_size_))) {
      __SE_LOG(ERROR, "fail to get content of large value\n");
      return Slice();
    } else if (kNoCompression == large_value.compression_type_) {
@@ -224,7 +223,7 @@ protected:
  IterKey saved_end_key_;
  std::string saved_value_;
  mutable std::unique_ptr<char[], void(&)(void *)> oob_aligned_buf_;
- mutable size_t oob_aligned_size_;
+ mutable int64_t oob_aligned_size_;
  mutable std::unique_ptr<char[], memory::ptr_delete<char>> oob_unzip_buf_;
  mutable size_t oob_unzip_size_;
  Slice pinned_value_;
@@ -241,7 +240,6 @@ protected:
  // is not deleted, will be true if ReadOptions::pin_data is true
  const bool pin_thru_lifetime_;
  PinnedIteratorsManager pinned_iters_mgr_;
- storage::ExtentSpaceManager* space_manager_;
  SequenceNumber key_sequence_;
  const bool skip_del_;
  bool is_art_based_memtable_;
@@ -261,8 +259,7 @@ public:
                         InternalIterator* iter,
                         SequenceNumber s,
                         bool arena_mode,
-                        uint64_t max_sequential_skip,
-                        storage::ExtentSpaceManager* space_manager)
+                        uint64_t max_sequential_skip)
       : DBIter(env,
                read_options,
                cf_options,
@@ -270,8 +267,7 @@ public:
                nullptr,
                s,
                arena_mode,
-               max_sequential_skip,
-               space_manager)
+               max_sequential_skip)
   {
     assert(!read_options.skip_del_);
   }
@@ -908,8 +904,7 @@ Iterator* NewDBIterator(Env* env,
                         InternalIterator* internal_iter,
                         const SequenceNumber& sequence,
                         uint64_t max_sequential_skip,
-                        Arena* arena,
-                        ExtentSpaceManager* space_manager)
+                        Arena* arena)
 {
   DBIter* db_iter = nullptr;
   if (nullptr != arena) {
@@ -922,8 +917,7 @@ Iterator* NewDBIterator(Env* env,
                             internal_iter,
                             sequence,
                             false,
-                            max_sequential_skip,
-                            space_manager);
+                            max_sequential_skip);
   } else {
     db_iter = MOD_NEW_OBJECT(memory::ModId::kDbIter,
                              DBIter,
@@ -934,8 +928,7 @@ Iterator* NewDBIterator(Env* env,
                              internal_iter,
                              sequence,
                              false,
-                             max_sequential_skip,
-                             space_manager);
+                             max_sequential_skip);
   }
   return db_iter;
 }
@@ -948,8 +941,7 @@ Iterator* NewDBIterator(Env* env,
                         const SequenceNumber& sequence,
                         bool use_arena,
                         uint64_t max_sequential_skip,
-                        Arena* arena,
-                        ExtentSpaceManager* space_manager)
+                        Arena* arena)
 {
   DBIter* db_iter = nullptr;
   if (nullptr != arena) {
@@ -962,8 +954,7 @@ Iterator* NewDBIterator(Env* env,
                             internal_iter,
                             sequence,
                             use_arena,
-                            max_sequential_skip,
-                            space_manager);
+                            max_sequential_skip);
   } else {
     db_iter = MOD_NEW_OBJECT(memory::ModId::kDbIter,
                             DBIter,
@@ -974,8 +965,7 @@ Iterator* NewDBIterator(Env* env,
                              internal_iter,
                              sequence,
                              false /**use_arena*/,
-                             max_sequential_skip,
-                             space_manager);
+                             max_sequential_skip);
   }
   return db_iter;
 }
@@ -1041,8 +1031,7 @@ ArenaWrappedDBIter* NewArenaWrappedDbIterator(
     const ReadOptions& read_options,
     const ImmutableCFOptions& cf_options,
     const Comparator* user_key_comparator,
-    const SequenceNumber& sequence,
-    ExtentSpaceManager* space_manager)
+    const SequenceNumber& sequence)
 {
   const uint64_t MAX_SEQUENTIAL_SKIP = 100;
   ArenaWrappedDBIter* iter = MOD_NEW_OBJECT(memory::ModId::kDbIter, ArenaWrappedDBIter);
@@ -1058,8 +1047,7 @@ ArenaWrappedDBIter* NewArenaWrappedDbIterator(
                                nullptr,
                                sequence,
                                true,
-                               MAX_SEQUENTIAL_SKIP,
-                               space_manager);
+                               MAX_SEQUENTIAL_SKIP);
   } else {
     ReadOptions ro = read_options;
     ro.skip_del_ = false;
@@ -1071,8 +1059,7 @@ ArenaWrappedDBIter* NewArenaWrappedDbIterator(
                                               nullptr,
                                               sequence,
                                               true,
-                                              MAX_SEQUENTIAL_SKIP,
-                                              space_manager);
+                                              MAX_SEQUENTIAL_SKIP);
   }
 
   iter->SetDBIter(db_iter);

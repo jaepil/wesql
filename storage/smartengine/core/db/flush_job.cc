@@ -265,7 +265,7 @@ int BaseFlush::after_run_flush(MiniTables &mtables, int ret) {
   MemTable* last_mem = mems_.size() > 0 ? mems_.back() : nullptr;
   RecoveryPoint recovery_point;
 
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     if (IS_NULL(last_mem)
         || IS_NULL(mtables.change_info_)
         || IS_NULL(cfd_)) {
@@ -285,23 +285,19 @@ int BaseFlush::after_run_flush(MiniTables &mtables, int ret) {
   }
   if (FAILED(ret)) {
     // 2nd param of file_number is unused
-    if (nullptr != cfd_
-        && nullptr != cfd_->imm()
-        && nullptr != job_context_.storage_logger_) {
+    if (nullptr != cfd_ && nullptr != cfd_->imm()) {
       if (is_flush_task(job_context_.task_type_)) {
         cfd_->imm()->RollbackMemtableFlush(mems_, 0);
       } else if (nullptr != last_mem){
         last_mem->set_dump_in_progress(false);
       }
-      job_context_.storage_logger_->abort();
+      StorageLogger::get_instance().abort();
     } else {
       FLUSH_LOG(ERROR, "unexpected error, can not abort", K(ret), K(cfd_->GetID()));
     }
   } else if (TaskType::DUMP_TASK == job_context_.task_type_) {
     if (FAILED(cfd_->apply_change_info(*(mtables.change_info_), true /*write_log*/, false /*is_replay*/, &recovery_point))) {
-      if (nullptr != job_context_.storage_logger_) {
-        job_context_.storage_logger_->abort();
-      }
+      StorageLogger::get_instance().abort();
       FLUSH_LOG(WARN, "failed to apply change info for dump", K(ret));
     } else {
       last_mem->set_temp_min_prep_log(UINT64_MAX);
@@ -310,9 +306,7 @@ int BaseFlush::after_run_flush(MiniTables &mtables, int ret) {
   } else if (FAILED(cfd_->apply_change_info(*(mtables.change_info_),
       true /*write_log*/, false /*is_replay*/, &recovery_point, 
       &mems_, &job_context_.memtables_to_free))) {
-    if (nullptr != job_context_.storage_logger_) {
-      job_context_.storage_logger_->abort();
-    }
+    StorageLogger::get_instance().abort();
     FLUSH_LOG(WARN, "fail to apply change info", K(ret));
   } else {
     // do nothing
@@ -369,7 +363,7 @@ int BaseFlush::delete_old_M0(const InternalKeyComparator *internal_comparator, M
       // do nothing
     } else {
       // delete large object extent
-      for (int32_t i = 0; i < dump_layer->lob_extent_arr_.size() && SUCC(ret); i++) {
+      for (int32_t i = 0; i < dump_layer->lob_extent_arr_.size() && SUCCED(ret); i++) {
         lob_extent_meta = dump_layer->lob_extent_arr_.at(i);
         FLUSH_LOG(INFO, "delete large object extent for dump", K(cfd_->GetID()), "extent_id", lob_extent_meta->extent_id_);
         if (FAILED(mtables.change_info_->delete_large_object_extent(lob_extent_meta->extent_id_))) {
@@ -377,7 +371,7 @@ int BaseFlush::delete_old_M0(const InternalKeyComparator *internal_comparator, M
         }
       }
 
-      if (SUCC(ret)) {
+      if (SUCCED(ret)) {
         if (FAILED(CompactionJob::create_meta_iterator(arena_, internal_comparator, current_snapshot, layer_position, meta_iter))) {
           FLUSH_LOG(WARN, "create meta iterator failed", K(ret));
         } else {
@@ -388,7 +382,7 @@ int BaseFlush::delete_old_M0(const InternalKeyComparator *internal_comparator, M
             FLUSH_LOG(WARN, "dump range iter is null", K(ret));
           } else {
             range_iter->seek_to_first();
-            while (range_iter->valid() && SUCC(ret)) {
+            while (range_iter->valid() && SUCCED(ret)) {
               MetaDescriptor extent_meta = range_iter->get_meta_descriptor().deep_copy(tmp_arena_);
               FLUSH_LOG(DEBUG, "delete extent for dump", K(cfd_->GetID()), K(extent_meta));
               if (FAILED(mtables.change_info_->delete_extent(extent_meta.layer_position_, extent_meta.extent_id_))) {
@@ -426,7 +420,7 @@ int BaseFlush::fill_table_cache(const MiniTables &mtables) {
     FLUSH_LOG(WARN, "invalid ptr", K(ret), KP(db_options_.env), KP(env_options_), K(cfd_->GetID()));
     return ret;
   }
-  for (size_t i = 0; i < mtables.metas.size() && SUCC(ret); i++) {
+  for (size_t i = 0; i < mtables.metas.size() && SUCCED(ret); i++) {
     const FileMetaData* meta = &mtables.metas[i];
     std::unique_ptr<InternalIterator, memory::ptr_destruct_delete<InternalIterator>> it(
         cfd_->table_cache()->NewIterator(ReadOptions(),
@@ -730,7 +724,7 @@ int FlushJob::build_l1_iterator(storage::Range &wide_range,
       }
     }
 
-    if (SUCC(ret)) {
+    if (SUCCED(ret)) {
       storage::MetaType type(MetaType::SSTable, MetaType::Extent,
                              MetaType::InternalKey, 1, 1, 0);
       iterator = ALLOC_OBJECT(MetaDataIterator, arena_, type, meta_iter,
@@ -747,7 +741,7 @@ int FlushJob::get_memtable_range(
   Slice largest_key;
   int64_t way_size = (int64_t)memtables.size();
   db::InternalKeyComparator comparator(compaction_context_.data_comparator_);
-  for (int64_t i = 0; i < way_size && SUCC(ret); ++i) {
+  for (int64_t i = 0; i < way_size && SUCCED(ret); ++i) {
     InternalIterator *cur_iter = memtables.at(i);
     if (IS_NULL(cur_iter)) {
       ret = Status::kErrorUnexpected;
@@ -769,7 +763,7 @@ int FlushJob::get_memtable_range(
       }
     }
   }
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     wide_range.start_key_ = smallest_key;
     wide_range.end_key_ = largest_key;
     FLUSH_LOG(INFO, "get memtable range succ!", K(smallest_key), K(largest_key), K(way_size));

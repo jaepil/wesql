@@ -25,15 +25,16 @@
 #include "memory/mod_info.h"
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/storage_logger.h"
 
 namespace smartengine {
 using namespace common;
-using namespace util;
-using namespace table;
+using namespace memory;
 using namespace monitor;
 using namespace storage;
-using namespace memory;
+using namespace table;
+using namespace util;
 
 namespace db {
 Options SanitizeOptions(const std::string& dbname, const Options& src) {
@@ -204,7 +205,7 @@ int DBImpl::prepare_recovery(const ColumnFamilyOptions &cf_options)
       } else {
         //overwrite ret as design
         const uint64_t t2 = env_->NowMicros();
-        if (FAILED(storage_logger_->external_write_checkpoint())) {
+        if (FAILED(StorageLogger::get_instance().external_write_checkpoint())) {
           SE_LOG(WARN, "fail to external write checkpoint", K(ret), K_(dbname));
         }
         const uint64_t t3 = env_->NowMicros();
@@ -277,13 +278,13 @@ int DBImpl::recovery()
   ArenaAllocator recovery_arena(CharArena::DEFAULT_PAGE_SIZE, ModId::kRecovery);
 
   const uint64_t t1 = env_->NowMicros();
-  if (FAILED(storage_logger_->replay(recovery_arena))) {
+  if (FAILED(StorageLogger::get_instance().replay(recovery_arena))) {
     SE_LOG(ERROR, "fail to replay manifest log", K(ret));
   } else if (FAILED(set_compaction_need_info())){ // set compaction info
     SE_LOG(WARN, "failed to set compaction need info", K(ret));
   }
   const uint64_t t2 = env_->NowMicros();
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     if (FAILED(recovery_wal(recovery_arena))) {
       SE_LOG(WARN, "fail to replay wal", K(ret));
     }
@@ -315,7 +316,7 @@ int DBImpl::create_default_subtbale(const ColumnFamilyOptions &cf_options)
       ModId::kDBImpl, ColumnFamilyHandleImpl,sub_table, this, &mutex_)) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for default_cf_handle", K(ret));
-  } else if (FAILED(extent_space_manager_->create_table_space(args.table_space_id_))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().create_table_space(args.table_space_id_))) { 
     SE_LOG(WARN, "fail to create table space", K(ret), K(args));
   } else {
     default_cf_internal_stats_ = default_cf_handle_->cfd()->internal_stats();
@@ -334,7 +335,7 @@ int DBImpl::recovery_wal(ArenaAllocator &arena)
     SE_LOG(WARN, "fail to do something before replay wal", K(ret));
   }
   const uint64_t t2 = env_->NowMicros();
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     if (immutable_db_options_.parallel_wal_recovery) {
       SE_LOG(INFO, "start replaying wal files in parallel");
       ret = parallel_replay_wal_files(arena);
@@ -347,7 +348,7 @@ int DBImpl::recovery_wal(ArenaAllocator &arena)
     }
   }
   const uint64_t t3 = env_->NowMicros();
-  if (SUCC(ret)) {
+  if (SUCCED(ret)) {
     if (FAILED(after_replay_wal_files(arena))) {
       SE_LOG(WARN, "fail to do something after replay wal files", K(ret));
     }
@@ -451,7 +452,7 @@ int DBImpl::parallel_replay_wal_files(ArenaAllocator &arena) {
     bool last_file = false;
     uint64_t slowest = 0;
     uint64_t logfile_count = log_file_numbers.size();
-    for (uint32_t i = 0; SUCC(ret) && i < logfile_count; ++i) {
+    for (uint32_t i = 0; SUCCED(ret) && i < logfile_count; ++i) {
       const uint64_t t1 = env_->NowMicros();
       log_file_number = log_file_numbers.at(i);
       next_log_file_number = (i < (logfile_count - 1)) ?
@@ -477,7 +478,7 @@ int DBImpl::parallel_replay_wal_files(ArenaAllocator &arena) {
     auto replay_last_time = env_->NowMicros() - start_t;
     recovery_debug_info_.recoverywal_file_count = logfile_count;
     recovery_debug_info_.recoverywal_slowest = slowest;
-    if (SUCC(ret)) {
+    if (SUCCED(ret)) {
       if (FAILED(finish_parallel_replay_wal_files(replay_thread_pool))) {
         SE_LOG(ERROR, "finish_parallel_replay_wal_files failed", K(ret),
             K(max_sequence_during_recovery_), K(max_log_file_number_during_recovery_));
@@ -895,7 +896,7 @@ int DBImpl::recovery_flush(ColumnFamilyData *sub_table)
 {
   int ret = Status::kOk;
   const MutableCFOptions mutable_cf_options = *sub_table->GetLatestMutableCFOptions();
-  JobContext job_context(next_job_id_.fetch_add(1), storage_logger_, true);
+  JobContext job_context(next_job_id_.fetch_add(1), true);
   STFlushJob st_flush_job(sub_table, nullptr, FLUSH_TASK, true /*need_check_snapshot*/);
  
   if (FAILED(FlushMemTableToOutputFile(st_flush_job, mutable_cf_options, nullptr, job_context).code())) {
@@ -1334,37 +1335,26 @@ Status DB::Open(const Options &options,
   if (IS_NULL(impl->table_cache_.get())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, table cache must not nullptr", K(ret));
-  } else if (IS_NULL(impl->storage_logger_ = MOD_NEW_OBJECT(ModId::kStorageLogger, StorageLogger))) {
-    ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for StorageLogger", K(ret));
-  } else if (IS_NULL(impl->extent_space_manager_ = MOD_NEW_OBJECT(ModId::kExtentSpaceMgr,
-                                                                  ExtentSpaceManager,
-                                                                  impl->env_,
-                                                                  impl->env_options_,
-                                                                  impl->initial_db_options_))) {
-    ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for ExtentSpaceManager", K(ret));
+  } else if (FAILED(StorageLogger::get_instance().init(impl->env_,
+                                                       dbname,
+                                                       impl->env_options_,
+                                                       impl->immutable_db_options_,
+                                                       impl->versions_.get(),
+                                                       64 * 1024 * 1024))) {
+    SE_LOG(WARN, "fail to init StorageLogger", K(ret));
+  } else if (FAILED(ExtentMetaManager::get_instance().init())) {
+    SE_LOG(WARN, "fail to init ExtentMetaManager", K(ret)); 
+  } else if (FAILED(ExtentSpaceManager::get_instance().init(impl->env_, impl->env_options_, impl->initial_db_options_))) {
+    SE_LOG(WARN, "fail to init ExtentSpaceManager", K(ret));
   } else if (IS_NULL(gctx = MOD_NEW_OBJECT(ModId::kDefaultMod, GlobalContext, dbname, options))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for GlobalContext", K(ret));
-  } else if (FAILED(impl->storage_logger_->init(impl->env_,
-                                                dbname,
-                                                impl->env_options_,
-                                                impl->immutable_db_options_,
-                                                impl->versions_.get(),
-                                                impl->extent_space_manager_,
-                                                64 * 1024 * 1024))) {
-    SE_LOG(WARN, "fail to init StorageLogger", K(ret));
-  } else if (FAILED(impl->extent_space_manager_->init(impl->storage_logger_))) {
-    SE_LOG(WARN, "fail to init ExtentSpaceMgr", K(ret));
   } else {
     gctx->options_ = options;
     gctx->env_options_ = impl->env_options_;
     gctx->env_ = impl->env_;
     gctx->cache_ = impl->table_cache_.get();
     gctx->write_buf_mgr_ = impl->write_buffer_manager_;
-    gctx->storage_logger_ = impl->storage_logger_;
-    gctx->extent_space_mgr_ = impl->extent_space_manager_;
     gctx->reset_thread_local_all_sub_table();
     gctx->db_dir_ = impl->directories_.GetDbDir();
     if (FAILED(impl->versions_->init(gctx))) {

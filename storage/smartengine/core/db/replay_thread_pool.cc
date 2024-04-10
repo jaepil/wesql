@@ -54,7 +54,7 @@ int ReplayThreadPool::wait_for_all_tasks_executed() {
     ret = Status::kNotInit;
     SE_LOG(WARN, "wait for all threads suspend failed", K(ret));
   } else {
-    while (SUCC(ret) && get_submit_task_num() > get_executed_task_num()) {
+    while (SUCCED(ret) && get_submit_task_num() > get_executed_task_num()) {
       std::this_thread::yield();
       // still need pre_process_execute during waiting all tasks done for checking switching memtable
       // but here we won't meet a barrier again
@@ -63,11 +63,11 @@ int ReplayThreadPool::wait_for_all_tasks_executed() {
         break;
       }
     }
-    if (SUCC(ret) && replay_thread_pool_executor_->has_error()) {
+    if (SUCCED(ret) && replay_thread_pool_executor_->has_error()) {
       SE_LOG(WARN, "fail to wait for all tasks executed, has error");
       ret = Status::kCorruption;
     }
-    if (SUCC(ret)) {
+    if (SUCCED(ret)) {
       assert(replay_thread_pool_executor_->get_waitting_task_num() == 0);
     }
   }
@@ -232,7 +232,7 @@ int ReplayThreadPool::wait_for_all_threads_suspend() {
     auto env = db_impl_->GetEnv();
     last_log_wait_time_ = env->NowMicros();
     uint64_t current_timestamp = 0;
-    while (SUCC(ret) &&
+    while (SUCCED(ret) &&
            replay_thread_pool_executor_->get_suspend_thread_num() < thread_count_) {
       current_timestamp = env->NowMicros();
       if (current_timestamp > last_log_wait_time_ &&
@@ -259,7 +259,7 @@ int ReplayThreadPool::wait_for_all_threads_stopped() {
     ret = Status::kNotSupported;
     SE_LOG(WARN, "wait for all threads stopped failed", K(ret));
   } else {
-    while (SUCC(ret) && !all_threads_stopped()) {
+    while (SUCCED(ret) && !all_threads_stopped()) {
       if (FAILED(pre_process_execute())) {
         SE_LOG(ERROR, "pre_process_parallel_replay while waiting for all threads stopped failed", K(ret));
         break;

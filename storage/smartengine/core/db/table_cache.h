@@ -24,10 +24,6 @@
 
 namespace smartengine {
 
-namespace storage {
-class ExtentSpaceManager;
-}
-
 namespace env {
 class Env;
 }
@@ -52,8 +48,8 @@ class InternalStats;
 class TableCache {
  public:
   TableCache(const common::ImmutableCFOptions& ioptions,
-             const util::EnvOptions& storage_options, cache::Cache* cache,
-             storage::ExtentSpaceManager* space_manager);
+             const util::EnvOptions& storage_options,
+             cache::Cache* cache);
   ~TableCache();
 
   // Return an iterator for the specified file number (the corresponding
@@ -162,7 +158,6 @@ class TableCache {
   const util::EnvOptions& env_options_;
   cache::Cache* const cache_;
   std::string row_cache_id_;
-  storage::ExtentSpaceManager* space_manager_;
 };
 }
 }  // namespace smartengine

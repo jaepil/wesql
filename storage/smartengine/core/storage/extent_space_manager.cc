@@ -29,14 +29,11 @@ using namespace util;
 using namespace memory;
 namespace storage
 {
-ExtentSpaceManager::ExtentSpaceManager(util::Env *env,
-                                       const util::EnvOptions &env_options,
-                                       const common::DBOptions &db_options)
+ExtentSpaceManager::ExtentSpaceManager()
     : is_inited_(false),
-      env_(env),
-      env_options_(env_options),
-      db_options_(db_options),
-      extent_meta_mgr_(nullptr),
+      env_(nullptr),
+      env_options_(),
+      db_options_(),
       table_space_lock_(),
       table_space_id_(0),
       table_space_map_(),
@@ -44,10 +41,7 @@ ExtentSpaceManager::ExtentSpaceManager(util::Env *env,
       io_info_map_lock_(),
       extent_io_info_map_(),
       garbage_files_()
-{
-  env_options_.use_direct_reads = true;
-  env_options_.use_direct_writes = true;
-}
+{}
 
 ExtentSpaceManager::~ExtentSpaceManager()
 {
@@ -60,7 +54,7 @@ void ExtentSpaceManager::destroy()
     for (auto iter = table_space_map_.begin(); table_space_map_.end() != iter; ++iter) {
       MOD_DELETE_OBJECT(TableSpace, iter->second); 
     }
-    MOD_DELETE_OBJECT(ExtentMetaManager, extent_meta_mgr_);
+    table_space_id_ = 0;
     table_space_map_.clear();
     wait_remove_table_space_map_.clear();
     extent_io_info_map_.clear();
@@ -69,23 +63,28 @@ void ExtentSpaceManager::destroy()
   }
 }
 
-int ExtentSpaceManager::init(StorageLogger *storage_logger)
+ExtentSpaceManager &ExtentSpaceManager::get_instance()
+{
+  static ExtentSpaceManager extent_space_manager;
+  return extent_space_manager;
+}
+
+int ExtentSpaceManager::init(util::Env *env, const util::EnvOptions &env_options, const common::DBOptions &db_options)
 {
   int ret = Status::kOk;
 
   if (UNLIKELY(is_inited_)) {
     ret = Status::kInitTwice;
     SE_LOG(WARN, "ExtentSpaceManager has been inited", K(ret));
-  } else if (IS_NULL(storage_logger)) {
+  } else if (IS_NULL(env)) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(storage_logger));
-  } else if (IS_NULL(extent_meta_mgr_ = MOD_NEW_OBJECT(ModId::kExtentSpaceMgr,
-                                                       ExtentMetaManager))) {
-    ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for ExtentMetaManager", K(ret));
-  } else if (FAILED(extent_meta_mgr_->init(storage_logger))) {
-    SE_LOG(WARN, "fail to init extent_meta_manager", K(ret));
+    SE_LOG(WARN, "invalid argument", K(ret));
   } else {
+    env_ = env;
+    env_options_ = env_options;
+    env_options_.use_direct_reads = true;
+    env_options_.use_direct_writes = true;
+    db_options_ = db_options;
     is_inited_ = true;
   }
 
@@ -305,7 +304,7 @@ int ExtentSpaceManager::recycle(const int64_t table_space_id,
     }
 
     if (SUCCED(ret)) {
-      if (has_meta && FAILED(extent_meta_mgr_->recycle_meta(extent_id))) {
+      if (has_meta && FAILED(ExtentMetaManager::get_instance().recycle_meta(extent_id))) {
         SE_LOG(WARN, "fail to recycle extent meta", K(ret), K(table_space_id), K(extent_space_type), K(extent_id));
       } else {
         SE_LOG(INFO, "success to recycle extent", K(table_space_id), K(extent_space_type), K(extent_id));
@@ -376,7 +375,7 @@ common::Status ExtentSpaceManager::get_random_access_extent(ExtentId extent_id,
     if (extent_io_info_map_.end() == iter) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "unexpected error, the extent not exist", K(ret), K(extent_id));
-    } else if (FAILED(random_access_extent.init(iter->second, this))) {
+    } else if (FAILED(random_access_extent.init(iter->second))) {
       SE_LOG(WARN, "fail to init random access extent", K(ret), K(io_info));
     } else {
       SE_LOG(DEBUG, "success to get random access extent", K(extent_id));
@@ -384,41 +383,6 @@ common::Status ExtentSpaceManager::get_random_access_extent(ExtentId extent_id,
   }
 
   return ret;
-}
-
-int ExtentSpaceManager::get_meta(const ExtentId &extent_id, ExtentMeta *&extent_meta)
-{
-  int ret = Status::kOk;
-  if (IS_NULL(extent_meta = extent_meta_mgr_->get_meta(extent_id))) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, fail to get extent meta", K(ret), K(extent_id));
-  }
-  return ret;
-}
-
-int ExtentSpaceManager::write_meta(const ExtentMeta &extent_meta, bool write_log)
-{
-  return extent_meta_mgr_->write_meta(extent_meta, write_log);
-}
-
-int ExtentSpaceManager::recycle_meta(const ExtentId extent_id)
-{
-  return extent_meta_mgr_->recycle_meta(extent_id);
-}
-
-int ExtentSpaceManager::do_checkpoint(util::WritableFile *checkpoint_writer, CheckpointHeader *header)
-{
-  return extent_meta_mgr_->do_checkpoint(checkpoint_writer, header);
-}
-
-int ExtentSpaceManager::load_checkpoint(util::RandomAccessFile *checkpoint_reader, CheckpointHeader *header)
-{
-  return extent_meta_mgr_->load_checkpoint(checkpoint_reader, header);
-}
-
-int ExtentSpaceManager::replay(int64_t log_type, char *log_data, int64_t log_len)
-{
-  return extent_meta_mgr_->replay(log_type, log_data, log_len);
 }
 
 int ExtentSpaceManager::get_shrink_infos(const ShrinkCondition &shrink_condition, std::vector<ShrinkInfo> &shrink_infos)
@@ -667,7 +631,7 @@ int ExtentSpaceManager::rebuild()
     }
 
     if (SUCCED(ret)) {
-      if (FAILED(extent_meta_mgr_->clear_free_extent_meta())) {
+      if (FAILED(ExtentMetaManager::get_instance().clear_free_extent_meta())) {
         SE_LOG(WARN, "fail to clear free extent meta", K(ret));
       } else if (FAILED(clear_garbage_files())) {
         SE_LOG(WARN, "fail to clear garbage files", K(ret));

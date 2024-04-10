@@ -14,26 +14,25 @@
  * limitations under the License.
  */
 
-//#ifndef SMARTENGINE_INCLUDE_STORAGE_MANAGER_H_
-//#define SMARTENGINE_INCLUDE_STORAGE_MANAGER_H_
-#pragma once
-#include "change_info.h"
-#include "extent_space_manager.h"
-#include "large_object_extent_manager.h"
+#ifndef SMARTENGINE_INCLUDE_STORAGE_MANAGER_H_
+#define SMARTENGINE_INCLUDE_STORAGE_MANAGER_H_
+
 #include "db/table_cache.h"
 #include "db/snapshot_impl.h"
+#include "storage/change_info.h"
+#include "storage/large_object_extent_manager.h"
 #include "table/two_level_iterator.h"
 namespace smartengine
 {
 namespace db
 {
- class InternalStats;
- class ColumnFamilyData;
- class SnapshotImpl;
+class InternalStats;
+class ColumnFamilyData;
+class SnapshotImpl;
 }
 namespace table
 {
-  class MergeIteratorBuilder;
+class MergeIteratorBuilder;
 }
 namespace storage
 {
@@ -59,7 +58,7 @@ public:
 	virtual ~StorageManager();
   void destroy();
 
-	int init(util::Env *env, ExtentSpaceManager *extent_space_manager, cache::Cache *cache);
+	int init(util::Env *env, cache::Cache *cache);
 	int apply(const ChangeInfo &change_info, bool for_recovery);
   int get(const common::Slice &key,
           const db::Snapshot &current_meta,
@@ -103,7 +102,6 @@ public:
                            int32_t end_level,
                            const db::Snapshot *sn,
                            int64_t estimate_cost_depth);
-  ExtentMeta *get_extent_meta(const ExtentId &extent_id);
 	void print_raw_meta();
   const db::SnapshotImpl *acquire_meta_snapshot();
   void release_meta_snapshot(const db::SnapshotImpl *meta_snapshot);
@@ -132,8 +130,7 @@ public:
   DECLARE_SERIALIZATION();
   DECLARE_TO_STRING();
 private:
-  int init_extent_layer_versions(ExtentSpaceManager *extent_space_manager,
-                                 db::InternalKeyComparator *internalkey_comparator);
+  int init_extent_layer_versions(db::InternalKeyComparator *internalkey_comparator);
 	int normal_apply(const ChangeInfo &change_info);
   int apply_large_object(const ChangeInfo &change_info);
   int build_new_version(ExtentLayerVersion *old_version,
@@ -204,7 +201,6 @@ private:
   int32_t column_family_id_;
   int64_t bg_recycle_count_;
   db::InternalKeyComparator *internalkey_comparator_;
-  ExtentSpaceManager *extent_space_manager_;
   mutable std::mutex meta_mutex_;
   common::SequenceNumber meta_version_;
   ExtentLayerVersion *extent_layer_versions_[MAX_TIER_COUNT];
@@ -218,4 +214,5 @@ private:
 
 } //namespace storage
 } //namespace smartengine
-//#endif
+
+#endif // SMARTENGINE_INCLUDE_STORAGE_MANAGER_H_

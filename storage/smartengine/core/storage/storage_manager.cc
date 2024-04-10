@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-#include "storage_manager.h"
-#include "multi_version_extent_meta_layer.h"
+#include "storage/storage_manager.h"
 #include "db/internal_stats.h"
 #include "db/table_cache.h"
 #include "monitoring/query_perf_context.h"
+#include "storage/extent_meta_manager.h"
+#include "storage/extent_space_manager.h"
+#include "storage/multi_version_extent_meta_layer.h"
 #include "table/merging_iterator.h"
 #include "table/internal_iterator.h"
 #include "table/sstable_scan_iterator.h"
@@ -47,7 +49,6 @@ StorageManager::StorageManager(const util::EnvOptions &env_options,
       column_family_id_(0),
       bg_recycle_count_(0),
       internalkey_comparator_(nullptr),
-      extent_space_manager_(nullptr),
       meta_mutex_(),
       meta_version_(1),
       current_meta_(nullptr),
@@ -92,32 +93,31 @@ void StorageManager::destroy()
   }
 }
 
-int StorageManager::init(util::Env *env, ExtentSpaceManager *extent_space_manager, cache::Cache *cache)
+int StorageManager::init(util::Env *env, cache::Cache *cache)
 {
   int ret = Status::kOk;
 
   if (is_inited_) {
     ret = Status::kInitTwice;
     SE_LOG(WARN, "StorageManager has been inited", K(ret));
-  } else if (IS_NULL(env) || IS_NULL(extent_space_manager) || IS_NULL(cache)) {
+  } else if (IS_NULL(env) || IS_NULL(cache)) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(env), KP(extent_space_manager), KP(cache));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(env), KP(cache));
   } else if (IS_NULL(internalkey_comparator_ = MOD_NEW_OBJECT(ModId::kStorageMgr,
-                                                           db::InternalKeyComparator,
-                                                           immutable_cfoptions_.user_comparator))) {
+                                                              db::InternalKeyComparator,
+                                                              immutable_cfoptions_.user_comparator))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for internal_comparator", K(ret));
   } else if (IS_NULL(lob_extent_mgr_ = MOD_NEW_OBJECT(ModId::kStorageMgr, LargeObjectExtentMananger))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for LargeObjectExtentMananger", K(ret));
-  } else if (FAILED(lob_extent_mgr_->init(extent_space_manager))) {
+  } else if (FAILED(lob_extent_mgr_->init())) {
     SE_LOG(WARN, "fail to init lob_extent_mgr_", K(ret));
-  } else if (FAILED(init_extent_layer_versions(extent_space_manager, internalkey_comparator_))) {
+  } else if (FAILED(init_extent_layer_versions(internalkey_comparator_))) {
     SE_LOG(WARN, "fail to init extent layer versions", K(ret));
   } else {
     env_ = env;
 		table_cache_ = cache;
-    extent_space_manager_ = extent_space_manager;
     is_inited_ = true;
   }
 
@@ -345,16 +345,6 @@ int64_t StorageManager::approximate_size(const db::ColumnFamilyData *cfd,
 #endif 
 
   return result_size;
-}
-
-ExtentMeta *StorageManager::get_extent_meta(const ExtentId &extent_id)
-{
-  int ret = Status::kOk;
-  ExtentMeta *extent_meta = nullptr;
-  if (FAILED(extent_space_manager_->get_meta(extent_id, extent_meta))) {
-    SE_LOG(WARN, "fail to get extent meta", K(ret), K(extent_id));
-  }
-  return extent_meta;
 }
 
 void StorageManager::print_raw_meta()
@@ -712,19 +702,18 @@ int64_t StorageManager::to_string(char *buf, const int64_t buf_len) const
   
   return pos;
 }
-int StorageManager::init_extent_layer_versions(ExtentSpaceManager *extent_space_manager,
-                                               db::InternalKeyComparator *internalkey_comparator)
+int StorageManager::init_extent_layer_versions(db::InternalKeyComparator *internalkey_comparator)
 {
   int ret = Status::kOk;
   ExtentLayer *extent_layer = nullptr;
   ExtentLayerVersion *extent_layer_version = nullptr;
 
   for (int32_t level = 0; SUCCED(ret) && level < MAX_TIER_COUNT; ++level) {
-    if (IS_NULL(extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, extent_space_manager, internalkey_comparator))) {
+    if (IS_NULL(extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, internalkey_comparator))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for ExtentLayer", K(ret), K(level));
     } else if (IS_NULL(extent_layer_version = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayerVersion,
-            level, extent_space_manager, internalkey_comparator))) {
+            level, internalkey_comparator))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for ExtentLayerVersion", K(ret), K(level));
     } else if (FAILED(extent_layer_version->add_layer(extent_layer))) {
@@ -758,8 +747,10 @@ int StorageManager::normal_apply(const ChangeInfo &change_info)
       if (level < 0 || level >= MAX_TIER_COUNT) {
         ret = Status::kInvalidArgument;
         SE_LOG(WARN, "invalid argument", K(ret), K(level));
-      } else if (IS_NULL(new_extent_layer_versions[level] = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayerVersion,
-              level, extent_space_manager_, internalkey_comparator_))) {
+      } else if (IS_NULL(new_extent_layer_versions[level] = MOD_NEW_OBJECT(ModId::kStorageMgr,
+                                                                           ExtentLayerVersion,
+                                                                           level,
+                                                                           internalkey_comparator_))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for ExtentLayerVersion", K(ret), K(level));
       } else if (FAILED(build_new_version(extent_layer_versions_[level],
@@ -893,7 +884,7 @@ int StorageManager::copy_on_write_accord_old_version(const ExtentLayerVersion *o
       if (IS_NULL(old_extent_layer = (const_cast<ExtentLayerVersion *>(old_version))->get_extent_layer(layer_index))) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, fail to get extent layer", K(ret), K(layer_index));
-      } else if (IS_NULL(new_extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, extent_space_manager_, internalkey_comparator_))) {
+      } else if (IS_NULL(new_extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, internalkey_comparator_))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for ExtentLayer", K(ret));
       } else {
@@ -954,7 +945,7 @@ int StorageManager::build_new_extent_layer_if_need(const ExtentChangesMap &exten
       if (0 != new_version->get_level()) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, only level 0 will generate new ExtentLayer", K(ret));
-      } else if (IS_NULL(new_extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, extent_space_manager_, internalkey_comparator_))) {
+      } else if (IS_NULL(new_extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, internalkey_comparator_))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for ExtentLayer", K(ret));
       } else if (FAILED(modify_extent_layer(new_extent_layer, iter->second))) {
@@ -994,7 +985,7 @@ int StorageManager::deal_dump_extent_layer_if_need(const ExtentLayerVersion *old
   } else if (IS_NULL(new_version) || (0 != new_version->get_level())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(new_version));
-  } else if (IS_NULL(new_dump_extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, extent_space_manager_, internalkey_comparator_))) {
+  } else if (IS_NULL(new_dump_extent_layer = MOD_NEW_OBJECT(ModId::kStorageMgr, ExtentLayer, internalkey_comparator_))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for ExtentLayer", K(ret));
   } else {
@@ -1046,11 +1037,9 @@ int StorageManager::record_lob_extent_info_to_dump_extent_layer(const ExtentChan
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < lob_extent_change.size(); ++i) {
       const ExtentChange &extent_change = lob_extent_change.at(i);
-      if (FAILED(extent_space_manager_->get_meta(extent_change.extent_id_, extent_meta))) {
-        SE_LOG(WARN, "fail to get extent meta", K(ret), K(extent_change));
-      } else if (IS_NULL(extent_meta)) {
+      if (IS_NULL(extent_meta = ExtentMetaManager::get_instance().get_meta(extent_change.extent_id_))) {
         ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(extent_change));
+        SE_LOG(WARN, "fail to get extent meta", K(ret), K(extent_change));
       } else {
         if (extent_change.is_delete()) {
           if (FAILED(dump_extent_layer->remove_lob_extent(extent_meta))) {
@@ -1091,9 +1080,7 @@ int StorageManager::modify_extent_layer(ExtentLayer *extent_layer,
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < extent_changes.size(); ++i) {
       const ExtentChange &extent_change = extent_changes.at(i);
-      if (FAILED(extent_space_manager_->get_meta(extent_change.extent_id_, extent_meta))) {
-        SE_LOG(WARN, "fail to get extent meta", K(ret), K(extent_change));
-      } else if (IS_NULL(extent_meta)) {
+      if (IS_NULL(extent_meta = ExtentMetaManager::get_instance().get_meta(extent_change.extent_id_))) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(extent_change));
       } else {
@@ -1145,7 +1132,7 @@ int StorageManager::add_iterator_for_layer(const LayerPosition &layer_position,
   } else if (UNLIKELY(nullptr == (arena = merge_iter_builder->GetArena()))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, arena must not nullptr", K(ret), KP(arena));
-  } else if (ISNULL(scan_iter = PLACEMENT_NEW(table::SSTableScanIterator, *arena))) {
+  } else if (IS_NULL(scan_iter = PLACEMENT_NEW(table::SSTableScanIterator, *arena))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for scan iterator", K(ret));
   } else {
@@ -1662,13 +1649,13 @@ int StorageManager::do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery
     if (!for_recovery) {
       //evict from table cache
       db::TableCache::Evict(table_cache_, extent_meta->extent_id_.id());
-      if (FAILED(extent_space_manager_->recycle(extent_meta->table_space_id_,
-                                                extent_meta->extent_space_type_,
-                                                extent_meta->extent_id_))) {
+      if (FAILED(ExtentSpaceManager::get_instance().recycle(extent_meta->table_space_id_,
+                                                            extent_meta->extent_space_type_,
+                                                            extent_meta->extent_id_))) {
         SE_LOG(WARN, "fail to recycle extent", K(ret));
       }
     } else {
-      if (FAILED(extent_space_manager_->recycle_meta(extent_meta->extent_id_))) {
+      if (FAILED(ExtentMetaManager::get_instance().recycle_meta(extent_meta->extent_id_))) {
         SE_LOG(WARN, "fail to recycle meta", K(ret));
       }
     }
@@ -1691,11 +1678,9 @@ int StorageManager::build_new_extent_layer(util::autovector<ExtentId> &extent_id
     SE_LOG(WARN, "invalid argument", K(ret), "extent_ids_size", extent_ids.size(), KP(extent_layer));
   } else {
     for (uint64_t i = 0; Status::kOk == ret && i < extent_ids.size(); ++i) {
-      if (FAILED(extent_space_manager_->get_meta(extent_ids.at(i), extent_meta))) {
-        SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(i), "extent_id", extent_ids.at(i));
-      } else if (nullptr == extent_meta) {
+      if (IS_NULL(extent_meta = ExtentMetaManager::get_instance().get_meta(extent_ids.at(i)))) {
         ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), "extent_id", extent_ids.at(i));
+        SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(i), "extent_id", extent_ids.at(i));
       } else if (FAILED(extent_layer->add_extent(extent_meta, true))) {
         SE_LOG(WARN, "fail to add extent", K(ret), K(i), "extent_id", extent_ids.at(i));
       } else {

@@ -168,8 +168,7 @@ VersionSet::VersionSet(const std::string& dbname,
       next_file_number_(2),
       last_sequence_(0),
       last_allocated_sequence_(0),
-      env_options_(storage_options),
-      storage_logger_(nullptr)
+      env_options_(storage_options)
 {
 #ifndef NDEBUG
   write_checkpoint_failed_ = false;
@@ -216,7 +215,7 @@ int VersionSet::recover_extent_space_manager()
 {
   int ret = Status::kOk;
 
-  if (FAILED(global_ctx_->extent_space_mgr_->open_all_data_file())) {
+  if (FAILED(ExtentSpaceManager::get_instance().open_all_data_file())) {
     SE_LOG(ERROR, "fail to open all data file", K(ret));
   }
 
@@ -238,7 +237,7 @@ int VersionSet::recover_extent_space_manager()
   }
 
   if (SUCCED(ret)) {
-    if (FAILED(global_ctx_->extent_space_mgr_->rebuild())) {
+    if (FAILED(ExtentSpaceManager::get_instance().rebuild())) {
       SE_LOG(WARN, "fail to rebuild extent_space_mgr", K(ret));
     } else {
       SE_LOG(INFO, "success to rebuild extent_space_mgr");
@@ -332,7 +331,7 @@ int VersionSet::add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_
   if (UNLIKELY(!args.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(args));
-  } else if (write_log && FAILED(global_ctx_->storage_logger_->write_log(REDO_LOG_ADD_SSTABLE, log_entry))) {
+  } else if (write_log && FAILED(StorageLogger::get_instance().write_log(REDO_LOG_ADD_SSTABLE, log_entry))) {
     SE_LOG(WARN, "fail to write add subtable log", K(ret), K(log_entry));
   } else if (FAILED(column_family_set_->CreateColumnFamily(args, sub_table))) {
     SE_LOG(WARN, "fail to create ColumnFamiltData", K(ret), K(args));
@@ -373,7 +372,7 @@ int VersionSet::remove_sub_table(ColumnFamilyData *sub_table, bool write_log, bo
   if (IS_NULL(sub_table)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(sub_table));
-  } else if (write_log && FAILED(global_ctx_->storage_logger_->write_log(REDO_LOG_REMOVE_SSTABLE, log_entry))) {
+  } else if (write_log && FAILED(StorageLogger::get_instance().write_log(REDO_LOG_REMOVE_SSTABLE, log_entry))) {
     SE_LOG(WARN, "fail to write remove subtable log", K(ret), K(log_entry));
   } else {
     sub_table->SetDropped();
@@ -550,9 +549,9 @@ int VersionSet::load_checkpoint(util::RandomAccessFile *checkpoint_reader, stora
               SE_LOG(WARN, "fail to deserialize subtable", K(ret));
             } else if (FAILED(column_family_set_->add_sub_table(sub_table))) {
               SE_LOG(WARN, "fail to add subtable to column family set", K(ret), "index_id", sub_table->GetID());
-            } else if (FAILED(global_ctx_->extent_space_mgr_->open_table_space(sub_table->get_table_space_id()))) {
+            } else if (FAILED(ExtentSpaceManager::get_instance().open_table_space(sub_table->get_table_space_id()))) {
               SE_LOG(WARN, "fail to create table space if not exist", K(ret), "table_space_id", sub_table->get_table_space_id());
-            } else if (FAILED(global_ctx_->extent_space_mgr_->register_subtable(sub_table->get_table_space_id(), sub_table->GetID()))) {
+            } else if (FAILED(ExtentSpaceManager::get_instance().register_subtable(sub_table->get_table_space_id(), sub_table->GetID()))) {
               SE_LOG(WARN, "fail to register subtable", K(ret), "table_space_id", sub_table->get_table_space_id(), "index_id", sub_table->GetID());
             } else if (FAILED(global_ctx_->all_sub_table_->add_sub_table(sub_table->GetID(), sub_table))) {
               SE_LOG(WARN, "fail to add subtable to AllSubTable", K(ret), "index_id", sub_table->GetID());
@@ -689,9 +688,9 @@ int VersionSet::read_big_subtable(util::RandomAccessFile *checkpoint_reader,
       SE_LOG(WARN, "fail to deserialize subtable", K(ret));
     } else if (FAILED(sub_table->deserialize(buf, buf_size, pos))) {
       SE_LOG(WARN, "fail to deserialize partition group", K(ret));
-    } else if (FAILED(global_ctx_->extent_space_mgr_->open_table_space(sub_table->get_table_space_id()))) {
+    } else if (FAILED(ExtentSpaceManager::get_instance().open_table_space(sub_table->get_table_space_id()))) {
       SE_LOG(WARN, "fail to open table space", K(ret), "table_space_id", sub_table->get_table_space_id());
-    } else if (FAILED(global_ctx_->extent_space_mgr_->register_subtable(sub_table->get_table_space_id(), sub_table->GetID()))) {
+    } else if (FAILED(ExtentSpaceManager::get_instance().register_subtable(sub_table->get_table_space_id(), sub_table->GetID()))) {
       SE_LOG(WARN, "fail to register subtable", K(ret), "table_space_id", sub_table->get_table_space_id(), "index_id", sub_table->GetID());
     } else if (FAILED(column_family_set_->add_sub_table(sub_table))) {
       SE_LOG(WARN, "fail to add subtable to column family set", K(ret), "index_id", sub_table->GetID());
@@ -754,9 +753,9 @@ int VersionSet::replay_add_subtable_log(const char *log_data, int64_t log_length
     CreateSubTableArgs args(log_entry.index_id_, cf_options, true, log_entry.table_space_id_);
     if (FAILED(add_sub_table(args, false /*write log*/, true /*is_replay*/, sub_table))) {
       SE_LOG(WARN, "fail to add subtable", K(ret), K(log_entry), K(args));
-    } else if (FAILED(global_ctx_->extent_space_mgr_->open_table_space(log_entry.table_space_id_))) {
+    } else if (FAILED(ExtentSpaceManager::get_instance().open_table_space(log_entry.table_space_id_))) {
       SE_LOG(WARN, "fail to create table space if not exist", K(ret), K(log_entry));
-    } else if (FAILED(global_ctx_->extent_space_mgr_->register_subtable(log_entry.table_space_id_, sub_table->GetID()))) {
+    } else if (FAILED(ExtentSpaceManager::get_instance().register_subtable(log_entry.table_space_id_, sub_table->GetID()))) {
       SE_LOG(WARN, "fail to register subtable", K(ret), "table_space_id", log_entry.table_space_id_, "index_id", sub_table->GetID());
     } else {
       SE_LOG(INFO, "success to replay add subtable", "index_id", sub_table->GetID());
@@ -783,7 +782,7 @@ int VersionSet::replay_remove_subtable_log(const char *log_data, int64_t log_len
     SE_LOG(WARN, "unexpected error, subtable must not nullptr", K(ret), K(log_entry));
   } else if (FAILED(remove_sub_table(sub_table, false /*write log*/, true /*is_replay*/))) {
     SE_LOG(WARN, "fail to remove subtable", K(ret), K(log_entry));
-  } else if (FAILED(global_ctx_->extent_space_mgr_->unregister_subtable(sub_table->get_table_space_id(), sub_table->GetID()))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().unregister_subtable(sub_table->get_table_space_id(), sub_table->GetID()))) {
     SE_LOG(WARN, "fail to unregister subtbale", K(ret), "table_space_id", sub_table->get_table_space_id(), "index_id", sub_table->GetID());
   } else if (FAILED(sub_table->release_resource(true /*for_recovery*/))) {
     SE_LOG(WARN, "fail to release subtable", K(ret));

@@ -29,6 +29,7 @@
 #include "options/options_helper.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_logger.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "table/extent_table_factory.h"
 #include "table/merging_iterator.h"
@@ -51,6 +52,7 @@ using namespace std;
 using namespace monitor;
 using namespace chrono;
 
+static const std::string test_dir = smartengine::util::test::TmpDir() + "/parallel_read_test";
 struct Context {
   const Options *options_;
   DBOptions db_options_;
@@ -224,11 +226,9 @@ public:
 
   SubTable *subtable_;
   VersionSet *version_set_;
-  storage::StorageLogger *storage_logger_; 
   StorageManager *storage_manager_;
 
   ChangeInfo change_info_;
-  ExtentSpaceManager *space_manager_;
   std::unique_ptr<db::log::Writer> descriptor_log_;
   Directory *db_dir_;
 
@@ -276,28 +276,23 @@ void ParallelReadTest::init(const TestArgs args) {
 
   WriteBufferManager *write_buffer_manager = ALLOC_OBJECT(WriteBufferManager, alloc_, 0);
 
-  storage_logger_ = ALLOC_OBJECT(StorageLogger, alloc_);
-
-  space_manager_ = ALLOC_OBJECT(ExtentSpaceManager, alloc_, env_, context_->env_options_, context_->db_options_);
- 
-  table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, context_->env_options_, cache_.get(), space_manager_);
+  table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, context_->env_options_, cache_.get());
 
   version_set_ = ALLOC_OBJECT(VersionSet, alloc_, dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager);
 
   global_ctx->env_ = env_;
   global_ctx->cache_ = cache_.get();
-  global_ctx->storage_logger_ = storage_logger_;
   global_ctx->write_buf_mgr_ = write_buffer_manager;
-  global_ctx->extent_space_mgr_ = space_manager_;
   global_ctx->env_options_ = context_->env_options_;
   global_ctx->options_ =  *(context_->options_);
 
-  storage_logger_->TEST_reset();  
-  storage_logger_->init(env_, dbname_, context_->env_options_, context_->idb_options_, version_set_, space_manager_, 1 * 1024 * 1024 * 1024);
+  StorageLogger::get_instance().TEST_reset();  
+  StorageLogger::get_instance().init(env_, dbname_, context_->env_options_, context_->idb_options_, version_set_, 1 * 1024 * 1024 * 1024);
   Options opt;
   version_set_->init(global_ctx);
-  space_manager_->init(storage_logger_);
-  space_manager_->create_table_space(0);
+  ExtentMetaManager::get_instance().init();
+  ExtentSpaceManager::get_instance().init(env_, context_->env_options_, context_->db_options_);
+  ExtentSpaceManager::get_instance().create_table_space(0);
 
   uint64_t file_number = 1;
   std::string manifest_filename =
@@ -314,7 +309,7 @@ void ParallelReadTest::init(const TestArgs args) {
     if (s.ok()) {
       db::log::Writer *log_writer = MOD_NEW_OBJECT(
           memory::ModId::kTestMod, db::log::Writer, file_writer, 0, false);
-      storage_logger_->set_log_writer(log_writer);
+      StorageLogger::get_instance().set_log_writer(log_writer);
     }
   }
 
@@ -347,10 +342,9 @@ void ParallelReadTest::init(const TestArgs args) {
 
 void ParallelReadTest::reset() {
   storage_manager_ = nullptr;
-  space_manager_ = nullptr;
-
+  ExtentMetaManager::get_instance().destroy();
+  ExtentSpaceManager::get_instance().destroy();
   db_dir_ = nullptr;
-
   mini_tables_.metas.clear();
   mini_tables_.props.clear();
   extent_builder_.reset();
@@ -382,21 +376,20 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
           : LayerPosition(level, 0);
   if (begin_trx) {
     if (0 == level) {
-      ret = storage_logger_->begin(FLUSH);
+      ret = StorageLogger::get_instance().begin(FLUSH);
       //        mini_tables_.change_info_->task_type_ = TaskType::FLUSH_TASK;
       ASSERT_EQ(Status::kOk, ret);
     } else if (1 == level) {
-      ret = storage_logger_->begin(MINOR_COMPACTION);
+      ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
       //        mini_tables_.change_info_->task_type_ = TaskType::SPLIT_TASK;
       ASSERT_EQ(Status::kOk, ret);
     } else {
-      ret = storage_logger_->begin(MAJOR_COMPACTION);
+      ret = StorageLogger::get_instance().begin(MAJOR_COMPACTION);
       //        mini_tables_.change_info_->task_type_ =
       //        TaskType::MAJOR_SELF_COMPACTION_TASK;
       ASSERT_EQ(Status::kOk, ret);
     }
   }
-  mini_tables_.space_manager = space_manager_;
   mini_tables_.table_space_id_ = 0;
   common::CompressionType compression_type = get_compression_type(context_->icf_options_, level);
   TableBuilderOptions table_builder_opts(context_->icf_options_,
@@ -421,7 +414,7 @@ void ParallelReadTest::close(const int64_t level, bool finish)
     ASSERT_TRUE(extent_builder_->status().ok());
   }
 
-  ret = storage_logger_->commit(commit_seq);
+  ret = StorageLogger::get_instance().commit(commit_seq);
   ASSERT_EQ(Status::kOk, ret);
 
   meta_write(level, mini_tables_);
@@ -716,7 +709,6 @@ void ParallelReadTest::build_compact_context(CompactionContext *comp) {
   comp->data_comparator_ = BytewiseComparator();
   comp->internal_comparator_ = &internal_comparator_;
   comp->earliest_write_conflict_snapshot_ = 0;
-  comp->storage_logger_ = storage_logger_;
   comp->table_space_id_ = 0;
   // Default is minor task
   comp->task_type_ = db::TaskType::MINOR_COMPACTION_TASK;
@@ -729,15 +721,12 @@ void ParallelReadTest::run_intra_l0_compact() {
   CompactionContext ct;
   build_compact_context(&ct);
   ct.task_type_ = db::TaskType::INTRA_COMPACTION_TASK;
-  ct.space_manager_ = space_manager_;
-  int ret =
-      job.init(ct, cf_desc_, storage_manager_,
-               storage_manager_->get_current_version());
+  int ret = job.init(ct, cf_desc_, storage_manager_->get_current_version());
   storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
   ASSERT_EQ(ret, 0);
   ret = job.prepare();
   ASSERT_EQ(ret, 0);
-  ret = storage_logger_->begin(MINOR_COMPACTION);
+  ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
   ASSERT_EQ(ret, 0);
   ret = job.run();
   ASSERT_EQ(ret, 0);
@@ -746,7 +735,7 @@ void ParallelReadTest::run_intra_l0_compact() {
     job.append_change_info(compaction->get_change_info());
   }
   int64_t commit_seq;
-  ret = storage_logger_->commit(commit_seq);
+  ret = StorageLogger::get_instance().commit(commit_seq);
   ASSERT_EQ(ret, 0);
   ret = storage_manager_->apply(job.get_change_info(), false);
   ASSERT_EQ(ret, 0);
@@ -1224,8 +1213,10 @@ TEST_F(ParallelReadTest, parallel_run_balance)
 
 int main(int argc, char **argv)
 {
+  smartengine::util::test::remove_dir(test_dir.c_str());
+  smartengine::util::Env::Default()->CreateDir(test_dir);
+  std::string log_path = smartengine::util::test::TmpDir() + "/parallel_read_test.log";
+  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::DEBUG_LEVEL);
   ::testing::InitGoogleTest(&argc, argv);
-  std::string log_path = test::TmpDir() + "/parallel_scan_test.log";
-  smartengine::util::test::init_logger(log_path.c_str(), logger::INFO_LEVEL);
   return RUN_ALL_TESTS();
 }

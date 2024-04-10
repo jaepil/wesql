@@ -237,7 +237,7 @@ Status WritableExtent::Append(const Slice &data)
 Status WritableExtent::AsyncAppend(util::AIO &aio, util::AIOReq *req, const Slice &data) {
   int ret = Status::kOk;
   AIOInfo aio_info(io_info_.fd_, io_info_.get_offset(), data.size());
-  if (ISNULL(req)) {
+  if (IS_NULL(req)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "req is null", K(ret));
   } else if (FAILED(req->prepare_write(aio_info, data.data()))) {
@@ -254,18 +254,15 @@ size_t WritableExtent::GetUniqueId(char *id, size_t max_size) const {
   return len;
 }
 
-RandomAccessExtent::RandomAccessExtent()
-    : io_info_(),
-      space_manager_(nullptr)
-{
-}
+RandomAccessExtent::RandomAccessExtent() : io_info_()
+{}
 
 RandomAccessExtent::~RandomAccessExtent()
 {
   destroy();
 }
 
-int RandomAccessExtent::init(const ExtentIOInfo &io_info, ExtentSpaceManager *space_manager)
+int RandomAccessExtent::init(const ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
 
@@ -274,7 +271,6 @@ int RandomAccessExtent::init(const ExtentIOInfo &io_info, ExtentSpaceManager *sp
     SE_LOG(INFO, "invalid argument", K(ret), K(io_info));
   } else {
     io_info_ = io_info;
-    space_manager_ = space_manager;
   }
 
   return ret;
@@ -283,7 +279,6 @@ int RandomAccessExtent::init(const ExtentIOInfo &io_info, ExtentSpaceManager *sp
 void RandomAccessExtent::destroy()
 {
   io_info_.reset();  
-  space_manager_ = nullptr;
 }
 
 Status RandomAccessExtent::Read(uint64_t offset, size_t n, Slice *result,
@@ -334,18 +329,18 @@ AsyncRandomAccessExtent::AsyncRandomAccessExtent()
 
 AsyncRandomAccessExtent::~AsyncRandomAccessExtent() {}
 
-int AsyncRandomAccessExtent::init(const ExtentIOInfo &io_info, ExtentSpaceManager *space_manager)
+int AsyncRandomAccessExtent::init(const ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
 
-  if (UNLIKELY(!io_info.is_valid()) || IS_NULL(space_manager)) {
+  if (UNLIKELY(!io_info.is_valid())) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(io_info), KP(space_manager));
-  } else if (FAILED(RandomAccessExtent::init(io_info, space_manager))) {
+    SE_LOG(WARN, "invalid argument", K(ret), K(io_info));
+  } else if (FAILED(RandomAccessExtent::init(io_info))) {
     SE_LOG(WARN, "fail to init random access extent", K(ret), K(io_info));
   } else {
     aio_req_.status_ = Status::kInvalidArgument;  // not prepare
-    if (ISNULL(aio_ = AIO::get_instance())) {
+    if (IS_NULL(aio_ = AIO::get_instance())) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "aio instance is nullptr", K(ret));
     }

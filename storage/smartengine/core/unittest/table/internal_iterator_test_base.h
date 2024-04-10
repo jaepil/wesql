@@ -20,6 +20,7 @@
 #include "db/version_set.h"
 #include "db/dbformat.h"
 #include "options/options_helper.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_logger.h"
 #include "storage/storage_manager.h"
@@ -31,6 +32,8 @@
 
 namespace smartengine
 {
+using namespace storage;
+
 namespace table
 {
 
@@ -139,10 +142,8 @@ public:
                                global_ctx_(nullptr),
                                write_buffer_manager_(nullptr),
                                next_file_number_(2),
-                               space_manager_(nullptr),
                                version_set_(nullptr),
                                descriptor_log_(nullptr),
-                               storage_logger_(nullptr),
                                internal_comparator_(util::BytewiseComparator()),
                                extent_builder_(nullptr),
                                //block_cache_(nullptr),
@@ -188,13 +189,11 @@ protected:
   db::WriteBufferManager *write_buffer_manager_;
   // extent space manager
   db::FileNumber next_file_number_;
-  storage::ExtentSpaceManager* space_manager_;
   // storage
   unique_ptr<storage::StorageManager> storage_manager_;
   // stroage logger
   db::VersionSet *version_set_;
   db::log::Writer *descriptor_log_;
-  storage::StorageLogger *storage_logger_;
   // extent budiler
   storage::ChangeInfo change_info_;
   db::InternalKeyComparator internal_comparator_;
@@ -230,17 +229,11 @@ void InternalIteratorTestBase::reset()
     //mini_tables_.schema = new common::SeSchema;
   //}
   extent_builder_.reset();
-
-  if (nullptr != storage_logger_) {
-    delete storage_logger_;
-    storage_logger_ = nullptr;
-  }
+  StorageLogger::get_instance().destroy();
   descriptor_log_ = nullptr;
   storage_manager_.reset();
-  if (nullptr != space_manager_) {
-    delete space_manager_;
-    space_manager_ = nullptr;
-  }
+  ExtentSpaceManager::get_instance().destroy();
+  ExtentMetaManager::get_instance().destroy();
   smartengine::common::Options* options = nullptr;
   if (nullptr != context_) {
     options = context_->options_;
@@ -281,9 +274,7 @@ void InternalIteratorTestBase::init(const TestArgs &args)
   // new
   clock_cache_ = cache::NewLRUCache(50000, 1);
   global_ctx_ = new db::GlobalContext(dbname_, *context_->options_);
-  space_manager_ = new storage::ExtentSpaceManager(env_, global_ctx_->env_options_, context_->db_options_);
   write_buffer_manager_ = new db::WriteBufferManager(0);
-  storage_logger_ = new storage::StorageLogger();
   version_set_ = new db::VersionSet(dbname_,
                                     &context_->idb_options_,
                                     context_->env_options_,
@@ -291,26 +282,21 @@ void InternalIteratorTestBase::init(const TestArgs &args)
                                     write_buffer_manager_);
   table_cache_.reset(new db::TableCache(context_->icf_options_,
                                         context_->env_options_,
-                                        clock_cache_.get(),
-                                        space_manager_));
+                                        clock_cache_.get()));
 
   // init storage logger
   global_ctx_->env_ = env_;
   global_ctx_->cache_ = clock_cache_.get();
-  global_ctx_->storage_logger_ = storage_logger_;
   global_ctx_->write_buf_mgr_ = write_buffer_manager_;
-  global_ctx_->extent_space_mgr_ = space_manager_;
-  //global_ctx_->db_mutex_ = &mutex_;
   version_set_->init(global_ctx_);
 
-  storage_logger_->TEST_reset();
-  storage_logger_->init(env_,
-                        dbname_,
-                        context_->env_options_,
-                        context_->idb_options_,
-                        version_set_,
-                        space_manager_,
-                        1 * 1024 * 1024 * 1024);
+  StorageLogger::get_instance().TEST_reset();
+  StorageLogger::get_instance().init(env_,
+                                     dbname_,
+                                     context_->env_options_,
+                                     context_->idb_options_,
+                                     version_set_,
+                                     1 * 1024 * 1024 * 1024);
   uint64_t file_number = 1;
   common::Status s;
   std::string manifest_filename = util::DescriptorFileName(dbname_, file_number);
@@ -328,19 +314,18 @@ void InternalIteratorTestBase::init(const TestArgs &args)
                                    0,
                                    false);
   assert(descriptor_log_ != nullptr);
-  storage_logger_->set_log_writer(descriptor_log_);
+  StorageLogger::get_instance().set_log_writer(descriptor_log_);
 
   // storage manager
   db::CreateSubTableArgs subtable_args;
   subtable_args.index_id_ = 1;
   storage_manager_.reset(new storage::StorageManager(context_->env_options_, context_->icf_options_, context_->mutable_cf_options_));
-  storage_manager_->init(env_, space_manager_, clock_cache_.get());
+  storage_manager_->init(env_, clock_cache_.get());
 
+  ExtentMetaManager::get_instance().init();
   // space manager
-  space_manager_->init(storage_logger_);
-  space_manager_->create_table_space(0);
-
-  //
+  ExtentSpaceManager::get_instance().init(env_, global_ctx_->env_options_, context_->db_options_);
+  ExtentSpaceManager::get_instance().create_table_space(0);
   row_size_ = 16;
   key_size_ = 32;
   level_ = 1;
@@ -349,9 +334,8 @@ void InternalIteratorTestBase::init(const TestArgs &args)
 void InternalIteratorTestBase::open_extent_builder()
 {
   mini_tables_.change_info_ = &change_info_;
-  ASSERT_EQ(storage_logger_->begin(storage::MINOR_COMPACTION), common::Status::kOk);
+  ASSERT_EQ(StorageLogger::get_instance().begin(storage::MINOR_COMPACTION), common::Status::kOk);
   //mini_tables_.change_info_->task_type_ = db::TaskType::SPLIT_TASK;
-  mini_tables_.space_manager = space_manager_;
   mini_tables_.table_space_id_ = 0;
   cf_desc_.column_family_id_ = 1;
   storage::LayerPosition output_layer_position(level_, 0);
@@ -425,7 +409,7 @@ void InternalIteratorTestBase::close_extent_builder()
   int64_t commit_seq = 0;
   extent_builder_->Finish();
   ASSERT_TRUE(extent_builder_->status().ok());
-  ASSERT_EQ(storage_logger_->commit(commit_seq), common::Status::kOk);
+  ASSERT_EQ(StorageLogger::get_instance().commit(commit_seq), common::Status::kOk);
   ASSERT_EQ(storage_manager_->apply(*(mini_tables_.change_info_), false), common::Status::kOk);
   mini_tables_.metas.clear();
   mini_tables_.props.clear();

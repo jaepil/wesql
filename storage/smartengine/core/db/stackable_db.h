@@ -75,11 +75,6 @@ class StackableDB : public db::DB {
                                             MiniTables* mtables) override {
     return db_->InstallSstExternal(column_family, mtables);
   }
-  using DB::GetStorageLogger;
-  virtual storage::StorageLogger * GetStorageLogger() override {
-    return db_->GetStorageLogger();
-  }
-
 
   using DB::Delete;
   virtual common::Status Delete(const common::WriteOptions& wopts,

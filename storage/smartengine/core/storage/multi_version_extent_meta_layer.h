@@ -34,7 +34,7 @@ struct ExtentLayer
 public:
   typedef util::PointerSortedVector<ExtentMeta*> ExtentMetaSortedVector;
 public:
-  ExtentLayer(ExtentSpaceManager *extent_space_mgr, const util::Comparator *cmp);
+  ExtentLayer(const util::Comparator *cmp);
   ~ExtentLayer();
   void destroy();
 
@@ -95,7 +95,6 @@ public:
 public:
   static const int64_t EXTENT_LAYER_VERSION = 1;
 
-  ExtentSpaceManager *extent_space_mgr_;
   const util::Comparator *cmp_;
   common::SequenceNumber sequence_number_; //the largest data seq of kv int extent layer
   ExtentMetaSortedVector extent_meta_arr_;
@@ -148,7 +147,7 @@ private:
 class ExtentLayerVersion
 {
 public:
-  ExtentLayerVersion(const int32_t level, ExtentSpaceManager *extent_space_mgr, const util::Comparator *cmp);
+  ExtentLayerVersion(const int32_t level, const util::Comparator *cmp);
   ~ExtentLayerVersion();
   void destroy();
 
@@ -185,7 +184,6 @@ public:
   static const int64_t EXTENT_LAYER_VERSION_VERSION = 1;
   int32_t refs_;
   int32_t level_;
-  ExtentSpaceManager *extent_space_mgr_;
   const util::Comparator *cmp_;
   util::PointerSortedVector<ExtentLayer *> extent_layer_arr_;
   ExtentLayer *dump_extent_layer_;

@@ -31,6 +31,7 @@
 
 namespace smartengine
 {
+using namespace storage;
 
 SeSstFile::SeSstFile(db::DB *const db,
                      db::ColumnFamilyHandle *const cf,
@@ -95,7 +96,7 @@ common::Status SeSstFile::open()
     m_sst_file_writer = nullptr;
   }
 
-  int ret = m_db->GetStorageLogger()->begin(storage::SeEvent::CREATE_INDEX);
+  int ret = StorageLogger::get_instance().begin(storage::SeEvent::CREATE_INDEX);
   if (common::Status::kOk != ret) {
     return common::Status(ret);
   }
@@ -132,7 +133,7 @@ int SeSstFile::rollback()
 {
   sql_print_information("Set sst file create rollback");
   rollbacked = true;
-  int ret = m_db->GetStorageLogger()->abort();
+  int ret = StorageLogger::get_instance().abort();
   if (common::Status::kOk != ret) {
     sql_print_information("Rollback manifest txn fail, ret=%d", ret);
   }
@@ -158,9 +159,9 @@ common::Status SeSstFile::commit() {
 
   if (s.ok()) {
     int64_t dummy_log_seq;
-    int ret = m_db->GetStorageLogger()->commit(dummy_log_seq);
+    int ret = StorageLogger::get_instance().commit(dummy_log_seq);
     if (common::Status::kOk != ret) {
-       m_db->GetStorageLogger()->abort();
+       StorageLogger::get_instance().abort();
        return common::Status(ret);
     }
 
@@ -186,7 +187,7 @@ common::Status SeSstFile::commit() {
       sql_print_information("Rollback the sst file %s", fileinfo.file_path.c_str());
     }
   }else{
-    m_db->GetStorageLogger()->abort();
+    StorageLogger::get_instance().abort();
   }
 
   delete m_sst_file_writer;

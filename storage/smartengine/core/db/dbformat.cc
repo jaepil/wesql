@@ -23,16 +23,17 @@
 #include "util/serialization.h"
 #include "util/string_util.h"
 
-using namespace smartengine;
+namespace smartengine
+{
 using namespace common;
-using namespace util;
 using namespace monitor;
+using namespace storage;
+using namespace util;
 
-namespace smartengine {
-namespace db {
+namespace db
+{
 
-using namespace smartengine;
-
+// TODO(Zhao Dongsheng): the code related to large object move to specific file
 int64_t LargeValue::get_serialize_size() const {
   int64_t ret = util::get_serialize_size(version_, compression_type_, size_) +
                 util::get_serialize_v_size(oob_extents_);
@@ -54,44 +55,46 @@ int LargeValue::deserialize(const char *buffer, int64_t bufsiz, int64_t &pos) {
 
 DEFINE_SERIALIZATION(LargeObject, key_, value_);
 
-int get_oob_large_value(const Slice& value_in_kv,
-                        storage::ExtentSpaceManager *space_manager,
-                        db::LargeValue& large_value,
-                        std::unique_ptr<char[], void(&)(void *)>& oob_uptr,
-                        size_t& oob_size) {
-  auto& oob_extents = large_value.oob_extents_;
-  int64_t pos = 0;
-  int ret = large_value.deserialize(value_in_kv.data(), value_in_kv.size(), pos);
-  if (ret != Status::kOk) {
-    __SE_LOG(ERROR, "corrupted large value\n");
-    return ret;
-  }
-
-  size_t req_size = oob_extents.size() * storage::MAX_EXTENT_SIZE;
-  if (req_size > oob_size) {
-    oob_uptr.reset((char *)base_memalign(4096, req_size, memory::ModId::kLargeObject));
-    if (!oob_uptr) {
-      oob_size = 0;
-      __SE_LOG(ERROR, "cannot allocate momery to store large object\n");
-      return Status::kMemoryLimit;
-    }
-    oob_size = req_size;
-  }
-
-  storage::RandomAccessExtent extent;
+int get_oob_large_value(const Slice &value_in_kv,
+                        db::LargeValue &large_value,
+                        std::unique_ptr<char[], void(&)(void *)> &oob_uptr,
+                        int64_t &oob_size)
+{
+  int ret = Status::kOk;
   Slice result;
-  for (size_t i = 0; i < oob_extents.size(); i++) {
-    if (Status::kOk != (ret = space_manager->get_random_access_extent(oob_extents[i], extent).code())) {
-      __SE_LOG(ERROR, "cannot get access extent for large object");
-      return ret;
-    } else if (Status::kOk != (ret = extent.Read(0, storage::MAX_EXTENT_SIZE, &result,
-                                                 oob_uptr.get() + i * storage::MAX_EXTENT_SIZE).code())) {
-      __SE_LOG(ERROR, "cannot read extent for large object");
-      return ret;
+  int64_t result_size = 0;
+  int64_t pos = 0;
+  char *current_read_buf = nullptr;
+  storage::RandomAccessExtent extent;
+
+  if (FAILED(large_value.deserialize(value_in_kv.data(), value_in_kv.size(), pos))) {
+    SE_LOG(WARN, "fail to deserialize large value", K(ret));
+  } else {
+    result_size = large_value.oob_extents_.size() * storage::MAX_EXTENT_SIZE;
+    if (result_size > oob_size) {
+      oob_uptr.reset(reinterpret_cast<char *>(base_memalign(4096, result_size, memory::ModId::kLargeObject)));
+      if (IS_NULL(oob_uptr.get())) {
+        oob_size = 0;
+        ret = Status::kMemoryLimit;
+        SE_LOG(WARN, "fail to allocate memory for large value", K(ret), K(result_size));
+      } else {
+        oob_size = result_size;
+      }
+    }
+
+    if (SUCCED(ret)) {
+      for (uint32_t i = 0; SUCCED(ret) && i < large_value.oob_extents_.size(); ++i) {
+        current_read_buf = oob_uptr.get() + i * storage::MAX_EXTENT_SIZE;
+        if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(large_value.oob_extents_[i], extent).code())) {
+          SE_LOG(WARN, "fail to get random access extent for large object", K(ret), "extent_id", large_value.oob_extents_[i]);
+        } else if (FAILED(extent.Read(0, storage::MAX_EXTENT_SIZE, &result, current_read_buf).code())) {
+          SE_LOG(WARN, "fail to read data for large object", K(ret));
+        }
+      }
     }
   }
 
-  return Status::kOk;
+  return ret; 
 }
 
 const int32_t BlockStats::LATEST_VERSION = 0;

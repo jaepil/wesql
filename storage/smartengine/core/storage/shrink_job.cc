@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+#include "storage/shrink_job.h"
 #include "db/db_impl.h"
 #include "db/version_set.h"
-#include "shrink_job.h"
-#include "storage_logger.h"
+#include "storage/extent_meta_manager.h"
+#include "storage/storage_logger.h"
 
 namespace smartengine
 {
@@ -201,7 +202,7 @@ int ShrinkJob::move_extent()
 
   if (FAILED(get_extent_infos())) {
     SE_LOG(WARN, "fail to get extent infos", K(ret));
-  } else if (FAILED(global_ctx_->extent_space_mgr_->move_extens_to_front(shrink_info_, extent_replace_map_))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().move_extens_to_front(shrink_info_, extent_replace_map_))) {
     SE_LOG(WARN, "fail to move extents to front", K(ret));
   }
   
@@ -213,13 +214,13 @@ int ShrinkJob::install_shrink_result()
   int ret = Status::kOk;
   int64_t dummy_commit_seq = 0;
 
-  if (FAILED(global_ctx_->storage_logger_->begin(SeEvent::SHRINK_EXTENT_SPACE))) {
+  if (FAILED(StorageLogger::get_instance().begin(SeEvent::SHRINK_EXTENT_SPACE))) {
     SE_LOG(WARN, "fail to begin shrink trans", K(ret));
   } else if (FAILED(write_extent_metas())) {
     SE_LOG(WARN, "fail to write extent metas", K(ret));
   } else if (FAILED(apply_change_infos())) {
     SE_LOG(WARN, "fail to apply change infos", K(ret));
-  } else if (FAILED(global_ctx_->storage_logger_->commit(dummy_commit_seq))) {
+  } else if (FAILED(StorageLogger::get_instance().commit(dummy_commit_seq))) {
     SE_LOG(WARN, "fail to commit shrink trans", K(ret));
   } else if (FAILED(update_super_version())) {
     SE_LOG(WARN, "fail to update super version", K(ret));
@@ -249,15 +250,13 @@ int ShrinkJob::write_extent_metas()
 
     if (SUCCED(ret)) {
       //step1: write new extent meta
-      if (FAILED(global_ctx_->extent_space_mgr_->get_meta(old_extent_id, old_extent_meta))) {
-        SE_LOG(WARN, "fail to get extent meta", K(ret), K(old_extent_id), K(new_extent_id));
-      } else if (IS_NULL(old_extent_meta)) {
+      if (IS_NULL(old_extent_meta = ExtentMetaManager::get_instance().get_meta(old_extent_id))) {
         ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(old_extent_id), K(new_extent_id));
+        SE_LOG(WARN, "fail to get extent meta", K(ret), K(old_extent_id), K(new_extent_id));
       } else {
         ExtentMeta new_extent_meta(*old_extent_meta);
         new_extent_meta.extent_id_ = new_extent_id;
-        if (FAILED(global_ctx_->extent_space_mgr_->write_meta(new_extent_meta, true /*write_log*/))) {
+        if (FAILED(ExtentMetaManager::get_instance().write_meta(new_extent_meta, true /**write_log*/))) {
           SE_LOG(WARN, "fail to write meta", K(ret), K(old_extent_id), K(new_extent_id), K(*old_extent_meta));
         }
       }
@@ -356,7 +355,7 @@ int ShrinkJob::shrink_physical_space()
   }
 
   if (can_shrink) {
-    if (FAILED(global_ctx_->extent_space_mgr_->shrink_extent_space(shrink_info_))) {
+    if (FAILED(ExtentSpaceManager::get_instance().shrink_extent_space(shrink_info_))) {
       SE_LOG(WARN, "fail to shrink extent space", K(ret));
     } else {
       SE_LOG(INFO, "success to shrink extent space", K_(shrink_info));
@@ -399,8 +398,10 @@ int ShrinkJob::double_check_shrink_info(bool &can_shrink)
   int ret = Status::kOk;
   ShrinkInfo current_shrink_info;
 
-  if (FAILED(global_ctx_->extent_space_mgr_->get_shrink_info(shrink_info_.table_space_id_,
-          shrink_info_.extent_space_type_, shrink_info_.shrink_condition_, current_shrink_info))) {
+  if (FAILED(ExtentSpaceManager::get_instance().get_shrink_info(shrink_info_.table_space_id_,
+                                                                shrink_info_.extent_space_type_,
+                                                                shrink_info_.shrink_condition_,
+                                                                current_shrink_info))) {
     SE_LOG(WARN, "fail to get shrink info", K(ret), K_(shrink_info));
   } else {
     if (shrink_info_ == current_shrink_info) {

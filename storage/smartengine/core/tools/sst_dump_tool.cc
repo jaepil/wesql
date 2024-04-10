@@ -105,9 +105,8 @@ Status SstFileReader::GetTableReader(const std::string& file_path,
   }
 
   storage::RandomAccessExtent *extent = MOD_NEW_OBJECT(ModId::kDefaultMod, storage::RandomAccessExtent);
-  storage::ExtentSpaceManager* fake_space = reinterpret_cast<storage::ExtentSpaceManager*>(1);
   storage::ExtentIOInfo io_info(fd, eid, storage::MAX_EXTENT_SIZE, storage::DATA_BLOCK_SIZE, 1);
-  extent->init(io_info, fake_space);
+  extent->init(io_info);
   file_.reset(MOD_NEW_OBJECT(ModId::kDefaultMod,
       RandomAccessFileReader, extent, options_.env, nullptr, 0, nullptr, &ioptions_, EnvOptions()));
 

@@ -40,6 +40,7 @@
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
 #include "port/port.h"
+#include "storage/extent_space_manager.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_common.h"
 #include "table/scoped_arena_iterator.h"
@@ -89,8 +90,6 @@ struct GlobalContext
   util::Env *env_;
   cache::Cache *cache_;
   WriteBufferManager *write_buf_mgr_;
-  storage::StorageLogger *storage_logger_;
-  storage::ExtentSpaceManager *extent_space_mgr_;
   std::mutex all_sub_table_mutex_;
   std::atomic<int64_t> version_number_;
   std::unique_ptr<util::ThreadLocalPtr, memory::ptr_destruct_delete<util::ThreadLocalPtr>> local_all_sub_table_;
@@ -295,7 +294,7 @@ class DBImpl : public DB {
 
   virtual int get_data_file_stats(std::vector<storage::DataFileStatistics> &data_file_stats) override
   {
-    return extent_space_manager_->get_data_file_stats(data_file_stats);
+    return storage::ExtentSpaceManager::get_instance().get_data_file_stats(data_file_stats);
   }
 
   virtual common::Status GetUpdatesSince(
@@ -497,7 +496,7 @@ class DBImpl : public DB {
 
   int TEST_get_data_file_stats(const int64_t table_space_id, std::vector<storage::DataFileStatistics> &data_file_stats)
   {
-    return extent_space_manager_->get_data_file_stats(table_space_id, data_file_stats);
+    return storage::ExtentSpaceManager::get_instance().get_data_file_stats(table_space_id, data_file_stats);
   }
 
   bool TEST_after_create_backup_snapshot_ = false;
@@ -689,10 +688,6 @@ class DBImpl : public DB {
     logs_to_free_queue_.push_back(log_writer);
   }
 
-  virtual smartengine::storage::StorageLogger * GetStorageLogger() override {
-    return storage_logger_;
-  }
-
   public:
   std::list<storage::CompactionJobStatsInfo*> &get_compaction_history(std::mutex **mutex,
                                                storage::CompactionJobStatsInfo **sum) override {
@@ -748,13 +743,6 @@ protected:
   util::ConcurrentHashMap<std::string, RecoveredTransaction*> recovered_transactions_;
   std::unordered_map<common::SequenceNumber/*commit_seq*/, CommitWriteBatch*> commit_transactions_;
   static SnapshotImpl snapshot_;
-  // new storage model: only two levels of LSM tree
-  // manage data file in extents, and reuse the data mostly when
-  // compaction extents have no intersect data. use the memtable
-  // to manage meta versions.
-  storage::ExtentSpaceManager* extent_space_manager_;
-  storage::StorageLogger *storage_logger_;
-  // no need do concurrently
   int bg_recycle_scheduled_;
   std::atomic<bool> master_thread_running_;
 

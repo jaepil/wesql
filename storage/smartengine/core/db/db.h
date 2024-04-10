@@ -54,9 +54,7 @@ class Env;
 }
 
 namespace storage {
-class ExtentSpaceManager;
 struct CompactionJobStatsInfo;
-class StorageLogger;
 struct DataFileStatistics;
 }
 
@@ -770,9 +768,6 @@ class DB {
   virtual common::Status InstallSstExternal(ColumnFamilyHandle* column_family,
                                             db::MiniTables* mtables) {
     return common::Status::OK();
-  }
-  virtual storage::StorageLogger * GetStorageLogger() {
-    return nullptr;
   }
 
   // Returns default column family handle
