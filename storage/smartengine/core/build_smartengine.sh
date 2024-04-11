@@ -114,10 +114,8 @@ else
   exit 1
 fi
 
-#CC=/opt/rh/devtoolset-11/root/usr/bin/gcc
-#CXX=/opt/rh/devtoolset-11/root/usr/bin/g++
-CC=/opt/rh/devtoolset-7/root/usr/bin/gcc
-CXX=/opt/rh/devtoolset-7/root/usr/bin/g++
+CC=/opt/rh/gcc-toolset-11/root/usr/bin/gcc
+CXX=/opt/rh/gcc-toolset-11/root/usr/bin/g++
 
 export CC CFLAGS CXX CXXFLAGS
 

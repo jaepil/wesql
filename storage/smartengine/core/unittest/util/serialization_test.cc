@@ -85,6 +85,8 @@ struct POD {
     memcpy(str_, pod.str_, 20);
   }
 
+  constexpr POD& operator=(const POD&) =default;
+
   bool equal(const POD &pod) {
     return i64_ == pod.i64_ && i32_ == pod.i32_ && i16_ == pod.i16_ &&
            ui8_ == pod.ui8_ && 0 == strcmp(str_, pod.str_);

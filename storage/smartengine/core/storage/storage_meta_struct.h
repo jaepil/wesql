@@ -87,6 +87,8 @@ public:
              int32_t extent_space_type);
   ExtentMeta(const ExtentMeta &extent_meta);
   ~ExtentMeta();
+
+  ExtentMeta& operator=(const ExtentMeta &extent_meta);
   int deep_copy(ExtentMeta *&extent_meta) const;
   int deep_copy(memory::SimpleAllocator &allocator, ExtentMeta *&extent_meta) const;
   int64_t get_deep_copy_size() const;

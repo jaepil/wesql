@@ -121,6 +121,25 @@ ExtentMeta::~ExtentMeta()
 {
 }
 
+ExtentMeta& ExtentMeta::operator=(const ExtentMeta &extent_meta)
+{
+  attr_ = extent_meta.attr_;
+  smallest_key_ = extent_meta.smallest_key_;
+  largest_key_ = extent_meta.largest_key_;
+  extent_id_ = extent_meta.extent_id_;
+  smallest_seqno_ = extent_meta.smallest_seqno_;
+  largest_seqno_ = extent_meta.largest_seqno_;
+  data_size_ = extent_meta.data_size_;
+  index_size_ = extent_meta.index_size_;
+  num_data_blocks_ = extent_meta.num_data_blocks_;
+  num_entries_ = extent_meta.num_entries_;
+  num_deletes_ = extent_meta.num_deletes_;
+  table_space_id_ = extent_meta.table_space_id_;
+  extent_space_type_ = extent_meta.extent_space_type_;
+
+  return *this;
+}
+
 int ExtentMeta::deep_copy(ExtentMeta *&extent_meta) const
 {
   int ret = common::Status::kOk;

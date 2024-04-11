@@ -33,7 +33,6 @@
 #include "storage/multi_version_extent_meta_layer.h"
 #include "storage/storage_logger.h"
 #include "storage/storage_manager.h"
-#include "storage/storage_manager_mock.h"
 #include "table/block.h"
 #include "table/extent_table_factory.h"
 #include "table/merging_iterator.h"

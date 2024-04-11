@@ -286,10 +286,10 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/unittest/)
-include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third-party/gmock-1.7.0/fused-src)
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third-party/gtest-1.8.1/fused-src)
 find_package(Threads REQUIRED)
 
-add_subdirectory(third-party/gmock-1.7.0/fused-src/)
+add_subdirectory(third-party/gtest-1.8.1/fused-src/gtest)
 
 #support gflags using system's
 find_package(gflags REQUIRED)
@@ -722,7 +722,7 @@ foreach(sourcefile ${BENCHMARKS})
   add_executable(${exename}${ARTIFACT_SUFFIX} ${sourcefile}
     $<TARGET_OBJECTS:testharness>
     $<TARGET_OBJECTS:testutil>)
-  target_link_libraries(${exename}${ARTIFACT_SUFFIX} gmock ${LIBS} gflags)
+  target_link_libraries(${exename}${ARTIFACT_SUFFIX} gtest ${LIBS} gflags)
 endforeach(sourcefile ${BENCHMARKS})
 
 # For test util library that is build only in DEBUG mode
@@ -763,7 +763,7 @@ foreach(sourcefile ${TEST_EXES})
       EXCLUDE_FROM_DEFAULT_BUILD_RELWITHDEBINFO 1
       )
     target_link_libraries(${exename}${ARTIFACT_SUFFIX}
-      testutillib${ARTIFACT_SUFFIX} gmock ${LIBS} gflags)
+      testutillib${ARTIFACT_SUFFIX} gtest ${LIBS} gflags)
     if(NOT "${exename}" MATCHES "db_sanity_test")
       add_test(NAME ${exename} COMMAND ${exename}${ARTIFACT_SUFFIX})
       add_dependencies(check ${exename}${ARTIFACT_SUFFIX})
