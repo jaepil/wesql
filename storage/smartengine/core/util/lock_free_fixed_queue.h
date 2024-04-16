@@ -17,6 +17,7 @@
 #ifndef SMARTENGINE_UTIL_LOCK_FREE_FIXED_QUEUE_H_
 #define SMARTENGINE_UTIL_LOCK_FREE_FIXED_QUEUE_H_ 
 
+#include <cstdlib>
 #include <stdint.h>
 #include <assert.h>
 #include "util/common.h"

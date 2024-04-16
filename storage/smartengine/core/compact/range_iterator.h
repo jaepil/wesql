@@ -18,17 +18,14 @@
 #define SMARTENGINE_RANGE_ITERATOR_ADAPTOR_H_
 
 #include <stdint.h>
-#include <mutex>
 #include <utility>
 #include "memory/stl_adapt_allocator.h"
 #include "memory/mod_info.h"
 #include "db/dbformat.h"
 #include "table/internal_iterator.h"
 #include "util/to_string.h"
-#include "storage/io_extent.h"
 #include "storage/storage_common.h"
 #include "util/heap.h"
-#include "compaction_stats.h"
 #include "table/block.h"
 
 namespace smartengine {

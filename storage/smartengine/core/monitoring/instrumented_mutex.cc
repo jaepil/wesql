@@ -11,6 +11,7 @@
 #include "util/sync_point.h"
 #include "logger/log_module.h"
 #include "memory/base_malloc.h"
+#include "port/stack_trace.h"
 
 using namespace smartengine;
 using namespace common;

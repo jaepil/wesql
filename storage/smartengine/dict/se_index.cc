@@ -23,7 +23,7 @@
 #include "dict/se_field_pack.h"
 #include "dict/se_table.h"
 #include "dict/se_cf_manager.h"
-#include "dict/se_binlog_manager.h"
+#include "dict/se_dd_operations.h"
 #include "dict/se_dict_util.h"
 #include "handler/handler_alter.h"
 #include "handler/se_hton.h"

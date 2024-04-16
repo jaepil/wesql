@@ -9,11 +9,8 @@
 
 #pragma once
 
-#include <map>
-#include <stdexcept>
 #include <string>
 #include <vector>
-#include <memory>
 #include "options/cf_options.h"
 #include "options/db_options.h"
 

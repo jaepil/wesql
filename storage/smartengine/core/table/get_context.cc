@@ -6,8 +6,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "table/get_context.h"
-#include "db/pinned_iterators_manager.h"
-#include "monitoring/statistics.h"
 
 namespace smartengine {
 using namespace common;

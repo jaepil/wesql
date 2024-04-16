@@ -19,12 +19,7 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
-#include <mutex>
-#include <queue>
 #include <string>
-#include <thread>
-#include <vector>
 
 #include "db/db.h"
 #include "table/sst_file_writer.h"

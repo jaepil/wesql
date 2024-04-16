@@ -4,15 +4,14 @@
 #include "compact/compaction_job.h"
 #include <algorithm>
 #include "compact/range_iterator.h"
+#include "compact/reuse_block_merge_iterator.h"
 #include "db/db_iter.h"
-#include "db/internal_stats.h"
+#include "db/snapshot_impl.h"
 #include "logger/log_module.h"
-#include "memory/mod_info.h"
 #include "monitoring/thread_status_util.h"
 #include "options/options.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/multi_version_extent_meta_layer.h"
-#include "util/to_string.h"
 
 namespace smartengine {
 using namespace common;

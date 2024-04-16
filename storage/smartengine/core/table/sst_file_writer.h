@@ -11,7 +11,7 @@
 #include <string>
 #include "env/env.h"
 #include "options/options.h"
-#include "table/table_properties.h"
+#include "util/types.h"
 
 namespace smartengine {
 

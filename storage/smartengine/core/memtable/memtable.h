@@ -11,24 +11,16 @@
 
 #pragma once
 #include <atomic>
-#include <deque>
-#include <functional>
-#include <memory>
 #include <string>
-#include <unordered_map>
-#include <vector>
 #include "db/db.h"
 #include "db/dbformat.h"
 #include "db/recovery_point.h"
 #include "env/env.h"
 #include "memtable/memtable_allocator.h"
 #include "memtable/memtablerep.h"
-#include "monitoring/instrumented_mutex.h"
 #include "options/cf_options.h"
 #include "util/concurrent_arena.h"
 #include "util/dynamic_bloom.h"
-#include "util/hash.h"
-#include "util/misc_utility.h"
 
 namespace smartengine {
 

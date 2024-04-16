@@ -14,7 +14,6 @@
 #include "db/db_impl.h"
 #include "monitoring/thread_status_updater.h"
 #include "table/filter_manager.h"
-#include "table/internal_iterator.h"
 
 using namespace smartengine;
 using namespace common;

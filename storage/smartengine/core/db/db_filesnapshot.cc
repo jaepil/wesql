@@ -13,19 +13,8 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
-#include <stdint.h>
-#include <algorithm>
-#include <string>
-#include "db/db.h"
 #include "db/db_impl.h"
 #include "db/job_context.h"
-#include "db/version_set.h"
-#include "port/port.h"
-#include "util/file_util.h"
-#include "util/filename.h"
-#include "util/mutexlock.h"
-#include "util/sync_point.h"
 
 namespace smartengine
 {

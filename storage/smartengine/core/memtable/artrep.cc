@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+#include "db/dbformat.h"
 #include "memtable/art.h"
 #include "memtable/art_node.h"
-#include "memtable/memtable.h"
 #include "memtable/memtablerep.h"
+#include "memtable/memtable_allocator.h"
 #include "util/arena.h"
 
 using namespace smartengine;

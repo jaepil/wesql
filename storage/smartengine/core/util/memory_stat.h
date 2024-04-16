@@ -18,8 +18,6 @@
 #define UTIL_MEMORY_STAT_H
 
 #include <map>
-#include <string>
-#include <unordered_set>
 #include <vector>
 
 #include "db/db.h"

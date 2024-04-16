@@ -5,7 +5,6 @@
 //
 
 #include "monitoring/thread_status.h"
-#include <sstream>
 #include "env/env.h"
 #include "util/string_util.h"
 #include "util/thread_operation.h"

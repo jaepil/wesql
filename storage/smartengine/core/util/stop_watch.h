@@ -8,7 +8,6 @@
 #pragma once
 
 #include "env/env.h"
-#include "monitoring/statistics.h"
 
 namespace smartengine {
 namespace util {

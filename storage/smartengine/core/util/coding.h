@@ -16,11 +16,9 @@
 
 #pragma once
 #include <stdint.h>
-#include <string.h>
-#include <algorithm>
 #include <string>
 
-#include "port/port.h"
+#include "port/port_posix.h"
 #include "write_batch/write_batch.h"
 
 namespace smartengine {

@@ -11,9 +11,9 @@
 
 #include "table/format.h"
 
-#include <inttypes.h>
 #include <string>
 
+#include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
 #include "monitoring/statistics.h"
 #include "table/block.h"
@@ -22,7 +22,6 @@
 #include "util/crc32c.h"
 #include "util/file_reader_writer.h"
 #include "util/filename.h"
-#include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/xxhash.h"
 

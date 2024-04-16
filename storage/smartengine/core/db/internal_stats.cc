@@ -18,7 +18,6 @@
 #include <algorithm>
 #include <string>
 #include <utility>
-#include <vector>
 #include "db/column_family.h"
 #include "db/db_impl.h"
 #include "storage/storage_meta_struct.h"

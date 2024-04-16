@@ -17,9 +17,17 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "se_transaction_list_walker.h"
+#include "mysql/plugin.h"
+#include "se_buff.h"
+#include "se_transaction_impl.h"
+#include "se_write_batch_impl.h"
+#include "sql_class.h"
+#include "sql_thd_internal_api.h"
+#include "transactions/transaction_db_impl.h"
 
 namespace smartengine
 {
+extern util::TransactionDB *se_db;
 
 std::string SeSnapshotStatus::current_timestamp()
 {

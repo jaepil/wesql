@@ -17,9 +17,9 @@
 #ifndef SMARTENGINE_INCLUDE_EXTENT_META_MANAGER_H_
 #define SMARTENGINE_INCLUDE_EXTENT_META_MANAGER_H_
 #include <unordered_map>
+#include "storage/storage_common.h"
 #include "util/spin_rwlock.h"
 #include "memory/stl_adapt_allocator.h"
-#include "io_extent.h"
 
 namespace smartengine
 {

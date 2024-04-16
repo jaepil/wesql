@@ -10,9 +10,6 @@
 #ifndef INCLUDE_ROCKSDB_PERF_LEVEL_H_
 #define INCLUDE_ROCKSDB_PERF_LEVEL_H_
 
-#include <stdint.h>
-#include <string>
-
 namespace smartengine {
 namespace monitor {
 

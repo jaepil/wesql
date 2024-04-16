@@ -16,7 +16,6 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
-#include <atomic>
 
 namespace smartengine {
 namespace util {

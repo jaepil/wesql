@@ -30,15 +30,12 @@
 #include "monitoring/thread_status.h"
 
 #include <atomic>
-#include <list>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include "port/port.h"
-#include "util/thread_operation.h"
 #include "util/status.h"
 
 namespace smartengine {

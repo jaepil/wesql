@@ -9,9 +9,7 @@
 #include "util/random.h"
 
 #include <stdint.h>
-#include <string.h>
 #include <thread>
-#include <utility>
 
 #include "port/likely.h"
 #include "util/thread_local.h"
@@ -21,8 +19,6 @@
 #else
 #define STORAGE_DECL static
 #endif
-
-using namespace smartengine::port;
 
 namespace smartengine {
 namespace util {

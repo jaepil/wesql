@@ -12,10 +12,7 @@
 #include "util/comparator.h"
 #include <stdint.h>
 #include <algorithm>
-#include <memory>
 #include "db/dbformat.h"
-#include "port/port.h"
-#include "storage/storage_manager.h"
 
 namespace smartengine {
 using namespace port;

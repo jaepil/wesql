@@ -21,24 +21,14 @@
 
 #pragma once
 #include <atomic>
-#include <deque>
 #include <limits>
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "db/column_family.h"
-#include "db/dbformat.h"
 #include "db/file_number.h"
-#include "db/log_reader.h"
-#include "db/table_cache.h"
 #include "env/env.h"
-#include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
-#include "port/port.h"
 #include "storage/storage_manager.h"
 
 namespace smartengine

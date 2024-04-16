@@ -11,12 +11,11 @@
 #pragma once
 
 #include "env/env.h"
+#include "port/port_posix.h"
 #include <atomic>
 #include <map>
 #include <string>
 #include <vector>
-#include "port/port.h"
-#include "util/mutexlock.h"
 
 namespace smartengine {
 namespace util {

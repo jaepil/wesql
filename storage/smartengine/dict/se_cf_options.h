@@ -19,8 +19,6 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
-#include <memory>
 #include "util/se_comparator.h"
 #include "table/table.h"
 

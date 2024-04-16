@@ -16,8 +16,6 @@
 #include "cache/sharded_cache.h"
 
 #include <string>
-#include "memory/base_malloc.h"
-#include "memory/page_arena.h"
 #include "util/mutexlock.h"
 #include "logger/log_module.h"
 

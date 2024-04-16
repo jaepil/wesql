@@ -22,6 +22,7 @@
 #include "db/db_test_util.h"
 #include "env/mock_env.h"
 #include "port/port.h"
+#include "port/stack_trace.h"
 #include "util/sync_point.h"
 
 

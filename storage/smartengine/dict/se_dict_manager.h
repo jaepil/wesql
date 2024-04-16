@@ -18,7 +18,6 @@
 #ifndef SE_DICT_XE_DICT_MANAGER_H_
 #define SE_DICT_XE_DICT_MANAGER_H_
 
-//#include "se_utils.h"
 #include "dict/se_index.h"
 
 namespace smartengine {

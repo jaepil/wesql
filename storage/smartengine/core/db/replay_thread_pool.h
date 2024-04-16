@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <atomic>
 #include "db/replay_task.h"
 #include "db/replay_threadpool_executor.h"
 #include "db/column_family.h"

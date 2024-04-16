@@ -22,16 +22,14 @@
 #include <inttypes.h>
 #endif
 #include "compact/compaction_stats.h"
-#include "compact/reuse_block_merge_iterator.h"
+#include "compact/range_iterator.h"
 #include "compact/task_type.h"
 #include "env/env.h"
 #include "memory/page_arena.h"
 #include "options/options.h"
-#include "storage/storage_manager.h"
+#include "storage/change_info.h"
 #include "table/block.h"
-#include "table/two_level_iterator.h"
 #include "util/aligned_buffer.h"
-#include "util/threadpool_imp.h"
 
 namespace smartengine {
 

@@ -11,10 +11,7 @@
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
-#include <inttypes.h>
-#include "cache/row_cache.h"
 #include "logger/log_module.h"
-#include "port/port.h"
 
 namespace smartengine {
 using namespace util;

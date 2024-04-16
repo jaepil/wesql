@@ -36,9 +36,8 @@
 #include "table/block_builder.h"
 
 #include <assert.h>
-#include <algorithm>
-#include "db/dbformat.h"
 #include "util/coding.h"
+#include "util/serialization.h"
 
 namespace smartengine {
 using namespace util;

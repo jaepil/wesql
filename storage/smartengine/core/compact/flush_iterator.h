@@ -10,15 +10,10 @@
 #ifndef SMARTENGINE_FLUSH_ITERATOR_H_
 #define SMARTENGINE_FLUSH_ITERATOR_H_
 
-#include <algorithm>
-#include <deque>
-#include <string>
 #include <vector>
 
 #include "compact/compaction_stats.h"
 #include "db/dbformat.h"
-#include "db/pinned_iterators_manager.h"
-#include "memory/page_arena.h"
 
 namespace smartengine
 {

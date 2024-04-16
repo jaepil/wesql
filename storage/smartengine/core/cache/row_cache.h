@@ -15,13 +15,9 @@
  */
 #pragma once
 #include "memory/chunk_allocator.h"
-//#include "memory/mem_pool.h"
-
-#include "cache/sharded_cache.h"
 #include "db/column_family.h"
-#include "util/mutexlock.h"
+#include "util/hash.h"
 #include "util/hashtable.h"
-#include "util/heap.h"
 
 namespace smartengine
 {

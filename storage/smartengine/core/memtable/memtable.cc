@@ -11,27 +11,17 @@
 
 #include "memtable/memtable.h"
 
-#include <algorithm>
-#include <limits>
-#include <memory>
-
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
-#include "memory/mod_info.h"
+#include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
 #include "monitoring/statistics.h"
-#include "port/port.h"
-#include "storage/storage_manager.h"
 #include "table/internal_iterator.h"
 #include "table/iterator_wrapper.h"
 #include "table/merging_iterator.h"
 #include "util/arena.h"
 #include "util/autovector.h"
 #include "util/coding.h"
-#include "util/memory_usage.h"
-#include "util/murmurhash.h"
-#include "util/mutexlock.h"
-#include "util/stop_watch.h"
 
 namespace smartengine {
 using namespace common;

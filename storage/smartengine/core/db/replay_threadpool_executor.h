@@ -17,14 +17,12 @@
 #pragma once
 #include <atomic>
 #include <list>
-#include <mutex>
 #include <thread>
+#include "port/port_posix.h"
 #include "util/callback_util.h"
 #include "util/lock_free_fixed_queue.h"
 #include "util/common.h"
 #include "memory/allocator.h"
-#include "memory/base_malloc.h"
-#include "port/port.h"
 
 namespace smartengine {
 

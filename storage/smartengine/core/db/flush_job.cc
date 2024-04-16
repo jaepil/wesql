@@ -15,41 +15,27 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
-
-#include <algorithm>
 #include <vector>
 
 #include "compact/compaction_job.h"
 #include "compact/flush_iterator.h"
 #include "compact/mt_ext_compaction.h"
+#include "compact/reuse_block_merge_iterator.h"
 #include "db/db.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
-#include "db/log_reader.h"
-#include "db/log_writer.h"
-#include "db/version_set.h"
 #include "logger/log_module.h"
 #include "memtable/memtable_list.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_util.h"
 #include "memory/page_arena.h"
-#include "port/likely.h"
-#include "port/port.h"
 #include "storage/multi_version_extent_meta_layer.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_logger.h"
-#include "table/block.h"
 #include "table/merging_iterator.h"
 #include "table/table_builder.h"
-#include "table/two_level_iterator.h"
-#include "util/coding.h"
-#include "util/file_util.h"
 #include "util/filename.h"
-#include "util/mutexlock.h"
-#include "util/stop_watch.h"
 #include "util/sync_point.h"
-#include "util/to_string.h"
 
 namespace smartengine {
 using namespace util;

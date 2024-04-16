@@ -11,15 +11,10 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 
 #include "cache/sharded_cache.h"
-
-#include "port/port.h"
 #include "util/autovector.h"
-#include "memory/stl_adapt_allocator.h"
-#include "monitoring/instrumented_mutex.h"
-#include <atomic>
+
 
 #ifdef TBB
 #include "tbb/concurrent_unordered_map.h"

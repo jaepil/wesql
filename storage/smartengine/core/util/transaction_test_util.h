@@ -8,7 +8,6 @@
 #pragma once
 
 #include "options/options.h"
-#include "port/port.h"
 #include "transactions/optimistic_transaction_db.h"
 #include "transactions/transaction_db.h"
 

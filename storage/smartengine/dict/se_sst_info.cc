@@ -19,13 +19,13 @@
 #include "se_sst_info.h"
 #include <cstdio>
 #include <string>
-#include <vector>
+#include "se_utils.h"
 #include "sql/log.h"
 #include "my_dir.h"
 #include "mysqld_error.h"
-#include "dict/se_cf_options.h"
 #include "options/options.h"
 #include "db/db.h"
+#include "storage/change_info.h"
 #include "storage/storage_log_entry.h"
 #include "storage/storage_logger.h"
 

@@ -13,7 +13,6 @@
 
 #include <inttypes.h>
 #include <string>
-#include <vector>
 
 #include "db/db_impl.h"
 #include "util/string_util.h"

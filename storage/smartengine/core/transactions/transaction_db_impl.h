@@ -8,11 +8,11 @@
 #pragma once
 
 #include <mutex>
-#include <queue>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "monitoring/instrumented_mutex.h"
 #include "options/options.h"
 #include "transactions/transaction_db.h"
 #include "transactions/transaction_impl.h"

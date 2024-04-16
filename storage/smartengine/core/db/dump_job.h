@@ -21,8 +21,6 @@
 #include "db/job_context.h"
 #include "db/internal_stats.h"
 #include "memtable/memtable_list.h"
-#include "memtable/memtablerep.h"
-#include "db/snapshot_impl.h"
 
 namespace smartengine {
 

@@ -22,14 +22,11 @@
 #endif
 
 /* C++ standard header files */
-#include <set>
 #include <string>
 #include <unordered_set>
 #include <vector>
-#include <future>
 
 /* MySQL header files */
-#include "se_counter.h"
 #include "my_icp.h"
 #include "sql_string.h"
 #include "field.h"
@@ -38,28 +35,18 @@
 #include "sql_string.h"
 
 #include "mysql/psi/mysql_thread.h"
-#include "mysql/psi/mysql_rwlock.h"
-#include "mysql/components/services/bits/psi_rwlock_bits.h"
 
 /* se header files */
-#include "monitoring/statistics.h"
-#include "transactions/transaction_db.h"
-#include "storage/storage_manager.h"
 #include "table/parallel_read.h"
 #include "write_batch/write_batch_with_index.h"
 
 /* SE handler header files */
-#include "./se_dd_operations.h"
 #include "se_dict_struct.h"
-#include "se_cf_manager.h"
-#include "./se_comparator.h"
 #include "./se_index_merge.h"
 #include "./se_sst_info.h"
 #include "./se_utils.h"
-#include "se_io_perf.h"
 #include "plugin/se_status_vars.h"
 #include "util/se_buff.h"
-#include <regex>
 
 namespace smartengine
 {

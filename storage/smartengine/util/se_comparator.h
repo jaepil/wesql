@@ -20,9 +20,6 @@
 /* C++ system header files */
 #include <string>
 
-/* MySQL includes */
-#include "./m_ctype.h"
-
 /* se header files */
 #include "util/comparator.h"
 

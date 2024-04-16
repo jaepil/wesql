@@ -16,9 +16,9 @@
 
 #include "util/filename.h"
 #include "util/increment_number_allocator.h"
-#include "extent_meta_manager.h"
-#include "extent_space_manager.h"
-#include "storage_meta_struct.h"
+#include "storage/extent_meta_manager.h"
+#include "storage/extent_space_manager.h"
+#include "storage/storage_meta_struct.h"
 #include "util/sync_point.h"
 
 

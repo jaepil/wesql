@@ -15,7 +15,6 @@
 #include <linux/fs.h>
 #endif
 #include <pthread.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +37,6 @@
 #else
 #include <chrono>
 #endif
-#include <deque>
 #include <set>
 #include <vector>
 
@@ -46,8 +44,6 @@
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_updater.h"
 #include "options/options.h"
-#include "port/port.h"
-#include "util/coding.h"
 #include "util/random.h"
 #include "util/se_constants.h"
 #include "util/string_util.h"

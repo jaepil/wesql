@@ -18,11 +18,9 @@
 #define SMARTENGINE_INCLUDE_EXTENT_META_H_
 
 #include "table/internal_iterator.h"
-#include "util/misc_utility.h"
 #include "util/autovector.h"
 #include "util/pointer_vector.h"
-#include "change_info.h"
-#include "storage_meta_struct.h"
+#include "storage/storage_meta_struct.h"
 #include "compact/range_iterator.h"
 
 namespace smartengine

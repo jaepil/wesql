@@ -15,10 +15,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <limits>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 #include "env/env.h"
 #include "options/advanced_options.h"

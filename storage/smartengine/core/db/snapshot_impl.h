@@ -10,8 +10,6 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
-#include <vector>
-#include "db/db.h"
 #include "db/snapshot.h"
 #include "storage/multi_version_extent_meta_layer.h"
 

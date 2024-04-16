@@ -17,15 +17,9 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
-#include <limits>
-
-#include "memtable/memtablerep.h"
-#include "monitoring/statistics.h"
+#include "logger/log_module.h"
 #include "options/db_options.h"
-#include "options/options_helper.h"
 #include "table/extent_table_factory.h"
-#include "table/table_properties.h"
 #include "util/compression.h"
 
 namespace smartengine {

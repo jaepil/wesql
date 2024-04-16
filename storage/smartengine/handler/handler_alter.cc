@@ -26,32 +26,23 @@
 
 /* C++ standard header files */
 #include <algorithm>
-#include <queue>
-#include <set>
 #include <string>
-#include <vector>
 
 #include "debug_sync.h"
-#include "my_bit.h"
 #include "my_sys.h"
-#include "my_stacktrace.h"
+#include "mysql/plugin.h"
 #include "sql_table.h"
-#include "m_string.h"
-#include "mysql/psi/mysql_stage.h"
-#include "mysql/psi/mysql_table.h"
 #include "mysql/thread_pool_priv.h"
-#include "mysys_err.h"
 #include "debug_sync.h"
 #include "mysqld.h"
 #include "sql_table.h"
 #include "sql_thd_internal_api.h"
 #include "table.h"
-#include "my_loglevel.h"
 #include "sql/create_field.h"
 #include "dict/se_cf_manager.h"
-#include "dict/se_cf_options.h"
 #include "dict/se_binlog_manager.h"
 #include "dict/se_ddl_manager.h"
+#include "dict/se_dd_operations.h"
 #include "dict/se_dict_manager.h"
 #include "dict/se_table.h"
 #include "dict/se_log_ddl.h"
@@ -60,22 +51,10 @@
 #include "transaction/se_transaction.h"
 #include "transaction/se_transaction_factory.h"
 #include "util/se_utils.h"
-#include "util/se_logger.h"
-#include "util/se_mutex_wrapper.h"
 #include "util/se_threads.h"
-#include "core/util/memory_stat.h"
-#include "core/util/sync_point.h"
-#include "core/memory/mod_info.h"
-#include "core/port/likely.h"
-#include "core/monitoring/query_perf_context.h"
 #include "core/util/string_util.h"
-#include "core/options/options_helper.h"
-#include "core/logger/logger.h"
 #include "transactions/transaction_db_impl.h"
 #include "db/db_impl.h"
-#include "db/column_family.h"
-#include "table/internal_iterator.h"
-#include "storage/multi_version_extent_meta_layer.h"
 #include "write_batch/write_batch_with_index.h"
 
 namespace smartengine

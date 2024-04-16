@@ -12,7 +12,6 @@
 #include "memtable/memtable_allocator.h"
 
 #include <assert.h>
-#include "util/arena.h"
 #include "util/write_buffer_manager.h"
 
 namespace smartengine {

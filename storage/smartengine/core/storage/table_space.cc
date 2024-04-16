@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "table_space.h"
+#include "storage/table_space.h"
+
 namespace smartengine
 {
 using namespace common;

@@ -25,9 +25,7 @@
 #include <stdint.h>
 #include <memory>
 #include <string>
-#include <vector>
 #include "format.h"
-#include "util/hash.h"
 #include "memory/base_malloc.h"
 #include "options/options.h"
 

@@ -15,7 +15,7 @@
  */
 
 /* clang-format off */
-#include "storage_common.h"
+#include "storage/storage_common.h"
 
 namespace smartengine
 {

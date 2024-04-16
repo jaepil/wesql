@@ -17,7 +17,7 @@
 #pragma once
 
 #include <string>
-#include "mod_info.h"
+#include "memory/mod_info.h"
 
 namespace smartengine {
 namespace memory {

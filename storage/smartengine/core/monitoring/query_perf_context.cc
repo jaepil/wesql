@@ -17,9 +17,7 @@
 #include "query_perf_context.h"
 
 #include <string>
-#include <memory>
 #include <thread>
-#include <vector>
 #include <time.h>
 #ifdef ROCKSDB_JEMALLOC
 #include "jemalloc/jemalloc.h"
@@ -27,12 +25,9 @@
 #include "env/env.h"
 #include "cache/lru_cache.h"
 #include "cache/row_cache.h"
-#include "monitoring/histogram.h"
 #include "util/thread_local.h"
-#include "util/mutexlock.h"
 #include "logger/log_module.h"
 #include "memory/alloc_mgr.h"
-#include "port/likely.h"
 
 namespace smartengine {
 using namespace util;

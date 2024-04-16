@@ -19,7 +19,6 @@
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_meta_struct.h"
-#include "port/likely.h"
 #include "logger/log_module.h"
 
 namespace smartengine

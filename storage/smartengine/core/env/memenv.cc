@@ -6,12 +6,10 @@
 
 #include "env/env.h"
 
-#include <string.h>
 #include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
-#include "port/port.h"
 #include "util/mutexlock.h"
 
 namespace smartengine {

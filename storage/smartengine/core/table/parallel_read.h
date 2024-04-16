@@ -17,7 +17,6 @@
 #include <vector>
 #include <deque>
 #include <mutex>
-#include <condition_variable>
 #include "compact/range_iterator.h"
 #include "db/column_family.h"
 #include "memory/modtype_define.h"

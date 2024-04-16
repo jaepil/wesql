@@ -11,13 +11,9 @@
 #include <cassert>
 #include <cctype>
 #include <cstdlib>
-#include <unordered_set>
 #include <vector>
-#include "memory/mod_info.h"
-#include "memtable/memtablerep.h"
 #include "options/options.h"
 #include "table/extent_table_factory.h"
-#include "table/filter_policy.h"
 #include "util/rate_limiter.h"
 #include "util/string_util.h"
 

@@ -46,9 +46,7 @@
 #pragma once
 #include <assert.h>
 #include <stdlib.h>
-#include <algorithm>
 #include <atomic>
-#include "port/port.h"
 #include "memory/allocator.h"
 #include "util/random.h"
 #include "util/slice.h"

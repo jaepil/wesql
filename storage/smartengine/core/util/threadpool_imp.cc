@@ -11,8 +11,7 @@
 
 #include "util/threadpool_imp.h"
 
-#include "monitoring/thread_status_util.h"
-#include "port/port.h"
+#include <deque>
 
 #ifndef OS_WIN
 #include <unistd.h>
@@ -27,8 +26,10 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <thread>
 #include <vector>
+
+#include "monitoring/thread_status_util.h"
+#include "port/port.h"
 
 using namespace smartengine::monitor;
 

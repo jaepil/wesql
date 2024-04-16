@@ -17,23 +17,18 @@
 #include "compact/compaction.h"
 
 #include "compact/new_compaction_iterator.h"
-#include "db/table_cache.h"
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
-#include "options/db_options.h"
 #include "options/options_helper.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "table/extent_table_factory.h"
 #include "table/extent_table_reader.h"
-#include "table/merging_iterator.h"
 #include "table/table_builder.h"
-#include "util/arena.h"
 #include "util/file_reader_writer.h"
 #include "util/rate_limiter.h"
 #include "util/string_util.h"
-#include "util/to_string.h"
 #include "util/stop_watch.h"
 
 

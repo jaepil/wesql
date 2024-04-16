@@ -7,11 +7,6 @@
 
 #pragma once
 
-#include <stack>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #include "db/write_callback.h"
 #include "transactions/optimistic_transaction_db.h"
 #include "transactions/transaction.h"

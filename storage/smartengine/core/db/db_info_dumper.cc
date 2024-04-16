@@ -11,7 +11,6 @@
 
 #include "db/db_info_dumper.h"
 #include <inttypes.h>
-#include <stdio.h>
 #include <algorithm>
 #include <string>
 #include <vector>

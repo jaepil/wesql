@@ -17,22 +17,17 @@
 #ifndef SMARTENGINE_DB_BATCH_GROUP_H_
 #define SMARTENGINE_DB_BATCH_GROUP_H_
 
-#pragma once
-
 #include <assert.h>
 #include <stdint.h>
 #include <atomic>
-#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <type_traits>
 #include <vector>
 #include "db/async_callback.h"
 #include "db/log_writer.h"
-#include "db/write_callback.h"
-#include "monitoring/instrumented_mutex.h"
 #include "options/options.h"
-#include "util/autovector.h"
+#include "util/mutexlock.h"
 #include "write_batch/write_batch.h"
 
 namespace smartengine {

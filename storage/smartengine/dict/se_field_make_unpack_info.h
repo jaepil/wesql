@@ -19,7 +19,6 @@
 #define SE_DICT_XE_FIELD_MAKE_UNPACK_INFO_H_
 
 #include "my_inttypes.h"
-#include "my_compiler.h"
 
 class Field;
 

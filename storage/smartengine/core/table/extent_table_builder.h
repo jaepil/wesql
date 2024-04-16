@@ -14,10 +14,9 @@
 #include <stdint.h>
 #include <limits>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "options/options.h"
+#include "storage/io_extent.h"
 #include "table/extent_table_reader.h"
 #include "table/meta_blocks.h"
 #include "table/table_builder.h"

@@ -8,18 +8,15 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "options/cf_options.h"
+#include "table/filter_manager.h"
+#include "util/compression.h"
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
 #include <cassert>
-#include <limits>
-#include <string>
 #include "options/db_options.h"
-#include "port/port.h"
-#include "table/filter_manager.h"
 
 namespace smartengine {
 using namespace db;

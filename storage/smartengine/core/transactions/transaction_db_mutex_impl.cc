@@ -5,9 +5,7 @@
 
 #include "transactions/transaction_db_mutex_impl.h"
 
-#include <chrono>
 #include <condition_variable>
-#include <functional>
 #include <mutex>
 
 namespace smartengine {

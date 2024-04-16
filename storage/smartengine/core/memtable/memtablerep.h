@@ -42,11 +42,8 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <memory>
-#include <stdexcept>
 
 namespace smartengine {
-
 namespace util {
 class Arena;
 class Logger;

@@ -16,21 +16,15 @@
 #pragma once
 
 #include <sched.h>
-#include <functional>
 #include <cstdio>
-#include <queue>
 #include <unistd.h>
 
-#include "logger/log_module.h"
 #include "memory/allocator.h"
 #include "memory/base_malloc.h"
 #include "memtable/memtablerep.h"
 #include "memtable/art_node.h"
-#include "logger/log_module.h"
 #include "util/coding.h"
 #include "util/common.h"
-#include "port/likely.h"
-#include "util/ebr.h"
 
 namespace smartengine {
 namespace memtable {

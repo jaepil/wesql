@@ -15,19 +15,16 @@
  */
 #pragma once
 
+#include <queue>
 #ifdef __x86_64__
 #include <x86intrin.h>
 #include <emmintrin.h>
 #include <immintrin.h>
 #endif
 #include <cstdio>
-#include <queue>
-#include "port/likely.h"
 #include "util/opt_latch.h"
-#include "logger/log_module.h"
 #include "memory/base_malloc.h"
 #include "util/coding.h"
-#include "util/common.h"
 
 namespace smartengine {
 namespace memtable {

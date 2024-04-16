@@ -13,15 +13,10 @@
 #include "db/db.h"
 
 #include <atomic>
-#include <deque>
-#include <functional>
-#include <limits>
 #include <list>
 #include <map>
-#include <queue>
 #include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "db/batch_group.h"
@@ -30,6 +25,7 @@
 #include "db/flush_job.h"
 #include "db/flush_scheduler.h"
 #include "db/internal_stats.h"
+#include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "db/pipline_queue_manager.h"
 #include "db/snapshot_impl.h"
@@ -39,17 +35,13 @@
 #include "memtable/memtablerep.h"
 #include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
-#include "port/port.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_common.h"
-#include "table/scoped_arena_iterator.h"
-#include "util/autovector.h"
-#include "util/hash.h"
-#include "util/stop_watch.h"
+#include "util/concurrent_hash_map.h"
+#include "util/filename.h"
 #include "util/thread_local.h"
 #include "util/heap.h"
-#include "util/concurrent_hash_map.h"
 #include "transactions/transaction.h"
 #include "transactions/transaction_log.h"
 

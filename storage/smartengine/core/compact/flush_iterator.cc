@@ -8,9 +8,8 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "compact/flush_iterator.h"
+#include "logger/log_module.h"
 #include "table/internal_iterator.h"
-#include "storage/storage_manager.h"
-#include "util/stop_watch.h"
 
 namespace smartengine {
 using namespace common;

@@ -19,15 +19,21 @@
 #include "ha_smartengine.h"
 #include "sql/debug_sync.h"
 #include "sql/item.h"
+#include "sql/sql_class.h"
 #include "my_bit.h"
 #include "dict/se_field_pack.h"
 #include "dict/se_table.h"
 #include "dict/se_dict_util.h"
 #include "index/se_parallel_ddl_ctx.h"
+#include "sql/system_variables.h"
+#include "plugin/se_system_vars.h"
 #include "transaction/se_transaction_factory.h"
+#include "transaction/se_transaction_impl.h"
+#include "transactions/transaction_db_impl.h"
 
 namespace smartengine
 {
+extern util::TransactionDB *se_db;
 
 static uint32_t se_debug_optimizer_n_rows = 0;
 

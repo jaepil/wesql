@@ -11,11 +11,9 @@
 
 #pragma once
 
-#include <algorithm>
 #include <atomic>
 #include <deque>
 #include "env/env.h"
-#include "port/port.h"
 #include "monitoring/statistics.h"
 #include "util/mutexlock.h"
 #include "util/random.h"

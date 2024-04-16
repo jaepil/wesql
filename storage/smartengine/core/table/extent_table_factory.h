@@ -12,10 +12,8 @@
 #pragma once
 
 #include <stdint.h>
-#include <memory>
 #include <string>
 #include "db/dbformat.h"
-#include "table/flush_block_policy.h"
 
 namespace smartengine {
 

@@ -10,7 +10,6 @@
 
 #include "table/iterator.h"
 
-#include <string>
 #include "util/comparator.h"
 
 namespace smartengine {

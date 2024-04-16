@@ -12,7 +12,6 @@
 #include "util/concurrent_arena.h"
 #include <thread>
 #include "port/likely.h"
-#include "port/port.h"
 #include "util/random.h"
 
 using namespace smartengine::port;

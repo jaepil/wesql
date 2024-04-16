@@ -20,11 +20,11 @@
 
 #include "sql/log.h"
 #include <queue>
-#include <set>
 #include <vector>
 #include "handler.h"
-#include "util/se_comparator.h"
-#include "db/db.h"
+#include "util/arena.h"
+#include "util/comparator.h"
+#include "util/slice.h"
 
 namespace smartengine
 {

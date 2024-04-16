@@ -14,11 +14,9 @@
 #include "cache/cache.h"
 #include <atomic>
 #include <string>
-#include <unordered_map>
 #include "memory/object_pool.h"
 #include "memory/page_arena.h"
 #include "memory/page_arena.h"
-#include "port/port.h"
 #include "util/hash.h"
 
 namespace smartengine {

@@ -17,17 +17,12 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #pragma once
 
-#include <algorithm>
-#include <atomic>
 #include <map>
-#include <mutex>
 #include <string>
 #include <unordered_set>
 #include <utility>
-#include <vector>
 #include <arpa/inet.h>
 #include "dict/se_index.h"
-#include "util/se_buff.h"
 #include "util/se_utils.h"
 
 namespace smartengine {

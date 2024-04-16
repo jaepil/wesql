@@ -12,8 +12,8 @@
 #pragma once
 
 #include "env/env.h"
-#include "table/iterator_wrapper.h"
 #include "monitoring/query_perf_context.h"
+#include "table/internal_iterator.h"
 
 namespace smartengine {
 

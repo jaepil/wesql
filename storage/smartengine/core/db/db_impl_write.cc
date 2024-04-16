@@ -13,9 +13,8 @@
 #define __STDC_FORMAT_MACROS
 #endif
 #include <inttypes.h>
-#include "log_writer.h"
+#include "db/log_writer.h"
 #include "options/options_helper.h"
-#include "util/crc32c.h"
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
 

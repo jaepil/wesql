@@ -17,7 +17,6 @@
 #ifndef SMARTENGINE_INCLUDE_STORAGE_META_STRUCT_H_
 #define SMARTENGINE_INCLUDE_STORAGE_META_STRUCT_H_
 #include "memory/allocator.h"
-#include "storage/io_extent.h"
 #include "db/dbformat.h"
 #include "db/recovery_point.h"
 

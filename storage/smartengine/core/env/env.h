@@ -23,8 +23,6 @@
 
 #include <stdint.h>
 #include <cstdarg>
-#include <functional>
-#include <limits>
 #include <memory>
 #include <string>
 #include <vector>

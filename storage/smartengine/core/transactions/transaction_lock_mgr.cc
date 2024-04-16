@@ -11,10 +11,7 @@
 
 #include "transactions/transaction_lock_mgr.h"
 
-#include <inttypes.h>
 #include <algorithm>
-#include <condition_variable>
-#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -22,10 +19,8 @@
 #include "monitoring/query_perf_context.h"
 #include "transactions/transaction_db_impl.h"
 #include "transactions/transaction_db_mutex.h"
-#include "util/murmurhash.h"
 #include "util/se_constants.h"
 #include "util/sync_point.h"
-#include "util/thread_local.h"
 
 namespace smartengine {
 using namespace common;

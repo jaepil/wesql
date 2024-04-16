@@ -12,7 +12,6 @@
 #include "table/iterator.h"
 
 #include "table/iterator_wrapper.h"
-#include "util/arena.h"
 #include "db/dbformat.h"
 
 namespace smartengine {

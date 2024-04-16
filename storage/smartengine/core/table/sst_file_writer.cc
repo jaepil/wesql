@@ -6,7 +6,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "table/sst_file_writer.h"
-#include <vector>
 #include "db/column_family.h"
 #include "db/dbformat.h"
 #include "storage/storage_common.h"

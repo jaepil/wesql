@@ -16,7 +16,6 @@
 
 #include "util/ebr.h"
 #include "logger/log_module.h"
-#include "port/likely.h"
 #include "util/status.h"
 #include "util/se_constants.h"
 

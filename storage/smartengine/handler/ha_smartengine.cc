@@ -16,6 +16,8 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#include "dd/cache/dictionary_client.h"
+#include "se_transaction.h"
 #ifdef USE_PRAGMA_IMPLEMENTATION
 #pragma implementation // gcc: Class implementation
 #endif
@@ -26,22 +28,14 @@
 #include "sql_class.h"
 #include "handler/handler_alter.h"
 #include <algorithm>
-#include <queue>
-#include <set>
 #include <string>
-#include <vector>
 #include <atomic>
 #include "debug_sync.h"
-#include "my_bit.h"
 #include "my_sys.h"
-#include "my_stacktrace.h"
 #include "sql_audit.h"
 #include "sql_table.h"
 #include "m_string.h"
-#include "mysql/psi/mysql_stage.h"
-#include "mysql/psi/mysql_table.h"
 #include "mysql/thread_pool_priv.h"
-#include "mysys_err.h"
 #include "debug_sync.h"
 #include "json_dom.h"
 #include "mysqld.h"
@@ -51,43 +45,22 @@
 #include "sql_table.h"
 #include "sql_thd_internal_api.h"
 #include "table.h"
-#include "my_loglevel.h"
 #include "sql/mysqld_thd_manager.h"
 #include "sql/sql_base.h"
-#include "util/rate_limiter.h"
-#include "core/cache/row_cache.h"
-#include "core/util/memory_stat.h"
-#include "core/util/sync_point.h"
-#include "core/memory/mod_info.h"
-#include "core/port/likely.h"
 #include "core/monitoring/query_perf_context.h"
 #include "core/util/string_util.h"
-#include "core/options/options_helper.h"
-#include "core/logger/logger.h"
 #include "transactions/transaction_db_impl.h"
-#include "db/db_impl.h"
-#include "db/column_family.h"
-#include "options/options.h"
-#include "table/internal_iterator.h"
-#include "storage/multi_version_extent_meta_layer.h"
-#include "backup/hotbackup.h"
-#include "api/se_api.h"
 #include "dict/se_cf_manager.h"
-#include "dict/se_cf_options.h"
 #include "dict/se_log_ddl.h"
 #include "dict/se_binlog_manager.h"
-#include "dict/se_charset_info.h"
 #include "dict/se_ddl_manager.h"
 #include "dict/se_dict_manager.h"
 #include "dict/se_dict_util.h"
-#include "dict/se_field_pack.h"
 #include "dict/se_table.h"
 #include "handler/se_hton.h"
 #include "index/se_index_merge.h"
 #include "index/se_parallel_ddl_ctx.h"
-#include "util/se_mutex_wrapper.h"
 #include "util/se_threads.h"
-#include "util/se_logger.h"
 #include "plugin/se_system_vars.h"
 #include "transaction/se_transaction_factory.h"
 #include "write_batch/write_batch_with_index.h"

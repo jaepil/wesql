@@ -36,7 +36,6 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <atomic>
-#include "port/port.h"
 #include "memory/allocator.h"
 #include "util/random.h"
 

@@ -11,7 +11,6 @@
 #endif
 
 #include <inttypes.h>
-#include <algorithm>
 #include <cstdio>
 #include "port/likely.h"
 namespace smartengine {

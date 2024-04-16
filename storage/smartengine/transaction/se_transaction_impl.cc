@@ -17,6 +17,8 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "se_transaction_impl.h"
+#include "transactions/transaction_db_impl.h"
+#include "util/se_constants.h"
 
 namespace smartengine
 {

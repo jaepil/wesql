@@ -20,13 +20,10 @@
 #include <assert.h>
 #include <stdint.h>
 #include <cerrno>
-#include <cstddef>
 #include <vector>
-#include "memory/base_malloc.h"
 #include "memory/mod_info.h"
 #include "memory/stl_adapt_allocator.h"
 #include "memory/allocator.h"
-#include "util/mutexlock.h"
 
 namespace smartengine {
 namespace util {

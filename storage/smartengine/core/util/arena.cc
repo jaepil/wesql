@@ -21,13 +21,9 @@
 #include <sys/mman.h>
 #endif
 #include <algorithm>
-#include "env/env.h"
-#include "port/port.h"
 #include "logger/log_module.h"
 
 namespace smartengine {
-using namespace common;
-using namespace port;
 
 namespace util {
 

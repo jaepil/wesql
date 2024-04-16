@@ -12,9 +12,7 @@
 #pragma once
 
 #include <assert.h>
-#include <inttypes.h>
 
-#include <list>
 #include <string>
 #include <unordered_map>
 

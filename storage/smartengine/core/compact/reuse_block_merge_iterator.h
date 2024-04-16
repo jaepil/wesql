@@ -17,16 +17,14 @@
 #define SMARTENGINE_REUSE_BLOCK_MERGE_ITERATOR_H_
 
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
 #include <bitset>
-#include "range_iterator.h"
+#include "compact/range_iterator.h"
+#include "logger/log_module.h"
+#include "storage/multi_version_extent_meta_layer.h"
+#include "storage/storage_meta_struct.h"
 #include "table/format.h"
 #include "table/iter_heap.h"
 #include "table/iterator_wrapper.h"
-#include "storage/storage_manager.h"
-#include "memory/allocator.h"
-#include "util/autovector.h"
 #include "util/heap.h"
 #include "memory/page_arena.h"
 

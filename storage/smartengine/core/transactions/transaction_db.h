@@ -10,7 +10,6 @@
 #pragma once
 
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "transactions/transaction.h"

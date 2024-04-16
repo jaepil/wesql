@@ -18,11 +18,9 @@
 #define SMARTENGINE_UTIL_CONCURRENT_DIRECT_FILE_WRITER_H_
 
 #include <atomic>
-#include <string>
 #include "env/env.h"
-#include "port/port.h"
+#include "port/port_posix.h"
 #include "util/aligned_buffer.h"
-#include "util/lock_free_fixed_queue.h"
 
 namespace smartengine {
 

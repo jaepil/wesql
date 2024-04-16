@@ -6,13 +6,11 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 #pragma once
 
-#include <vector>
 
 #include "transactions/transaction_log.h"
 #include "db/log_reader.h"
 #include "db/version_set.h"
 #include "options/db_options.h"
-#include "port/port.h"
 #include "util/filename.h"
 
 namespace smartengine {

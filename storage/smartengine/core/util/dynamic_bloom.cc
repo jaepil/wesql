@@ -7,9 +7,6 @@
 
 #include "dynamic_bloom.h"
 
-#include <algorithm>
-
-#include "port/port.h"
 #include "memory/allocator.h"
 #include "util/hash.h"
 

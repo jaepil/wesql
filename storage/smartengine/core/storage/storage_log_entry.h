@@ -18,8 +18,7 @@
 #define SMARTENGINE_INCLUDE_STORAGE_LOG_ENTRY_H_
 #include "util/serialization.h"
 #include "util/to_string.h"
-#include "storage_meta_struct.h"
-#include "storage_manager.h"
+#include "storage/storage_meta_struct.h"
 
 namespace smartengine
 {

@@ -15,20 +15,15 @@
 #include "util/filename.h"
 #include <inttypes.h>
 
-#include <ctype.h>
 #include <stdio.h>
 #include <vector>
 #include "monitoring/query_perf_context.h"
-#include "util/file_reader_writer.h"
 #include "util/string_util.h"
-#include "util/sync_point.h"
-#include "storage/storage_manager.h"
 
 namespace smartengine {
 using namespace smartengine::common;
 using namespace smartengine::db;
 using namespace smartengine::monitor;
-using namespace smartengine::storage;
 
 namespace util {
 

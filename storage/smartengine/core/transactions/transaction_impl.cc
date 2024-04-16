@@ -7,10 +7,7 @@
 
 #include "transactions/transaction_impl.h"
 
-#include <map>
-#include <set>
 #include <string>
-#include <vector>
 
 #include "db/column_family.h"
 #include "db/db_impl.h"

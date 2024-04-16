@@ -16,10 +16,8 @@
 #pragma once
 
 #include "env/env.h"
-#include "memory/base_malloc.h"
 #include "storage/storage_common.h"
 #include "util/aio_wrapper.h"
-#include "util/coding.h"
 #include "util/serialization.h"
 
 namespace smartengine {

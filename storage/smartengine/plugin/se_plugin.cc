@@ -16,6 +16,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#include "se_api.h"
 #include "se_hton.h"
 #include "se_status_vars.h"
 #include "se_system_vars.h"
@@ -25,6 +26,7 @@
 #include "mysql/plugin.h"
 #include "dict/se_charset_info.h"
 #include "dict/se_dict_util.h"
+#include "transactions/transaction_db.h"
 #include "util/rate_limiter.h"
 #include "util/se_mutex_wrapper.h"
 #include "util/se_logger.h"

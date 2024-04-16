@@ -6,12 +6,11 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "monitoring/histogram.h"
-#include "port/likely.h"
-#include "port/port.h"
 #include "port/port_posix.h"
 #include "util/mutexlock.h"
 #include "util/thread_local.h"

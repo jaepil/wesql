@@ -17,6 +17,13 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "se_transaction_factory.h"
+#include "mysql/plugin.h"
+#include "se_hton.h"
+#include "se_system_vars.h"
+#include "se_transaction_impl.h"
+#include "se_write_batch_impl.h"
+#include "sql_class.h"
+#include "util/se_utils.h"
 
 namespace smartengine
 {

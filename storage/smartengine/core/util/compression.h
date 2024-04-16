@@ -15,7 +15,6 @@
 #include <limits>
 #include <string>
 
-#include "aligned_buffer.h"
 #include "coding.h"
 #include "memory/mod_info.h"
 #include "options/options.h"

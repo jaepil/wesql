@@ -21,6 +21,7 @@
 #endif
 
 #include "se_cf_manager.h"
+#include "db/column_family.h"
 
 namespace smartengine
 {

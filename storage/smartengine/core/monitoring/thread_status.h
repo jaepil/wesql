@@ -18,11 +18,8 @@
 #pragma once
 
 #include <stdint.h>
-#include <cstddef>
 #include <map>
 #include <string>
-#include <utility>
-#include <vector>
 
 #if !defined(NROCKSDB_THREAD_STATUS) && \
     !defined(OS_MACOSX) && !defined(IOS_CROSS_COMPILE)

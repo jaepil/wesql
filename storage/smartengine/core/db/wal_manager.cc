@@ -22,10 +22,7 @@
 
 #include "options/options.h"
 #include "db/log_reader.h"
-#include "db/log_writer.h"
-#include "port/port.h"
 #include "transactions/transaction_log_impl.h"
-#include "util/coding.h"
 #include "util/file_reader_writer.h"
 #include "util/filename.h"
 #include "util/mutexlock.h"

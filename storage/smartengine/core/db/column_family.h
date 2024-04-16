@@ -21,13 +21,11 @@
 #include "db/snapshot_impl.h"  // SnapshotList
 #include "db/table_cache.h"
 #include "env/env.h"
-#include "logger/log_module.h"
 #include "memory/page_arena.h"
 #include "memtable/memtable_list.h"
 #include "options/cf_options.h"
 #include "storage/storage_manager.h"
 #include "util/thread_local.h"
-#include "util/misc_utility.h"
 #include "write_batch/write_batch_internal.h"
 
 namespace smartengine

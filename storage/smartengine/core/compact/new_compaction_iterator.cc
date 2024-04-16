@@ -17,7 +17,6 @@
 #include "compact/new_compaction_iterator.h"
 #include "compact/task_type.h"
 #include "logger/log_module.h"
-#include "table/internal_iterator.h"
 
 namespace smartengine
 {

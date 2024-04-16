@@ -10,19 +10,12 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 
-#include <atomic>
-#include <deque>
-#include <limits>
 #include <memory>
-#include <set>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "db/version_set.h"
 #include "env/env.h"
 #include "options/db_options.h"
-#include "port/port.h"
 #include "transactions/transaction_log.h"
 
 namespace smartengine

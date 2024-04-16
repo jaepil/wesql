@@ -12,14 +12,12 @@
 #include "table/extent_table_factory.h"
 
 #include <stdint.h>
-#include <memory>
 #include <string>
 
-#include "port/port.h"
 #include "table/extent_table_builder.h"
 #include "table/extent_table_reader.h"
 #include "table/filter_policy.h"
-#include "table/format.h"
+#include "table/flush_block_policy.h"
 
 namespace smartengine {
 using namespace common;

@@ -16,12 +16,8 @@
 #pragma once
 
 #include "sql/table.h"
-#include "field_types.h"
 #include "dd/cache/dictionary_client.h"
-#include "dd/dd.h"
-#include "dd/dd_schema.h"
 #include "dd/dd_table.h"
-#include "dd/dictionary.h"
 #include "dd/properties.h"
 #include "dd/types/column.h"
 #include "dd/types/foreign_key.h"

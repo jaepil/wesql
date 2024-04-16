@@ -17,13 +17,11 @@
 #include "table/parallel_read.h"
 
 #include <thread>
-#include <iostream>
 #include "db/column_family.h"
 #include "db/db_impl.h"
 #include "options/options.h"
 #include "storage/multi_version_extent_meta_layer.h"
 #include "transactions/transaction_base.h"
-#include "util/arena.h"
 
 #ifdef MYSQL_SERVER
 #include "my_base.h"

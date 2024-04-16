@@ -13,8 +13,6 @@
 
 #include <stdint.h>
 #include <string>
-#include <utility>
-#include <vector>
 #include "options/cf_options.h"
 #include "storage/storage_common.h"
 #include "util/file_reader_writer.h"

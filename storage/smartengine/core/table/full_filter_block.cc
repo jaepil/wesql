@@ -9,8 +9,6 @@
 
 #include "table/filter_policy.h"
 #include "monitoring/query_perf_context.h"
-#include "port/port.h"
-#include "util/coding.h"
 
 namespace smartengine {
 using namespace common;

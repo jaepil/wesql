@@ -12,9 +12,7 @@
 #include "table/two_level_iterator.h"
 #include "db/pinned_iterators_manager.h"
 #include "options/options.h"
-#include "table/block.h"
-#include "table/format.h"
-#include "util/arena.h"
+#include "table/iterator_wrapper.h"
 
 namespace smartengine {
 using namespace common;

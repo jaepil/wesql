@@ -17,7 +17,6 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "monitoring/query_perf_context.h"
-#include "port/port.h"
 #include "storage/extent_space_manager.h"
 #include "util/coding.h"
 #include "util/serialization.h"

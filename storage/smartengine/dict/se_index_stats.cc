@@ -17,14 +17,9 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "se_index_stats.h"
-#include <algorithm>
-#include <map>
 #include <string>
 #include <vector>
-#include "my_stacktrace.h"
-#include "sql_array.h"
-#include "dict/se_ddl_manager.h"
-#include "util/se_constants.h"
+#include "se_buff.h"
 #include "util/se_utils.h"
 
 namespace smartengine

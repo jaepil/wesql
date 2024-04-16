@@ -16,8 +16,8 @@
 #pragma once
 
 #include "db/table_cache.h"
-#include "storage/io_extent.h"
 #include "table/extent_table_reader.h"
+#include "util/aio_wrapper.h"
 
 namespace smartengine
 {

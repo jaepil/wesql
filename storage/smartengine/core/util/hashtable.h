@@ -15,8 +15,6 @@
  */
 
 #pragma once
-#include "logger/log_module.h"
-#include "util/misc_utility.h"
 #include "util/fast_latch.h"
 namespace smartengine
 {

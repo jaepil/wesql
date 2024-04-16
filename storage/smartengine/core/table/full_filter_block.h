@@ -10,13 +10,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <memory>
-#include <string>
-#include <vector>
-#include "db/dbformat.h"
 #include "memory/base_malloc.h"
 #include "options/options.h"
 #include "table/filter_block.h"
-#include "util/hash.h"
 
 namespace smartengine {
 namespace table {

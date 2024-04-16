@@ -33,22 +33,15 @@
 
 #include "write_batch/write_batch.h"
 
-#include <map>
-#include <stack>
-#include <stdexcept>
-#include <type_traits>
-#include <vector>
-
 #include "db/column_family.h"
 #include "db/db_impl.h"
 #include "db/dbformat.h"
 #include "db/flush_scheduler.h"
-#include "db/snapshot_impl.h"
 #include "memtable/memtable.h"
-#include "monitoring/statistics.h"
 #include "transactions/transaction.h"
 #include "util/coding.h"
 #include "util/string_util.h"
+#include <stack>
 
 namespace smartengine {
 using namespace util;

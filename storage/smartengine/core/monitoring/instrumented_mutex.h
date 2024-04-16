@@ -9,9 +9,6 @@
 
 #include "env/env.h"
 #include "monitoring/statistics.h"
-#include "port/port.h"
-#include "port/stack_trace.h"
-#include "util/stop_watch.h"
 
 namespace smartengine {
 namespace monitor {

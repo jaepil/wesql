@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <gflags/gflags.h>
 #include <inttypes.h>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>

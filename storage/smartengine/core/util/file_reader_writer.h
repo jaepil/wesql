@@ -12,7 +12,6 @@
 #include <atomic>
 #include <string>
 #include "env/env.h"
-#include "port/port.h"
 #include "util/aligned_buffer.h"
 
 namespace smartengine {
@@ -43,11 +42,11 @@ class SequentialFileReader {
   explicit SequentialFileReader(SequentialFile *file, bool use_allocator = false)
       : file_(file), offset_(0), prefetch_offset_(0), use_allocator_(use_allocator) {}
   ~SequentialFileReader();
-//  SequentialFileReader(SequentialFileReader&& o) ROCKSDB_NOEXCEPT {
+//  SequentialFileReader(SequentialFileReader&& o) noexcept {
 //    *this = std::move(o);
 //  }
 //
-  SequentialFileReader& operator=(SequentialFileReader&& o) ROCKSDB_NOEXCEPT {
+  SequentialFileReader& operator=(SequentialFileReader&& o) noexcept {
 //    file_ = std::move(o.file_);
     file_ = o.release_file();
     return *this;
@@ -108,13 +107,13 @@ class RandomAccessFileReader {
         env_options_(env_options),
         use_allocator_(use_allocator) {}
 // todo
-//  RandomAccessFileReader(RandomAccessFileReader&& o) ROCKSDB_NOEXCEPT {
+//  RandomAccessFileReader(RandomAccessFileReader&& o) noexcept {
 //    *this = std::move(o);
 //  }
 
   // todo
   RandomAccessFileReader& operator=(RandomAccessFileReader&& o)
-      ROCKSDB_NOEXCEPT {
+      noexcept {
 //    file_ = std::move(o.file_);
 //    env_ = std::move(o.env_);
     file_ = o.release_file();

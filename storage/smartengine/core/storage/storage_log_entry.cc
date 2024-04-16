@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "storage_log_entry.h"
+#include "storage/storage_log_entry.h"
+#include "storage/change_info.h"
 
 namespace smartengine
 {

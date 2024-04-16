@@ -6,9 +6,9 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 #include "table/meta_blocks.h"
 
-#include <map>
 #include <string>
 
+#include "logger/log_module.h"
 #include "table/block.h"
 #include "table/format.h"
 #include "table/internal_iterator.h"

@@ -19,12 +19,14 @@
 #include <string>
 #include <set>
 #include <unordered_map>
+#include "field.h"
 #include "table.h"
 #include "dict/se_cf_manager.h"
 #include "dict/se_ddl_manager.h"
 #include "dict/se_index.h"
 #include "dict/se_table.h"
 #include "handler/se_hton.h"
+#include "transactions/transaction_db_impl.h"
 
 // Export utilities functions from smartengine
 namespace smartengine

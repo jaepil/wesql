@@ -15,11 +15,6 @@
  */
 
 #include "db/batch_group.h"
-#include <thread>
-#include "db/column_family.h"
-#include "port/port.h"
-#include "util/random.h"
-#include "util/sync_point.h"
 
 using namespace smartengine;
 using namespace util;

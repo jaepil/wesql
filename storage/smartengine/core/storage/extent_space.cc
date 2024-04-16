@@ -16,7 +16,7 @@
 
 #include "util/filename.h"
 #include "util/increment_number_allocator.h"
-#include "extent_space.h"
+#include "storage/extent_space.h"
 
 namespace smartengine
 {

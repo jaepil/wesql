@@ -19,7 +19,6 @@
 #include <stdint.h>
 #include <atomic>
 #include <string>
-#include <type_traits>
 
 namespace smartengine {
 namespace util {

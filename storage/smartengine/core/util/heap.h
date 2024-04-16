@@ -8,7 +8,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cstdint>
 #include <functional>
 #include "port/port.h"
 #include "util/autovector.h"

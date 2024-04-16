@@ -18,6 +18,7 @@
 #ifndef SE_HANDLER_XE_INDEX_H_
 #define SE_HANDLER_XE_INDEX_H_
 
+#include "db.h"
 #include "my_base.h"
 #include "se_index_stats.h"
 #include "dd/types/index.h"

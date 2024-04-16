@@ -16,43 +16,32 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#include "dd/cache/dictionary_client.h"
+#include "dd/dictionary.h"
+#include "se_dd_operations.h"
 #ifdef USE_PRAGMA_IMPLEMENTATION
 #pragma implementation // gcc: Class implementation
 #endif
 
 #include "se_ddl_manager.h"
 #include <algorithm>
-#include <array>
-#include <limits>
-#include <map>
-#include <set>
 #include <utility>
-#include <vector>
-#include "my_dir.h"
-#include "m_ctype.h"
-#include "my_bit.h"
-#include "my_bitmap.h"
-#include "my_stacktrace.h"
-#include "myisampack.h"
 #include "sql/field.h"
-#include "sql/key.h"
 #include "sql/mysqld.h"
 #include "sql/sql_table.h"
 #include "sql/table.h"
-#include "sql/system_variables.h"
 #include "sql/sql_class.h"
 #include "sql/thd_raii.h"      // Disable_autocommit_guard
 #include "sql/transaction.h"   // trans_commit
 #include "dict/se_cf_manager.h"
-#include "dict/se_field_pack.h"
 #include "dict//se_log_ddl.h"
 #include "dict/se_dict_manager.h"
 #include "dict/se_table.h"
 #include "dict/se_dict_util.h"
 #include "handler/se_hton.h"
+#include "transactions/transaction_db_impl.h"
 #include "util/se_utils.h"
-#include "core/port/likely.h"
-
+#include "db/column_family.h"
 
 namespace smartengine {
 extern ulong purge_acquire_lock_timeout;

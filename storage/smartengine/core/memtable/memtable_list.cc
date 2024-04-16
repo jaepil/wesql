@@ -11,16 +11,11 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
 #include <string>
 #include "db/db.h"
-#include "db/version_set.h"
 #include "monitoring/thread_status_util.h"
 #include "storage/storage_manager.h"
-#include "storage/extent_space_manager.h"
 #include "table/merging_iterator.h"
-#include "util/coding.h"
-#include "util/sync_point.h"
 
 namespace smartengine {
 using namespace util;

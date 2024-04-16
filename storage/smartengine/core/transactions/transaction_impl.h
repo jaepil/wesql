@@ -7,12 +7,9 @@
 
 #pragma once
 
-#include <algorithm>
 #include <atomic>
 #include <mutex>
-#include <stack>
 #include <string>
-#include <unordered_map>
 #include <vector>
 #include "db/write_callback.h"
 #include "transactions/transaction.h"

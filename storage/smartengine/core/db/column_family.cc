@@ -15,15 +15,12 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <inttypes.h>
 #include <algorithm>
 #include <limits>
 #include <string>
-#include <vector>
 
-#include "cache/row_cache.h"
-#include "cache/sharded_cache.h"
 #include "compact/compaction_job.h"
+#include "compact/reuse_block_merge_iterator.h"
 #include "db/db_impl.h"
 #include "db/internal_stats.h"
 #include "db/job_context.h"

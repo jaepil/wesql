@@ -11,7 +11,6 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
-#include <errno.h>
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>

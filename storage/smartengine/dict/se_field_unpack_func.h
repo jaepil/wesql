@@ -19,7 +19,6 @@
 #define SE_DICT_XE_FIELD_UNPACK_FUNC_H_
 
 #include "my_inttypes.h"
-#include "my_compiler.h"
 
 class Field;
 namespace smartengine

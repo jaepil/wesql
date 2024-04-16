@@ -11,6 +11,7 @@
 #include "db/db.h"
 #include "monitoring/thread_status_updater.h"
 #include "util/testharness.h"
+#include "util/thread_operation.h"
 
 #ifdef ROCKSDB_USING_THREAD_STATUS
 

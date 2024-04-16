@@ -12,7 +12,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include "port/port.h"
 #include "memory/base_malloc.h"
 #include "memory/mod_info.h"
 #include "util/slice.h"
@@ -43,9 +42,9 @@ class AlignedBuffer {
   AlignedBuffer()
       : alignment_(), capacity_(0), cursize_(0), bufstart_(nullptr) {}
 
-  AlignedBuffer(AlignedBuffer&& o) ROCKSDB_NOEXCEPT { *this = std::move(o); }
+  AlignedBuffer(AlignedBuffer&& o) noexcept { *this = std::move(o); }
 
-  AlignedBuffer& operator=(AlignedBuffer&& o) ROCKSDB_NOEXCEPT {
+  AlignedBuffer& operator=(AlignedBuffer&& o) noexcept {
     alignment_ = std::move(o.alignment_);
     buf_ = std::move(o.buf_);
     capacity_ = std::move(o.capacity_);

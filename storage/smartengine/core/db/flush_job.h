@@ -11,11 +11,7 @@
 #pragma once
 
 #include <atomic>
-#include <deque>
-#include <limits>
-#include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "db/column_family.h"
@@ -24,20 +20,12 @@
 #include "db/flush_scheduler.h"
 #include "db/internal_stats.h"
 #include "db/job_context.h"
-#include "db/log_writer.h"
-#include "db/snapshot_impl.h"
 #include "env/env.h"
 #include "memtable/memtable_list.h"
 #include "memtable/memtablerep.h"
-#include "monitoring/instrumented_mutex.h"
 #include "options/db_options.h"
-#include "port/port.h"
-#include "table/scoped_arena_iterator.h"
-#include "transactions/transaction_log.h"
 #include "util/arena.h"
 #include "util/autovector.h"
-#include "util/stop_watch.h"
-#include "util/thread_local.h"
 
 namespace smartengine {
 

@@ -11,6 +11,7 @@
 
 #include "memtable/skiplist.h"
 #include <set>
+#include "port/port_posix.h"
 #include "util/arena.h"
 #include "util/hash.h"
 #include "util/random.h"

@@ -19,8 +19,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <cassert>
-
-#include "port/port.h"
+#include <cstring>
 
 namespace smartengine {
 namespace monitor {

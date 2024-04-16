@@ -26,6 +26,7 @@
 #include "sql/mysqld_thd_manager.h"
 #include "handler/se_hton.h"
 #include "dict/se_dict_util.h"
+#include "transactions/transaction_db_impl.h"
 
 namespace smartengine {
 

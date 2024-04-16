@@ -14,14 +14,12 @@
 #define STORAGE_ROCKSDB_INCLUDE_DB_H_
 
 #include <stdint.h>
-#include <stdio.h>
 #include <map>
 #include <memory>
 #include <string>
 #include <list>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 #include <mutex>
 #include "db/async_callback.h"

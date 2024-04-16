@@ -16,12 +16,9 @@
 #pragma once
 #include <atomic>
 #include <memory>
-#include <set>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include "db/db_impl.h"
-#include "port/port.h"
 
 namespace smartengine {
 namespace db {

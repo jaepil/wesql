@@ -16,9 +16,9 @@
 #pragma once
 #include <unordered_map>
 #include <vector>
+#include "storage/storage_common.h"
 #include "util/serialization.h"
-#include "io_extent.h"
-
+#include "util/types.h"
 
 namespace smartengine
 {

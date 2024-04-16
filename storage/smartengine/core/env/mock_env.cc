@@ -11,8 +11,6 @@
 
 #include "env/mock_env.h"
 #include <algorithm>
-#include <chrono>
-#include "port/sys_time.h"
 #include "util/murmurhash.h"
 #include "util/random.h"
 #include "util/rate_limiter.h"

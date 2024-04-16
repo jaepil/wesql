@@ -8,16 +8,12 @@
 #include "write_batch_with_index.h"
 #include "write_batch_with_index_internal.h"
 
-#include <limits>
-#include <memory>
-
 #include "db/column_family.h"
 #include "db/db_impl.h"
 #include "memtable/skiplist.h"
 #include "options/db_options.h"
 #include "util/arena.h"
 #include "monitoring/query_perf_context.h"
-#include "port/likely.h"
 
 namespace smartengine {
 using namespace common;

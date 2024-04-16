@@ -16,8 +16,6 @@
 
 #include "storage/io_extent.h"
 #include <unistd.h>
-#include "storage/extent_space_manager.h"
-#include "table/format.h"
 #include "util/rate_limiter.h"
 
 namespace smartengine

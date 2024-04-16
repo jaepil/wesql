@@ -11,7 +11,6 @@
 #include <map>
 #include <string>
 #include "util/status.h"
-#include "util/types.h"
 
 namespace smartengine {
 namespace db {

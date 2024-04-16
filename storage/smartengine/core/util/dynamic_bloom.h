@@ -8,8 +8,6 @@
 #pragma once
 
 #include <atomic>
-#include <memory>
-#include <string>
 #include "memory/allocator.h"
 #include "port/port.h"
 #include "util/slice.h"

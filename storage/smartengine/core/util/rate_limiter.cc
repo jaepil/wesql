@@ -12,9 +12,7 @@
 #include "util/rate_limiter.h"
 
 #include "monitoring/query_perf_context.h"
-#include "port/port.h"
 #include "util/sync_point.h"
-#include "logger/log_module.h"
 
 namespace smartengine {
 using namespace monitor;

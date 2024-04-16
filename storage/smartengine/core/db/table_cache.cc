@@ -9,10 +9,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "cache/row_cache.h"
 #include "db/table_cache.h"
 #include "db/dbformat.h"
-#include "util/filename.h"
 
 #include "monitoring/query_perf_context.h"
 #include "storage/extent_space_manager.h"
@@ -21,9 +19,7 @@
 #include "table/iterator_wrapper.h"
 #include "table/table_builder.h"
 #include "table/table_reader.h"
-#include "util/coding.h"
 #include "util/file_reader_writer.h"
-#include "util/stop_watch.h"
 #include "util/sync_point.h"
 
 namespace smartengine {

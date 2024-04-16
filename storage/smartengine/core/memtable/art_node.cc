@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 #include "memtable/art_node.h"
+#include "logger/log_module.h"
+#include "util/common.h"
 
 namespace smartengine {
 

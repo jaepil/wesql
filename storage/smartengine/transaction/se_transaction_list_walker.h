@@ -19,12 +19,7 @@
 #ifndef SMARTENGINE_TRANSACTION_LIST_WALKER_H_
 #define SMARTENGINE_TRANSACTION_LIST_WALKER_H_
 
-#include "mysql/plugin.h"
-#include "sql/sql_class.h"
-#include "sql/sql_thd_internal_api.h"
-#include "se_transaction_impl.h"
-#include "se_write_batch_impl.h"
-
+#include "se_transaction.h"
 namespace smartengine
 {
 

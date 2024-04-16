@@ -20,7 +20,6 @@
 
 #include <vector>
 #include "my_inttypes.h"
-#include "my_compiler.h"
 
 class Field;
 

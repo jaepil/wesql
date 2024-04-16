@@ -13,7 +13,6 @@
 #include <stdint.h>
 #include <string>
 #include "options/cf_options.h"
-#include "port/port.h"  // noexcept
 
 namespace smartengine {
 namespace common {

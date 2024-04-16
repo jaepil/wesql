@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-#include "db/log_writer.h"
 
 namespace smartengine {
 namespace db {

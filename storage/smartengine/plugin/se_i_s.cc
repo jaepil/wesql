@@ -17,11 +17,11 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* C++ standard header files */
-#include <map>
 #include <string>
 #include <vector>
 
 /* MySQL header files */
+#include "monitoring/thread_status.h"
 #include "table.h"
 #include "mysql/plugin.h"
 #include <sql_show.h>
@@ -31,17 +31,11 @@
 
 /* smartengine header files */
 #include "compact/compaction.h"
-#include "db/version_set.h"
-#include "compact/task_type.h"
-#include "storage/extent_space_manager.h"
 #include "memtable/memtablerep.h"
 #include "transactions/transaction_db.h"
 #include "db/db_impl.h"
 #include "db/debug_info.h"
-#include "transactions/transaction_db_impl.h"
 #include "db/internal_stats.h"
-#include "storage/multi_version_extent_meta_layer.h"
-#include "monitoring/thread_status.h"
 
 /* MyX header files */
 #include "./ha_smartengine.h"

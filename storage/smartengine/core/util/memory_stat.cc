@@ -15,8 +15,6 @@
  */
 
 #include "util/memory_stat.h"
-#include "db/db_impl.h"
-#include "db/version_set.h"
 
 using namespace smartengine::db;
 using namespace smartengine::common;

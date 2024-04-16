@@ -21,6 +21,7 @@
 #include "logger/log_module.h"
 #include "storage/extent_meta_manager.h"
 #include "util/file_reader_writer.h"
+#include "util/filename.h"
 #include "util/string_util.h"
 
 namespace smartengine

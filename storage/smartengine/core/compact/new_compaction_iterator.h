@@ -15,14 +15,10 @@
  */
 #pragma once
 
-#include <algorithm>
-#include <deque>
-#include <string>
 #include <vector>
 
 #include "compact/compaction.h"
 #include "compact/compaction_stats.h"
-#include "db/pinned_iterators_manager.h"
 
 namespace smartengine {
 namespace storage {

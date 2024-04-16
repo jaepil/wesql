@@ -20,12 +20,13 @@
 #define SMARTENGINE_HTON_H_
 
 #include "handler.h"
-#include "ha_smartengine.h"
-#include "mysql/psi/mysql_stage.h"
-#include "api/se_api.h"
 #include "dict/se_binlog_manager.h"
+#include "dict/se_cf_manager.h"
 #include "dict/se_ddl_manager.h"
 #include "dict/se_dict_manager.h"
+#include "logger/log_module.h"
+#include "se_cf_options.h"
+#include "se_dict_struct.h"
 #include "util/se_utils.h"
 #include "util/se_threads.h"
 #include "backup/hotbackup.h"
@@ -38,6 +39,11 @@ class THD;
 
 namespace smartengine
 {
+namespace util
+{
+class TransactionDB;
+}
+
 common::DBOptions se_init_se_db_options();
 
 logger::InfoLogLevel get_se_log_level(ulong l);

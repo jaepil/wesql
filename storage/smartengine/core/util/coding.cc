@@ -11,8 +11,6 @@
 
 #include "util/coding.h"
 
-#include <algorithm>
-#include "util/slice.h"
 
 namespace smartengine {
 namespace util {

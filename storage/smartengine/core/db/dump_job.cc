@@ -17,8 +17,6 @@
 #include "db/db_iter.h"
 #include "db/dbformat.h"
 #include "logger/log_module.h"
-#include "storage/multi_version_extent_meta_layer.h"
-#include "storage/storage_logger.h"
 
 namespace smartengine {
 using namespace common;

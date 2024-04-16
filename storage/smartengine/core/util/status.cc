@@ -14,7 +14,6 @@
 
 #include <stdio.h>
 #include <cstring>
-#include "port/port.h"
 
 namespace smartengine {
 namespace common {

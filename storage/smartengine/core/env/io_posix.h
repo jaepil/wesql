@@ -10,9 +10,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 
-#include <errno.h>
 #include <unistd.h>
-#include <atomic>
 #include <string>
 #include <sys/stat.h>
 #include <sys/statfs.h>

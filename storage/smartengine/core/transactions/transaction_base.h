@@ -11,7 +11,6 @@
 
 #include "db/db.h"
 #include "transactions/transaction.h"
-#include "transactions/transaction_db.h"
 #include "transactions/transaction_util.h"
 #include "write_batch/write_batch_with_index.h"
 
@@ -78,8 +77,8 @@ class TransactionBaseImpl : public util::Transaction {
                              keys, values);
   }
 
-  Iterator* GetIterator(const common::ReadOptions& read_options) override;
-  Iterator* GetIterator(const common::ReadOptions& read_options,
+  db::Iterator* GetIterator(const common::ReadOptions& read_options) override;
+  db::Iterator* GetIterator(const common::ReadOptions& read_options,
                         db::ColumnFamilyHandle* column_family) override;
 
   common::Status Put(db::ColumnFamilyHandle* column_family,

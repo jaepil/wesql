@@ -7,7 +7,6 @@
 
 #include "env/env.h"
 #include "monitoring/perf_level_imp.h"
-#include "util/stop_watch.h"
 
 namespace smartengine {
 namespace monitor {

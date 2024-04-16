@@ -19,8 +19,6 @@
 #include "se_field_pack.h"
 #include "field.h"
 #include "field_types.h"
-#include "myisampack.h"
-#include "my_bit.h"
 #include "sql_class.h"
 #include "se_charset_info.h"
 #include "se_field_make_unpack_info.h"

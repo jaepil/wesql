@@ -12,10 +12,9 @@
 #pragma once
 #include <stdio.h>
 #include <string>
-#include <utility>
 #include "db/db.h"
 #include "port/likely.h"
-#include "storage/io_extent.h"
+#include "storage/storage_common.h"
 #include "table/table.h"
 #include "table/table_properties.h"
 #include "util/coding.h"

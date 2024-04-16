@@ -8,9 +8,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 #pragma once
 
-#include <algorithm>
-#include <deque>
-#include <string>
 #include <vector>
 
 #include "compact/compaction_stats.h"

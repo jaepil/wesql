@@ -15,6 +15,11 @@
  */
 #include "memtable/art.h"
 
+#include <functional>
+
+#include "logger/log_module.h"
+#include "util/ebr.h"
+
 namespace smartengine {
 
 using namespace common;

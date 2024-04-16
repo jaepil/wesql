@@ -16,8 +16,6 @@ std::vector<std::string> rocksdb_kill_prefix_blacklist;
 
 #ifndef NDEBUG
 
-using namespace smartengine::port;
-
 namespace smartengine {
 namespace util {
 

@@ -17,23 +17,10 @@
 #define SMARTENGINE_DB_PIPLINE_QUEUE_MANAGER_H
 
 #include <atomic>
-#include <deque>
-#include <functional>
-#include <limits>
-#include <list>
-#include <map>
 #include <queue>
-#include <set>
-#include <string>
-#include <utility>
 #include <vector>
 
 #include "db/batch_group.h"
-#include "db/db.h"
-#include "db/log_writer.h"
-#include "env/env.h"
-#include "monitoring/instrumented_mutex.h"
-#include "port/port.h"
 #include "util/lock_free_fixed_queue.h"
 
 namespace smartengine {

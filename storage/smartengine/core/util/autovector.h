@@ -10,7 +10,6 @@
 #include <cassert>
 #include <initializer_list>
 #include <iterator>
-#include <stdexcept>
 #include <vector>
 #include "memory/stl_adapt_allocator.h"
 

@@ -17,12 +17,12 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "se_index_merge.h"
+#include "se_utils.h"
 #include "sql_class.h"
 #include "mysql/plugin.h"
 #include "mysql/psi/mysql_file.h"
 #include "sql_thd_internal_api.h"
 #include "logger/log_module.h"
-#include "util/arena.h"
 
 namespace smartengine
 {

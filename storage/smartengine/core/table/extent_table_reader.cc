@@ -14,21 +14,17 @@
 #include <limits>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "cache/sharded_cache.h"
 #include "db/dbformat.h"
-#include "db/pinned_iterators_manager.h"
 #include "monitoring/query_perf_context.h"
 #include "options/options.h"
-#include "storage/extent_space_manager.h"
 #include "table/block.h"
 #include "table/extent_table_factory.h"
 #include "table/filter_block.h"
 #include "table/filter_policy.h"
 #include "table/filter_manager.h"
 #include "table/format.h"
-#include "table/full_filter_block.h"
 #include "table/get_context.h"
 #include "table/internal_iterator.h"
 #include "table/meta_blocks.h"
@@ -36,7 +32,6 @@
 #include "table/sstable_scan_struct.h"
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
-#include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
 

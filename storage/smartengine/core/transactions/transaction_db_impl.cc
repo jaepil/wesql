@@ -8,7 +8,6 @@
 #include "transactions/transaction_db_impl.h"
 
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 #include "db/db_impl.h"

@@ -20,6 +20,7 @@
 #include "dict/se_dd_operations.h"
 #include "dict/se_ddl_manager.h"
 #include "dict/se_index.h"
+#include "logger/log_module.h"
 
 namespace smartengine
 {

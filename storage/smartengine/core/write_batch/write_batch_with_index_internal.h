@@ -10,6 +10,7 @@
 
 #include <limits>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "options/db_options.h"
 #include "port/port.h"

@@ -19,6 +19,7 @@
 #include "db/db_test_util.h"
 #include "env/mock_env.h"
 #include "port/port.h"
+#include "port/stack_trace.h"
 #include "storage/data_file.h"
 #include "table/extent_table_builder.h"
 #include "transactions/transaction.h"

@@ -4,6 +4,7 @@
 #define SMARTENGINE_STORAGE_COMPACTION_JOB_H_
 
 #include "split_compaction.h"
+#include <deque>
 
 namespace smartengine {
 
@@ -21,8 +22,9 @@ class InstrumentedMutex;
 }
 
 namespace storage {
-
 class ExtentLayer;
+class MetaDataIterator;
+class MetaDataSingleIterator;
 
 // mock for compaction
 class ExtentLayerIterator;
@@ -138,12 +140,12 @@ class CompactionJob {
                                          int64_t &iter_size);
   int build_major_l1_iterator(const int64_t level1_pick_start_pos,
                               storage::Range &wide_range,
-                              MetaDataIterator *&range_iter,
+                              storage::MetaDataIterator *&range_iter,
                               size_t delete_percent);
   int build_major_l2_iterator(const storage::Range &wide_range,
-                              MetaDataIterator *&range_iter);
+                              storage::MetaDataIterator *&range_iter);
   int build_self_iterator(const int64_t level,
-                          MetaDataSingleIterator *&range_iter,
+                          storage::MetaDataSingleIterator *&range_iter,
                           size_t delete_percent = 0);
   //int get_all_l0_range(util::Arena &arena, CompactWay *compact_way,
   //                     int64_t &way_size, storage::Range &wide_range);

@@ -12,8 +12,7 @@
 #pragma once
 #include <atomic>
 #include <memory>
-#include <utility>
-#include "port/likely.h"
+#include <mutex>
 #include "memory/allocator.h"
 #include "memory/mod_info.h"
 #include "util/arena.h"

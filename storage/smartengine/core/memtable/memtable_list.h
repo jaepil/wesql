@@ -7,19 +7,15 @@
 //
 #pragma once
 
-#include <deque>
 #include <list>
-#include <set>
 #include <string>
 #include <vector>
 
 #include "db/db.h"
 #include "db/dbformat.h"
 #include "memtable/memtable.h"
-#include "monitoring/instrumented_mutex.h"
 #include "options/options.h"
 #include "util/autovector.h"
-#include "util/filename.h"
 
 namespace smartengine {
 namespace monitor {

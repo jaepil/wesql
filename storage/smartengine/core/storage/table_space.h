@@ -19,7 +19,7 @@
 
 #include <mutex>
 #include <set>
-#include "extent_space.h"
+#include "storage/extent_space.h"
 
 namespace smartengine
 {

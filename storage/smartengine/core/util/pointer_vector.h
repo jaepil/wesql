@@ -20,7 +20,6 @@
 #include "memory/mod_info.h"
 #include "util/to_string.h"
 
-
 namespace smartengine
 {
 namespace util

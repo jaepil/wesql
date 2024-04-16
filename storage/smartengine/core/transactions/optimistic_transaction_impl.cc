@@ -7,9 +7,7 @@
 
 #include "transactions/optimistic_transaction_impl.h"
 
-#include <algorithm>
 #include <string>
-#include <vector>
 
 #include "db/column_family.h"
 #include "db/db_impl.h"

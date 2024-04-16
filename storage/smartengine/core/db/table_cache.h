@@ -14,12 +14,10 @@
 #pragma once
 #include <stdint.h>
 #include <string>
-#include <vector>
 
 #include "db/dbformat.h"
 #include "env/env.h"
 #include "options/cf_options.h"
-#include "port/port.h"
 #include "table/table_reader.h"
 
 namespace smartengine {

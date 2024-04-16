@@ -10,15 +10,10 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "env/env.h"
+#include "options/options.h"
 
 #include <thread>
 #include <execinfo.h>
-#include "logger/log_module.h"
-#include "options/db_options.h"
-#include "port/port.h"
-#include "port/sys_time.h"
-#include "util/arena.h"
-#include "util/autovector.h"
 
 namespace smartengine {
 using namespace common;

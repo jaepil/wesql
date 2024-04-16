@@ -7,7 +7,6 @@
 #include <memory>
 #include "env/env.h"
 #include "port/likely.h"
-#include "util/mutexlock.h"
 
 namespace smartengine {
 using namespace common;

@@ -10,6 +10,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/db_test_util.h"
+#include "port/stack_trace.h"
 #include "util/sync_point.h"
 
 using namespace smartengine;

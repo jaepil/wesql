@@ -14,10 +14,7 @@
 #include <algorithm>
 #include <mutex>
 
-#include "monitoring/histogram.h"
 #include "monitoring/iostats_context_imp.h"
-#include "port/port.h"
-#include "util/random.h"
 #include "util/rate_limiter.h"
 #include "util/sync_point.h"
 #include "util/aio_wrapper.h"

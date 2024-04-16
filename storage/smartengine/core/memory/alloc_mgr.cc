@@ -28,7 +28,6 @@
 #include <assert.h>
 #include <stdio.h>
 #include <algorithm>
-#include <iostream>
 #include "logger/log_module.h"
 #include "util/misc_utility.h"
 

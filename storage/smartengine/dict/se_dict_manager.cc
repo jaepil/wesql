@@ -18,6 +18,7 @@
 #include "se_dict_manager.h"
 #include "dict/se_cf_manager.h"
 #include "dict/se_dict_util.h"
+#include "logger/log_module.h"
 
 namespace smartengine {
 

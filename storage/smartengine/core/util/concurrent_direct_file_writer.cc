@@ -16,21 +16,14 @@
 
 
 #include "util/concurrent_direct_file_writer.h"
-#include <algorithm>
-#include <mutex>
-#include "db/log_writer.h"
 #include "logger/log_module.h"
-#include "monitoring/histogram.h"
 #include "monitoring/query_perf_context.h"
-#include "port/port.h"
-#include "util/random.h"
-#include "util/rate_limiter.h"
+#include "util/mutexlock.h"
 #include "util/sync_point.h"
 
 namespace smartengine {
 using namespace monitor;
 using namespace port;
-using namespace db;
 using namespace common;
 
 namespace common {

@@ -17,10 +17,8 @@
 #ifndef _IS_STL_ADAPT_ALLOCATOR_H_
 #define _IS_STL_ADAPT_ALLOCATOR_H_ 1
 
-#include <stdint.h>
 #include <memory>
 #include <bits/move.h>
-#include "base_malloc.h"
 #include "page_arena.h"
 
 #define SE_USE_NOEXCEPT 

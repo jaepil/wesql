@@ -15,7 +15,6 @@
 
 #include "cache/lru_cache.h"
 
-#include <algorithm>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

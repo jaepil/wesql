@@ -31,8 +31,6 @@
 
 #include <stdint.h>
 #include <atomic>
-#include <stack>
-#include <string>
 #include "memory/stl_adapt_allocator.h"
 #include "memory/modtype_define.h"
 #include "util/status.h"

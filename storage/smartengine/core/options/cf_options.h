@@ -9,12 +9,10 @@
 
 #pragma once
 
-#include <string>
 #include <vector>
 
 #include "db/dbformat.h"
 #include "options/options.h"
-#include "util/compression.h"
 
 namespace smartengine {
 

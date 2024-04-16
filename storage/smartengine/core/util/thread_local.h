@@ -12,14 +12,11 @@
 
 #pragma once
 
-#include <atomic>
+#include <cstdint>
 #include <functional>
-#include <memory>
-#include <unordered_map>
+#include <pthread.h>
 #include <vector>
 
-#include "port/port.h"
-#include "util/autovector.h"
 
 #ifndef ROCKSDB_SUPPORT_THREAD_LOCAL
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(IOS_CROSS_COMPILE)

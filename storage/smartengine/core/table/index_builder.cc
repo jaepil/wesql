@@ -12,9 +12,6 @@
 #include "table/index_builder.h"
 
 #include <assert.h>
-#include <inttypes.h>
-#include <list>
-#include "table/format.h"
 
 // Without anonymous namespace here, we fail the warning -Wmissing-prototypes
 namespace smartengine {

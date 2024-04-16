@@ -10,9 +10,6 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/db_iter.h"
-#include <deque>
-#include <limits>
-#include <stdexcept>
 #include <string>
 
 #include "table/format.h"
@@ -21,11 +18,9 @@
 #include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
 #include "options/options.h"
-#include "port/port.h"
 #include "table/internal_iterator.h"
 #include "util/arena.h"
 #include "util/filename.h"
-#include "util/mutexlock.h"
 #include "util/string_util.h"
 
 namespace smartengine {

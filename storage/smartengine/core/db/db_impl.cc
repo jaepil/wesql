@@ -20,7 +20,6 @@
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
-#include <inttypes.h>
 #include <stdint.h>
 #ifdef OS_SOLARIS
 #include <alloca.h>
@@ -32,24 +31,19 @@
 #include <algorithm>
 #include <climits>
 #include <cstdio>
-#include <map>
-#include <set>
-#include <stdexcept>
+#include <sstream>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "cache/row_cache.h"
-#include "cache/sharded_cache.h"
 #include "compact/compaction_job.h"
 #include "db/db_info_dumper.h"
 #include "db/db_iter.h"
 #include "db/dbformat.h"
 #include "db/flush_job.h"
 #include "db/job_context.h"
-#include "db/log_reader.h"
 #include "db/log_writer.h"
 #include "db/table_cache.h"
 #include "db/version_set.h"
@@ -61,16 +55,12 @@
 #include "options/cf_options.h"
 #include "options/options_helper.h"
 #include "port/likely.h"
-#include "port/port.h"
 #include "storage/extent_space_manager.h"
-#include "storage/io_extent.h"
-#include "table/block.h"
 #include "table/extent_table_factory.h"
 #include "table/filter_manager.h"
 #include "table/merging_iterator.h"
 #include "table/table_builder.h"
 #include "table/two_level_iterator.h"
-#include "transactions/transaction_log_impl.h"
 #include "memory/alloc_mgr.h"
 #include "util/autovector.h"
 #include "util/build_version.h"
@@ -81,10 +71,6 @@
 #include "util/file_reader_writer.h"
 #include "util/file_util.h"
 #include "util/filename.h"
-#include "util/memory_stat.h"
-#include "util/memory_stat.h"
-#include "util/mutexlock.h"
-#include "util/stop_watch.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
 #include "storage/extent_meta_manager.h"

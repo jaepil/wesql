@@ -14,11 +14,9 @@
 #pragma once
 #include <stdint.h>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
-#include "options/db_options.h"
-#include "port/port.h"
+#include "options/options.h"
 #include "transactions/transaction_log.h"
 #include "util/concurrent_direct_file_writer.h"
 

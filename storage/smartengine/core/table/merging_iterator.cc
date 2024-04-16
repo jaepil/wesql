@@ -11,10 +11,7 @@
 
 #include "table/merging_iterator.h"
 
-#include <string>
-#include <vector>
 #include "db/pinned_iterators_manager.h"
-#include "monitoring/query_perf_context.h"
 #include "options/options.h"
 #include "table/internal_iterator.h"
 #include "table/iter_heap.h"
@@ -22,7 +19,6 @@
 #include "util/arena.h"
 #include "util/autovector.h"
 #include "util/heap.h"
-#include "util/stop_watch.h"
 #include "util/sync_point.h"
 
 namespace smartengine {

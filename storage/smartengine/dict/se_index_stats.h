@@ -17,13 +17,8 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #pragma once
 
-#include <map>
-#include <memory>
 #include <string>
-#include <unordered_set>
 #include <vector>
-#include "db/db.h"
-#include "table/table_properties.h"
 #include "util/se_utils.h"
 
 namespace smartengine

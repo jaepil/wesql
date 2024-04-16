@@ -17,7 +17,6 @@
 #include "storage/multi_version_extent_meta_layer.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
-#include "util/arena.h"
 
 namespace smartengine
 {

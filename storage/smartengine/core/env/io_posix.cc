@@ -13,7 +13,6 @@
 #include "env/io_posix.h"
 #include <errno.h>
 #include <fcntl.h>
-#include <algorithm>
 #if defined(OS_LINUX)
 #include <linux/fs.h>
 #endif
@@ -30,7 +29,6 @@
 #include <sys/sysmacros.h>
 #endif
 #include "monitoring/iostats_context_imp.h"
-#include "port/port.h"
 #include "util/aio_wrapper.h"
 #include "util/coding.h"
 #include "util/string_util.h"

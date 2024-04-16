@@ -15,7 +15,6 @@
  */
 #include "compact/mt_ext_compaction.h"
 #include "compact/new_compaction_iterator.h"
-#include "compact/task_type.h"
 #include "table/extent_table_builder.h"
 
 namespace smartengine {

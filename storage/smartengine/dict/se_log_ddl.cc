@@ -24,6 +24,7 @@
 #include "util/se_buff.h"
 #include "util/se_utils.h"
 #include "util/se_threads.h"
+#include "transactions/transaction_db_impl.h"
 
 
 namespace smartengine {

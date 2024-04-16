@@ -17,7 +17,6 @@
 
 #include <list>
 #include "cache/sharded_cache.h"
-#include "cache/lru_cache.h"
 #include "db/column_family.h"
 #include "db/table_cache.h"
 #include "monitoring/query_perf_context.h"

@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <algorithm>
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -22,12 +22,9 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <algorithm>
-#include <string>
 #include <vector>
 #include <assert.h>
 #include "logger.h"
-#include "util/misc_utility.h"
 
 #define GETTID() static_cast<int64_t>(syscall(__NR_gettid))
 namespace smartengine
@@ -366,7 +363,7 @@ void Logger::clear_log_file() {
   // only keep the latest reserved_file_num_ th log file
   if (reserved_file_num_!=-1 && log_file_num>reserved_file_num_) {
     std::vector<log_file_entry>::iterator it;
-    sort(vec_log_entry.begin(), vec_log_entry.end(), log_file_time_comp_by_name);
+    std::sort(vec_log_entry.begin(), vec_log_entry.end(), log_file_time_comp_by_name);
     for (it = vec_log_entry.begin()+reserved_file_num_; it!=vec_log_entry.end();it++) {
       ret_remove = remove(it->log_file_path.c_str());
       if (ret_remove) {
