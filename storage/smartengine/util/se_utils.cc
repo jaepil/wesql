@@ -635,7 +635,10 @@ void dbug_append_garbage_at_end(std::string &on_disk_rec)
   on_disk_rec.append("abc");
 }
 
-void dbug_truncate_record(std::string &on_disk_rec) { on_disk_rec.resize(0); }
+// Truncating the length of the record to 0 may result in undefined behavior in
+// 'std::string' operations such as accessing the front, potentially causing a
+// crash.
+void dbug_truncate_record(std::string &on_disk_rec) { on_disk_rec.resize(1); }
 
 void dbug_modify_rec_varchar12(std::string &on_disk_rec)
 {
