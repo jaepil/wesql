@@ -30,15 +30,15 @@ on:
 
 env:
   GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-  KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
-  SSH_HOST: ${{ secrets.SSH_HOST }}
+  KNOWN_HOSTS: ${{ secrets.GCP_RPM_REPO_KNOWN_HOSTS }}
+  SSH_HOST: ${{ secrets.GCP_RPM_REPO_HOST }}
   SSH_USER: ${{ secrets.SSH_USER }}
   SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-  DOCKER_USER: ${{ secrets.JIHULAB_DOCKER_REGISTRY_USER }}
-  DOCKER_PASSWORD: ${{ secrets.JIHULAB_DOCKER_REGISTRY_PASSWORD }}
-  DOCKER_URL: "registry.jihulab.com"
-  DOCKER_IMG: "registry.jihulab.com/infracreate/mysql-server/mysql_dev/mysql_base_arm"
-  IMG_VERSION: "0.2-SNAPSHOT"
+  DOCKER_REGISTRY_USER: ${{ secrets.DOCKER_REGISTRY_USER}}
+  DOCKER_REGISTRY_PASSWORD: ${{ secrets.DOCKER_REGISTRY_PASSWORD}}
+  DOCKER_REGISTRY_URL: "docker.io"
+  DOCKER_IMG: "apecloud/mysql_base"
+  IMG_VERSION: "0.3-SNAPSHOT"
   SERVER_NAME: "wesql_rpm_build"
   BUILD_PATH: "/home/mysql/code/mysql-server"
   BOOST_NAME: "boost_1_77_0.tar.bz2"
@@ -47,24 +47,26 @@ env:
 jobs:
   enable-runner:
     uses: ./.github/workflows/enable-gke-runner.yml
+    with:
+      GITHUB_REPO: "wesql/wesql-server"
     secrets: inherit
 
   release-rpm:
     name: release x86_64 rpm
     needs: [ enable-runner ]
-    runs-on: [self-hosted, gke-amd-runner ]
+    runs-on: [self-hosted, gke-oracle8-amd-runner ]
     steps:
       - uses: actions/checkout@v3
       - name: rpm build
         run: |
           sudo cp /home/mysql/${{ env.BOOST_NAME }} ${{ github.workspace }}/..
-          
+
           sudo git config --global --add safe.directory ${{ github.workspace }}
 
           sudo rm -rf ${{ github.workspace }}/../rpm/*
 
           cd packaging/build-wesql
-          
+
           sudo ./rpm_build.sh --builddir=${{ github.workspace }}/.. \
             --source_code=wesql-server \
             --build_rpm=1 --prerelease=${{ github.event.inputs.prerelease }} \
@@ -77,19 +79,16 @@ jobs:
       - name: upload rpm
         run: |
           mkdir -pv /home/mysql/.ssh/
-          
+
           touch /home/mysql/.ssh/known_hosts
-          
+
           echo "${{ env.KNOWN_HOSTS }}" >> /home/mysql/.ssh/known_hosts
 
           sshpass -p ${{ env.SSH_PASSWORD }} scp ${{ github.workspace }}/../rpm/* \
-            ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/var/www/html/centos/7/os/x86_64/
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/var/www/html/release/8/rpms/x86_64/
 
           sshpass -p ${{ env.SSH_PASSWORD }} ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-            createrepo --update /var/www/html/centos/7/os/x86_64/
-
-          sshpass -p ${{ env.SSH_PASSWORD }} ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-            sudo systemctl restart httpd.service
+            createrepo --update /var/www/html/release/8/rpms/x86_64/
 
 
   release-arm-rpm:
@@ -101,23 +100,22 @@ jobs:
       - name: rpm build
         run: |
           cp /home/mysql/${{ env.BOOST_NAME }} ${{ github.workspace }}/extra
-          
+
           sudo git config --global --add safe.directory ${{ github.workspace }}
-          
-          echo ${{ env.DOCKER_PASSWORD }} | sudo docker login \
-            --username ${{ env.DOCKER_USER }} \
-            ${{ env.DOCKER_URL }} \
-            --password-stdin
-          
+
+          sudo docker login --username ${{ env.DOCKER_REGISTRY_USER }} \
+            --password ${{ env.DOCKER_REGISTRY_PASSWORD }} \
+            ${{ env.DOCKER_REGISTRY_URL }}
+
           sudo docker pull ${{ env.DOCKER_IMG }}:${{ env.IMG_VERSION }}
-          
+
           DOCKER_CONTAINER_ID=`sudo docker ps -a|grep ${{ env.SERVER_NAME }}|awk '{print $1}'`
-          
+
           if [[ -n $DOCKER_CONTAINER_ID ]]; then
             sudo docker stop  $DOCKER_CONTAINER_ID
             sudo docker rm $DOCKER_CONTAINER_ID
           fi
-          
+
           sudo docker run -itd -v ${{ github.workspace }}:${{ env.BUILD_PATH }} \
             --name ${{ env.SERVER_NAME }} \
             ${{ env.DOCKER_IMG }}:${{ env.IMG_VERSION }}
@@ -138,19 +136,16 @@ jobs:
       - name: upload rpm
         run: |
           mkdir -pv /home/mysql/.ssh/
-          
+
           touch /home/mysql/.ssh/known_hosts
-          
+
           echo "${{ env.KNOWN_HOSTS }}" >> /home/mysql/.ssh/known_hosts
 
           sshpass -p ${{ env.SSH_PASSWORD }} scp ${{ github.workspace }}/rpm/* \
-            ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/var/www/html/centos/7/os/aarch64/
+            ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/var/www/html/release/8/rpms/aarch64/
 
           sshpass -p ${{ env.SSH_PASSWORD }} ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-            createrepo --update /var/www/html/centos/7/os/aarch64/
-
-          sshpass -p ${{ env.SSH_PASSWORD }} ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
-            sudo systemctl restart httpd.service 
+            createrepo --update /var/www/html/release/8/rpms/aarch64/
 
       - name: rm rpm
         if: ${{ always() }}
@@ -162,5 +157,6 @@ jobs:
     if: ${{ always() }}
     uses: ./.github/workflows/enable-gke-runner.yml
     with:
+      GITHUB_REPO: "wesql/wesql-server"
       ENABLE: "disable"
     secrets: inherit
