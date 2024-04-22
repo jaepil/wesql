@@ -36,28 +36,24 @@ namespace table {
 struct TableReaderOptions {
   // @param skip_filters Disables loading/accessing the filter block
   TableReaderOptions(const common::ImmutableCFOptions& _ioptions,
-                     const util::EnvOptions& _env_options,
                      const db::InternalKeyComparator& _internal_comparator,
-                     const db::FileDescriptor* fd = nullptr,
-                     monitor::HistogramImpl* file_read_hist = nullptr,
-                     bool _skip_filters = false, int _level = -1)
+                     const storage::ExtentId &extent_id,
+                     bool _skip_filters,
+                     int _level)
       : ioptions(_ioptions),
-        env_options(_env_options),
         internal_comparator(_internal_comparator),
         skip_filters(_skip_filters),
         level(_level),
-        fd_(fd),
-        file_read_hist_(file_read_hist) {}
+        extent_id_(extent_id)
+  {}
 
   const common::ImmutableCFOptions& ioptions;
-  const util::EnvOptions& env_options;
   const db::InternalKeyComparator& internal_comparator;
   // This is only used for BlockBasedTable (reader)
   bool skip_filters;
   // what level this table/file is on, -1 for "not set, don't know"
   int level;
-  const db::FileDescriptor* fd_;
-  monitor::HistogramImpl* file_read_hist_;
+  const storage::ExtentId extent_id_;
 };
 
 struct TableBuilderOptions {

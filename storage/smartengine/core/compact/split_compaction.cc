@@ -164,7 +164,7 @@ int SplitCompaction::close_split_extent(const int64_t level)
     stats_.record_stats_.merge_output_extents += mini_tables_.metas.size();
     for (FileMetaData &meta : mini_tables_.metas) {
       stats_.record_stats_.merge_output_records += meta.num_entries;
-      stats_.record_stats_.total_output_bytes += meta.fd.file_size;
+      stats_.record_stats_.total_output_bytes += meta.data_size_;
       COMPACTION_LOG(INFO, "[SPLIT]GENERATE new extent", K(meta));
     }
     assert(1 == level);

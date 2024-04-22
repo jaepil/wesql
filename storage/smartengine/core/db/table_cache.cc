@@ -16,15 +16,13 @@
 #include "storage/extent_space_manager.h"
 #include "table/get_context.h"
 #include "table/internal_iterator.h"
-#include "table/iterator_wrapper.h"
 #include "table/table_builder.h"
-#include "table/table_reader.h"
 #include "util/file_reader_writer.h"
-#include "util/sync_point.h"
 
 namespace smartengine {
 using namespace cache;
 using namespace common;
+using namespace memory;
 using namespace monitor;
 using namespace storage;
 using namespace table;
@@ -53,282 +51,201 @@ static Slice GetSliceForFileNumber(const uint64_t* file_number) {
 
 }  // namespace
 
-TableCache::TableCache(const ImmutableCFOptions& ioptions,
-                       const EnvOptions& env_options,
-                       Cache* const cache)
+TableCache::TableCache(const ImmutableCFOptions& ioptions, Cache* const cache)
     : ioptions_(ioptions),
-      env_options_(env_options),
       cache_(cache)
 {
-  //TODO(Zhao Dongsheng): useless code?
-  if (ioptions_.row_cache) {
-    // If the same cache is shared by multiple instances, we need to
-    // disambiguate its entries.
-    // PutVarint64(&row_cache_id_, ioptions_.row_cache->NewId()); // nouse
-  }
+  se_assert(nullptr != cache_);
 }
 
 TableCache::~TableCache() {}
 
-TableReader* TableCache::GetTableReaderFromHandle(Cache::Handle* handle) {
+InternalIterator* TableCache::create_iterator(const ReadOptions& options,
+                                              const InternalKeyComparator& internal_key_comparator,
+                                              int32_t level,
+                                              const ExtentId &extent_id,
+                                              TableReader *&table_reader)
+{
+  int ret = Status::kOk;
+  Cache::Handle* handle = nullptr;
+  InternalIterator* iterator = nullptr;
+
+  if (FAILED(find_table_reader(internal_key_comparator,
+                               extent_id,
+                               options.read_tier == kBlockCacheTier /*no_io=*/,
+                               false /*skip_filters*/,
+                               level,
+                               true /*prefetch_index_and_filter_in_cache*/,
+                               &handle))) {
+    SE_LOG(WARN, "fail to find reader handle", K(ret), K(extent_id));
+  } else if (IS_NULL(table_reader = get_table_reader_from_handle(handle))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the reader must not be nullptr", K(ret));
+  } else if (IS_NULL(iterator = table_reader->NewIterator(options, nullptr /*arena*/, false /*skip_filters*/, 0 /*scan_add_blocks_limit*/))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "fail to create interator", K(ret));
+  } else {
+    if (IS_NOTNULL(handle)) {
+      iterator->RegisterCleanup(&UnrefEntry, cache_, handle);
+      handle = nullptr;
+    }
+  }
+
+
+  // resource clean
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(handle)) {
+      release_handle(handle);
+      handle = nullptr;
+    }
+
+    if (IS_NOTNULL(iterator)) {
+      MOD_DELETE_OBJECT(InternalIterator, iterator);
+      iterator = nullptr;
+    }
+  } else {
+    se_assert(IS_NULL(handle) && IS_NOTNULL(iterator));
+  }
+
+  return iterator;
+}
+
+int TableCache::get(const ReadOptions& options,
+                    const InternalKeyComparator& internal_key_comparator,
+                    const int32_t level,
+                    const ExtentId &extent_id,
+                    const Slice& key,
+                    GetContext* get_context)
+{
+  int ret = Status::kOk;
+  TableReader* reader = nullptr;
+  Cache::Handle* handle = nullptr;
+
+  if (FAILED(find_table_reader(internal_key_comparator,
+                               extent_id,
+                               options.read_tier == common::kBlockCacheTier /*no_io=*/,
+                               false /*skip_filters*/,
+                               level,
+                               true /*prefetch_index_and_filter_in_cache*/,
+                               &handle))) {
+    SE_LOG(WARN, "fail to find reader", K(ret), K(extent_id));
+  } else if (IS_NULL(reader = get_table_reader_from_handle(handle))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the reader must not be nullptr", K(ret), K(extent_id));
+  } else if (FAILED(reader->Get(options, key, get_context, false /*skip_filters*/).code())) {
+    SE_LOG(WARN, "fail to get key", K(ret), K(extent_id));
+  } else {
+    STRESS_CHECK_APPEND(GET_FROM_EXTENT, Status::kOk);
+  }
+
+  if (IS_NOTNULL(handle)) {
+    release_handle(handle);
+    handle = nullptr;
+  }
+
+  return ret;
+}
+
+int TableCache::find_table_reader(const InternalKeyComparator &internal_key_comparator,
+                                  const ExtentId &extent_id,
+                                  const bool no_io,
+                                  const bool skip_filters,
+                                  const int32_t level,
+                                  const bool prefetch_index_and_filter_in_cache,
+                                  Cache::Handle **handle)
+{
+  int ret = Status::kOk;
+  TableReader *table_reader = nullptr;
+  uint64_t id = extent_id.id();
+  Slice key = GetSliceForFileNumber(&id); 
+
+  if (IS_NULL(*handle = cache_->Lookup(key))) {
+    // cache miss, create it
+    if (no_io) {
+      ret = Status::kIncomplete;
+      SE_LOG(WARN, "can't find table reader from cache", K(extent_id));
+    } else if (FAILED(create_table_reader(internal_key_comparator,
+                                          extent_id,
+                                          skip_filters,
+                                          level,
+                                          prefetch_index_and_filter_in_cache,
+                                          table_reader))) {
+      SE_LOG(WARN, "fail to get table reader", K(ret));
+    } else if (FAILED(cache_->Insert(key,
+                                     table_reader,
+                                     table_reader->get_usable_size(),
+                                     &DeleteEntry<TableReader>,
+                                     handle).code())) {
+    
+    } else{
+      table_reader->set_mod_id(ModId::kTableCache);
+    }
+  }
+
+  return ret;
+}
+
+TableReader* TableCache::get_table_reader_from_handle(Cache::Handle* handle)
+{
   return reinterpret_cast<TableReader*>(cache_->Value(handle));
 }
 
-void TableCache::ReleaseHandle(Cache::Handle* handle) {
+void TableCache::release_handle(Cache::Handle* handle)
+{
   cache_->Release(handle);
 }
 
-Status TableCache::GetTableReader(const EnvOptions& env_options,
-                                  const InternalKeyComparator& internal_comparator,
-                                  const FileDescriptor& fd,
-                                  bool sequential_mode,
-                                  bool record_read_stats,
-                                  HistogramImpl* file_read_hist,
-                                  TableReader *&table_reader,
-                                  bool skip_filters,
-                                  int level,
-                                  bool prefetch_index_and_filter_in_cache) {
-  storage::ExtentId eid(fd.GetNumber());
-  storage::RandomAccessExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, storage::RandomAccessExtent);
-  if (!extent) {
-    __SE_LOG(INFO, "No memory for extent in %s\n",
-                   __func__);
-    return Status::MemoryLimit();
-  }
-  Status s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, *extent);
-  if (s.ok()) {
-    RandomAccessFileReader *file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader,
-        extent, ioptions_.env, record_read_stats ? ioptions_.statistics : nullptr, SST_READ_MICROS,
-        file_read_hist, &ioptions_, env_options);
-    s = ioptions_.table_factory->NewTableReader(
-        TableReaderOptions(ioptions_, env_options, internal_comparator, &fd,
-                           file_read_hist, skip_filters, level),
-        file_reader, fd.GetFileSize(), table_reader,
-        prefetch_index_and_filter_in_cache);
-    QUERY_COUNT(CountPoint::NUMBER_FILE_OPENS);
-    TEST_SYNC_POINT("TableCache::GetTableReader:0");
-  }
-  return s;
-}
-
-void TableCache::EraseHandle(const FileDescriptor& fd, Cache::Handle* handle) {
-  ReleaseHandle(handle);
-  uint64_t number = fd.GetNumber();
-  Slice key = GetSliceForFileNumber(&number);
-  cache_->Erase(key);
-}
-
-Status TableCache::FindTable(const EnvOptions& env_options,
-                             const InternalKeyComparator& internal_comparator,
-                             const FileDescriptor& fd, Cache::Handle** handle,
-                             const bool no_io, bool record_read_stats,
-                             HistogramImpl* file_read_hist, bool skip_filters,
-                             int level,
-                             bool prefetch_index_and_filter_in_cache) {
-  Status s;
-  uint64_t number = fd.GetNumber();
-  Slice key = GetSliceForFileNumber(&number);
-  *handle = cache_->Lookup(key);
-  TEST_SYNC_POINT_CALLBACK("TableCache::FindTable:0",
-                           const_cast<bool*>(&no_io));
-
-  if (*handle == nullptr) {
-    QUERY_TRACE_SCOPE(TracePoint::LOAD_TABLE);
-    if (no_io) {  // Don't do IO and return a not-found status
-      return Status::Incomplete("Table not found in table_cache, no_io is set");
-    }
-    TableReader *table_reader = nullptr;
-    s = GetTableReader(env_options,
-                       internal_comparator,
-                       fd,
-                       false /* sequential mode */,
-                       record_read_stats,
-                       file_read_hist,
-                       table_reader,
-                       skip_filters,
-                       level,
-                       prefetch_index_and_filter_in_cache);
-    if (!s.ok()) {
-      assert(table_reader == nullptr);
-      // We do not cache error results so that if the error is transient,
-      // or somebody repairs the file, we recover automatically.
-    } else {
-      s = cache_->Insert(key, table_reader, table_reader->get_usable_size(),
-                         &DeleteEntry<TableReader>, handle);
-      if (s.ok()) {
-        // Release ownership of table reader.
-        table_reader->set_mod_id(memory::ModId::kTableCache);
-//        table_reader.release();
-      }
-    }
-  }
-  return s;
-}
-
-InternalIterator* TableCache::NewIterator(const ReadOptions& options,
-                                          const EnvOptions& env_options,
-                                          const InternalKeyComparator& icomparator,
-                                          const FileDescriptor& fd,
-                                          TableReader** table_reader_ptr,
-                                          HistogramImpl* file_read_hist,
-                                          bool for_compaction, //TODO(Zhao Dongsheng, useless?)
-                                          memory::SimpleAllocator* arena,
-                                          bool skip_filters,
-                                          int level,
-                                          InternalStats *internal_stats,
-                                          const uint64_t scan_add_blocks_limit)
+void TableCache::evict(Cache* cache, uint64_t file_number)
 {
-  Status s;
-  TableReader* table_reader = nullptr;
-  Cache::Handle* handle = nullptr;
-  if (s.ok()) {
-    if (table_reader_ptr != nullptr) {
-      *table_reader_ptr = nullptr;
-    }
-    if (for_compaction) {
-#ifndef NDEBUG
-      bool use_direct_reads_for_compaction = env_options.use_direct_reads;
-      TEST_SYNC_POINT_CALLBACK("TableCache::NewIterator:for_compaction",
-                               &use_direct_reads_for_compaction);
-#endif  // !NDEBUG
-    }
-
-    table_reader = fd.table_reader;
-    if (table_reader == nullptr) {
-      s = FindTable(env_options, icomparator, fd, &handle,
-                    options.read_tier == kBlockCacheTier /* no_io */,
-                    !for_compaction /* record read_stats */, file_read_hist,
-                    skip_filters, level);
-      if (s.ok()) {
-        table_reader = GetTableReaderFromHandle(handle);
-      }
-    }
-  }
-  InternalIterator* result = nullptr;
-  if (s.ok()) {
-    result = table_reader->NewIterator(options, arena,
-        skip_filters, scan_add_blocks_limit);
-    if (handle != nullptr) {
-      result->RegisterCleanup(&UnrefEntry, cache_, handle);
-      handle = nullptr;  // prevent from releasing below
-    }
-
-    if (for_compaction) {
-      table_reader->SetupForCompaction();
-    }
-    if (table_reader_ptr != nullptr) {
-      *table_reader_ptr = table_reader;
-    }
-  }
-
-  if (handle != nullptr) {
-    ReleaseHandle(handle);
-  }
-  if (!s.ok()) {
-    assert(result == nullptr);
-    result = NewErrorInternalIterator(s, arena);
-  }
-  return result;
-}
-
-Status TableCache::Get(const ReadOptions& options,
-                       const InternalKeyComparator& internal_comparator,
-                       const FileDescriptor& fd,
-                       const Slice& k,
-                       GetContext* get_context,
-                       HistogramImpl* file_read_hist,
-                       bool skip_filters,
-                       int level)
-{
-  Status s;
-  TableReader* t = fd.table_reader;
-  Cache::Handle* handle = nullptr;
-  if (t == nullptr) {
-    s = FindTable(env_options_, internal_comparator, fd, &handle,
-                  options.read_tier == kBlockCacheTier /* no_io */,
-                  true /* record_read_stats */, file_read_hist, skip_filters,
-                  level);
-    if (s.ok()) {
-      t = GetTableReaderFromHandle(handle);
-    }
-  }
-
-  if (s.ok()) {
-    s = t->Get(options, k, get_context, skip_filters);
-    STRESS_CHECK_APPEND(GET_FROM_EXTENT, s.code());
-  } else if (options.read_tier == kBlockCacheTier && s.IsIncomplete()) {
-    // Couldn't find Table in cache but treat as kFound if no_io set
-    get_context->MarkKeyMayExist();
-    s = Status::OK();
-  }
-
-  if (handle != nullptr) {
-    ReleaseHandle(handle);
-  }
-  return s;
-}
-
-Status TableCache::GetTableProperties(
-    const EnvOptions& env_options,
-    const InternalKeyComparator& internal_comparator, const FileDescriptor& fd,
-    std::shared_ptr<const TableProperties>* properties, bool no_io) {
-  Status s;
-  auto table_reader = fd.table_reader;
-  // table already been pre-loaded?
-  if (table_reader) {
-    *properties = table_reader->GetTableProperties();
-
-    return s;
-  }
-
-  Cache::Handle* table_handle = nullptr;
-  s = FindTable(env_options, internal_comparator, fd, &table_handle, no_io);
-  if (!s.ok()) {
-    return s;
-  }
-  assert(table_handle);
-  auto table = GetTableReaderFromHandle(table_handle);
-  *properties = table->GetTableProperties();
-  ReleaseHandle(table_handle);
-  return s;
-}
-
-size_t TableCache::GetMemoryUsageByTableReader(
-    const EnvOptions& env_options,
-    const InternalKeyComparator& internal_comparator,
-    const FileDescriptor& fd) {
-  Status s;
-  auto table_reader = fd.table_reader;
-  // table already been pre-loaded?
-  if (table_reader) {
-    return table_reader->ApproximateMemoryUsage();
-  }
-
-  Cache::Handle* table_handle = nullptr;
-  s = FindTable(env_options, internal_comparator, fd, &table_handle, true);
-  if (!s.ok()) {
-    return 0;
-  }
-  assert(table_handle);
-  auto table = GetTableReaderFromHandle(table_handle);
-  auto ret = table->ApproximateMemoryUsage();
-  ReleaseHandle(table_handle);
-  return ret;
-}
-uint64_t TableCache::get_approximate_memory_usage_by_id(Cache* cache,
-                                                        uint64_t file_number) {
-  Slice key = GetSliceForFileNumber(&file_number);
-  Cache::Handle* handle = cache->Lookup(key);
-  if (nullptr == handle) {
-    return 0;
-  }
-  auto table = reinterpret_cast<TableReader*>(cache->Value(handle));
-  auto ret = sizeof(TableReader) + table->ApproximateMemoryUsage();
-  cache->Release(handle);
-  return ret;
-}
-void TableCache::Evict(Cache* cache, uint64_t file_number) {
   cache->Erase(GetSliceForFileNumber(&file_number));
 }
+
+int TableCache::create_table_reader(const InternalKeyComparator &internal_key_comparator,
+                                    const ExtentId &extent_id,
+                                    bool skip_filters,
+                                    int level,
+                                    bool prefetch_index_and_filter_in_cache,
+                                    TableReader *&table_reader)
+{
+  int ret = Status::kOk;
+  RandomAccessExtent *extent = nullptr;
+  RandomAccessFileReader *file_reader = nullptr;
+  TableReaderOptions reader_options(ioptions_, internal_key_comparator,
+      extent_id, skip_filters, level);
+
+  if (IS_NULL(extent = MOD_NEW_OBJECT(ModId::kTableCache, RandomAccessExtent))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for RandomAccessExtent", K(ret));
+  } else if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(extent_id, *extent))) {
+    SE_LOG(WARN, "fail to get RandomAccessExtent", K(ret), K(extent_id));
+  } else if (IS_NULL(file_reader = MOD_NEW_OBJECT(ModId::kTableCache,
+                                                  RandomAccessFileReader,
+                                                  extent,
+                                                  false /*use_allocator*/))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for RandomAccessFileReader", K(ret));
+  } else if (FAILED(ioptions_.table_factory->NewTableReader(reader_options,
+                                                            file_reader,
+                                                            MAX_EXTENT_SIZE,
+                                                            table_reader,
+                                                            prefetch_index_and_filter_in_cache).code())) {
+    SE_LOG(WARN, "failk to create table reader", K(ret));
+  } else {
+    QUERY_COUNT(CountPoint::NUMBER_FILE_OPENS);
+  }
+
+  // resource clean
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(extent) && IS_NULL(file_reader)) {
+      MOD_DELETE_OBJECT(RandomAccessExtent, extent);
+    }
+    if (IS_NOTNULL(file_reader)) {
+      MOD_DELETE_OBJECT(RandomAccessFileReader, file_reader);
+    }
+  }
+
+  return ret;
+}
+
 }  // namespace db
 }  // namespace smartengine

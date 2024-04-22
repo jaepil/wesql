@@ -279,7 +279,6 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
   } else if (IS_NULL(table_cache = MOD_NEW_OBJECT(memory::ModId::kSubTable,
                                                   TableCache,
                                                   ioptions_,
-                                                  global_ctx->env_options_,
                                                   global_ctx->cache_))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for table_cache", K(ret));
@@ -654,12 +653,12 @@ int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_o
     std::function<int(const ExtentMeta *extent_meta, int32_t level, bool &found)>
       save_value = [&](const ExtentMeta *extent_meta, int32_t level, bool &found) {
         found = false;
-        FileDescriptor fd(extent_meta->extent_id_.id(), GetID(), MAX_EXTENT_SIZE);
-        int func_ret =
-          table_cache_
-            ->Get(read_options, internal_comparator_, fd, ikey, &get_context,
-                  internal_stats_->GetFileReadHist(level), false, level)
-            .code();
+        int func_ret = table_cache_->get(read_options,
+                                         internal_comparator_,
+                                         level,
+                                         extent_meta->extent_id_,
+                                         ikey,
+                                         &get_context);
         SE_LOG(DEBUG, "get from extent", "index_id", sub_table_meta_.index_id_, K(extent_meta));
         if (Status::kOk != func_ret) {
           SE_LOG(WARN, "fail to get from table cache", K(func_ret));

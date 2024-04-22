@@ -15,10 +15,12 @@
  */
 #pragma once
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include "db/db_impl.h"
+#include "storage/storage_common.h"
 
 namespace smartengine {
 namespace db {
@@ -51,15 +53,19 @@ enum class FilterType {
 
 class QueueElement {
 public:
-  QueueElement(uint32_t count, int level, const db::FileDescriptor &fd,
+  QueueElement(uint32_t count,
+               int32_t level,
+               const storage::ExtentId &extent_id,
                monitor::HistogramImpl *file_read_hist)
       : count_(count),
         level_(level),
-        fd_(fd),
-        file_read_hist_(file_read_hist) {}
+        extent_id_(extent_id),
+        file_read_hist_(file_read_hist)
+  {}
+
   uint32_t count_ = 0;
-  int level_;
-  db::FileDescriptor fd_;
+  int32_t level_;
+  storage::ExtentId extent_id_;
   monitor::HistogramImpl *file_read_hist_;
 };
 
@@ -97,9 +103,12 @@ public:
 
   ~FilterManager();
 
-  int get_filter(const common::Slice &request_key, cache::Cache *cache,
-                 monitor::Statistics *stats, bool no_io, int level,
-                 const db::FileDescriptor &fd,
+  int get_filter(const common::Slice &request_key,
+                 cache::Cache *cache,
+                 monitor::Statistics *stats,
+                 bool no_io,
+                 int32_t level,
+                 const storage::ExtentId &extent_id,
                  monitor::HistogramImpl *file_read_hist,
                  table::FilterBlockReader *&filter,
                  cache::Cache::Handle *&cache_handle);
@@ -142,8 +151,9 @@ private:
                           table::FilterBlockReader *filter_contents,
                           monitor::Statistics *statistics);
 
-  void append_to_request_queue(const common::Slice &request_key, int level,
-                               const db::FileDescriptor &fd,
+  void append_to_request_queue(const common::Slice &request_key,
+                               int32_t level,
+                               const storage::ExtentId &extent_id,
                                monitor::HistogramImpl *file_read_hist);
   void schedule();
   int build_filter(const std::string &key, QueueElement &ele,

@@ -16,8 +16,7 @@
 #include <climits>
 #include <sstream>
 
-#include "memtable/memtable_list.h"
-#include "port/port.h"
+#include "table/table.h"
 #include "util/concurrent_direct_file_writer.h"
 #include "util/file_reader_writer.h"
 
@@ -158,9 +157,7 @@ ConcurrentDirectFileWriter* GetConcurrentDirectFileWriter(WritableFile* wf) {
 }
 
 RandomAccessFileReader* GetRandomAccessFileReader(RandomAccessFile* raf) {
-//  unique_ptr<RandomAccessFile> file(raf);
-//  return new RandomAccessFileReader(raf);
-  return MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, raf);
+  return MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, raf, false /*use_allocator*/);
 }
 
 SequentialFileReader* GetSequentialFileReader(SequentialFile* se) {

@@ -1243,18 +1243,16 @@ int64_t StorageManager::one_layer_approximate_size(
       SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret));
     } else if (0 == include_extent_count) {
       /**first extent should calculate start_off*/
-      db::FileDescriptor fd(extent_meta->extent_id_.id(), column_family_id_, MAX_EXTENT_SIZE);
-      table_iter.reset(cfd->table_cache()->NewIterator(read_options,
-                                                       env_options_,
-                                                       cfd->internal_comparator(),
-                                                       fd,
-                                                       &table_reader));
-      if (IS_NULL(table_reader)) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, TableReader should not nullptr",
-                    K(ret), K(*extent_meta));
-      } else {
-        start_off = table_reader->ApproximateOffsetOf(start);
+      table_iter.reset(cfd->table_cache()->create_iterator(read_options,
+                                                           cfd->internal_comparator(),
+                                                           -1 /*level*/,
+                                                           extent_meta->extent_id_,
+                                                           table_reader));
+      if (IS_NULL(table_reader)) {                                        
+        ret = Status::kErrorUnexpected;                                   
+        SE_LOG(WARN, "unexpected error, TableReader should not be nullptr", K(ret), K(*extent_meta));                             
+      } else {                                                            
+        start_off = table_reader->ApproximateOffsetOf(start);             
         ++cost_stats.total_open_extent_cnt_;
       }
     }
@@ -1273,12 +1271,11 @@ int64_t StorageManager::one_layer_approximate_size(
         if (0 == include_extent_count) {
           end_off = table_reader->ApproximateOffsetOf(end);
         } else {
-          db::FileDescriptor fd(extent_meta->extent_id_.id(), column_family_id_, MAX_EXTENT_SIZE);
-          table_iter.reset(cfd->table_cache()->NewIterator(read_options,
-                                                           env_options_,
-                                                           cfd->internal_comparator(),
-                                                           fd,
-                                                           &table_reader));
+          table_iter.reset(cfd->table_cache()->create_iterator(read_options,
+                                                               cfd->internal_comparator(),
+                                                               -1 /*level*/,
+                                                               extent_meta->extent_id_,
+                                                               table_reader));
           if (IS_NULL(table_reader)) {
             ret = Status::kErrorUnexpected;
             SE_LOG(WARN,
@@ -1323,13 +1320,11 @@ int64_t StorageManager::one_layer_approximate_size(
       // last extent has not been openen, need create it's TableReader
       start_off = 0;
       end_off = MAX_EXTENT_SIZE;
-      db::FileDescriptor fd(last_extent_id.id(), column_family_id_,
-                            MAX_EXTENT_SIZE);
-      table_iter.reset(cfd->table_cache()->NewIterator(read_options,
-                                                       env_options_,
-                                                       cfd->internal_comparator(),
-                                                       fd,
-                                                       &table_reader));
+      table_iter.reset(cfd->table_cache()->create_iterator(read_options,
+                                                           cfd->internal_comparator(),
+                                                           -1 /*level*/,
+                                                           last_extent_id,
+                                                           table_reader));
       end_off = table_reader->ApproximateOffsetOf(end);
       assert(last_extent_cost_size >= (end_off - start_off));
       cost_size += (end_off - start_off) - last_extent_cost_size;
@@ -1648,7 +1643,7 @@ int StorageManager::do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery
     SE_LOG(INFO, "recycle the extent", K(*extent_meta));
     if (!for_recovery) {
       //evict from table cache
-      db::TableCache::Evict(table_cache_, extent_meta->extent_id_.id());
+      db::TableCache::evict(table_cache_, extent_meta->extent_id_.id());
       if (FAILED(ExtentSpaceManager::get_instance().recycle(extent_meta->table_space_id_,
                                                             extent_meta->extent_space_type_,
                                                             extent_meta->extent_id_))) {

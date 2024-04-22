@@ -84,7 +84,8 @@ int get_oob_large_value(const Slice &value_in_kv,
     if (SUCCED(ret)) {
       for (uint32_t i = 0; SUCCED(ret) && i < large_value.oob_extents_.size(); ++i) {
         current_read_buf = oob_uptr.get() + i * storage::MAX_EXTENT_SIZE;
-        if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(large_value.oob_extents_[i], extent).code())) {
+        if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(
+            large_value.oob_extents_[i], extent))) {
           SE_LOG(WARN, "fail to get random access extent for large object", K(ret), "extent_id", large_value.oob_extents_[i]);
         } else if (FAILED(extent.Read(0, storage::MAX_EXTENT_SIZE, &result, current_read_buf).code())) {
           SE_LOG(WARN, "fail to read data for large object", K(ret));
@@ -389,12 +390,10 @@ LookupKey::LookupKey(const Slice& _user_key, SequenceNumber s) {
   this->bloom_hash_set_ = false;
 }
 
-DEFINE_TO_STRING(FileMetaData, KV(smallest), KV(largest), KV(smallest_seqno),
-                 KV(largest_seqno), KV(fd.extent_id.offset),
-                 KV(fd.extent_id.file_number), KV(fd.file_size),
-                 KV(compensated_file_size), KV(num_entries), KV(num_deletions),
-                 KV(raw_key_size), KV(raw_value_size), KV(fd.extent_id.offset),
-                 KV(fd.extent_id.file_number));
+DEFINE_TO_STRING(FileMetaData, KV_(extent_id), KV_(data_size), KV(smallest),
+                 KV(largest), KV(smallest_seqno), KV(largest_seqno),
+                 KV_(extent_id), KV(num_entries), KV(num_deletions),
+                 KV(raw_key_size), KV(raw_value_size));
 
 }
 }  // namespace smartengine

@@ -6,6 +6,7 @@
 // of patent rights can be found in the PATENTS file in the same directory.
 #pragma once
 
+#include "table/table_reader.h"
 #include "tools/sst_dump_tool.h"
 
 #include <memory>
@@ -15,10 +16,17 @@
 #include "table/table_properties.h"
 #include "util/file_reader_writer.h"
 
-namespace smartengine {
-namespace tools {
+namespace smartengine
+{
+namespace table
+{
+class TableReader;
+}
+namespace tools
+{
 
-class SstFileReader {
+class SstFileReader
+{
  public:
   explicit SstFileReader(const std::string& file_name, bool verify_checksum,
                          bool output_hex, size_t extent_offset = 1,

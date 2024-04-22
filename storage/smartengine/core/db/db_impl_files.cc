@@ -425,8 +425,6 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
 
     std::string fname;
     if (type == kTableFile) {
-      // evict from cache
-      TableCache::Evict(table_cache_.get(), number);
       fname = TableFileName(immutable_db_options_.db_paths, number, path_id);
     } else {
       fname = ((type == kLogFile) ? immutable_db_options_.wal_dir : dbname_) +

@@ -53,7 +53,7 @@ public:
   int reference(const int64_t table_space_id,
                 const int32_t extent_space_type,
                 const ExtentId extent_id);
-  common::Status get_random_access_extent(ExtentId extent_id, RandomAccessExtent &);
+  int get_random_access_extent(ExtentId extent_id, RandomAccessExtent &extent);
 
   //shrink relative function
   int get_shrink_infos(const ShrinkCondition &shrink_condition, std::vector<ShrinkInfo> &shrink_infos);

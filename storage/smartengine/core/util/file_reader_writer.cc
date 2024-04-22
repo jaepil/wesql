@@ -111,32 +111,13 @@ Status SequentialFileReader::Skip(uint64_t n) {
   return file_->Skip(n);
 }
 
-int RandomAccessFileReader::read(int64_t offset,
-                                 int64_t size,
-                                 common::Slice *result,
-                                 char *scratch,
-                                 AIOHandle *aio_handle)
-{
-  int ret = Status::kOk;
-  if (nullptr != aio_handle) {
-    // try aio
-    AIOInfo aio_info;
-    if (FAILED(file_->fill_aio_info(offset, size, aio_info))) {
-      SE_LOG(WARN, "failed to fill io info", K(ret), K(offset), K(size));
-    } else if (FAILED(aio_handle->read(aio_info.offset_, aio_info.size_, result, scratch))) {
-      SE_LOG(WARN, "aio handle read failed", K(ret), K(offset), K(size), K(aio_info));
-      BACKTRACE(ERROR, "aio handle read failed");
-    }
-  }
-  // use sync IO or aio read failed
-  if (nullptr == aio_handle || FAILED(ret)) {
-    // overwrite ret
-    ret = Read(offset, size, result, scratch).code();
-  }
-  return ret;
-}
+RandomAccessFileReader::RandomAccessFileReader(RandomAccessFile *raf, bool use_allocator)
+    : file_(raf),
+      use_allocator_(use_allocator)
+{}
 
-RandomAccessFileReader::~RandomAccessFileReader() {
+RandomAccessFileReader::~RandomAccessFileReader()
+{
   if (use_allocator_) {
     file_->~RandomAccessFile();
     file_ = nullptr;
@@ -145,33 +126,17 @@ RandomAccessFileReader::~RandomAccessFileReader() {
   }
 }
 
-int RandomAccessFileReader::prefetch(const int64_t offset,
-                                     const int64_t size,
-                                     AIOHandle *aio_handle)
+RandomAccessFileReader &RandomAccessFileReader::operator=(RandomAccessFileReader&& o) noexcept
 {
-  int ret = Status::kOk;
-  if (IS_NULL(aio_handle)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "aio handle is nullptr", K(ret));
-  } else {
-    AIOInfo aio_info;
-    if (FAILED(file_->fill_aio_info(offset, size, aio_info))) {
-      SE_LOG(WARN, "failed to fill io info", K(ret), K(offset), K(size));
-    } else if (FAILED(aio_handle->prefetch(aio_info))) {
-      SE_LOG(WARN, "aio handle prefetch failed", K(ret), K(aio_info));
-    }
-    if (FAILED(ret)) {
-      // prefetch failed, will try sync IO, overwrite ret
-      ret = Status::kOk;
-      aio_handle->aio_req_->status_ = Status::kErrorUnexpected;
-      SE_LOG(INFO, "aio prefetch failed, will try sync IO!");
-    }
-  }
-  return ret;
+  file_ = o.release_file();
+  return *this;
 }
 
-Status RandomAccessFileReader::Read(uint64_t offset, size_t n, Slice* result,
-                                    char* scratch) const {
+Status RandomAccessFileReader::Read(uint64_t offset,
+                                    size_t n,
+                                    Slice* result,
+                                    char* scratch) const
+{
   Status s;
   uint64_t elapsed = 0;
   {
@@ -199,6 +164,63 @@ Status RandomAccessFileReader::Read(uint64_t offset, size_t n, Slice* result,
     IOSTATS_ADD_IF_POSITIVE(bytes_read, result->size());
   }
   return s;
+}
+
+int RandomAccessFileReader::read(int64_t offset,
+                                 int64_t size,
+                                 common::Slice *result,
+                                 char *scratch,
+                                 AIOHandle *aio_handle)
+{
+  int ret = Status::kOk;
+  if (nullptr != aio_handle) {
+    // try aio
+    AIOInfo aio_info;
+    if (FAILED(file_->fill_aio_info(offset, size, aio_info))) {
+      SE_LOG(WARN, "failed to fill io info", K(ret), K(offset), K(size));
+    } else if (FAILED(aio_handle->read(aio_info.offset_, aio_info.size_, result, scratch))) {
+      SE_LOG(WARN, "aio handle read failed", K(ret), K(offset), K(size), K(aio_info));
+      BACKTRACE(ERROR, "aio handle read failed");
+    }
+  }
+  // use sync IO or aio read failed
+  if (nullptr == aio_handle || FAILED(ret)) {
+    // overwrite ret
+    ret = Read(offset, size, result, scratch).code();
+  }
+  return ret;
+}
+
+int RandomAccessFileReader::prefetch(const int64_t offset,
+                                     const int64_t size,
+                                     AIOHandle *aio_handle)
+{
+  int ret = Status::kOk;
+  if (IS_NULL(aio_handle)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "aio handle is nullptr", K(ret));
+  } else {
+    AIOInfo aio_info;
+    if (FAILED(file_->fill_aio_info(offset, size, aio_info))) {
+      SE_LOG(WARN, "failed to fill io info", K(ret), K(offset), K(size));
+    } else if (FAILED(aio_handle->prefetch(aio_info))) {
+      SE_LOG(WARN, "aio handle prefetch failed", K(ret), K(aio_info));
+    }
+    if (FAILED(ret)) {
+      // prefetch failed, will try sync IO, overwrite ret
+      ret = Status::kOk;
+      aio_handle->aio_req_->status_ = Status::kErrorUnexpected;
+      SE_LOG(INFO, "aio prefetch failed, will try sync IO!");
+    }
+  }
+  return ret;
+}
+
+RandomAccessFile* RandomAccessFileReader::release_file()
+{
+  auto rfile = file_;
+  file_ = nullptr;
+  return rfile;
 }
 
 Status WritableFileWriter::Append(const Slice& data) {

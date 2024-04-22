@@ -306,13 +306,11 @@ Slice ExtentBasedTable::GetCacheKey(const char* cache_key_prefix,
 }
 
 ExtentBasedTable::Rep::Rep(const common::ImmutableCFOptions& _ioptions,
-    const util::EnvOptions& _env_options,
-    const BlockBasedTableOptions& _table_opt,
-    const db::InternalKeyComparator& _internal_comparator,
-    bool skip_filters,
-    SimpleAllocator *alloc)
+                           const BlockBasedTableOptions& _table_opt,
+                           const db::InternalKeyComparator& _internal_comparator,
+                           bool skip_filters,
+                           SimpleAllocator *alloc)
     : ioptions(_ioptions),
-      env_options(_env_options),
       table_options(_table_opt),
       filter_policy(skip_filters ? nullptr : _table_opt.filter_policy.get()),
       internal_comparator(_internal_comparator),
@@ -353,14 +351,12 @@ uint64_t ExtentBasedTable::Rep::get_usable_size() {
 }
 
 Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
-                              const EnvOptions& env_options,
                               const BlockBasedTableOptions& table_options,
                               const InternalKeyComparator& internal_comparator,
                               RandomAccessFileReader *file,
                               uint64_t file_size,
                               TableReader *&table_reader,
-                              const FileDescriptor* fd,
-                              HistogramImpl* file_read_hist,
+                              const storage::ExtentId &extent_id,
                               const bool prefetch_index_and_filter_in_cache,
                               const bool skip_filters,
                               const int level,
@@ -385,17 +381,13 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   // Better not mutate rep_ after the creation. eg. internal_prefix_transform
   // raw pointer will be used to create HashIndexReader, whose reset may
   // access a dangling pointer.
-  //Rep* rep = new ExtentBasedTable::Rep(ioptions, env_options, table_options,
-  //                                     internal_comparator, skip_filters);
-  Rep* rep = COMMON_NEW(ModId::kRep, Rep, alloc, ioptions, env_options,
+  Rep* rep = COMMON_NEW(ModId::kRep, Rep, alloc, ioptions,
     table_options, internal_comparator, skip_filters, alloc);
 //  rep->file = std::move(file);
   rep->file.reset(file);
   rep->level = level;
   // Copy once for this maybe used after open.
-  rep->fd_valid = fd != nullptr;
-  rep->fd = (fd == nullptr ? FileDescriptor() : *fd);
-  rep->file_read_hist = file_read_hist;
+  rep->extent_id_ = extent_id;
   rep->footer = footer;
   SetupCacheKeyPrefix(rep, file_size);
   ExtentBasedTable *new_table = COMMON_NEW(ModId::kRep, ExtentBasedTable, alloc, rep);
@@ -814,7 +806,7 @@ ExtentBasedTable::CachableEntry<FilterBlockReader> ExtentBasedTable::GetFilter(
   return {nullptr /* filter */, nullptr /* cache handle */};
 
   Cache* block_cache = rep_->table_options.block_cache.get();
-  if (block_cache == nullptr /* no block cache at all */ || !rep_->fd_valid ||
+  if (block_cache == nullptr /* no block cache at all */ ||
       !rep_->ioptions.filter_manager->is_working()) {
     return {nullptr /* filter */, nullptr /* cache handle */};
   }
@@ -831,8 +823,8 @@ ExtentBasedTable::CachableEntry<FilterBlockReader> ExtentBasedTable::GetFilter(
   Cache::Handle* cache_handle = nullptr;
   Statistics* statistics = rep_->ioptions.statistics;
   Status s = rep_->ioptions.filter_manager->get_filter(
-      key, block_cache, statistics, no_io, rep_->level, rep_->fd,
-      rep_->file_read_hist, filter, cache_handle);
+      key, block_cache, statistics, no_io, rep_->level, rep_->extent_id_,
+      nullptr /*read_hist*/, filter, cache_handle);
   if (!s.ok()) {
     return {nullptr /* filter */, nullptr /* cache handle */};
   }
@@ -2153,7 +2145,7 @@ int ExtentBasedTable::new_index_iterator(const ReadOptions &read_options,
       SE_LOG(WARN, "block cache value is nullptr", K(ret));
     } else {
       handle.block_entry_.value->NewIterator(&index_block_iter, read_options.total_order_seek);
-      index_block_iter.set_source(rep_->fd.extent_id.id());
+      index_block_iter.set_source(rep_->extent_id_.id());
     }
   }
   return ret;

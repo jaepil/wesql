@@ -166,7 +166,7 @@ int GeneralCompaction::close_extent(MiniTables *flush_tables) {
         "extent_count", mini_tables_.metas.size());
 
     for (FileMetaData &meta : mini_tables_.metas) {
-      stats_.record_stats_.total_output_bytes += meta.fd.file_size;
+      stats_.record_stats_.total_output_bytes += meta.data_size_;
       if (nullptr != flush_tables) {
         // for mt_ext task, need preheat table_cache
         flush_tables->metas.push_back(meta);
@@ -387,6 +387,7 @@ int GeneralCompaction::delete_extent_meta(const MetaDescriptor &extent) {
 int GeneralCompaction::get_table_reader(const MetaDescriptor &extent, TableReader *&reader)
 {
   int ret = Status::kOk;
+  ExtentId extent_id(extent.block_position_.first);
   RandomAccessFile *file = nullptr;
   AsyncRandomAccessExtent *async_file = nullptr;
   RandomAccessExtent *extent_file = nullptr;
@@ -394,14 +395,14 @@ int GeneralCompaction::get_table_reader(const MetaDescriptor &extent, TableReade
   TableReader *table_reader = nullptr;
 
   // get random access extent
-  if (IS_NOTNULL(async_file = get_async_extent_reader(extent.block_position_.first))) {
+  if (IS_NOTNULL(async_file = get_async_extent_reader(extent_id.id()))) {
     file = async_file;
   } else {
       if (IS_NULL(extent_file = ALLOC_OBJECT(RandomAccessExtent, arena_))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for extent file", K(ret));
       } else if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(
-          extent.block_position_.first, *extent_file).code())) {
+          extent_id, *extent_file))) {
         SE_LOG(WARN, "fail to get random access extent", K(ret), K(extent));
       } else {
         file = extent_file;
@@ -412,12 +413,6 @@ int GeneralCompaction::get_table_reader(const MetaDescriptor &extent, TableReade
     if (IS_NULL(file_reader = ALLOC_OBJECT(RandomAccessFileReader,
                                            arena_,
                                            file,
-                                           context_.cf_options_->env,
-                                           context_.cf_options_->statistics,
-                                           0 /**hist_type*/,
-                                           nullptr /**file_read_hist*/,
-                                           context_.cf_options_,
-                                           *context_.env_options_,
                                            true /**use_allocator*/))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for RandomAccessFileReader", K(ret));
@@ -426,10 +421,8 @@ int GeneralCompaction::get_table_reader(const MetaDescriptor &extent, TableReade
 
   if (SUCCED(ret)) {
     TableReaderOptions reader_options(*context_.cf_options_,
-                                      *context_.env_options_,
                                       *context_.internal_comparator_,
-                                      nullptr /**fd*/,
-                                      nullptr /**file_read_hist*/,
+                                      extent_id,
                                       false /**skip_filter*/,
                                       extent.type_.level_);
     if (FAILED(context_.cf_options_->table_factory->NewTableReader(
@@ -721,7 +714,7 @@ int GeneralCompaction::prefetch_extent(int64_t extent_id) {
   if (IS_NULL(reader)) {
     ret = Status::kMemoryLimit;
     COMPACTION_LOG(WARN, "failed to alloc memory for reader", K(ret));
-  } else if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(extent_id, *reader).code())) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(extent_id, *reader))) {
     COMPACTION_LOG(ERROR, "open extent for read failed.", K(extent_id), K(ret));
   } else {
     // todo if cache key changed

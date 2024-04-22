@@ -25,6 +25,10 @@ namespace cache
 {
 class Cache;
 }
+namespace db
+{
+class InternalStats;
+}
 namespace storage
 {
 class ExtentLayer;
@@ -118,7 +122,7 @@ struct TableReaderHandle
   {
     extent_id_.reset();
     if (nullptr != table_cache_) {
-      table_cache_->ReleaseHandle(cache_handle_);
+      table_cache_->release_handle(cache_handle_);
     }
     cache_handle_ = nullptr;
     table_reader_ = nullptr;

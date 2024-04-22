@@ -360,8 +360,7 @@ int ExtentSpaceManager::reference(const int64_t table_space_id,
   return ret;
 }
 
-common::Status ExtentSpaceManager::get_random_access_extent(ExtentId extent_id,
-                                                            RandomAccessExtent &random_access_extent)
+int ExtentSpaceManager::get_random_access_extent(ExtentId extent_id, RandomAccessExtent &random_access_extent)
 {
   int ret = Status::kOk;
   ExtentIOInfo io_info;

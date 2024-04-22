@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include <string>
+#include "table/table.h"
 #include "db/dbformat.h"
 
 namespace smartengine {
@@ -33,13 +34,6 @@ class ColumnFamilyOptions;
 }
 
 namespace table {
-
-class TableFactory;
-struct BlockBasedTableOptions;
-class TableReaderOptions;
-class TableReader;
-class TableBuilder;
-class TableBuilderOptions;
 
 class ExtentBasedTableFactory : public TableFactory {
  public:

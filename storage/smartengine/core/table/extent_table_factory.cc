@@ -59,12 +59,17 @@ Status ExtentBasedTableFactory::NewTableReader(
     TableReader *&table_reader,
     bool prefetch_index_and_filter_in_cache,
     memory::SimpleAllocator *arena) const {
-  return ExtentBasedTable::Open(
-      table_reader_options.ioptions, table_reader_options.env_options,
-      table_options_, table_reader_options.internal_comparator, file,
-      file_size, table_reader, table_reader_options.fd_,
-      table_reader_options.file_read_hist_, prefetch_index_and_filter_in_cache,
-      table_reader_options.skip_filters, table_reader_options.level, arena);
+  return ExtentBasedTable::Open(table_reader_options.ioptions,
+                                table_options_,
+                                table_reader_options.internal_comparator,
+                                file,
+                                file_size,
+                                table_reader,
+                                table_reader_options.extent_id_,
+                                prefetch_index_and_filter_in_cache,
+                                table_reader_options.skip_filters,
+                                table_reader_options.level,
+                                arena);
 }
 
 TableBuilder* ExtentBasedTableFactory::NewTableBuilderExt(

@@ -16,14 +16,18 @@
 
 #ifndef SMARTENGINE_INCLUDE_STORAGE_LOG_ENTRY_H_
 #define SMARTENGINE_INCLUDE_STORAGE_LOG_ENTRY_H_
+
+#include "db/recovery_point.h"
+#include "storage/storage_meta_struct.h"
 #include "util/serialization.h"
 #include "util/to_string.h"
-#include "storage/storage_meta_struct.h"
 
 namespace smartengine
 {
 namespace storage
 {
+struct ChangeInfo;
+
 enum SeEvent
 {
   INVALID_EVENT = 0,

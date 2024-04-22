@@ -108,7 +108,9 @@ Status SstFileReader::GetTableReader(const std::string& file_path,
   storage::ExtentIOInfo io_info(fd, eid, storage::MAX_EXTENT_SIZE, storage::DATA_BLOCK_SIZE, 1);
   extent->init(io_info);
   file_.reset(MOD_NEW_OBJECT(ModId::kDefaultMod,
-      RandomAccessFileReader, extent, options_.env, nullptr, 0, nullptr, &ioptions_, EnvOptions()));
+                             RandomAccessFileReader,
+                             extent,
+                             false /*use_allocator*/));
 
   if (s.ok()) {
     s = ReadFooterFromFile(file_.get(), file_size, &footer);
@@ -145,22 +147,18 @@ Status SstFileReader::NewTableReader(
   shared_ptr<ExtentBasedTableFactory> extent_based_table_factory =
       dynamic_pointer_cast<ExtentBasedTableFactory>(options_.table_factory);
 
-  if (extent_based_table_factory) {
-    return extent_based_table_factory->NewTableReader(
-        TableReaderOptions(ioptions_, soptions_, internal_comparator_,
-                           nullptr /* fd */, nullptr /* read hist */,
-                           false /* skip_filters */),
-                           file_.release(), file_size,
-                           table_reader, /*enable_prefetch=*/false);
-  }
-
-  assert(!extent_based_table_factory);
-
-  // For all other factory implementation
-  Status s = options_.table_factory->NewTableReader(
-      TableReaderOptions(ioptions_, soptions_, internal_comparator_),
-      file_.release(), file_size, table_reader);
-  return s;
+  assert(nullptr != extent_based_table_factory);
+  ExtentId dummy_extent_id;
+  TableReaderOptions reader_options(ioptions_,
+                                    internal_comparator_,
+                                    dummy_extent_id,
+                                    false /*skip_filters*/,
+                                    -1 /*level*/);
+  return extent_based_table_factory->NewTableReader(reader_options,
+                                                    file_.release(),
+                                                    file_size,
+                                                    table_reader,
+                                                    false /*prefetch_index_and_filter_in_cache*/);
 }
 
 Status SstFileReader::DumpTable(const std::string& out_filename) {

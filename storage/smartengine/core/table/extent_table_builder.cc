@@ -223,7 +223,7 @@ int ExtentBasedTableBuilder::init_one_sst() {
   } else {
     not_flushed_normal_extent_id_ = rep_->extent_.get_extent_id();
   }
-  rep_->meta.fd = FileDescriptor(rep_->extent_.get_extent_id().id(), 0, 0);
+  rep_->meta.extent_id_ = rep_->extent_.get_extent_id();
 
   if (table_options_.block_cache) {
     ExtentBasedTable::GenerateCachePrefix(
@@ -1031,18 +1031,17 @@ int ExtentBasedTableBuilder::write_sst(Footer& footer) {
     buf += this_count;
   }
 
-  rep_->meta.fd.file_size = sst_file_size;
+  rep_->meta.data_size_ = sst_file_size;
   rep_->meta.marked_for_compaction = NeedCompact();
   rep_->meta.num_entries = rep_->props.num_entries;
   rep_->meta.num_deletions = rep_->props.num_deletes;
-  assert(rep_->meta.fd.GetFileSize() > 0);
   offset_ += rep_->offset;
   num_entries_ += rep_->props.num_entries;
   mtables_->props.push_back(GetTableProperties());
 
   int ret = Status::kOk;
   storage::ExtentMeta extent_meta(storage::ExtentMeta::F_NORMAL_EXTENT,
-      rep_->meta.fd.extent_id, rep_->meta, GetTableProperties(),
+      rep_->meta.extent_id_, rep_->meta, GetTableProperties(),
       mtables_->table_space_id_, storage::HOT_EXTENT_SPACE);
   if (FAILED(write_extent_meta(extent_meta, false /*is_large_object_extent*/))) {
     SE_LOG(WARN, "fail to write meta", K(ret), K(extent_meta));
@@ -1273,7 +1272,7 @@ int ExtentBasedTableBuilder::Abandon() {
   } else {
     /**recycle normal extent has flushed to disk*/
     for (uint32_t i = 0; SUCCED(ret) && i < mtables_->metas.size(); ++i) {
-      extent_id = mtables_->metas[i].fd.extent_id;
+      extent_id = mtables_->metas[i].extent_id_;
       if (FAILED(ExtentSpaceManager::get_instance().recycle(mtables_->table_space_id_,
                                                             storage::HOT_EXTENT_SPACE,
                                                             extent_id))) {

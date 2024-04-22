@@ -170,28 +170,24 @@ int TablePrefetchHelper::load_table_reader(const Slice &meta_handle, TableReader
 {
   int ret = Status::kOk;
   ExtentId *eid = (ExtentId *)meta_handle.data();
-  FileDescriptor fd(eid->id(), scan_param_->subtable_id_, MAX_EXTENT_SIZE);
   table_reader_handle.extent_id_ = *eid;
   if (UNLIKELY(nullptr != table_reader_handle.cache_handle_)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "table cache handle was not released", K(ret));
-  } else if (FAILED(scan_param_->table_cache_->FindTable(*(scan_param_->env_options_),
-                                                         *(scan_param_->icomparator_),
-                                                         fd,
-                                                         &table_reader_handle.cache_handle_,
-                                                         scan_param_->read_options_->read_tier == kBlockCacheTier /* no_io */,
-                                                         !(scan_param_->for_compaction_) /* record read_stats */,
-                                                         scan_param_->file_read_hist_,
-                                                         scan_param_->skip_filters_,
-                                                         scan_param_->layer_position_.get_level(),
-                                                         true /* TODO: prefetch_index_and_filter_in_cache */).code())) {
+  } else if (FAILED(scan_param_->table_cache_->find_table_reader(*(scan_param_->icomparator_),
+                                                                 *eid,
+                                                                 scan_param_->read_options_->read_tier == kBlockCacheTier /* no_io */,
+                                                                 scan_param_->skip_filters_,
+                                                                 scan_param_->layer_position_.get_level(),
+                                                                 true /* TODO: prefetch_index_and_filter_in_cache */,
+                                                                 &table_reader_handle.cache_handle_))) {
     SE_LOG(WARN, "failed to find table from table cache", K(ret));
   } else if (IS_NULL(table_reader_handle.cache_handle_)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "handle is nullptr", K(ret));
   } else {
     table_reader_handle.table_cache_ = scan_param_->table_cache_;
-    table_reader_handle.table_reader_ = scan_param_->table_cache_->GetTableReaderFromHandle(table_reader_handle.cache_handle_);
+    table_reader_handle.table_reader_ = scan_param_->table_cache_->get_table_reader_from_handle(table_reader_handle.cache_handle_);
     // TODO: we can set AIORandomAccessExtent to table_reader here,
     //       but the table_reader might be used by multiple SSTableScanIterators,
     //       thus it seems we should keep AIORandomAccessExtent in SSTableScanIterator?

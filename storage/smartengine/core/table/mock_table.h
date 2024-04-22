@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "table/internal_iterator.h"
+#include "table/table.h"
 #include "table/table_builder.h"
 #include "table/table_properties.h"
 #include "table/table_reader.h"

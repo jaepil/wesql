@@ -11,8 +11,6 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
-#include <algorithm>
-#include <deque>
 #include <string>
 #include <vector>
 
@@ -28,8 +26,10 @@
 namespace smartengine {
 
 namespace util {
+class RandomAccessFileReader;
 class SequentialFileReader;
 class SequentialFile;
+class WritableFileWriter;
 
 namespace test {
 

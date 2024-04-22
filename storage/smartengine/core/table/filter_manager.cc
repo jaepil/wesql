@@ -21,7 +21,7 @@
 #include "db/table_cache.h"
 #include "monitoring/query_perf_context.h"
 #include "options/options.h"
-#include "port/likely.h"
+#include "storage/storage_common.h"
 #include "table/filter_block.h"
 #include "table/filter_policy.h"
 #include "table/format.h"
@@ -102,12 +102,16 @@ FilterManager::~FilterManager() {
   db_mutex_ = nullptr;
 }
 
-int FilterManager::get_filter(const Slice &request_key, Cache *cache,
-                              Statistics *stats, bool no_io, int level,
-                              const FileDescriptor &fd,
+int FilterManager::get_filter(const Slice &request_key,
+                              Cache *cache,
+                              Statistics *stats,
+                              bool no_io,
+                              int32_t level,
+                              const storage::ExtentId &extent_id,
                               HistogramImpl *file_read_hist,
                               FilterBlockReader *&filter,
-                              Cache::Handle *&cache_handle) {
+                              Cache::Handle *&cache_handle)
+{
   // disable filter
   return Status::kNotSupported;
 }
@@ -205,6 +209,7 @@ void FilterManager::schedule() {
 int FilterManager::build_filter(const std::string &request_key,
                                 QueueElement &max_element,
                                 QuotaGuard &&scheduler_quota_guard) {
+  int ret = Status::kOk;
   QuotaGuard quota_guard{std::move(scheduler_quota_guard)};
   TEST_SYNC_POINT_CALLBACK("FilterManager::BuildFilter:Start", quota_);
   Cache::Handle *table_handle;
@@ -216,29 +221,31 @@ int FilterManager::build_filter(const std::string &request_key,
   // been
   // recycled. So its data should be seen as corrupted and not to be loaded
   // again.
-  Status s = table_cache_->FindTable(
-      *env_options_, *icmp_, max_element.fd_, &table_handle, true /* no_io */,
-      true /* record_read_stats */, max_element.file_read_hist_,
-      true /* skip_filters */, max_element.level_,
-      false /* prefetch_index_and_filter_in_cache */);
-  if (!s.ok()) {
+  ret = table_cache_->find_table_reader(*icmp_,
+                                        max_element.extent_id_,
+                                        true /* no_io */,
+                                        true /* skip_filters */,
+                                        max_element.level_,
+                                        false /* prefetch_index_and_filter_in_cache */,
+                                        &table_handle);
+  if (FAILED(ret)) {
     release_meta_snapshot(meta_snapshot);
-    return s.code();
+    return ret;
   }
 
   TEST_SYNC_POINT_CALLBACK("FilterManager::BuildFilter:Running", nullptr);
   // Iter the table and fill the filter builder.
   TableReader *table_reader =
-      table_cache_->GetTableReaderFromHandle(table_handle);
+      table_cache_->get_table_reader_from_handle(table_handle);
 
   uint64_t num_entries = table_reader->GetTableProperties()->num_entries;
   std::unique_ptr<FilterBlockBuilder> filter_builder;
-  int ret = create_filter_builder(whole_key_filtering_,
-                                  filter_policy_.get(),
-                                  num_entries,
-                                  filter_builder);
+  ret = create_filter_builder(whole_key_filtering_,
+                              filter_policy_.get(),
+                              num_entries,
+                              filter_builder);
   if (ret != Status::kOk) {
-    table_cache_->ReleaseHandle(table_handle);
+    table_cache_->release_handle(table_handle);
     release_meta_snapshot(meta_snapshot);
     return ret;
   }
@@ -258,7 +265,7 @@ int FilterManager::build_filter(const std::string &request_key,
     // in level1, find and return value1
     filter_builder->Add(ExtractUserKey(iter->key()));
   }
-  table_cache_->ReleaseHandle(table_handle);
+  table_cache_->release_handle(table_handle);
   release_meta_snapshot(meta_snapshot);
 
   // Put built filter to cache.
@@ -287,9 +294,11 @@ void FilterManager::release_meta_snapshot(const Snapshot *meta_snapshot) {
 }
 
 
-void FilterManager::append_to_request_queue(const Slice &request_key, int level,
-                                            const FileDescriptor &fd,
-                                            HistogramImpl *file_read_hist) {
+void FilterManager::append_to_request_queue(const Slice &request_key,
+                                            int32_t level,
+                                            const storage::ExtentId &extent_id,
+                                            HistogramImpl *file_read_hist)
+{
   std::string key = request_key.ToString();
   static murmur_hash hash;
   size_t stripe = hash(key) % stripes_;
@@ -301,7 +310,7 @@ void FilterManager::append_to_request_queue(const Slice &request_key, int level,
   } else {
     request_queue_[stripe].emplace(
         std::piecewise_construct, std::forward_as_tuple(key),
-        std::forward_as_tuple(1 /* count */, level, fd, file_read_hist));
+        std::forward_as_tuple(1 /* count */, level, extent_id, file_read_hist));
   }
 }
 

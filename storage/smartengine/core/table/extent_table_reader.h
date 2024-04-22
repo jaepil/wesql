@@ -100,14 +100,12 @@ class ExtentBasedTable : public TableReader {
   //    are set.
   static common::Status Open(
       const common::ImmutableCFOptions& ioptions,
-      const util::EnvOptions& env_options,
       const BlockBasedTableOptions& table_options,
       const db::InternalKeyComparator& internal_key_comparator,
       util::RandomAccessFileReader *file,
       uint64_t file_size,
       TableReader *&table_reader,
-      const db::FileDescriptor* fd,
-      monitor::HistogramImpl* file_read_hist,
+      const storage::ExtentId &extent_id,
       bool prefetch_index_and_filter_in_cache = true,
       bool skip_filters = false,
       int level = -1,
@@ -458,7 +456,6 @@ struct ExtentBasedTable::CachableEntry {
 
 struct ExtentBasedTable::Rep {
   Rep(const common::ImmutableCFOptions& _ioptions,
-      const util::EnvOptions& _env_options,
       const BlockBasedTableOptions& _table_opt,
       const db::InternalKeyComparator& _internal_comparator,
       bool skip_filters,
@@ -468,14 +465,11 @@ struct ExtentBasedTable::Rep {
   uint64_t get_usable_size();
   std::unique_ptr<memory::SimpleAllocator, memory::ptr_destruct_delete<memory::SimpleAllocator>> alloc_;
   const common::ImmutableCFOptions& ioptions;
-  const util::EnvOptions& env_options;
   const BlockBasedTableOptions table_options;
   const FilterPolicy* const filter_policy;
   const db::InternalKeyComparator& internal_comparator;
   int level;
-  bool fd_valid;
-  db::FileDescriptor fd;
-  monitor::HistogramImpl* file_read_hist;
+  storage::ExtentId extent_id_;
   common::Status status;
   // if rep use internal allocator, file use MOD_NEW, need delete when destruct
   // else file use external allocator, don't need delete

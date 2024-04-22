@@ -132,7 +132,7 @@ TEST(InMemExtent, sim) {
   s = builder->Finish();
   EXPECT_TRUE(s.ok()) << s.ToString();
 
-  ExtentId eid(mtables.metas[0].fd.GetNumber());
+  ExtentId eid(mtables.metas[0].extent_id_);
 
   unique_ptr<char[]> block1;
   size_t size1;
@@ -142,11 +142,17 @@ TEST(InMemExtent, sim) {
     s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, *extent);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
-    RandomAccessFileReader *file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent);
+    RandomAccessFileReader *file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent, false /*use_allocator=*/);
     TableReader *table_reader = nullptr;
-    s = ioptions.table_factory->NewTableReader(
-        TableReaderOptions(ioptions, soptions, internal_comparator),
-        file_reader, MAX_EXTENT_SIZE, table_reader);
+    TableReaderOptions reader_options(ioptions,
+                                      internal_comparator,
+                                      eid,
+                                      false,
+                                      -1);
+    s = ioptions.table_factory->NewTableReader(reader_options,
+                                               file_reader,
+                                               MAX_EXTENT_SIZE,
+                                               table_reader);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
     // verify
@@ -178,11 +184,13 @@ TEST(InMemExtent, sim) {
     extent->prefetch();
 
     // the mem interface
-    RandomAccessFileReader *in_mem_file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent);
+    RandomAccessFileReader *in_mem_file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent, false /*use_allocator=*/);
     TableReader *in_mem_table_reader = nullptr;
-    s = ioptions.table_factory->NewTableReader(
-        TableReaderOptions(ioptions, soptions, internal_comparator),
-        in_mem_file_reader, MAX_EXTENT_SIZE, in_mem_table_reader);
+    TableReaderOptions reader_options(ioptions, internal_comparator, eid, false, -1);
+    s = ioptions.table_factory->NewTableReader(reader_options,
+                                               in_mem_file_reader,
+                                               MAX_EXTENT_SIZE,
+                                               in_mem_table_reader);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
     // verify

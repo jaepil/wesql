@@ -13,9 +13,7 @@
 #include <stdio.h>
 #include <string>
 #include "db/db.h"
-#include "port/likely.h"
 #include "storage/storage_common.h"
-#include "table/table.h"
 #include "table/table_properties.h"
 #include "util/coding.h"
 #include "util/serialization.h"
@@ -643,58 +641,18 @@ extern common::Status ReadRecordFromWriteBatch(common::Slice* input, char* tag,
 //TODO: Zhao Dongsheng. Temporatily move FileDescriptor, FileMetaData, and MiniTables to
 //here, they will be placed in more approriate file in the future.
 //
-// A copyable structure contains information needed to read data from an SST
-// file. It can contains a pointer to a table reader opened for the file, or
-// file number and size, which can be used to create a new table reader for it.
-// The behavior is undefined when a copied of the structure is used when the
-// file is not in any live version any more.
-struct FileDescriptor {
-  // Table reader in table_reader_handle
-  table::TableReader* table_reader;
-  storage::ExtentId extent_id;
-  uint64_t file_size;  // File size in bytes
-
-  FileDescriptor() : FileDescriptor(0, 0, 0) {}
-
-  FileDescriptor(uint64_t eid, uint32_t path_id, uint64_t _file_size)
-      : table_reader(nullptr), extent_id(eid), file_size(_file_size) {}
-
-  FileDescriptor(const FileDescriptor &file_desc)
-      : table_reader(file_desc.table_reader),
-        extent_id(file_desc.extent_id),
-        file_size(file_desc.file_size)
-  {}
-  
-  FileDescriptor& operator=(const FileDescriptor& fd) {
-    this->table_reader = fd.table_reader;
-    this->extent_id = fd.extent_id;
-    this->file_size = fd.file_size;
-    return *this;
-  }
-
-  uint64_t GetNumber() const { return extent_id.id(); }
-  uint32_t GetPathId() const { return 0; }
-  uint64_t GetFileSize() const { return file_size; }
-};
-
 struct FileMetaData {
   int refs;
-  FileDescriptor fd;
+  storage::ExtentId extent_id_;
+  int64_t data_size_;
   db::InternalKey smallest;  // Smallest internal key served by table
   db::InternalKey largest;   // Largest internal key served by table
   bool being_compacted;  // Is this file undergoing compaction?
   common::SequenceNumber smallest_seqno;  // The smallest seqno in this file
   common::SequenceNumber largest_seqno;   // The largest seqno in this file
 
-  // Needs to be disposed when refs becomes 0.
-  cache::Cache::Handle* table_reader_handle;
-
   // Stats for compensating deletion entries during compaction
 
-  // File size compensated by deletion entry.
-  // This is updated in Version::UpdateAccumulatedStats() first time when the
-  // file is created or loaded.  After it is updated (!= 0), it is immutable.
-  uint64_t compensated_file_size;
   // These values can mutate, but they can only be read or written from
   // single-threaded LogAndApply thread
   uint64_t num_entries;       // the number of entries.
@@ -709,11 +667,13 @@ struct FileMetaData {
 
   FileMetaData()
       : refs(0),
+        extent_id_(),
+        data_size_(0),
+        smallest(),
+        largest(),
         being_compacted(false),
         smallest_seqno(db::kMaxSequenceNumber),
         largest_seqno(0),
-        table_reader_handle(nullptr),
-        compensated_file_size(0),
         num_entries(0),
         num_deletions(0),
         raw_key_size(0),

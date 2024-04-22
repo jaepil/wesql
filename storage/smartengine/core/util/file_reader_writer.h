@@ -77,71 +77,19 @@ class SequentialFileReader {
   common::Status DirectRead(size_t n, common::Slice* result, char* scratch);
 };
 
-class RandomAccessFileReader {
- private:
-//  std::unique_ptr<RandomAccessFile> file_;
-  RandomAccessFile *file_; // maybe have better way to manager file's mem?
-  Env* env_;
-  monitor::Statistics* stats_;
-  uint32_t hist_type_;
-  monitor::HistogramImpl* file_read_hist_;
-
- public:
-  // used to read the next extent in the same logic file
-  const common::ImmutableCFOptions* ioptions_;
-  const EnvOptions env_options_;
-  bool use_allocator_;
-
-  explicit RandomAccessFileReader(
-      RandomAccessFile *raf, Env* env = nullptr,
-      monitor::Statistics* stats = nullptr, uint32_t hist_type = 0,
-      monitor::HistogramImpl* file_read_hist = nullptr,
-      const common::ImmutableCFOptions* ioptions = nullptr,
-      EnvOptions env_options = EnvOptions(), bool use_allocator = false)
-      : file_(raf),
-        env_(env),
-        stats_(stats),
-        hist_type_(hist_type),
-        file_read_hist_(file_read_hist),
-        ioptions_(ioptions),
-        env_options_(env_options),
-        use_allocator_(use_allocator) {}
-// todo
-//  RandomAccessFileReader(RandomAccessFileReader&& o) noexcept {
-//    *this = std::move(o);
-//  }
-
-  // todo
-  RandomAccessFileReader& operator=(RandomAccessFileReader&& o)
-      noexcept {
-//    file_ = std::move(o.file_);
-//    env_ = std::move(o.env_);
-    file_ = o.release_file();
-    env_ = o.env_;
-    stats_ = std::move(o.stats_);
-    hist_type_ = std::move(o.hist_type_);
-    file_read_hist_ = std::move(o.file_read_hist_);
-    return *this;
-  }
-
+class RandomAccessFileReader
+{
+public:
+  explicit RandomAccessFileReader(RandomAccessFile *raf, bool use_allocator);
+  ~RandomAccessFileReader();
   RandomAccessFileReader(const RandomAccessFileReader&) = delete;
   RandomAccessFileReader& operator=(const RandomAccessFileReader&) = delete;
+  RandomAccessFileReader& operator=(RandomAccessFileReader&& o) noexcept;
 
-  ~RandomAccessFileReader();
-  common::Status Read(uint64_t offset, size_t n, common::Slice* result,
+  common::Status Read(uint64_t offset,
+                      size_t n,
+                      common::Slice* result,
                       char* scratch) const;
-
-  common::Status Prefetch(uint64_t offset, size_t n) const {
-    return file_->Prefetch(offset, n);
-  }
-
-  RandomAccessFile* file() { return file_; }
-  RandomAccessFile* release_file() {
-    auto rfile = file_;
-    file_ = nullptr;
-    return rfile;
-  }
-  bool use_direct_io() const { return file_->use_direct_io(); }
 
   int read(int64_t offset,
            int64_t n,
@@ -153,10 +101,14 @@ class RandomAccessFileReader {
                const int64_t size,
                AIOHandle *aio_handle);
 
+  common::Status Prefetch(uint64_t offset, size_t n) const { return file_->Prefetch(offset, n); }
+  bool use_direct_io() const { return file_->use_direct_io(); }
+  RandomAccessFile* file() { return file_; }
+  RandomAccessFile* release_file();
 
- protected:
-  common::Status DirectRead(uint64_t offset, size_t n, common::Slice* result,
-                            char* scratch) const;
+private:
+  RandomAccessFile *file_; // maybe have better way to manager file's mem?
+  bool use_allocator_;
 };
 
 // Use posix write to write data to a file.

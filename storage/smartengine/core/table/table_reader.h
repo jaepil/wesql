@@ -22,6 +22,7 @@ struct ReadOptions;
 
 namespace util {
 class Arena;
+class WritableFile;
 }
 
 namespace table {

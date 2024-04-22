@@ -217,7 +217,7 @@ class CompactionTest : public testing::Test {
 
     GlobalContext *global_ctx = ALLOC_OBJECT(GlobalContext, alloc_, dbname_, *(const_cast<Options*>(context_->options_)));
     WriteBufferManager *write_buffer_manager = ALLOC_OBJECT(WriteBufferManager, alloc_, 0);
-    table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, context_->env_options_, cache_.get());
+    table_cache_ = ALLOC_OBJECT(TableCache, alloc_, context_->icf_options_, cache_.get());
     version_set_ = ALLOC_OBJECT(VersionSet, alloc_, dbname_, &context_->idb_options_, context_->env_options_, reinterpret_cast<cache::Cache*>(table_cache_), write_buffer_manager);
 
     global_ctx->env_ = env_;

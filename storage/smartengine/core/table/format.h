@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <string>
 #include "options/cf_options.h"
+#include "table/table.h"
 
 namespace smartengine {
 namespace common {

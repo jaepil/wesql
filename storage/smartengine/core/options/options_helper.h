@@ -13,6 +13,7 @@
 #include <vector>
 #include "options/cf_options.h"
 #include "options/db_options.h"
+#include "table/table.h"
 
 namespace smartengine {
 

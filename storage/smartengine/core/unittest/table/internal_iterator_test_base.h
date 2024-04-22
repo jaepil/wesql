@@ -280,9 +280,7 @@ void InternalIteratorTestBase::init(const TestArgs &args)
                                     context_->env_options_,
                                     reinterpret_cast<cache::Cache*>(table_cache_.get()),
                                     write_buffer_manager_);
-  table_cache_.reset(new db::TableCache(context_->icf_options_,
-                                        context_->env_options_,
-                                        clock_cache_.get()));
+  table_cache_.reset(new db::TableCache(context_->icf_options_, clock_cache_.get()));
 
   // init storage logger
   global_ctx_->env_ = env_;

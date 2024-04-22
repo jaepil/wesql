@@ -10,6 +10,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/flush_job.h"
+#include "table/table_reader.h"
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -229,7 +230,7 @@ int BaseFlush::write_level0(MiniTables &mini_tables)
     FLUSH_LOG(WARN, "fail to flush data", K(ret), K(output_layer_position), K(is_flush));
   } else {
     for (auto file_meta : mini_tables.metas) {
-      bytes_written += file_meta.fd.GetFileSize();
+      bytes_written += file_meta.data_size_;
       FLUSH_LOG(INFO, "generate new level 0 extent", KE_(job_context_.task_type),
           "index_id", cfd_->GetID(), K(file_meta));
     }
@@ -408,20 +409,13 @@ int BaseFlush::fill_table_cache(const MiniTables &mtables) {
   }
   for (size_t i = 0; i < mtables.metas.size() && SUCCED(ret); i++) {
     const FileMetaData* meta = &mtables.metas[i];
+    TableReader *table_reader = nullptr;
     std::unique_ptr<InternalIterator, memory::ptr_destruct_delete<InternalIterator>> it(
-        cfd_->table_cache()->NewIterator(ReadOptions(),
-                                         *env_options_, //TODO(Zhao Dongsheng): the env_option is useless?
-                                         cfd_->internal_comparator(),
-                                         meta->fd,
-                                         nullptr,
-                                         (nullptr == cfd_->internal_stats())
-                                          ? nullptr
-                                          : cfd_->internal_stats()->GetFileReadHist(0),
-                                         false /* for compaction*/,
-                                         nullptr /* arena */,
-                                         false /* skip_filter */,
-                                         job_context_.output_level_ /*level*/,
-                                         cfd_->internal_stats()));
+        cfd_->table_cache()->create_iterator(ReadOptions(),
+                                             cfd_->internal_comparator(),
+                                             job_context_.output_level_ /*level*/,
+                                             meta->extent_id_,
+                                             table_reader));
     if (FAILED(it->status().code())) {
       FLUSH_LOG(WARN, "iterator occur error", K(ret), K(i));
     //TODO(Zhao Dongsheng): Depreatd parameter paranoid_file_checks's value
