@@ -843,6 +843,24 @@ static void se_set_master_thread_monitor_interval_ms(THD *thd,
   SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
 }
 
+static void se_set_master_thread_compaction_enabled(THD *thd,
+                                                    struct SYS_VAR *const var,
+                                                    void *const var_ptr,
+                                                    const void *const save) {
+  assert(save != nullptr);
+
+  SE_MUTEX_LOCK_CHECK(se_sysvars_mutex);
+
+  se_db_options.master_thread_compaction_enabled =
+      *static_cast<const bool *>(save);
+
+  se_db->SetDBOptions(
+      {{"master_thread_compaction_enabled",
+        std::to_string(se_db_options.master_thread_compaction_enabled)}});
+
+  SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
+}
+
 static MYSQL_SYSVAR_STR(
     datadir, se_datadir,
     PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
@@ -1449,6 +1467,13 @@ static MYSQL_SYSVAR_ULONG(master_thread_monitor_interval_ms,
                           /* default */ 60'000,
                           /* min */ 0L, /* max */ ULLONG_MAX, 0);
 
+static MYSQL_SYSVAR_BOOL(master_thread_compaction_enabled,
+                         se_db_options.master_thread_compaction_enabled,
+                         PLUGIN_VAR_RQCMDARG,
+                         "DBOptions::master_thread_compaction_enabled for SE",
+                         nullptr, se_set_master_thread_compaction_enabled,
+                         se_db_options.master_thread_compaction_enabled);
+
 ulong se_thd_lock_wait_timeout(THD *thd)
 {
   return THDVAR(thd, lock_wait_timeout);
@@ -1570,6 +1595,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(parallel_read_threads),
     MYSQL_SYSVAR(scan_add_blocks_limit),
     MYSQL_SYSVAR(master_thread_monitor_interval_ms),
+    MYSQL_SYSVAR(master_thread_compaction_enabled),
     nullptr};
 
 SYS_VAR **se_system_vars_export = se_system_vars_internal;

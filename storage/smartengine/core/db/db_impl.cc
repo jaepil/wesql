@@ -647,23 +647,27 @@ void DBImpl::bg_master_thread_func() {
       idle_flag = false;
     }
     last_seq = cur_seq;
-    if (auto_compaction_ms > 0
-        && env_->NowMicros() / 1000 > last_auto_compaction_ts + auto_compaction_ms
-        && SUCCED(ret)) {
-      last_auto_compaction_ts = env_->NowMicros() / 1000;
-      if (idle_flag) {
-        if (FAILED(master_schedule_compaction(CompactionScheduleType::MASTER_IDLE))) {
+    if (idle_flag) {
+      if (mutable_db_options_.master_thread_compaction_enabled &&
+          auto_compaction_ms > 0 &&
+          env_->NowMicros() / 1000 >
+              last_auto_compaction_ts + auto_compaction_ms &&
+          SUCCED(ret)) {
+        last_auto_compaction_ts = env_->NowMicros() / 1000;
+        if (FAILED(master_schedule_compaction(
+                CompactionScheduleType::MASTER_IDLE))) {
           SE_LOG(WARN, "failed to schedule compaction", K(ret));
-        } else {
         }
         // todo do idle checkpoint
-      } else {
-        idle_flag = true;
       }
+    } else {
+      idle_flag = true;
     }
     // (4) schedule auto compaction task
-    if (env_->NowMicros() / 1000 > last_auto_compaction_ts + auto_compaction_ms
-        && SUCCED(ret)) {
+    if (mutable_db_options_.master_thread_compaction_enabled &&
+        env_->NowMicros() / 1000 >
+            last_auto_compaction_ts + auto_compaction_ms &&
+        SUCCED(ret)) {
       last_auto_compaction_ts = env_->NowMicros() / 1000;
       SE_LOG(DEBUG, "BG_TASK: schedule compaction", K(env_->NowMicros()));
       if (FAILED(master_schedule_compaction(CompactionScheduleType::MASTER_AUTO))) {

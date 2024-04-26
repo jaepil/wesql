@@ -540,6 +540,7 @@ struct DBOptions {
   uint64_t table_cache_size = 1 * 1024 * 1024 * 1024; // 1GB
   uint64_t auto_shrink_schedule_interval = 60 * 60; // 1 hour
   uint64_t estimate_cost_depth = 0;
+  bool master_thread_compaction_enabled = true;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)

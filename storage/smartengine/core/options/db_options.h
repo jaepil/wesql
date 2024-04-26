@@ -84,6 +84,7 @@ struct MutableDBOptions {
   uint64_t auto_shrink_schedule_interval;
   uint64_t estimate_cost_depth;
   uint64_t monitor_interval_ms;
+  bool master_thread_compaction_enabled;
 };
 
 }  // namespace common

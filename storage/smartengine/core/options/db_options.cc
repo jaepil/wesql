@@ -104,7 +104,8 @@ MutableDBOptions::MutableDBOptions()
       idle_tasks_schedule_time(60),
       auto_shrink_schedule_interval(60 * 60),
       estimate_cost_depth(0),
-      monitor_interval_ms(60'000)
+      monitor_interval_ms(60'000),
+      master_thread_compaction_enabled(true)
 {}
 
 MutableDBOptions::MutableDBOptions(const DBOptions& options)
@@ -134,7 +135,8 @@ MutableDBOptions::MutableDBOptions(const DBOptions& options)
       idle_tasks_schedule_time(options.idle_tasks_schedule_time),
       auto_shrink_schedule_interval(options.auto_shrink_schedule_interval),
       estimate_cost_depth(options.estimate_cost_depth),
-      monitor_interval_ms(options.monitor_interval_ms)
+      monitor_interval_ms(options.monitor_interval_ms),
+      master_thread_compaction_enabled(options.master_thread_compaction_enabled)
 {}
 
 void MutableDBOptions::Dump() const {
@@ -165,6 +167,7 @@ void MutableDBOptions::Dump() const {
   __SE_LOG(INFO, "           Options.auto_shrink_schedule_interval: %d)", auto_shrink_schedule_interval);
   __SE_LOG(INFO, "                Options.estimate_cost_depth: %d)", estimate_cost_depth);
   __SE_LOG(INFO, "                Options.monitor_interval_ms: %d)", monitor_interval_ms);
+  __SE_LOG(INFO, "   Options.master_thread_compaction_enabled: %d)", master_thread_compaction_enabled);
 }
 
 }  // namespace common
