@@ -18,10 +18,13 @@
 
 #include "storage/storage_logger.h"
 #include "storage/storage_log_entry.h"
+#include "util/dio_helper.h"
 
 namespace smartengine
 {
 using namespace common;
+using namespace util;
+
 namespace storage
 {
 
@@ -141,9 +144,10 @@ int ExtentMetaManager::do_checkpoint(util::WritableFile *checkpoint_writer,
   if (IS_NULL(checkpoint_writer) || IS_NULL(header)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(checkpoint_writer), KP(header));
-  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, buf_size,  memory::ModId::kExtentSpaceMgr)))) {
+  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, buf_size,  memory::ModId::kExtentSpaceMgr)))) {
     ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for buf", K(ret), K(PAGE_SIZE), K(buf_size));
+    SE_LOG(WARN, "fail to allocate memory for buf", K(ret), K(buf_size));
   } else if (FAILED(reserve_checkpoint_block_header(buf, buf_size, offset, block_header))) {
     SE_LOG(WARN, "fail to reserve checkpoint block header", K(ret));
   } else {
@@ -208,7 +212,7 @@ int ExtentMetaManager::load_checkpoint(util::RandomAccessFile *checkpoint_reader
   if (IS_NULL(checkpoint_reader) || IS_NULL(header)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(checkpoint_reader), KP(header));
-  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, buf_size, memory::ModId::kExtentSpaceMgr)))) {
+  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(DIOHelper::DIO_ALIGN_SIZE, buf_size, memory::ModId::kExtentSpaceMgr)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for buf", K(ret), K(buf_size));
   } else {

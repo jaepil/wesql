@@ -208,7 +208,7 @@ class Footer {
 // Read the footer from file
 // If enforce_table_magic_number != 0, ReadFooterFromFile() will return
 // corruption if table_magic number is not equal to enforce_table_magic_number
-common::Status ReadFooterFromFile(util::RandomAccessFileReader* file,
+common::Status ReadFooterFromFile(storage::ReadableExtent *extent,
                                   uint64_t file_size, Footer* footer,
                                   uint64_t enforce_table_magic_number = 0);
 
@@ -251,7 +251,7 @@ struct BlockContents {
   }
 };
 
-extern common::Status ReadBlock(util::RandomAccessFileReader* file,
+extern common::Status ReadBlock(storage::ReadableExtent *extent,
                                 const Footer& footer,
                                 const common::ReadOptions& options,
                                 const BlockHandle& handle,
@@ -261,7 +261,7 @@ extern common::Status ReadBlock(util::RandomAccessFileReader* file,
 
 // Read the block identified by "handle" from "file".  On failure
 // return non-OK.  On success fill *result and return OK.
-extern common::Status ReadBlockContents(util::RandomAccessFileReader* file,
+extern common::Status ReadBlockContents(storage::ReadableExtent *extent,
                                         const Footer& footer,
                                         const common::ReadOptions& options,
                                         const BlockHandle& handle,

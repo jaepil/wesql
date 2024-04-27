@@ -53,6 +53,10 @@ namespace monitor {
 class HistogramImpl;
 }
 
+namespace storage
+{
+class IOExtent;
+}
 namespace table {
 class Block;
 class BlockIter;
@@ -102,7 +106,7 @@ class ExtentBasedTable : public TableReader {
       const common::ImmutableCFOptions& ioptions,
       const BlockBasedTableOptions& table_options,
       const db::InternalKeyComparator& internal_key_comparator,
-      util::RandomAccessFileReader *file,
+      storage::ReadableExtent *extent,
       uint64_t file_size,
       TableReader *&table_reader,
       const storage::ExtentId &extent_id,
@@ -388,10 +392,9 @@ class ExtentBasedTable : public TableReader {
 
   // Generate a cache key prefix from the file
   static void GenerateCachePrefix(cache::Cache* cc,
-                                  util::RandomAccessFile* file, char* buffer,
-                                  size_t* size);
-  static void GenerateCachePrefix(cache::Cache* cc, util::WritableFile* file,
-                                  char* buffer, size_t* size);
+                                  storage::IOExtent* io_extent,
+                                  char* buffer,
+                                  int64_t* size);
 
   // Helper functions for DumpTable()
   common::Status DumpIndexBlock(util::WritableFile* out_file);
@@ -472,14 +475,14 @@ struct ExtentBasedTable::Rep {
   storage::ExtentId extent_id_;
   common::Status status;
   // if rep use internal allocator, file use MOD_NEW, need delete when destruct
-  // else file use external allocator, don't need delete
-  std::unique_ptr<util::RandomAccessFileReader, memory::ptr_destruct<util::RandomAccessFileReader>> file;
+  // else extent use external allocator, don't need delete
+  std::unique_ptr<storage::ReadableExtent, memory::ptr_destruct<storage::ReadableExtent>> extent;
   char cache_key_prefix[kMaxCacheKeyPrefixSize];
-  size_t cache_key_prefix_size = 0;
+  int64_t cache_key_prefix_size = 0;
   char persistent_cache_key_prefix[kMaxCacheKeyPrefixSize];
-  size_t persistent_cache_key_prefix_size = 0;
+  int64_t persistent_cache_key_prefix_size = 0;
   char compressed_cache_key_prefix[kMaxCacheKeyPrefixSize];
-  size_t compressed_cache_key_prefix_size = 0;
+  int64_t compressed_cache_key_prefix_size = 0;
   uint64_t dummy_index_reader_offset = 0;  // ID that is unique for the block cache.
 
   // Footer contains the fixed table information

@@ -44,7 +44,7 @@ public:
   //extent relative function
   int allocate(const int64_t table_space_id,
                const int32_t extent_space_type,
-               WritableExtent &extent);
+               WritableExtent *extent);
   int recycle(const int64_t table_space_id,
               const int32_t extent_space_type,
               const ExtentId extent_id,
@@ -53,7 +53,7 @@ public:
   int reference(const int64_t table_space_id,
                 const int32_t extent_space_type,
                 const ExtentId extent_id);
-  int get_random_access_extent(ExtentId extent_id, RandomAccessExtent &extent);
+  int get_readable_extent(ExtentId extent_id, ReadableExtent *extent);
 
   //shrink relative function
   int get_shrink_infos(const ShrinkCondition &shrink_condition, std::vector<ShrinkInfo> &shrink_infos);

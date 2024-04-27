@@ -87,7 +87,8 @@ void HotbackupTest::replay_sst_files(const std::string &backup_dir,
   int64_t i = 0;
   Slice id_res;
   Slice extent_res;
-  ASSERT_TRUE(nullptr != (extent_buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, storage::MAX_EXTENT_SIZE, memory::ModId::kDefaultMod))));
+  ASSERT_TRUE(nullptr != (extent_buf = reinterpret_cast<char *>(memory::base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, storage::MAX_EXTENT_SIZE, memory::ModId::kDefaultMod))));
   while (id_reader->Read(8, &id_res, buf).ok() && id_res.size() == 8) {
     ExtentId extent_id(*reinterpret_cast<const int64_t*>(id_res.data()));
     // read from extent file
@@ -105,7 +106,10 @@ void HotbackupTest::replay_sst_files(const std::string &backup_dir,
     } else {
       fd = iter->second;
     }
-    ASSERT_OK(unintr_pwrite(fd, extent_buf, storage::MAX_EXTENT_SIZE, extent_id.offset * storage::MAX_EXTENT_SIZE));
+    ExtentIOInfo io_info(fd, extent_id, MAX_EXTENT_SIZE, 16 * 1024 /*block_size=*/, extent_id.id());
+    WritableExtent writable_extent;
+    ASSERT_EQ(Status::kOk, writable_extent.init(io_info));
+    ASSERT_EQ(Status::kOk, writable_extent.append(Slice(extent_buf, storage::MAX_EXTENT_SIZE)));
     SE_LOG(INFO, "replay extent", K(extent_id));
   }
   for (auto &iter : fds_map) {
@@ -134,7 +138,8 @@ void HotbackupTest::copy_extents(const std::string &backup_tmp_dir_path,
   std::unordered_map<int32_t, int32_t> fds_map;
   int fd = -1;
   std::string fname;
-  ASSERT_TRUE(nullptr != (extent_buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, storage::MAX_EXTENT_SIZE, memory::ModId::kDefaultMod))));
+  ASSERT_TRUE(nullptr != (extent_buf = reinterpret_cast<char *>(memory::base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, storage::MAX_EXTENT_SIZE, memory::ModId::kDefaultMod))));
   while (reader->Read(8, &result, buf).ok() && result.size() > 0) {
     ExtentId extent_id(*reinterpret_cast<const int64_t*>(result.data()));
     auto iter = fds_map.find(extent_id.file_number);
@@ -148,8 +153,12 @@ void HotbackupTest::copy_extents(const std::string &backup_tmp_dir_path,
     } else {
       fd = iter->second;
     }
-    ASSERT_OK(unintr_pread(fd, extent_buf, storage::MAX_EXTENT_SIZE, extent_id.offset * storage::MAX_EXTENT_SIZE));
-    ASSERT_OK(extent_writer->Append(Slice(extent_buf, storage::MAX_EXTENT_SIZE)));
+    Slice extent_result;
+    ExtentIOInfo io_info(fd, extent_id, storage::MAX_EXTENT_SIZE, 16 * 1024, extent_id.id());
+    ReadableExtent readable_extent;
+    ASSERT_EQ(Status::kOk, readable_extent.init(io_info));
+    ASSERT_EQ(Status::kOk, readable_extent.read(0, storage::MAX_EXTENT_SIZE, extent_buf, nullptr /*aio_handle=*/, extent_result));
+    ASSERT_OK(extent_writer->Append(extent_result));
     SE_LOG(INFO, "copy extent", K(extent_id));
   }
   ASSERT_OK(extent_writer->Close());

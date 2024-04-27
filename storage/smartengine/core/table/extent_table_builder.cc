@@ -209,7 +209,7 @@ int ExtentBasedTableBuilder::init_one_sst() {
 
   ret = ExtentSpaceManager::get_instance().allocate(mtables_->table_space_id_,
                                                     storage::HOT_EXTENT_SPACE,
-                                                    rep_->extent_);
+                                                    &(rep_->extent_));
 #ifndef NDEBUG
   if (TEST_is_ignore_flush_data()) {
     return Status::kOk;
@@ -599,7 +599,7 @@ int ExtentBasedTableBuilder::Add(const Slice& key, const Slice& value) {
     oob_extent.reset();
     FAIL_RETURN_MSG(ExtentSpaceManager::get_instance().allocate(mtables_->table_space_id_,
                                                                 storage::HOT_EXTENT_SPACE,
-                                                                oob_extent),
+                                                                &oob_extent),
                     "Could not allocate extent(%d)", ret);
     not_flushed_lob_extent_id_ = oob_extent.get_extent_id();
     size_t count = EXTENT_SIZE;
@@ -612,10 +612,8 @@ int ExtentBasedTableBuilder::Add(const Slice& key, const Slice& value) {
       oob = oob_base + off;
     }
     size_t io_count = util::Roundup(count, PAGE_SIZE);
-    FAIL_RETURN_MSG(oob_extent.Append(Slice(oob, io_count)).code(),
+    FAIL_RETURN_MSG(oob_extent.append(Slice(oob, io_count)),
                     "Could not append extent(%d)", ret);
-    FAIL_RETURN_MSG(oob_extent.Sync().code(),
-                    "Could not sync extent(%d)", ret);
     storage::ExtentMeta extent_meta;
     if (FAILED(build_large_object_extent_meta(lob_key, oob_extent.get_extent_id(), count, extent_meta))) {
       SE_LOG(WARN, "fail to build large object extent meta", K(ret), "extent_id", oob_extent.get_extent_id());
@@ -983,7 +981,7 @@ int ExtentBasedTableBuilder::write_sst(Footer& footer) {
       abort();
       s = ExtentSpaceManager::get_instance().allocate(mtables_->table_space_id_,
                                                       storage::HOT_EXTENT_SPACE,
-                                                      next_extent);
+                                                      &next_extent);
       if (!s.ok()) {
         __SE_LOG(ERROR, "Could not allocate extent");
         return s.code();
@@ -1011,17 +1009,17 @@ int ExtentBasedTableBuilder::write_sst(Footer& footer) {
         return Status::kCorruption;
       }
 
-      if (!(s = extent.Append(Slice(buf, EXTENT_SIZE))).ok() ||
-          !(s = extent.Sync()).ok()) {
+      if (!(s = extent.append(Slice(buf, EXTENT_SIZE))).ok()) {
         __SE_LOG(ERROR, "Could not write out extent");
         return s.code();
       }
     } else {
+      // must not reach here
+      se_assert(false);
       memcpy(ebuf + padding_size, footer_encoding.data(),
              footer_encoding.size());
-      if (!(s = extent.Append(Slice(buf, this_count))).ok() ||
-          !(s = extent.Append(Slice(ebuf, PAGE_SIZE))).ok() ||
-          !(s = extent.Sync()).ok()) {
+      if (!(s = extent.append(Slice(buf, this_count))).ok() ||
+          !(s = extent.append(Slice(ebuf, PAGE_SIZE))).ok()) {
         __SE_LOG(ERROR, "Could not write out extent");
         return s.code();
       }

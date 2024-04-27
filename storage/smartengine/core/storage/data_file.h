@@ -139,8 +139,6 @@ private:
   int truncate(const int64_t truncate_extent_count);
   int rebuild_free_extent();
   int update_data_file_size(const int64_t total_extent_count);
-  int internal_get_random_access_extent(const ExtentId &extent_id,
-                                        RandomAccessExtent &random_access_extent);
   int move_extent(const int32_t origin_offset,
                   char *extent_buf,
                   ChangeInfo &change_info);

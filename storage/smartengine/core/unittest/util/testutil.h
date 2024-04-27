@@ -623,6 +623,20 @@ std::string RandomName(Random* rnd, const size_t len);
 
 common::Status DestroyDir(Env* env, const std::string& dir);
 
+class RandomInt64Generator
+{
+public:
+  RandomInt64Generator() = delete;
+  explicit RandomInt64Generator(const int64_t lower_bound, const int64_t upper_bound);
+  ~RandomInt64Generator() {}
+
+  int64_t generate();
+private:
+  std::random_device rd_;
+  std::mt19937 generator_;
+  std::uniform_int_distribution<int64_t> distribution_;
+};
+
 }  // namespace test
 }  // namespace util
 }  // namespace smartengine

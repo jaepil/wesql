@@ -250,9 +250,9 @@ struct ExtentBasedTableBuilder::Rep {
 
   storage::WritableExtent extent_;
   char cache_key_prefix[ExtentBasedTable::kMaxCacheKeyPrefixSize];
-  size_t cache_key_prefix_size;
+  int64_t cache_key_prefix_size;
   char compressed_cache_key_prefix[ExtentBasedTable::kMaxCacheKeyPrefixSize];
-  size_t compressed_cache_key_prefix_size;
+  int64_t compressed_cache_key_prefix_size;
 
   Rep(const common::ImmutableCFOptions& ioptions,
       const BlockBasedTableOptions& table_options,

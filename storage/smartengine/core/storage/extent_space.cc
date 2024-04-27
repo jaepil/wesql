@@ -197,7 +197,8 @@ int ExtentSpace::move_extens_to_front(const int64_t move_extent_count, std::unor
   } else if ((free_extent_count = get_free_extent_count()) < move_extent_count) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, no enough space to move", K(ret), K(move_extent_count), K(free_extent_count));
-  } else if (IS_NULL(extent_buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, MAX_EXTENT_SIZE, memory::ModId::kExtentSpaceMgr)))) {
+  } else if (IS_NULL(extent_buf = reinterpret_cast<char *>(memory::base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, MAX_EXTENT_SIZE, memory::ModId::kExtentSpaceMgr)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for extent buf", K(ret));
   } else {
@@ -643,7 +644,7 @@ int ExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
 {
   int ret = Status::kOk;
   ExtentIOInfo origin_io_info;
-  RandomAccessExtent origin_extent;
+  ReadableExtent origin_extent;
   WritableExtent new_extent;
   Slice extent_slice;
 
@@ -664,10 +665,10 @@ int ExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
     SE_LOG(WARN, "unexpected error, the new extent should at the front", K(ret), K(origin_io_info), K(new_io_info));
   } else if (FAILED(new_extent.init(new_io_info))) {
     SE_LOG(WARN, "fail to init new extent", K(ret), K(new_io_info));
-  } else if (FAILED(origin_extent.Read(0, origin_io_info.extent_size_, &extent_slice, extent_buf).code())) {
+  } else if (FAILED(origin_extent.read(0, origin_io_info.extent_size_, extent_buf, nullptr /*aio_handle=*/, extent_slice))) {
     SE_LOG(WARN, "fail to read origin extent", K(ret), K(origin_extent_id));
-  } else if (FAILED(new_extent.Append(extent_slice).code())) {
-    SE_LOG(WARN, "fail to write new extent", K(ret), "new_extent_id", new_extent.get_extent_id());
+  } else if (FAILED(new_extent.append(extent_slice))) {
+    SE_LOG(WARN, "fail to append new extent", K(ret), K(new_extent));
   } else {
     SE_LOG(INFO, "success to move one extent to front", K(origin_extent_id), K(new_io_info));
   }

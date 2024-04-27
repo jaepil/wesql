@@ -570,7 +570,7 @@ int DataFile::double_write_header()
   if (UNLIKELY(!data_file_header_.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K_(data_file_header));
-  } else if (IS_NULL(header_buf = reinterpret_cast<char *>(memory::base_memalign(DIO_ALIGN_SIZE, header_buf_size, memory::ModId::kExtentSpaceMgr)))) {
+  } else if (IS_NULL(header_buf = reinterpret_cast<char *>(memory::base_memalign(DIOHelper::DIO_ALIGN_SIZE, header_buf_size, memory::ModId::kExtentSpaceMgr)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for header buffer", K(ret));
   } else {
@@ -622,7 +622,7 @@ int DataFile::double_load_header(const std::string &file_path)
   int64_t backup_header_offset = 0;
 
   if (IS_NULL(header_buf = reinterpret_cast<char *>(
-          memory::base_memalign(DIO_ALIGN_SIZE, header_buf_size, memory::ModId::kExtentSpaceMgr)))) {
+          memory::base_memalign(DIOHelper::DIO_ALIGN_SIZE, header_buf_size, memory::ModId::kExtentSpaceMgr)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for header buf", K(ret));
   } else {
@@ -902,7 +902,7 @@ int DataFile::check_garbage_file(const std::string &file_path, const Slice &head
 
   if (SUCCED(ret) && !garbage_file_) {
     if (IS_NULL(garbage_header_buf = reinterpret_cast<char *>(
-            memory::base_memalign(DIO_ALIGN_SIZE, garbage_header_size, memory::ModId::kExtentSpaceMgr)))) {
+            memory::base_memalign(DIOHelper::DIO_ALIGN_SIZE, garbage_header_size, memory::ModId::kExtentSpaceMgr)))) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "fail to allocate memory for garbage header buf", K(ret));
     } else {

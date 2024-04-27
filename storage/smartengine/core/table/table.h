@@ -26,24 +26,33 @@
 #include "env/env.h"
 #include "options/options.h"
 
-namespace smartengine {
+namespace smartengine
+{
 
-namespace db {
+namespace db
+{
 class MiniTables;
 }
 
-namespace util {
+namespace storage
+{
+class ReadableExtent;
+}
+namespace util
+{
 class WritableFileWriter;
 class RandomAccessFile;
 struct EnvOptions;
 class RandomAccessFileReader;
 }
 
-namespace common {
+namespace common
+{
 struct Options;
 }
 
-namespace table {
+namespace table
+{
 using std::unique_ptr;
 
 struct TableReaderOptions;
@@ -225,7 +234,8 @@ class TableFactory {
   // table_reader is the output table reader.
   virtual common::Status NewTableReader(
       const TableReaderOptions& table_reader_options,
-      util::RandomAccessFileReader *file, uint64_t file_size,
+      storage::ReadableExtent *extent,
+      uint64_t file_size,
       TableReader *&table_reader,
       bool prefetch_index_and_filter_in_cache = true,
       memory::SimpleAllocator *arena = nullptr) const = 0;

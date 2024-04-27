@@ -104,16 +104,13 @@ Status SstFileReader::GetTableReader(const std::string& file_path,
     s = options_.env->GetFileSize(file_path, &file_size);
   }
 
-  storage::RandomAccessExtent *extent = MOD_NEW_OBJECT(ModId::kDefaultMod, storage::RandomAccessExtent);
+  storage::ReadableExtent *extent = MOD_NEW_OBJECT(ModId::kDefaultMod, storage::ReadableExtent);
   storage::ExtentIOInfo io_info(fd, eid, storage::MAX_EXTENT_SIZE, storage::DATA_BLOCK_SIZE, 1);
   extent->init(io_info);
-  file_.reset(MOD_NEW_OBJECT(ModId::kDefaultMod,
-                             RandomAccessFileReader,
-                             extent,
-                             false /*use_allocator*/));
+  extent_.reset(extent);
 
   if (s.ok()) {
-    s = ReadFooterFromFile(file_.get(), file_size, &footer);
+    s = ReadFooterFromFile(extent, file_size, &footer);
   }
 
   if (s.ok()) {
@@ -124,7 +121,7 @@ Status SstFileReader::GetTableReader(const std::string& file_path,
   if (s.ok()) {
     options_.comparator = &internal_comparator_;
     // For old sst format, ReadTableProperties might fail but file can be read
-    if (ReadTableProperties(magic_number, file_.get(), file_size).ok()) {
+    if (ReadTableProperties(magic_number, extent_.get(), file_size).ok()) {
       SetTableOptionsByMagicNumber(magic_number);
     }
   }
@@ -155,7 +152,7 @@ Status SstFileReader::NewTableReader(
                                     false /*skip_filters*/,
                                     -1 /*level*/);
   return extent_based_table_factory->NewTableReader(reader_options,
-                                                    file_.release(),
+                                                    extent_.release(),
                                                     file_size,
                                                     table_reader,
                                                     false /*prefetch_index_and_filter_in_cache*/);
@@ -174,10 +171,10 @@ Status SstFileReader::DumpTable(const std::string& out_filename) {
 
 
 Status SstFileReader::ReadTableProperties(uint64_t table_magic_number,
-                                          RandomAccessFileReader* file,
+                                          storage::ReadableExtent *extent,
                                           uint64_t file_size) {
   TableProperties* table_properties = nullptr;
-  Status s = table::ReadTableProperties(file, file_size, table_magic_number,
+  Status s = table::ReadTableProperties(extent, file_size, table_magic_number,
                                         ioptions_, &table_properties);
   if (s.ok()) {
     table_properties_.reset(table_properties);

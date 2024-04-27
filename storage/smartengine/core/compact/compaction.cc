@@ -248,7 +248,7 @@ int GeneralCompaction::create_extent_index_iterator(const MetaDescriptor &extent
                                                     DataBlockIterator *&iterator,
                                                     ExtSEIterator::ReaderRep &rep) {
   int ret = 0;
-  if (IS_NULL(get_async_extent_reader(extent.block_position_.first))) {
+  if (IS_NULL(get_prefetched_extent(extent.block_position_.first))) {
     // if prefetch failed, just ignore it
     prefetch_extent(extent.block_position_.first);
   }
@@ -363,9 +363,7 @@ int GeneralCompaction::destroy_extent_index_iterator(
     if (0 == rep.extent_id_) return ret;
     destroy_async_extent_reader(rep.extent_id_);
     if (nullptr != rep.table_reader_) {
-//      delete rep.table_reader_;
       FREE_OBJECT(TableReader, arena_, rep.table_reader_);
-//      rep.table_reader_ = nullptr;
     }
     if (nullptr != rep.block_iter_) {
       rep.block_iter_->~DataBlockIterator();
@@ -384,39 +382,25 @@ int GeneralCompaction::delete_extent_meta(const MetaDescriptor &extent) {
   return ret;
 }
 
-int GeneralCompaction::get_table_reader(const MetaDescriptor &extent, TableReader *&reader)
+int GeneralCompaction::get_table_reader(const MetaDescriptor &extent_desc, TableReader *&reader)
 {
   int ret = Status::kOk;
-  ExtentId extent_id(extent.block_position_.first);
-  RandomAccessFile *file = nullptr;
-  AsyncRandomAccessExtent *async_file = nullptr;
-  RandomAccessExtent *extent_file = nullptr;
-  RandomAccessFileReader *file_reader = nullptr;
+  ExtentId extent_id(extent_desc.block_position_.first);
+  ReadableExtent *extent = nullptr;
+  FullPrefetchExtent *prefetched_extent = nullptr;
   TableReader *table_reader = nullptr;
 
-  // get random access extent
-  if (IS_NOTNULL(async_file = get_async_extent_reader(extent_id.id()))) {
-    file = async_file;
+  // get readable extent
+  if (IS_NOTNULL(prefetched_extent = get_prefetched_extent(extent_id.id()))) {
+    extent = prefetched_extent;
   } else {
-      if (IS_NULL(extent_file = ALLOC_OBJECT(RandomAccessExtent, arena_))) {
+      if (IS_NULL(extent = ALLOC_OBJECT(ReadableExtent, arena_))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for extent file", K(ret));
-      } else if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(
-          extent_id, *extent_file))) {
+      } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(
+          extent_id, extent))) {
         SE_LOG(WARN, "fail to get random access extent", K(ret), K(extent));
-      } else {
-        file = extent_file;
       }
-  }
-
-  if (SUCCED(ret)) {
-    if (IS_NULL(file_reader = ALLOC_OBJECT(RandomAccessFileReader,
-                                           arena_,
-                                           file,
-                                           true /**use_allocator*/))) {
-      ret = Status::kMemoryLimit;
-      SE_LOG(WARN, "fail to allocate memory for RandomAccessFileReader", K(ret));
-    }
   }
 
   if (SUCCED(ret)) {
@@ -424,10 +408,10 @@ int GeneralCompaction::get_table_reader(const MetaDescriptor &extent, TableReade
                                       *context_.internal_comparator_,
                                       extent_id,
                                       false /**skip_filter*/,
-                                      extent.type_.level_);
+                                      extent_desc.type_.level_);
     if (FAILED(context_.cf_options_->table_factory->NewTableReader(
         reader_options,
-        file_reader,
+        extent,
         MAX_EXTENT_SIZE,
         table_reader,
         false /**prefetch_index_and_filter_in_cache*/,
@@ -440,11 +424,9 @@ int GeneralCompaction::get_table_reader(const MetaDescriptor &extent, TableReade
 
   // resource clean
   if (FAILED(ret)) {
-    if (IS_NOTNULL(extent_file)) {
-      FREE_OBJECT(RandomAccessExtent, arena_, extent_file);
-    }
-    if (IS_NOTNULL(file_reader)) {
-      FREE_OBJECT(RandomAccessFileReader, arena_, file_reader);
+    // ensure that the extent is allocated through arena.
+    if (IS_NOTNULL(extent) && IS_NULL(prefetched_extent)) {
+      FREE_OBJECT(ReadableExtent, arena_, extent);
     }
   }
 
@@ -707,56 +689,64 @@ int GeneralCompaction::run() {
 }
 
 int GeneralCompaction::prefetch_extent(int64_t extent_id) {
-  int ret = 0;
-  AsyncRandomAccessExtent *reader = ALLOC_OBJECT(AsyncRandomAccessExtent, arena_);
+  int ret = Status::kOk;
+  FullPrefetchExtent *extent = nullptr;
 
-  Status s;
-  if (IS_NULL(reader)) {
+  if (IS_NULL(extent = ALLOC_OBJECT(FullPrefetchExtent, arena_))) {
     ret = Status::kMemoryLimit;
     COMPACTION_LOG(WARN, "failed to alloc memory for reader", K(ret));
-  } else if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(extent_id, *reader))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(extent_id, extent))) {
     COMPACTION_LOG(ERROR, "open extent for read failed.", K(extent_id), K(ret));
   } else {
     // todo if cache key changed
-//    reader->set_subtable_id(cf_desc_.column_family_id_);
+    //reader->set_subtable_id(cf_desc_.column_family_id_);
+    //TODO(Zhao Dongsheng) : the rate limiter is out of work.
     if (nullptr != context_.cf_options_->rate_limiter) {
-      reader->set_rate_limiter(context_.cf_options_->rate_limiter);
+      //reader->set_rate_limiter(context_.cf_options_->rate_limiter);
     }
-    if (FAILED(reader->prefetch())) {
+    if (FAILED(extent->full_prefetch())) {
       COMPACTION_LOG(WARN, "failed to prefetch", K(ret));
     } else {
-      prefetch_extents_.insert(std::make_pair(extent_id, reader));
+      prefetched_extents_.insert(std::make_pair(extent_id, extent));
     }
   }
+
+  // resource clean
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(extent)) {
+      FREE_OBJECT(FullPrefetchExtent, arena_, extent);
+    }
+  }
+
   return ret;
 }
 
-AsyncRandomAccessExtent *GeneralCompaction::get_async_extent_reader(
-    int64_t extent_id) const {
-  AsyncRandomAccessExtent *reader = nullptr;
-  std::unordered_map<int64_t, AsyncRandomAccessExtent *>::const_iterator iter =
-      prefetch_extents_.find(extent_id);
-  if (iter != prefetch_extents_.end()) {
-    reader = iter->second;
+FullPrefetchExtent *GeneralCompaction::get_prefetched_extent(int64_t extent_id) const
+{
+  FullPrefetchExtent *extent = nullptr;
+  std::unordered_map<int64_t, FullPrefetchExtent*>::const_iterator iter =
+      prefetched_extents_.find(extent_id);
+  if (iter != prefetched_extents_.end()) {
+    extent = iter->second;
+    se_assert(IS_NOTNULL(extent));
   }
-  return reader;
+  return extent;
 }
 
 void GeneralCompaction::destroy_async_extent_reader(int64_t extent_id, bool is_reuse) {
-  std::unordered_map<int64_t, AsyncRandomAccessExtent *>::iterator iter =
-      prefetch_extents_.find(extent_id);
-  if (iter != prefetch_extents_.end() && nullptr != iter->second) {
+  std::unordered_map<int64_t, FullPrefetchExtent*>::iterator iter =
+      prefetched_extents_.find(extent_id);
+  if (iter != prefetched_extents_.end() && nullptr != iter->second) {
     iter->second->reset();
     if (is_reuse) {
-//      delete iter->second;
-      FREE_OBJECT(AsyncRandomAccessExtent, arena_, iter->second);
+      FREE_OBJECT(FullPrefetchExtent, arena_, iter->second);
     } else {
-      // no need delete it->second(AsyncRandomAccessExtent), delete with table_reader
+      // no need delete it->second(FullPrefetchExtent), delete with table_reader
     }
     iter->second = nullptr;
   }
-  if (iter != prefetch_extents_.end()) {
-    prefetch_extents_.erase(iter);
+  if (iter != prefetched_extents_.end()) {
+    prefetched_extents_.erase(iter);
   }
 }
 
@@ -792,14 +782,14 @@ void GeneralCompaction::clear_current_readers() {
     destroy_extent_index_iterator(i);
   }
   reader_reps_.clear();
-  for (auto &item : prefetch_extents_) {
+  for (auto &item : prefetched_extents_) {
     if (nullptr != item.second) {
       item.second->reset();
       // AsyncExtentExtent needs delete if not used.
-      FREE_OBJECT(AsyncRandomAccessExtent, arena_, item.second);
+      FREE_OBJECT(FullPrefetchExtent, arena_, item.second);
     }
   }
-  prefetch_extents_.clear();
+  prefetched_extents_.clear();
 }
 
 void GeneralCompaction::clear_current_writers() {

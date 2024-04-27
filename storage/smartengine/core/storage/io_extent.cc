@@ -16,7 +16,7 @@
 
 #include "storage/io_extent.h"
 #include <unistd.h>
-#include "util/rate_limiter.h"
+#include "util/misc_utility.h"
 
 namespace smartengine
 {
@@ -32,364 +32,379 @@ extern const uint64_t kExtentBasedTableMagicNumber;
 namespace storage
 {
 
-// change system error number to string
-Status io_error(const std::string &context, int err_number) {
-  switch (err_number) {
-    case ENOSPC:
-      return Status::NoSpace(context, strerror(err_number));
-    case ESTALE:
-      return Status(Status::kStaleFile);
-    default:
-      return Status::IOError(context, strerror(err_number));
-  }
-}
-
-/*
- * DirectIOHelper
- * Aligned buffer for read and write
- */
-const size_t SECTOR_SIZE = 4096;
-const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
-
-std::unique_ptr<void, void (&)(void *)> new_aligned(const size_t size) {
-  void *ptr = nullptr;
-  if (posix_memalign(&ptr, 4 * 1024, size) != 0) {
-    return std::unique_ptr<char, void(&)(void *)>(nullptr, free);
-  }
-  std::unique_ptr<void, void(&)(void *)> uptr(ptr, free);
-  return uptr;
-}
-
-size_t upper(const size_t size, const size_t fac) {
-  if (size % fac == 0) {
-    return size;
-  }
-  return size + (fac - size % fac);
-}
-
-size_t lower(const size_t size, const size_t fac) {
-  if (size % fac == 0) {
-    return size;
-  }
-  return size - (size % fac);
-}
-
-bool is_sector_aligned(const size_t off) { return off % SECTOR_SIZE == 0; }
-
-static bool is_page_aligned(const void *ptr) {
-  return uintptr_t(ptr) % (PAGE_SIZE) == 0;
-}
-
-Status unintr_pread(int32_t fd, char *dest, const int64_t len,
-                    const int64_t pos) {
-  assert(is_sector_aligned(pos));
-  assert(is_sector_aligned(len));
-  assert(is_page_aligned(dest));
-
-  int64_t bytes_read = 0;
-  ssize_t status = -1;
-  while (bytes_read < len) {
-    status = pread(fd, dest + bytes_read, len - bytes_read, pos + bytes_read);
-    if (status <= 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      break;
-    }
-    bytes_read += status;
-  }
-
-  return status < 0 ? Status::IOError(strerror(errno)) : Status::OK();
-}
-
-Status read_aligned(int fd, Slice *data, const uint64_t offset,
-                    const size_t size, char *scratch) {
-  Status s = unintr_pread(fd, scratch, size, offset);
-  if (s.ok()) {
-    *data = Slice(scratch, size);
-  }
-
-  return s;
-}
-
-Status read_unaligned(int fd, Slice *data, const uint64_t offset,
-                      const size_t size, char *scratch) {
-  assert(scratch);
-  assert(!is_sector_aligned(offset) || !is_sector_aligned(size) ||
-         !is_page_aligned(scratch));
-
-  const uint64_t aligned_off = lower(offset, SECTOR_SIZE);
-  const size_t aligned_size = upper(size + (offset - aligned_off), SECTOR_SIZE);
-  auto aligned_scratch = new_aligned(aligned_size);
-  assert(aligned_scratch);
-  if (!aligned_scratch) {
-    return Status::IOError("Unable to allocate");
-  }
-
-  assert(is_sector_aligned(aligned_off));
-  assert(is_sector_aligned(aligned_size));
-  assert(aligned_scratch);
-  assert(is_page_aligned(aligned_scratch.get()));
-  assert(offset + size <= aligned_off + aligned_size);
-
-  Slice scratch_slice;
-  Status s = read_aligned(fd, &scratch_slice, aligned_off, aligned_size,
-                          reinterpret_cast<char *>(aligned_scratch.get()));
-
-  // copy data upto min(size, what was read)
-  memcpy(scratch, reinterpret_cast<char *>(aligned_scratch.get()) +
-                      (offset % SECTOR_SIZE),
-         std::min(size, scratch_slice.size()));
-  *data = Slice(scratch, std::min(size, scratch_slice.size()));
-  return s;
-}
-
-// read data in aligned or unaligned buffer
-Status direct_io_read(int fd, Slice *result, size_t off, size_t n,
-                      char *scratch) {
-  if (is_sector_aligned(off) && is_sector_aligned(n) &&
-      is_page_aligned(scratch)) {
-    return read_aligned(fd, result, off, n, scratch);
-  }
-  return read_unaligned(fd, result, off, n, scratch);
-}
-
-Status unintr_pwrite(const int32_t fd, const char *src, const int64_t len,
-                     const int64_t pos, bool dio) {
-  if (dio && (!is_sector_aligned(len) || !is_page_aligned(src))) {
-    return Status::IOError("Unaligned buffer for direct IO.");
-  }
-
-  int64_t left = len;
-  int64_t start = pos;
-  while (left != 0) {
-    ssize_t done = pwrite(fd, src, left, start);
-    if (done < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return io_error("unintr_pwrite", errno);
-    }
-    left -= done;
-    src += done;
-    start += done;
-  }
-  return Status::OK();
-}
-
-WritableExtent::WritableExtent()
-    : io_info_(),
-      current_write_size_(0)
-{
-}
-
-WritableExtent::~WritableExtent()
-{
-}
-
-void WritableExtent::operator=(const WritableExtent &r)
-{
-  io_info_ = r.io_info_;
-  current_write_size_ = r.current_write_size_;
-}
-
-int WritableExtent::init(const ExtentIOInfo &io_info)
+int IOExtent::init(const ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
 
-  if (!io_info.is_valid()) {
+  if (UNLIKELY(is_inited_)) {
+    ret = Status::kInitTwice;
+    SE_LOG(WARN, "the extent has been inited", K(ret), K(io_info));
+  } else if (UNLIKELY(!io_info.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(io_info));
   } else {
     io_info_ = io_info;
+    is_inited_ = true;
   }
 
   return ret;
+}
+
+void IOExtent::reset()
+{
+  is_inited_ = false;
+  io_info_.reset();
+}
+
+int64_t IOExtent::get_unique_id(char *id, const int64_t max_size) const
+{
+  int64_t len = std::min(static_cast<int64_t>(sizeof(io_info_.unique_id_)), max_size);
+  memcpy(id, (char *)(&(io_info_.unique_id_)), len);
+  return len;
+}
+bool IOExtent::is_aligned(const int64_t offset, const int64_t size, const char *buf) const
+{
+  return DIOHelper::is_aligned(offset) &&
+         DIOHelper::is_aligned(size) &&
+         DIOHelper::is_aligned(reinterpret_cast<std::uintptr_t>(buf));
 }
 
 void WritableExtent::reset()
 {
-  io_info_.reset();
-  current_write_size_ = 0;
+  IOExtent::reset();
+  curr_offset_ = 0;
 }
 
-// use direct io to write data
-Status WritableExtent::Append(const Slice &data)
+int WritableExtent::append(const Slice &data)
 {
   int ret = Status::kOk;
+  int64_t offset = io_info_.get_offset() + curr_offset_;
 
-  if ((current_write_size_ + data.size()) > static_cast<uint64_t>(io_info_.extent_size_)) {
-    ret = Status::kIOError;
-    SE_LOG(WARN, "io error, extent overflow", K(ret), K_(current_write_size), K_(io_info), "data_size", data.size());
-  } else if (FAILED(unintr_pwrite(io_info_.fd_, data.data(), data.size(), io_info_.get_offset() + current_write_size_).code())) {
-      SE_LOG(WARN, "fail to write extent", K(ret), K_(current_write_size), K_(io_info), "data_size", data.size());
-  } else {
-    current_write_size_ += data.size();
-    SE_LOG(DEBUG, "success to write extent", K_(current_write_size), K_(io_info), "data_size", data.size());
-  }
-
-  return Status(ret);
-}
-
-// DO NOT USE, only used in unittest
-Status WritableExtent::AsyncAppend(util::AIO &aio, util::AIOReq *req, const Slice &data) {
-  int ret = Status::kOk;
-  AIOInfo aio_info(io_info_.fd_, io_info_.get_offset(), data.size());
-  if (IS_NULL(req)) {
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "WritableExtent should be inited", K(ret));
+  } else if (UNLIKELY(IS_NULL(data.data())) || UNLIKELY(0 == data.size())) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "req is null", K(ret));
-  } else if (FAILED(req->prepare_write(aio_info, data.data()))) {
-    SE_LOG(WARN, "failed to prepare_write", K(ret), K(*req));
-  } else if (FAILED(aio.submit(req, 1))) {
-    SE_LOG(WARN, "failed to submit aio request", K(ret), K(*req));
-  }
-  return Status(ret);
-}
-
-size_t WritableExtent::GetUniqueId(char *id, size_t max_size) const {
-  size_t len = std::min(sizeof(io_info_.unique_id_), max_size);
-  memcpy(id, (char *)(&io_info_.unique_id_), len);
-  return len;
-}
-
-RandomAccessExtent::RandomAccessExtent() : io_info_()
-{}
-
-RandomAccessExtent::~RandomAccessExtent()
-{
-  destroy();
-}
-
-int RandomAccessExtent::init(const ExtentIOInfo &io_info)
-{
-  int ret = Status::kOk;
-
-  if (UNLIKELY(!io_info.is_valid())) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(INFO, "invalid argument", K(ret), K(io_info));
+    SE_LOG(WARN, "invalid argument", K(ret), K(data));
+  } else if (UNLIKELY((curr_offset_ + static_cast<int64_t>(data.size())) > io_info_.extent_size_)) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "extent size overlimit", K(ret), K(offset), K_(curr_offset),
+      K(data), "data_size", data.size(), K_(io_info));
+  } else if (UNLIKELY(!is_aligned(offset, data.size(), data.data()))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the write buf should be aligned", K(ret), K(offset), K_(curr_offset), K(data));
+  } else if (FAILED(direct_write(io_info_.fd_, offset, data.data(), data.size()))) {
+    SE_LOG(WARN, "fail to direct write", K(ret), K_(io_info), K(offset), K_(curr_offset), K(data));
   } else {
-    io_info_ = io_info;
+    curr_offset_ += data.size();
   }
 
   return ret;
 }
 
-void RandomAccessExtent::destroy()
+int WritableExtent::direct_write(const int fd, const int64_t offset, const char *buf, const int64_t size)
 {
-  io_info_.reset();  
+  assert(fd > 0 && offset >= 0 && size > 0 && (nullptr != buf));
+  assert(is_aligned(offset, size, buf));
+
+  int ret = Status::kOk;
+  int64_t write_size = 0;
+  int64_t total_write_size = 0;
+  const char *curr_buf = buf;
+  int64_t curr_offset = offset;
+  int64_t left_size = size;
+
+  while (SUCCED(ret) && left_size > 0) {
+    write_size = pwrite(fd, curr_buf, left_size, curr_offset);
+
+    if (write_size <= 0) {
+      if (EINTR == errno) {
+        continue;
+      } else {
+        ret = Status::kIOError;
+#ifndef NDEBUG
+        SE_LOG(ERROR, "extent io error!", K(ret), K(errno));
+#endif
+      }
+    } else {
+      total_write_size += write_size;
+      curr_buf = buf + total_write_size;
+      curr_offset = offset + total_write_size;
+      left_size = size - total_write_size;
+    }
+  }
+  se_assert(size == total_write_size);
+
+  return ret;
 }
 
-Status RandomAccessExtent::Read(uint64_t offset, size_t n, Slice *result,
-                                char *scratch) const
+int ReadableExtent::prefetch(const int64_t offset, const int64_t size, AIOHandle *aio_handle)
+{
+  int ret = Status::kOk;
+  AIOInfo aio_info;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "ReadableExtent should be inited", K(ret));
+  } else if (UNLIKELY(offset < 0) || UNLIKELY(size <= 0) || IS_NULL(aio_handle)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(offset), K(size), KP(aio_handle));
+  } else if (FAILED(fill_aio_info(offset, size, aio_info))) {
+    SE_LOG(WARN, "fail to fill aio info", K(ret), K(offset), K(size), K_(io_info));
+  } else if (FAILED(aio_handle->prefetch(aio_info))) {
+      SE_LOG(WARN, "fail to pretch", K(ret), K(aio_info));
+  }
+
+  // Prefetch failed, will try sync IO, overwrite ret here.
+  if (FAILED(ret)) {
+    ret = Status::kOk;
+    aio_handle->aio_req_->status_ = Status::kErrorUnexpected;
+    SE_LOG(INFO, "aio prefetch failed, will try sync IO!");
+  }
+
+  return ret;
+}
+
+int ReadableExtent::read(const int64_t offset, const int64_t size, char *buf, AIOHandle *aio_handle, Slice &result)
 {
   int ret = Status::kOk;
 
-  if ((offset + n) > static_cast<uint64_t>(io_info_.extent_size_)) {
-    ret = Status::kIOError;
-    SE_LOG(WARN, "io error, extent overflow", K(ret), K(offset), K(n), K_(io_info));
-  } else if (FAILED(direct_io_read(io_info_.fd_, result, io_info_.get_offset() + offset, n, scratch).code())) {
-    SE_LOG(WARN, "fail to read extent", K(ret), K(offset), K(n), K_(io_info));
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "ReadableExtent should be inited", K(ret));
+  } else if (UNLIKELY(offset < 0) || UNLIKELY(size <= 0) || IS_NULL(buf)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(offset), K(size), KP(buf));
+  } else if (UNLIKELY((offset + size) > io_info_.extent_size_)) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "extent size overflow", K(ret), K(offset), K(size),
+        K(buf), K_(io_info));
   } else {
-    //SE_LOG(DEBUG, "success to read extent", K(offset), K(n), K_(io_info));
+    if (IS_NULL(aio_handle)) {
+      // sync read
+      if (FAILED(sync_read(offset, size, buf, result))) {
+        SE_LOG(WARN, "fail to sync read", K(ret), K(offset), K(size), K_(io_info));
+      }
+    } else {
+      // async read
+      if (FAILED(async_read(offset, size, buf, aio_handle, result))) {
+        SE_LOG(WARN, "fail to async read", K(ret), K(offset), K(size), K_(io_info));
+      }
+    }
   }
 
-  return Status(ret);
+  return ret;
 }
 
-int RandomAccessExtent::fill_aio_info(const int64_t offset, const int64_t size, AIOInfo &aio_info) const
+int ReadableExtent::sync_read(const int64_t offset, const int64_t size, char *buf, Slice &result)
+{
+  int ret = Status::kOk;
+  int64_t file_offset = io_info_.get_offset() + offset;
+
+  if (is_aligned(offset, size, buf)) {
+    if (FAILED(direct_read(io_info_.fd_, file_offset, size, buf))) {
+      SE_LOG(WARN, "fail to direct read", K(ret), K(offset), K(size), K_(io_info));
+    }
+  } else {
+    if (FAILED(align_to_direct_read(io_info_.fd_, file_offset, size, buf))) {
+      SE_LOG(WARN, "fail to convert to direct read", K(ret), K(offset), K(size), K_(io_info));
+    }
+  }
+
+  if (SUCCED(ret)) {
+    result.assign(buf, size);
+  }
+
+  return ret;
+}
+
+int ReadableExtent::async_read(const int64_t offset, const int64_t size, char *buf, AIOHandle *aio_handle, Slice &result)
+{
+  assert(nullptr != aio_handle);
+  int ret = Status::kOk;
+  AIOInfo aio_info;
+
+  if (FAILED(fill_aio_info(offset, size, aio_info))) {
+    SE_LOG(WARN, "fail to fill aio info", K(ret), K(offset), K(size), K_(io_info));
+  } else if (FAILED(aio_handle->read(aio_info.offset_, aio_info.size_, &result, buf))) {
+    SE_LOG(WARN, "fail to aio handle read", K(ret), K(offset), K(size), K(aio_info));
+    BACKTRACE(ERROR, "aio handle read failed!");
+  }
+
+  // AIO read failed, try sync read, overwrite ret here.
+  if (FAILED(ret)) {
+    if (FAILED(sync_read(offset, size, buf, result))) {
+      SE_LOG(WARN, "fail to sync read after async read failed", K(ret), K(offset), K(size), K(aio_info));
+    }
+  }
+
+  return ret;
+}
+
+int ReadableExtent::fill_aio_info(const int64_t offset, const int64_t size, AIOInfo &aio_info) const
 {
   int ret = Status::kOk;
   aio_info.reset();
-  if (offset + size > io_info_.extent_size_) {
-    ret = Status::kNotSupported;
-    SE_LOG(INFO, "larger than one extent, will try sync IO!");
+
+  if (UNLIKELY((offset + size) > io_info_.extent_size_)) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "extent size overflow!", K(ret), K(offset), K(size), K_(io_info));
   } else {
     aio_info.fd_ = io_info_.fd_;
-    // convert the offset in the extent to the offset in the file
     aio_info.offset_ = io_info_.get_offset() + offset;
     aio_info.size_ = size;
   }
+
   return ret;
 }
 
-size_t RandomAccessExtent::GetUniqueId(char *id, size_t max_size) const {
-  size_t len = std::min(sizeof(io_info_.unique_id_), max_size);
-  memcpy(id, (char *)(&(io_info_.unique_id_)), len);
-  return len;
-}
-
-AsyncRandomAccessExtent::AsyncRandomAccessExtent()
-  : aio_(nullptr),
-    aio_req_(),
-    rate_limiter_(nullptr)
+int ReadableExtent::align_to_direct_read(const int fd, const int64_t offset, const int64_t size, char *buf)
 {
+  assert(fd > 0 && offset >= 0 && size > 0 && (nullptr != buf));
+  assert(!is_aligned(offset, size, buf));
+
+  int ret = Status::kOk;
+  int64_t aligned_offset = DIOHelper::align_offset(offset);
+  int64_t aligned_size = DIOHelper::align_size(offset + size - aligned_offset);
+  char *aligned_buf = nullptr;
+
+  if (IS_NULL(aligned_buf = reinterpret_cast<char *>(memory::base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, aligned_size, memory::ModId::kReadableExtent)))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for aligned buffer", K(ret), K(aligned_size));
+  } else if (FAILED(direct_read(fd, aligned_offset, aligned_size, aligned_buf))) {
+    SE_LOG(WARN, "fail to direct read", K(ret), K(aligned_offset), K(aligned_size));
+  } else {
+    memcpy(buf, aligned_buf + (offset - aligned_offset), size);
+  }
+
+  if (IS_NOTNULL(aligned_buf)) {
+    memory::base_memalign_free(aligned_buf);
+    aligned_buf = nullptr;
+  }
+
+  return ret;
 }
 
-AsyncRandomAccessExtent::~AsyncRandomAccessExtent() {}
+int ReadableExtent::direct_read(int fd, const int64_t offset, const int64_t size, char *buf)
+{
+  assert(fd > 0 && offset >= 0 && size > 0 && (nullptr != buf));
+  assert(is_aligned(offset, size, buf));
 
-int AsyncRandomAccessExtent::init(const ExtentIOInfo &io_info)
+  int ret = Status::kOk;
+  int64_t total_read_size = 0;
+  int64_t read_size = 0;
+  char *curr_buf = buf;
+  int64_t curr_offset = offset;
+  int64_t left_size = size;
+
+
+  while (SUCCED(ret) && left_size > 0) {
+    read_size = pread(fd, curr_buf, left_size, curr_offset);
+    if (read_size <= 0) {
+      if (EINTR == errno) {
+        continue;;
+      } else {
+        ret = Status::kIOError;
+#ifndef NDEBUG
+        SE_LOG(ERROR, "extent io error!", K(ret), K(errno));
+#endif
+      }
+    } else {
+      total_read_size += read_size;
+      curr_buf = buf + total_read_size;
+      curr_offset = offset + total_read_size;
+      left_size = size - total_read_size;
+    }
+  }
+  se_assert(size == total_read_size);
+
+  return ret;
+}
+
+
+int FullPrefetchExtent::init(const ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
 
-  if (UNLIKELY(!io_info.is_valid())) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(io_info));
-  } else if (FAILED(RandomAccessExtent::init(io_info))) {
-    SE_LOG(WARN, "fail to init random access extent", K(ret), K(io_info));
+  if (FAILED(IOExtent::init(io_info))) {
+    SE_LOG(WARN, "fail to init basic io", K(ret));
   } else {
-    aio_req_.status_ = Status::kInvalidArgument;  // not prepare
+    aio_req_.status_ = Status::kInvalidArgument; // not prepare
     if (IS_NULL(aio_ = AIO::get_instance())) {
       ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "aio instance is nullptr", K(ret));
+      SE_LOG(WARN, "aio instance must not be nullptr", K(ret));
     }
   }
 
   return ret;
 }
 
-int AsyncRandomAccessExtent::prefetch() {
+void FullPrefetchExtent::reset()
+{
+  IOExtent::reset();
+  aio_ = nullptr;
+  aio_req_.reset();
+}
+
+int FullPrefetchExtent::full_prefetch()
+{
   int ret = Status::kOk;
-  AIOInfo aio_info(io_info_.fd_, io_info_.get_offset(), MAX_EXTENT_SIZE);
-  if (FAILED(aio_req_.prepare_read(aio_info))) {
-    SE_LOG(WARN, "failed to prepare iocb", K(ret));
-  } else {
-    if (nullptr != rate_limiter_) {
-      rate_limiter_->Request(MAX_EXTENT_SIZE, Env::IOPriority::IO_LOW, nullptr /*stats_*/);
-    }
-    if (FAILED(aio_->submit(&aio_req_, 1))) {
-      SE_LOG(WARN, "failed to submit aio request", K(ret));
-    }
+  AIOInfo aio_info(io_info_.fd_, io_info_.get_offset(), io_info_.extent_size_);
+
+  if (UNLIKELY(!is_inited_)) {
+    SE_LOG(WARN, "FullPrefetchExtent should be inited", K(ret));
+  } else if (FAILED(aio_req_.prepare_read(aio_info))) {
+    SE_LOG(WARN, "fail to prepare iocb", K(ret), K(aio_info));
+  } else if (FAILED(aio_->submit(&aio_req_, 1))) {
+    SE_LOG(WARN, "fail to submit aio request", K(ret), K(aio_info));
   }
+
   return ret;
 }
 
-int AsyncRandomAccessExtent::reap() {
-  if (Status::kBusy == aio_req_.status_) {
-    // have submitted but not reap
-    if ((Status::kOk != aio_->reap(&aio_req_)) ||
-        (Status::kOk != aio_req_.status_)) {
-      aio_req_.status_ = Status::kIOError;
-      return Status::kIOError;
+int FullPrefetchExtent::read(const int64_t offset, const int64_t size, char *buf, AIOHandle *aio_handle, Slice &result)
+{
+  UNUSED(aio_handle);
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "FullPrefetchExtent should be inited", K(ret));
+  } else if (FAILED(reap())) {
+    SE_LOG(WARN, "fail to reap aio result", K(ret), K(offset), K(size));
+  } else if (UNLIKELY((offset + size) > aio_req_.aio_buf_.size())) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "extent size overflow", K(ret), K(offset), K(size), K_(aio_req));
+  } else {
+    result.assign(aio_req_.aio_buf_.data() + offset, size);
+  }
+
+  // async read failed, try sync read, overwrite ret here.
+  if (FAILED(ret)) {
+    if (FAILED(ReadableExtent::read(offset, size, buf, nullptr, result))) {
+      SE_LOG(WARN, "fail to sync read after async read failed", K(ret), K(offset), K(size), K_(io_info));
     }
   }
-  return aio_req_.status_;
+
+  return ret;
 }
 
-Status AsyncRandomAccessExtent::Read(uint64_t offset, size_t n, Slice *result,
-                                     char *scratch) const {
-  int ret = 0;
-  if (Status::kOk !=
-      (ret = const_cast<AsyncRandomAccessExtent *>(this)->reap())) {
-    return Status(ret);
-  } else if ((int64_t)(offset + n) > aio_req_.aio_buf_.size()) {
-    return Status::NoSpace("Read out of bound.");
-  } else {
-    *result = Slice(aio_req_.aio_buf_.data() + offset, n);
-    SE_LOG(DEBUG, "success async read", K_(io_info), K(offset), K(n));
+int FullPrefetchExtent::reap()
+{
+  int ret = Status::kOk;
+
+  if (Status::kBusy == aio_req_.status_) {
+    // have submit, but not reap
+    if (FAILED(aio_->reap(&aio_req_))) {
+      aio_req_.status_ = Status::kIOError;
+    } else if (FAILED(aio_req_.status_)) {
+      aio_req_.status_ = Status::kIOError;
+    }
   }
-  return Status::kOk;
-}
 
+  return aio_req_.status_; 
+}
 
 }  // storage
 }  // smartengine

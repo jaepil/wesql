@@ -46,7 +46,7 @@ class ExtentBasedTableFactory : public TableFactory {
 
   common::Status NewTableReader(
       const TableReaderOptions& table_reader_options,
-      util::RandomAccessFileReader *file,
+      storage::ReadableExtent *extent,
       uint64_t file_size,
       TableReader *&table_reader,
       bool prefetch_index_and_filter_in_cache = true,

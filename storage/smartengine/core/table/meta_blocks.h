@@ -72,7 +72,7 @@ class PropertyBlockBuilder {
 //          *table_properties will point to a heap-allocated TableProperties
 //          object, otherwise value of `table_properties` will not be modified.
 common::Status ReadProperties(const common::Slice& handle_value,
-                              util::RandomAccessFileReader* file,
+                              storage::ReadableExtent *extent,
                               const Footer& footer,
                               const common::ImmutableCFOptions& ioptions,
                               TableProperties** table_properties);
@@ -81,7 +81,7 @@ common::Status ReadProperties(const common::Slice& handle_value,
 // @returns a status to indicate if the operation succeeded. On success,
 //          *table_properties will point to a heap-allocated TableProperties
 //          object, otherwise value of `table_properties` will not be modified.
-common::Status ReadTableProperties(util::RandomAccessFileReader* file,
+common::Status ReadTableProperties(storage::ReadableExtent *extent,
                                    uint64_t file_size,
                                    uint64_t table_magic_number,
                                    const common::ImmutableCFOptions& ioptions,
@@ -102,7 +102,7 @@ common::Status FindMetaBlock(util::RandomAccessFileReader* file,
 // Read the specified meta block with name meta_block_name
 // from `file` and initialize `contents` with contents of this block.
 // Return common::Status::OK in case of success.
-common::Status ReadMetaBlock(util::RandomAccessFileReader* file,
+common::Status ReadMetaBlock(storage::ReadableExtent *extent,
                              uint64_t file_size, uint64_t table_magic_number,
                              const common::ImmutableCFOptions& ioptions,
                              const std::string& meta_block_name,

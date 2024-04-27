@@ -165,7 +165,8 @@ class MockTableFactory : public TableFactory {
   const char* Name() const override { return "MockTable"; }
   common::Status NewTableReader(
       const TableReaderOptions& table_reader_options,
-      util::RandomAccessFileReader *file, uint64_t file_size,
+      storage::ReadableExtent *extent,
+      uint64_t file_size,
       TableReader *&table_reader,
       bool prefetch_index_and_filter_in_cache = true,
       memory::SimpleAllocator *arena = nullptr) const override;
@@ -197,7 +198,7 @@ class MockTableFactory : public TableFactory {
 
  private:
   uint32_t GetAndWriteNextID(util::WritableFileWriter* file) const;
-  uint32_t GetIDFromFile(util::RandomAccessFileReader* file) const;
+  uint32_t GetIDFromFile(storage::ReadableExtent *extent) const;
 
   mutable MockTableFileSystem file_system_;
   mutable std::atomic<uint32_t> next_id_;

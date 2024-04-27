@@ -453,6 +453,7 @@ set(SOURCES
         tools/ldb_cmd.cc
         tools/ldb_tool.cc
         tools/sst_dump_tool.cc
+        util/aio_wrapper.cc
         util/arena.cc
         #util/auto_roll_logger.cc
         util/bloom.cc
@@ -460,6 +461,7 @@ set(SOURCES
         util/comparator.cc
         util/concurrent_arena.cc
         util/crc32c.cc
+        util/dio_helper.cc
         util/dynamic_bloom.cc
         util/ebr.cc
         util/file_reader_writer.cc
@@ -484,7 +486,6 @@ set(SOURCES
         util/misc_utility.cc
         #util/print_util.cc
         util/memory_stat.cc
-        util/aio_wrapper.cc
         #util/alloc_mgr.cc
         #util/mod_info.cc
         compact/compaction.cc
@@ -601,7 +602,7 @@ set(TESTS
         unittest/storage/data_file_test.cc
         unittest/storage/extent_space_test.cc
         #unittest/storage/extent_space_manager_test.cc
-        #unittest/storage/io_extent_test.cc
+        unittest/storage/io_extent_test.cc
         #unittest/storage/level0_meta_test.cc
         #unittest/storage/shrink_extent_spaces_test.cc
         unittest/storage/storage_common_test.cc
@@ -627,6 +628,7 @@ set(TESTS
         unittest/util/coding_test.cc
         unittest/util/crc32c_test.cc
         unittest/util/defer_test.cc
+        unittest/util/dio_helper_test.cc
         unittest/util/dynamic_bloom_test.cc
         unittest/util/increment_number_allocator_test.cc
         #unittest/util/event_logger_test.cc

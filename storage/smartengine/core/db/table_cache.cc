@@ -208,39 +208,29 @@ int TableCache::create_table_reader(const InternalKeyComparator &internal_key_co
                                     TableReader *&table_reader)
 {
   int ret = Status::kOk;
-  RandomAccessExtent *extent = nullptr;
-  RandomAccessFileReader *file_reader = nullptr;
+  ReadableExtent *extent = nullptr;
   TableReaderOptions reader_options(ioptions_, internal_key_comparator,
       extent_id, skip_filters, level);
 
-  if (IS_NULL(extent = MOD_NEW_OBJECT(ModId::kTableCache, RandomAccessExtent))) {
+  if (IS_NULL(extent = MOD_NEW_OBJECT(ModId::kReadableExtent, ReadableExtent))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for RandomAccessExtent", K(ret));
-  } else if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(extent_id, *extent))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(extent_id, extent))) {
     SE_LOG(WARN, "fail to get RandomAccessExtent", K(ret), K(extent_id));
-  } else if (IS_NULL(file_reader = MOD_NEW_OBJECT(ModId::kTableCache,
-                                                  RandomAccessFileReader,
-                                                  extent,
-                                                  false /*use_allocator*/))) {
-    ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for RandomAccessFileReader", K(ret));
   } else if (FAILED(ioptions_.table_factory->NewTableReader(reader_options,
-                                                            file_reader,
+                                                            extent,
                                                             MAX_EXTENT_SIZE,
                                                             table_reader,
                                                             prefetch_index_and_filter_in_cache).code())) {
-    SE_LOG(WARN, "failk to create table reader", K(ret));
+    SE_LOG(WARN, "fail to create table reader", K(ret));
   } else {
     QUERY_COUNT(CountPoint::NUMBER_FILE_OPENS);
   }
 
   // resource clean
   if (FAILED(ret)) {
-    if (IS_NOTNULL(extent) && IS_NULL(file_reader)) {
-      MOD_DELETE_OBJECT(RandomAccessExtent, extent);
-    }
-    if (IS_NOTNULL(file_reader)) {
-      MOD_DELETE_OBJECT(RandomAccessFileReader, file_reader);
+    if (IS_NOTNULL(extent)) {
+      MOD_DELETE_OBJECT(ReadableExtent, extent);
     }
   }
 

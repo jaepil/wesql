@@ -232,7 +232,7 @@ class GeneralCompaction : public Compaction {
                                  table::BlockIter *&block_iterator);
   int destroy_data_block_iterator(table::BlockIter *block_iterator);
 
-  AsyncRandomAccessExtent *get_async_extent_reader(int64_t extent_id) const;
+  FullPrefetchExtent *get_prefetched_extent(int64_t extent_id) const;
 
   void destroy_async_extent_reader(int64_t extent_id, bool is_reuse = false);
 
@@ -245,10 +245,10 @@ class GeneralCompaction : public Compaction {
       CompactRecordStats &stats);
 
  protected:
-  using PrefetchExtentMap = std::unordered_map<int64_t, AsyncRandomAccessExtent *,
+  using PrefetchExtentMap = std::unordered_map<int64_t, FullPrefetchExtent *,
   std::hash<int64_t>, std::equal_to<int64_t>,
   memory::stl_adapt_allocator<std::pair<const int64_t,
-  AsyncRandomAccessExtent *>, memory::ModId::kCompaction>>;
+  FullPrefetchExtent *>, memory::ModId::kCompaction>>;
 
   std::string compression_dict_;
   // options for create builder and reader;
@@ -259,7 +259,7 @@ class GeneralCompaction : public Compaction {
   MetaDescriptorList merge_extents_;
   // [start, end) sub task in %merge_extents_;
   BlockPositionList merge_batch_indexes_;
-  PrefetchExtentMap prefetch_extents_;
+  PrefetchExtentMap prefetched_extents_;
 
   // compaction writer,
   bool write_extent_opened_;

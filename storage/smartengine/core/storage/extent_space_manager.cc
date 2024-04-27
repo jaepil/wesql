@@ -232,7 +232,7 @@ int ExtentSpaceManager::unregister_subtable(const int64_t table_space_id, const 
 
 int ExtentSpaceManager::allocate(const int64_t table_space_id,
                                  const int32_t extent_space_type,
-                                 WritableExtent &extent)
+                                 WritableExtent *extent)
 {
   int ret = Status::kOk;
   TableSpace *table_space = nullptr;
@@ -241,9 +241,11 @@ int ExtentSpaceManager::allocate(const int64_t table_space_id,
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentSpaceManager should been inited first", K(ret));
-  } else if (UNLIKELY(table_space_id < 0) || UNLIKELY(!is_valid_extent_space_type(extent_space_type))) {
+  } else if (UNLIKELY(table_space_id < 0) ||
+             UNLIKELY(!is_valid_extent_space_type(extent_space_type)) ||
+             IS_NULL(extent)) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(table_space_id), K(extent_space_type));
+    SE_LOG(WARN, "invalid argument", K(ret), K(table_space_id), K(extent_space_type), KP(extent));
   } else {
 #ifndef NDEBUG
     TEST_SYNC_POINT("ExtentSpaceManager::allocate::inject_allocate_hang");
@@ -260,7 +262,7 @@ int ExtentSpaceManager::allocate(const int64_t table_space_id,
     
     if (SUCCED(ret)) {
       SpinWLockGuard w_guard(io_info_map_lock_);
-      if (FAILED(extent.init(io_info))) {
+      if (FAILED(extent->init(io_info))) {
         SE_LOG(WARN, "fail to init WritableExtent", K(ret), K(io_info), K(table_space_id), K(extent_space_type));
       } else if (!(extent_io_info_map_.emplace(io_info.extent_id_.id(), io_info).second)) {
         ret = Status::kErrorUnexpected;
@@ -360,7 +362,7 @@ int ExtentSpaceManager::reference(const int64_t table_space_id,
   return ret;
 }
 
-int ExtentSpaceManager::get_random_access_extent(ExtentId extent_id, RandomAccessExtent &random_access_extent)
+int ExtentSpaceManager::get_readable_extent(ExtentId extent_id, ReadableExtent *readable_extent)
 {
   int ret = Status::kOk;
   ExtentIOInfo io_info;
@@ -368,16 +370,19 @@ int ExtentSpaceManager::get_random_access_extent(ExtentId extent_id, RandomAcces
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentSpaceManager should been inited first", K(ret));
+  } else if (IS_NULL(readable_extent)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(readable_extent));
   } else {
     SpinRLockGuard r_guard(io_info_map_lock_);
     auto iter = extent_io_info_map_.find(extent_id.id());
     if (extent_io_info_map_.end() == iter) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "unexpected error, the extent not exist", K(ret), K(extent_id));
-    } else if (FAILED(random_access_extent.init(iter->second))) {
-      SE_LOG(WARN, "fail to init random access extent", K(ret), K(io_info));
+    } else if (FAILED(readable_extent->init(iter->second))) {
+      SE_LOG(WARN, "fail to init readable extent", K(ret), K(io_info));
     } else {
-      SE_LOG(DEBUG, "success to get random access extent", K(extent_id));
+      SE_LOG(DEBUG, "success to get readable extent", K(extent_id));
     }
   }
 

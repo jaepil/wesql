@@ -112,6 +112,7 @@ LIB_SOURCES =                                                   \
   table/table_properties.cc                                     \
   table/two_level_iterator.cc                                   \
   table/sstable_scan_iterator.cc                                \
+  util/aio_wrapper.cc                                           \
   util/arena.cc                                                 \
   util/bloom.cc                                                 \
   util/build_version.cc                                         \
@@ -119,6 +120,7 @@ LIB_SOURCES =                                                   \
   util/comparator.cc                                            \
   util/concurrent_arena.cc                                      \
   util/crc32c.cc                                                \
+  util/dio_helper.cc                                            \
   util/dynamic_bloom.cc                                         \
   util/ebr.cc                                                   \
   util/file_reader_writer.cc                                    \
@@ -140,7 +142,6 @@ LIB_SOURCES =                                                   \
   util/transaction_test_util.cc                                 \
   util/xxhash.cc                                                \
   util/memory_stat.cc                                           \
-  util/aio_wrapper.cc                                           \
   util/to_string.cc                                             \
   util/misc_utility.cc                                          \
   transactions/optimistic_transaction_db_impl.cc                \
@@ -177,40 +178,41 @@ TEST_LIB_SOURCES = \
 
 MAIN_SOURCES =                                                    \
   cache/cache_bench.cc                                                   \
-  cache/cache_test.cc                                                    \
-  env/env_basic_test.cc                                                 \
-  env/env_test.cc                                                       \
-  env/mock_env_test.cc                                                  \
-  memtable/memtablerep_bench.cc                                         \
-  memory/alloc_mgr_test.cc                                      \
-  monitoring/histogram_test.cc                                          \
-  monitoring/iostats_context_test.cc                                    \
-  monitoring/statistics_test.cc                                         \
-  options/options_test.cc                                               \
-  table/block_test.cc                                                   \
-  table/full_filter_block_test.cc                                       \
-  table/merger_test.cc                                                  \
-  table/extent_table_test.cc                                            \
-  third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc                  \
-  tools/db_bench.cc                                                     \
-  tools/db_bench_tool_test.cc                                           \
-  tools/db_sanity_test.cc                                               \
-  tools/ldb_cmd_test.cc                                                 \
-  tools/reduce_levels_test.cc                                           \
-  tools/sst_dump_test.cc                                                \
-  util/arena_test.cc                                                    \
-  util/autovector_test.cc                                               \
-  util/bloom_test.cc                                                    \
-  util/coding_test.cc                                                   \
-  util/crc32c_test.cc                                                   \
-  util/dynamic_bloom_test.cc                                            \
-  util/event_logger_test.cc                                             \
-  util/filelock_test.cc                                                 \
-  util/log_write_bench.cc                                               \
-  util/rate_limiter_test.cc                                             \
-  util/thread_list_test.cc                                              \
-  util/thread_local_test.cc                                             \
-  util/concurrent_direct_file_writer_test.cc                            \
+  unittest/cache/cache_test.cc                                                    \
+  unittest/env/env_basic_test.cc                                                 \
+  unittest/env/env_test.cc                                                       \
+  unittest/env/mock_env_test.cc                                                  \
+  unittest/memtable/memtablerep_bench.cc                                         \
+  unittest/memory/alloc_mgr_test.cc                                      \
+  unittest/monitoring/histogram_test.cc                                          \
+  unittest/monitoring/iostats_context_test.cc                                    \
+  unittest/monitoring/statistics_test.cc                                         \
+  unittest/options/options_test.cc                                               \
+  unittest/table/block_test.cc                                                   \
+  unittest/table/full_filter_block_test.cc                                       \
+  unittest/table/merger_test.cc                                                  \
+  unittest/table/extent_table_test.cc                                            \
+  unittest/third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc                  \
+  unittest/tools/db_bench.cc                                                     \
+  unittest/tools/db_bench_tool_test.cc                                           \
+  unittest/tools/db_sanity_test.cc                                               \
+  unittest/tools/ldb_cmd_test.cc                                                 \
+  unittest/tools/reduce_levels_test.cc                                           \
+  unittest/tools/sst_dump_test.cc                                                \
+  unittest/util/arena_test.cc                                                    \
+  unittest/util/autovector_test.cc                                               \
+  unittest/util/bloom_test.cc                                                    \
+  unittest/util/coding_test.cc                                                   \
+  unittest/util/crc32c_test.cc                                                   \
+  unittest/util/dio_helper_test.cc                                               \
+  unittest/util/dynamic_bloom_test.cc                                            \
+  unittest/util/event_logger_test.cc                                             \
+  unittest/util/filelock_test.cc                                                 \
+  unittest/util/log_write_bench.cc                                               \
+  unittest/util/rate_limiter_test.cc                                             \
+  unittest/util/thread_list_test.cc                                              \
+  unittest/util/thread_local_test.cc                                             \
+  unittest/util/concurrent_direct_file_writer_test.cc                            \
   utilities/checkpoint/checkpoint_test.cc                               \
   utilities/column_aware_encoding_exp.cc                                \
   utilities/column_aware_encoding_test.cc                               \

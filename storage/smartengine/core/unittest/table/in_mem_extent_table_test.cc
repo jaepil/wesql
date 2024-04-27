@@ -138,11 +138,10 @@ TEST(InMemExtent, sim) {
   size_t size1;
   {
     // method 1: read it normally
-    RandomAccessExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessExtent);
-    s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, *extent);
+    ReadableExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, ReadableExtent);
+    s = ExtentSpaceManager::get_instance().get_readable_extent(eid, extent);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
-    RandomAccessFileReader *file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent, false /*use_allocator=*/);
     TableReader *table_reader = nullptr;
     TableReaderOptions reader_options(ioptions,
                                       internal_comparator,
@@ -150,7 +149,7 @@ TEST(InMemExtent, sim) {
                                       false,
                                       -1);
     s = ioptions.table_factory->NewTableReader(reader_options,
-                                               file_reader,
+                                               extent,
                                                MAX_EXTENT_SIZE,
                                                table_reader);
     EXPECT_TRUE(s.ok()) << s.ToString();
@@ -172,23 +171,18 @@ TEST(InMemExtent, sim) {
   {
     // method 2: read it using the new added mem interface
     const int size = MAX_EXTENT_SIZE;
-    AsyncRandomAccessExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, AsyncRandomAccessExtent);
-    s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, *extent);
+    FullPrefetchExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, FullPrefetchExtent);
+    s = ExtentSpaceManager::get_instance().get_readable_extent(eid, extent);
     EXPECT_TRUE(s.ok()) << s.ToString();
 
     // async read it
-    // TODO: to be removed
-    //AsyncExtentBuffer arb;
-    //arb.reserve(PAGE_SIZE, size);
-    //extent->set_read_buffer(&arb);
-    extent->prefetch();
+    extent->full_prefetch();
 
     // the mem interface
-    RandomAccessFileReader *in_mem_file_reader = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileReader, extent, false /*use_allocator=*/);
     TableReader *in_mem_table_reader = nullptr;
     TableReaderOptions reader_options(ioptions, internal_comparator, eid, false, -1);
     s = ioptions.table_factory->NewTableReader(reader_options,
-                                               in_mem_file_reader,
+                                               extent,
                                                MAX_EXTENT_SIZE,
                                                in_mem_table_reader);
     EXPECT_TRUE(s.ok()) << s.ToString();

@@ -13,6 +13,7 @@
 #include <string>
 #include "db/dbformat.h"
 #include "options/cf_options.h"
+#include "storage/io_extent.h"
 #include "table/table_properties.h"
 #include "util/file_reader_writer.h"
 
@@ -54,7 +55,7 @@ class SstFileReader
   common::Status GetTableReader(const std::string& file_path,
                                 size_t extent_offset);
   common::Status ReadTableProperties(uint64_t table_magic_number,
-                                     util::RandomAccessFileReader* file,
+                                     storage::ReadableExtent *extent,
                                      uint64_t file_size);
 
   common::Status SetTableOptionsByMagicNumber(uint64_t table_magic_number);
@@ -79,7 +80,7 @@ class SstFileReader
 
   common::Status init_result_;
   std::unique_ptr<table::TableReader, memory::ptr_destruct_delete<table::TableReader>> table_reader_;
-  std::unique_ptr<util::RandomAccessFileReader, memory::ptr_destruct_delete<util::RandomAccessFileReader>> file_;
+  std::unique_ptr<storage::ReadableExtent, memory::ptr_destruct_delete<storage::ReadableExtent>> extent_;
 
   const common::ImmutableCFOptions ioptions_;
   db::InternalKeyComparator internal_comparator_;

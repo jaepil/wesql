@@ -22,14 +22,15 @@
 #include <unordered_set>
 #include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
+#include "util/dio_helper.h"
 #include "util/status.h"
 #include "util/se_constants.h"
 #include "util/thread_local.h"
 
-namespace smartengine {
-namespace util {
-
-const int64_t DIO_ALIGN_SIZE = 4096;
+namespace smartengine
+{
+namespace util
+{
 
 class AIOBuffer
 {
@@ -47,9 +48,9 @@ public:
     return io_buf_ != nullptr
         && aligned_offset_ >= 0
         && aligned_size_ > 0
-        && is_aligned(aligned_offset_)
-        && is_aligned(aligned_size_)
-        && is_aligned(uintptr_t(io_buf_));
+        && DIOHelper::is_aligned(aligned_offset_)
+        && DIOHelper::is_aligned(aligned_size_)
+        && DIOHelper::is_aligned(uintptr_t(io_buf_));
   }
 
   void reset()
@@ -102,8 +103,8 @@ public:
       ret = common::Status::kErrorUnexpected;
       SE_LOG(WARN, "io buf is not null", K(ret), KP(io_buf_));
     } else {
-      int64_t aligned_offset = align_offset(offset);
-      int64_t aligned_size = align_size(size + offset - aligned_offset);
+      int64_t aligned_offset = DIOHelper::align_offset(offset);
+      int64_t aligned_size = DIOHelper::align_size(size + offset - aligned_offset);
       if (FAILED(alloc_io_buf(aligned_offset, aligned_size))) {
         SE_LOG(WARN, "failed to alloc io buf", K(ret), K(offset), K(size), K(aligned_offset), K(aligned_size));
       } else {
@@ -125,13 +126,13 @@ private:
   int alloc_io_buf(const int64_t offset, const int64_t size)
   {
     int ret = common::Status::kOk;
-    if (UNLIKELY(!is_aligned(offset)) || UNLIKELY(!is_aligned(size))) {
+    if (UNLIKELY(!DIOHelper::is_aligned(offset)) || UNLIKELY(!DIOHelper::is_aligned(size))) {
       ret = common::Status::kInvalidArgument;
       SE_LOG(WARN, "not aligned", K(ret), K(size), K(offset));
-    } else if (IS_NULL(io_buf_ = static_cast<char *>(memory::base_memalign(DIO_ALIGN_SIZE, size, memory::ModId::kAIOBuffer)))) {
+    } else if (IS_NULL(io_buf_ = static_cast<char *>(memory::base_memalign(DIOHelper::DIO_ALIGN_SIZE, size, memory::ModId::kAIOBuffer)))) {
       ret = common::Status::kNoSpace;
       SE_LOG(WARN, "failed to alloc io buf", K(ret), K(aligned_size_));
-    } else if (UNLIKELY(!is_aligned(uintptr_t(io_buf_)))) {
+    } else if (UNLIKELY(!DIOHelper::is_aligned(uintptr_t(io_buf_)))) {
       ret = common::Status::kErrorUnexpected;
       SE_LOG(WARN, "io buf not aligned", K(ret), K(size), K(offset), KP(io_buf_));
     } else {
@@ -143,21 +144,6 @@ private:
       reset();
     }
     return ret;
-  }
-
-  bool is_aligned(const int64_t v)
-  {
-    return (v % DIO_ALIGN_SIZE) == 0;
-  }
-
-  int64_t align_offset(const int64_t offset)
-  {
-    return offset - (offset & (DIO_ALIGN_SIZE - 1));
-  }
-
-  int64_t align_size(const int64_t size)
-  {
-    return (size + DIO_ALIGN_SIZE - 1) & ~(DIO_ALIGN_SIZE - 1);
   }
 
 private:

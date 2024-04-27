@@ -64,7 +64,7 @@ int get_oob_large_value(const Slice &value_in_kv,
   int64_t result_size = 0;
   int64_t pos = 0;
   char *current_read_buf = nullptr;
-  storage::RandomAccessExtent extent;
+  storage::ReadableExtent extent;
 
   if (FAILED(large_value.deserialize(value_in_kv.data(), value_in_kv.size(), pos))) {
     SE_LOG(WARN, "fail to deserialize large value", K(ret));
@@ -83,11 +83,12 @@ int get_oob_large_value(const Slice &value_in_kv,
 
     if (SUCCED(ret)) {
       for (uint32_t i = 0; SUCCED(ret) && i < large_value.oob_extents_.size(); ++i) {
+        extent.reset();
         current_read_buf = oob_uptr.get() + i * storage::MAX_EXTENT_SIZE;
-        if (FAILED(ExtentSpaceManager::get_instance().get_random_access_extent(
-            large_value.oob_extents_[i], extent))) {
+        if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(
+            large_value.oob_extents_[i], &extent))) {
           SE_LOG(WARN, "fail to get random access extent for large object", K(ret), "extent_id", large_value.oob_extents_[i]);
-        } else if (FAILED(extent.Read(0, storage::MAX_EXTENT_SIZE, &result, current_read_buf).code())) {
+        } else if (FAILED(extent.read(0, storage::MAX_EXTENT_SIZE, current_read_buf, nullptr /*aio_handle=*/, result))) {
           SE_LOG(WARN, "fail to read data for large object", K(ret));
         }
       }

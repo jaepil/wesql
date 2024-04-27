@@ -19,19 +19,45 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sstream>
-#include "db/version_set.h"
+#include "db/file_number.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "util/testharness.h"
-#include "storage/storage_logger.h"
 
 using namespace smartengine::storage;
 using namespace smartengine::common;
 using namespace smartengine::db;
 
 namespace smartengine {
-namespace util {
+namespace storage
+{
+
+class AsyncWritableExtent : public WritableExtent
+{
+public:
+  AsyncWritableExtent() {}
+  virtual ~AsyncWritableExtent() override {}
+
+  int async_append(util::AIO &aio, util::AIOReq *req, const Slice &data)
+  {
+    int ret = Status::kOk;
+    util::AIOInfo aio_info(io_info_.fd_, io_info_.get_offset(), data.size());
+    if (IS_NULL(req)) {
+      ret = Status::kInvalidArgument;
+      SE_LOG(WARN, "req is null", K(ret));
+    } else if (FAILED(req->prepare_write(aio_info, data.data()))) {
+      SE_LOG(WARN, "failed to prepare_write", K(ret), K(*req));
+    } else if (FAILED(aio.submit(req, 1))) {
+      SE_LOG(WARN, "failed to submit aio request", K(ret), K(*req));
+    }
+    return ret;
+  }
+};
+
+} // namespace storage
+
+namespace util
+{
 
 #define OK(expr) ASSERT_EQ(Status::kOk, (expr))
 
@@ -60,68 +86,68 @@ TEST(AIO, simple)
   // read io buf
   ASSERT_EQ(aio_buf.prepare_read_io_buf(0, 0), Status::kInvalidArgument);
   OK(aio_buf.prepare_read_io_buf(0, 1));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE);
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE);
   ASSERT_EQ(aio_buf.aio_offset(), 0);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   ASSERT_EQ(aio_buf.prepare_read_io_buf(0, 1), Status::kErrorUnexpected);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(0, DIO_ALIGN_SIZE - 1));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE);
+  OK(aio_buf.prepare_read_io_buf(0, DIOHelper::DIO_ALIGN_SIZE - 1));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE);
   ASSERT_EQ(aio_buf.aio_offset(), 0);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(0, DIO_ALIGN_SIZE));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE);
+  OK(aio_buf.prepare_read_io_buf(0, DIOHelper::DIO_ALIGN_SIZE));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE);
   ASSERT_EQ(aio_buf.aio_offset(), 0);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(0, DIO_ALIGN_SIZE + 1));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE * 2);
+  OK(aio_buf.prepare_read_io_buf(0, DIOHelper::DIO_ALIGN_SIZE + 1));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE * 2);
   ASSERT_EQ(aio_buf.aio_offset(), 0);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(10, DIO_ALIGN_SIZE - 1));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE * 2);
+  OK(aio_buf.prepare_read_io_buf(10, DIOHelper::DIO_ALIGN_SIZE - 1));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE * 2);
   ASSERT_EQ(aio_buf.aio_offset(), 0);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(10, DIO_ALIGN_SIZE));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE * 2);
+  OK(aio_buf.prepare_read_io_buf(10, DIOHelper::DIO_ALIGN_SIZE));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE * 2);
   ASSERT_EQ(aio_buf.aio_offset(), 0);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(10, DIO_ALIGN_SIZE + 1));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE * 2);
+  OK(aio_buf.prepare_read_io_buf(10, DIOHelper::DIO_ALIGN_SIZE + 1));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE * 2);
   ASSERT_EQ(aio_buf.aio_offset(), 0);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(DIO_ALIGN_SIZE, DIO_ALIGN_SIZE + 1));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE * 2);
-  ASSERT_EQ(aio_buf.aio_offset(), DIO_ALIGN_SIZE);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  OK(aio_buf.prepare_read_io_buf(DIOHelper::DIO_ALIGN_SIZE, DIOHelper::DIO_ALIGN_SIZE + 1));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE * 2);
+  ASSERT_EQ(aio_buf.aio_offset(), DIOHelper::DIO_ALIGN_SIZE);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
-  OK(aio_buf.prepare_read_io_buf(DIO_ALIGN_SIZE + 1, DIO_ALIGN_SIZE * 2));
-  ASSERT_EQ(aio_buf.aio_size(), DIO_ALIGN_SIZE * 3);
-  ASSERT_EQ(aio_buf.aio_offset(), DIO_ALIGN_SIZE);
-  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIO_ALIGN_SIZE == 0);
+  OK(aio_buf.prepare_read_io_buf(DIOHelper::DIO_ALIGN_SIZE + 1, DIOHelper::DIO_ALIGN_SIZE * 2));
+  ASSERT_EQ(aio_buf.aio_size(), DIOHelper::DIO_ALIGN_SIZE * 3);
+  ASSERT_EQ(aio_buf.aio_offset(), DIOHelper::DIO_ALIGN_SIZE);
+  ASSERT_TRUE(uintptr_t(aio_buf.aio_buf()) % DIOHelper::DIO_ALIGN_SIZE == 0);
   aio_buf.reset();
 
   // write io buf
   data = new char[5000];
-  memset(data, 'a', DIO_ALIGN_SIZE);
+  memset(data, 'a', DIOHelper::DIO_ALIGN_SIZE);
 
-  ASSERT_EQ(aio_buf.prepare_write_io_buf(0, DIO_ALIGN_SIZE - 1, data), Status::kInvalidArgument);
-  ASSERT_EQ(aio_buf.prepare_write_io_buf(1, DIO_ALIGN_SIZE, data), Status::kInvalidArgument);
-  OK(aio_buf.prepare_write_io_buf(0, DIO_ALIGN_SIZE, data));
-  ASSERT_EQ(memcmp(aio_buf.aio_buf(), data, DIO_ALIGN_SIZE), 0);
+  ASSERT_EQ(aio_buf.prepare_write_io_buf(0, DIOHelper::DIO_ALIGN_SIZE - 1, data), Status::kInvalidArgument);
+  ASSERT_EQ(aio_buf.prepare_write_io_buf(1, DIOHelper::DIO_ALIGN_SIZE, data), Status::kInvalidArgument);
+  OK(aio_buf.prepare_write_io_buf(0, DIOHelper::DIO_ALIGN_SIZE, data));
+  ASSERT_EQ(memcmp(aio_buf.aio_buf(), data, DIOHelper::DIO_ALIGN_SIZE), 0);
   delete[] data;
 }
 
@@ -132,12 +158,12 @@ TEST(AIO, singe_request)
   int fd = open(filename.c_str(), O_RDWR | O_CREAT | O_DIRECT, 0600);
   ASSERT_GT(fd, -1);
 
-  const int size = DIO_ALIGN_SIZE;
+  const int size = DIOHelper::DIO_ALIGN_SIZE;
   int ret = fallocate(fd, 0, 0, size);
   ASSERT_EQ(ret, 0);
 
   char *wbuf = nullptr;
-  ret = posix_memalign(reinterpret_cast<void **>(&wbuf), DIO_ALIGN_SIZE, size);
+  ret = posix_memalign(reinterpret_cast<void **>(&wbuf), DIOHelper::DIO_ALIGN_SIZE, size);
   ASSERT_EQ(ret, 0);
   memset(wbuf, 'a', size);
 
@@ -182,16 +208,16 @@ TEST(AIO, singe_request)
 
 void prepare_file(int fd, const int page_cnt, char *buf)
 {
-  const int size = DIO_ALIGN_SIZE * page_cnt;
+  const int size = DIOHelper::DIO_ALIGN_SIZE * page_cnt;
   ASSERT_EQ(fallocate(fd, 0, 0, size), 0);
 
   // prepare requests
   const char c = 'a';
   AIOReq wreqs[page_cnt];
   for (int i = 0; i < page_cnt; i++) {
-    char *wbuf = buf + i * DIO_ALIGN_SIZE;
-    memset(wbuf, c + i, DIO_ALIGN_SIZE);
-    AIOInfo info(fd, i * DIO_ALIGN_SIZE /*offset*/, DIO_ALIGN_SIZE /*size*/);
+    char *wbuf = buf + i * DIOHelper::DIO_ALIGN_SIZE;
+    memset(wbuf, c + i, DIOHelper::DIO_ALIGN_SIZE);
+    AIOInfo info(fd, i * DIOHelper::DIO_ALIGN_SIZE /*offset*/, DIOHelper::DIO_ALIGN_SIZE /*size*/);
     OK(wreqs[i].prepare_write(info, wbuf));
   }
 
@@ -220,7 +246,7 @@ TEST(AIO, multi_request_reap) {
 
   const int page_cnt = 10;
   char *wbuf = nullptr;
-  ASSERT_EQ(posix_memalign(reinterpret_cast<void **>(&wbuf), DIO_ALIGN_SIZE, DIO_ALIGN_SIZE * page_cnt), 0);
+  ASSERT_EQ(posix_memalign(reinterpret_cast<void **>(&wbuf), DIOHelper::DIO_ALIGN_SIZE, DIOHelper::DIO_ALIGN_SIZE * page_cnt), 0);
 
   prepare_file(fd, page_cnt, wbuf);
 
@@ -230,34 +256,34 @@ TEST(AIO, multi_request_reap) {
   AIO *aio = AIO::get_instance();
 
   infos[0].offset_ = 0;
-  infos[0].size_ = DIO_ALIGN_SIZE;
+  infos[0].size_ = DIOHelper::DIO_ALIGN_SIZE;
 
   infos[1].offset_ = 0;
-  infos[1].size_ = DIO_ALIGN_SIZE - 1;
+  infos[1].size_ = DIOHelper::DIO_ALIGN_SIZE - 1;
 
   infos[2].offset_ = 0;
-  infos[2].size_ = DIO_ALIGN_SIZE + 1;
+  infos[2].size_ = DIOHelper::DIO_ALIGN_SIZE + 1;
 
-  infos[3].offset_ = DIO_ALIGN_SIZE - 1;
-  infos[3].size_ = DIO_ALIGN_SIZE;
+  infos[3].offset_ = DIOHelper::DIO_ALIGN_SIZE - 1;
+  infos[3].size_ = DIOHelper::DIO_ALIGN_SIZE;
 
-  infos[4].offset_ = DIO_ALIGN_SIZE - 1;
-  infos[4].size_ = DIO_ALIGN_SIZE * 2;
+  infos[4].offset_ = DIOHelper::DIO_ALIGN_SIZE - 1;
+  infos[4].size_ = DIOHelper::DIO_ALIGN_SIZE * 2;
 
-  infos[5].offset_ = DIO_ALIGN_SIZE;
-  infos[5].size_ = DIO_ALIGN_SIZE * 2;
+  infos[5].offset_ = DIOHelper::DIO_ALIGN_SIZE;
+  infos[5].size_ = DIOHelper::DIO_ALIGN_SIZE * 2;
 
-  infos[6].offset_ = DIO_ALIGN_SIZE + 1;
-  infos[6].size_ = DIO_ALIGN_SIZE * 2;
+  infos[6].offset_ = DIOHelper::DIO_ALIGN_SIZE + 1;
+  infos[6].size_ = DIOHelper::DIO_ALIGN_SIZE * 2;
 
-  infos[7].offset_ = DIO_ALIGN_SIZE;
-  infos[7].size_ = DIO_ALIGN_SIZE * 3 + 1;
+  infos[7].offset_ = DIOHelper::DIO_ALIGN_SIZE;
+  infos[7].size_ = DIOHelper::DIO_ALIGN_SIZE * 3 + 1;
 
-  infos[8].offset_ = DIO_ALIGN_SIZE;
-  infos[8].size_ = DIO_ALIGN_SIZE * 3 - 1;
+  infos[8].offset_ = DIOHelper::DIO_ALIGN_SIZE;
+  infos[8].size_ = DIOHelper::DIO_ALIGN_SIZE * 3 - 1;
 
-  infos[9].offset_ = DIO_ALIGN_SIZE * 3 + 1;
-  infos[9].size_ = DIO_ALIGN_SIZE * 3 - 1;
+  infos[9].offset_ = DIOHelper::DIO_ALIGN_SIZE * 3 + 1;
+  infos[9].size_ = DIOHelper::DIO_ALIGN_SIZE * 3 - 1;
 
   for (int i = 0; i < page_cnt; i++) {
     infos[i].fd_ = fd;
@@ -284,7 +310,7 @@ TEST(AIO, multi_request_reap_some) {
 
   const int page_cnt = 10;
   char *wbuf = nullptr;
-  ASSERT_EQ(posix_memalign(reinterpret_cast<void **>(&wbuf), DIO_ALIGN_SIZE, DIO_ALIGN_SIZE * page_cnt), 0);
+  ASSERT_EQ(posix_memalign(reinterpret_cast<void **>(&wbuf), DIOHelper::DIO_ALIGN_SIZE, DIOHelper::DIO_ALIGN_SIZE * page_cnt), 0);
 
   prepare_file(fd, page_cnt, wbuf);
 
@@ -294,34 +320,34 @@ TEST(AIO, multi_request_reap_some) {
   AIO *aio = AIO::get_instance();
 
   infos[0].offset_ = 0;
-  infos[0].size_ = DIO_ALIGN_SIZE;
+  infos[0].size_ = DIOHelper::DIO_ALIGN_SIZE;
 
   infos[1].offset_ = 0;
-  infos[1].size_ = DIO_ALIGN_SIZE - 1;
+  infos[1].size_ = DIOHelper::DIO_ALIGN_SIZE - 1;
 
   infos[2].offset_ = 0;
-  infos[2].size_ = DIO_ALIGN_SIZE + 1;
+  infos[2].size_ = DIOHelper::DIO_ALIGN_SIZE + 1;
 
-  infos[3].offset_ = DIO_ALIGN_SIZE - 1;
-  infos[3].size_ = DIO_ALIGN_SIZE;
+  infos[3].offset_ = DIOHelper::DIO_ALIGN_SIZE - 1;
+  infos[3].size_ = DIOHelper::DIO_ALIGN_SIZE;
 
-  infos[4].offset_ = DIO_ALIGN_SIZE - 1;
-  infos[4].size_ = DIO_ALIGN_SIZE * 2;
+  infos[4].offset_ = DIOHelper::DIO_ALIGN_SIZE - 1;
+  infos[4].size_ = DIOHelper::DIO_ALIGN_SIZE * 2;
 
-  infos[5].offset_ = DIO_ALIGN_SIZE;
-  infos[5].size_ = DIO_ALIGN_SIZE * 2;
+  infos[5].offset_ = DIOHelper::DIO_ALIGN_SIZE;
+  infos[5].size_ = DIOHelper::DIO_ALIGN_SIZE * 2;
 
-  infos[6].offset_ = DIO_ALIGN_SIZE + 1;
-  infos[6].size_ = DIO_ALIGN_SIZE * 2;
+  infos[6].offset_ = DIOHelper::DIO_ALIGN_SIZE + 1;
+  infos[6].size_ = DIOHelper::DIO_ALIGN_SIZE * 2;
 
-  infos[7].offset_ = DIO_ALIGN_SIZE;
-  infos[7].size_ = DIO_ALIGN_SIZE * 3 + 1;
+  infos[7].offset_ = DIOHelper::DIO_ALIGN_SIZE;
+  infos[7].size_ = DIOHelper::DIO_ALIGN_SIZE * 3 + 1;
 
-  infos[8].offset_ = DIO_ALIGN_SIZE;
-  infos[8].size_ = DIO_ALIGN_SIZE * 3 - 1;
+  infos[8].offset_ = DIOHelper::DIO_ALIGN_SIZE;
+  infos[8].size_ = DIOHelper::DIO_ALIGN_SIZE * 3 - 1;
 
-  infos[9].offset_ = DIO_ALIGN_SIZE * 3 + 1;
-  infos[9].size_ = DIO_ALIGN_SIZE * 3 - 1;
+  infos[9].offset_ = DIOHelper::DIO_ALIGN_SIZE * 3 + 1;
+  infos[9].size_ = DIOHelper::DIO_ALIGN_SIZE * 3 - 1;
 
   for (int i = 0; i < page_cnt; i++) {
     infos[i].fd_ = fd;
@@ -359,13 +385,13 @@ TEST(AIO, DISABLED_extent) {
   options.db_paths.emplace_back(dbname, 0);
   FileNumber file_number(2000);
 
-  WritableExtent we;
-  Status s = ExtentSpaceManager::get_instance().allocate(0, storage::HOT_EXTENT_SPACE, we);
+  AsyncWritableExtent we;
+  Status s = ExtentSpaceManager::get_instance().allocate(0, storage::HOT_EXTENT_SPACE, &we);
   EXPECT_TRUE(s.ok()) << s.ToString();
 
   const int size = MAX_EXTENT_SIZE;
   char *wbuf = nullptr;
-  int ret = posix_memalign(reinterpret_cast<void **>(&wbuf), DIO_ALIGN_SIZE, size);
+  int ret = posix_memalign(reinterpret_cast<void **>(&wbuf), DIOHelper::DIO_ALIGN_SIZE, size);
   ASSERT_EQ(ret, 0);
   memset(wbuf, 'b', size);
 
@@ -374,23 +400,21 @@ TEST(AIO, DISABLED_extent) {
   // write it out
   AIOReq wreq;
   // only extent has the real information of fd/offset
-  s = we.AsyncAppend(*aio, &wreq, Slice(wbuf, size));
+  s = we.async_append(*aio, &wreq, Slice(wbuf, size));
   EXPECT_TRUE(s.ok()) << s.ToString();
   ret = aio->reap(&wreq);
   ASSERT_EQ(ret, Status::kOk);
 
   // read it back
-  std::unique_ptr<storage::RandomAccessExtent> extent(new storage::RandomAccessExtent());
-  ASSERT_TRUE(extent.get());
   ExtentId eid(we.get_extent_id());
-  AsyncRandomAccessExtent re;
-  s = ExtentSpaceManager::get_instance().get_random_access_extent(eid, re);
+  FullPrefetchExtent re;
+  s = ExtentSpaceManager::get_instance().get_readable_extent(eid, &re);
   EXPECT_TRUE(s.ok()) << s.ToString();
 
-  re.prefetch();
+  re.full_prefetch();
 
   Slice rbuf;
-  s = re.Read(0, size, &rbuf, nullptr);
+  s = re.read(0, size, nullptr, nullptr, rbuf);
   EXPECT_TRUE(s.ok()) << s.ToString();
   ASSERT_EQ(ret, Status::kOk);
 

@@ -414,7 +414,7 @@ int VersionSet::do_checkpoint(util::WritableFile *checkpoint_writer, CheckpointH
   if (IS_NULL(checkpoint_writer) || IS_NULL(header)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(checkpoint_writer), KP(header));
-  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, buf_size, memory::ModId::kVersionSet)))) {
+  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(DIOHelper::DIO_ALIGN_SIZE, buf_size, memory::ModId::kVersionSet)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for buf", K(ret), K(buf_size));
   } else if (FAILED(reserve_checkpoint_block_header(buf, buf_size, offset, block_header))) {
@@ -502,7 +502,8 @@ int VersionSet::load_checkpoint(util::RandomAccessFile *checkpoint_reader, stora
   if (IS_NULL(checkpoint_reader) || IS_NULL(header)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(checkpoint_reader), KP(header));
-  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, buf_size, memory::ModId::kVersionSet)))) {
+  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, buf_size, memory::ModId::kVersionSet)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for buf", K(ret), K(buf_size));
   } else {
@@ -607,7 +608,8 @@ int VersionSet::write_big_subtable(util::WritableFile *checkpoint_writer, Column
     SE_LOG(WARN, "invalid argument", K(ret), KP(checkpoint_writer), KP(sub_table));
   } else {
     buf_size = ((sizeof(CheckpointBlockHeader) + sub_table->get_serialize_size() + DEFAULT_BUFFER_SIZE) / DEFAULT_BUFFER_SIZE) * DEFAULT_BUFFER_SIZE;
-    if (nullptr == (buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, buf_size, memory::ModId::kVersionSet)))) {
+    if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(
+        DIOHelper::DIO_ALIGN_SIZE, buf_size, memory::ModId::kVersionSet)))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for buf", K(ret), K(buf_size));
     } else if (FAILED(reserve_checkpoint_block_header(buf, buf_size, offset, block_header))){
@@ -649,7 +651,8 @@ int VersionSet::read_big_subtable(util::RandomAccessFile *checkpoint_reader,
   if (IS_NULL(checkpoint_reader) || block_size <=0 || file_offset <= 0) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(checkpoint_reader), K(block_size), K(file_offset));
-  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(PAGE_SIZE, buf_size, memory::ModId::kVersionSet)))) {
+  } else if (IS_NULL(buf = reinterpret_cast<char *>(memory::base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, buf_size, memory::ModId::kVersionSet)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for buf", K(ret), K(buf_size));
   } else if (FAILED(checkpoint_reader->Read(file_offset, buf_size, &result, buf).code())) {

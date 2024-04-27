@@ -19,6 +19,7 @@
 #include "db/dbformat.h"
 #include "monitoring/query_perf_context.h"
 #include "options/options.h"
+#include "storage/io_extent.h"
 #include "table/block.h"
 #include "table/extent_table_factory.h"
 #include "table/filter_block.h"
@@ -43,6 +44,7 @@ using namespace cache;
 using namespace monitor;
 using namespace db;
 using namespace memory;
+using namespace storage;
 
 namespace table {
 
@@ -67,13 +69,13 @@ ExtentBasedTable::~ExtentBasedTable() {
 }
 
 namespace {
-// Read the block identified by "handle" from "file".
+// Read the block identified by "handle" from "extent".
 // The only relevant option is options.verify_checksums for now.
 // On failure return non-OK.
 // On success fill *result and return OK - caller owns *result
 // @param compression_dict Data for presetting the compression library's
 //    dictionary.
-Status ReadBlockFromFile(RandomAccessFileReader* file,
+Status ReadBlockFromFile(storage::ReadableExtent *extent,
                          const Footer& footer,
                          const ReadOptions& options,
                          const BlockHandle& handle,
@@ -86,7 +88,7 @@ Status ReadBlockFromFile(RandomAccessFileReader* file,
                          AIOHandle *aio_handle,
                          SimpleAllocator *alloc) {
   BlockContents contents;
-  Status s = ReadBlockContents(file,
+  Status s = ReadBlockContents(extent,
                                footer,
                                options,
                                handle,
@@ -176,11 +178,11 @@ Cache::Handle* GetEntryFromCache(Cache* block_cache, const Slice& key,
 // supports binary search.
 class BinarySearchIndexReader : public ExtentBasedTable::IndexReader {
  public:
-  // Read index from the file and create an intance for
+  // Read index from the extent and create an intance for
   // `BinarySearchIndexReader`.
   // On success, index_reader will be populated; otherwise it will remain
   // unmodified.
-  static Status Create(RandomAccessFileReader* file,
+  static Status Create(storage::ReadableExtent *extent,
                        const Footer& footer,
                        const BlockHandle& index_handle,
                        const ImmutableCFOptions& ioptions,
@@ -191,7 +193,7 @@ class BinarySearchIndexReader : public ExtentBasedTable::IndexReader {
   {
     std::unique_ptr<Block, ptr_destruct_delete<Block>> index_block_ptr;
     Block *index_block = nullptr;
-    auto s = ReadBlockFromFile(file,
+    auto s = ReadBlockFromFile(extent,
                                footer,
                                ReadOptions(),
                                index_handle,
@@ -252,7 +254,7 @@ void ExtentBasedTable::SetupCacheKeyPrefix(Rep* rep, uint64_t file_size) {
   rep->cache_key_prefix_size = 0;
   rep->compressed_cache_key_prefix_size = 0;
   if (rep->table_options.block_cache != nullptr) {
-    GenerateCachePrefix(rep->table_options.block_cache.get(), rep->file->file(),
+    GenerateCachePrefix(rep->table_options.block_cache.get(), rep->extent.get(),
                         &rep->cache_key_prefix[0], &rep->cache_key_prefix_size);
     // Create dummy offset of index reader which is beyond the file size.
     rep->dummy_index_reader_offset =
@@ -260,37 +262,25 @@ void ExtentBasedTable::SetupCacheKeyPrefix(Rep* rep, uint64_t file_size) {
   }
   if (rep->table_options.block_cache_compressed != nullptr) {
     GenerateCachePrefix(rep->table_options.block_cache_compressed.get(),
-                        rep->file->file(), &rep->compressed_cache_key_prefix[0],
+                        rep->extent.get(), &rep->compressed_cache_key_prefix[0],
                         &rep->compressed_cache_key_prefix_size);
   }
 }
 
-void ExtentBasedTable::GenerateCachePrefix(Cache* cc, RandomAccessFile* file,
-                                           char* buffer, size_t* size) {
-  // generate an id from the file
-  *size = file->GetUniqueId(buffer, kMaxCacheKeyPrefixSize);
+void ExtentBasedTable::GenerateCachePrefix(Cache* cc,
+                                           IOExtent* io_extent,
+                                           char* buffer,
+                                           int64_t* size) {
+  // generate an id from the extent
+  *size = io_extent->get_unique_id(buffer, kMaxCacheKeyPrefixSize);
 
   // If the prefix wasn't generated or was too long,
   // create one from the cache.
   if (cc && *size == 0) {
     char* end = EncodeVarint64(buffer, cc->NewId());
-    *size = static_cast<size_t>(end - buffer);
+    *size = (end - buffer);
   }
 }
-
-void ExtentBasedTable::GenerateCachePrefix(Cache* cc, WritableFile* file,
-                                           char* buffer, size_t* size) {
-  // generate an id from the file
-  *size = file->GetUniqueId(buffer, kMaxCacheKeyPrefixSize);
-
-  // If the prefix wasn't generated or was too long,
-  // create one from the cache.
-  if (*size == 0) {
-    char* end = EncodeVarint64(buffer, cc->NewId());
-    *size = static_cast<size_t>(end - buffer);
-  }
-}
-
 
 Slice ExtentBasedTable::GetCacheKey(const char* cache_key_prefix,
                                     size_t cache_key_prefix_size,
@@ -328,11 +318,11 @@ ExtentBasedTable::Rep::Rep(const common::ImmutableCFOptions& _ioptions,
 
 ExtentBasedTable::Rep::~Rep() {
   if (internal_alloc_) {
-    RandomAccessFileReader *dfile = file.release();
-    MOD_DELETE_OBJECT(RandomAccessFileReader, dfile);
+    ReadableExtent *extent_ptr = extent.release();
+    MOD_DELETE_OBJECT(ReadableExtent, extent_ptr);
   } else {
     alloc_.release();
-    // rep use external allocator, file is also allocated by it
+    // rep use external allocator, extent is also allocated by it
     // no need free memory
   }
 }
@@ -353,7 +343,7 @@ uint64_t ExtentBasedTable::Rep::get_usable_size() {
 Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
                               const BlockBasedTableOptions& table_options,
                               const InternalKeyComparator& internal_comparator,
-                              RandomAccessFileReader *file,
+                              ReadableExtent *extent,
                               uint64_t file_size,
                               TableReader *&table_reader,
                               const storage::ExtentId &extent_id,
@@ -361,19 +351,18 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
                               const bool skip_filters,
                               const int level,
                               SimpleAllocator *alloc) {
-//  table_reader->reset();
-
+  Status s;
   Footer footer;
 
-  // Before read footer, readahead backwards to prefetch data
-  Status s = file->Prefetch((file_size < 512 * 1024 ? 0 : file_size - 512 * 1024), 512 * 1024 /* 512 KB prefetching */);
-  s = ReadFooterFromFile(file, file_size, &footer, kExtentBasedTableMagicNumber);
+  s = ReadFooterFromFile(extent, file_size, &footer, kExtentBasedTableMagicNumber);
   if (!s.ok()) {
+    SE_LOG(WARN, "fail to read footer from extent", KE(s.code()));
     return s;
   }
   if (!BlockBasedTableSupportedVersion(footer.version())) {
+    SE_LOG(WARN, "the version is not supported", "footer", footer.ToString());
     return Status::Corruption(
-        "Unknown Footer version. Maybe this file was created with newer "
+        "Unknown Footer version. Maybe this extent was created with newer "
         "version of smartengine?");
   }
 
@@ -383,8 +372,7 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   // access a dangling pointer.
   Rep* rep = COMMON_NEW(ModId::kRep, Rep, alloc, ioptions,
     table_options, internal_comparator, skip_filters, alloc);
-//  rep->file = std::move(file);
-  rep->file.reset(file);
+  rep->extent.reset(extent);
   rep->level = level;
   // Copy once for this maybe used after open.
   rep->extent_id_ = extent_id;
@@ -401,6 +389,7 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   meta_ptr.reset(meta);
   meta_iter_ptr.reset(meta_iter);
   if (!s.ok()) {
+    SE_LOG(WARN, "fail to read meta block", KE(s.code()));
     return s;
   }
 
@@ -437,12 +426,12 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
   s = SeekToPropertiesBlock(meta_iter, &found_properties_block);
 
   if (!s.ok()) {
-    __SE_LOG(WARN, "Error when seeking to properties block from file: %s", s.ToString().c_str());
+    __SE_LOG(WARN, "Error when seeking to properties block from extent: %s", s.ToString().c_str());
   } else if (found_properties_block) {
     s = meta_iter->status();
     TableProperties* table_properties = nullptr;
     if (s.ok()) {
-      s = ReadProperties(meta_iter->value(), rep->file.get(), rep->footer,
+      s = ReadProperties(meta_iter->value(), rep->extent.get(), rep->footer,
                          rep->ioptions, &table_properties);
     }
 
@@ -452,14 +441,14 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
       rep->table_properties.reset(table_properties);
     }
   } else {
-    __SE_LOG(ERROR, "Cannot find Properties block from file.");
+    __SE_LOG(ERROR, "Cannot find Properties block from extent.");
   }
 
   // Read the compression dictionary meta block
   bool found_compression_dict;
   s = SeekToCompressionDictBlock(meta_iter, &found_compression_dict);
   if (!s.ok()) {
-    __SE_LOG(WARN, "Error when seeking to compression dictionary block from file: %s", s.ToString().c_str());
+    __SE_LOG(WARN, "Error when seeking to compression dictionary block from extent: %s", s.ToString().c_str());
   } else if (found_compression_dict) {
     // TODO(andrewkr): Add to block cache if cache_index_and_filter_blocks is
     // true.
@@ -469,7 +458,7 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
     // maybe decode a handle from meta_iter
     // and do ReadBlockContents(handle) instead
     s = table::ReadMetaBlock(
-        rep->file.get(), file_size, kExtentBasedTableMagicNumber, rep->ioptions,
+        rep->extent.get(), file_size, kExtentBasedTableMagicNumber, rep->ioptions,
         kCompressionDictBlock, compression_dict_block.get());
     if (!s.ok()) {
       __SE_LOG(WARN, "Encountered error while reading data from compression dictionary block %s", s.ToString().c_str());
@@ -488,7 +477,7 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
       // block_cache
 
       // if pin_l0_filter_and_index_blocks_in_cache is true and this is
-      // a level0 file, then we will pass in this pointer to rep->index
+      // a level0 extent, then we will pass in this pointer to rep->index
       // to NewIndexIterator(), which will save the index block in there
       // else it's a nullptr and nothing special happens
       CachableEntry<IndexReader>* index_entry = nullptr;
@@ -504,7 +493,7 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
         // Hack: Call GetFilter() to implicitly add filter to the block_cache
         auto filter_entry = new_table->GetFilter();
         // if pin_l0_filter_and_index_blocks_in_cache is true, and this is
-        // a level0 file, then save it in rep_->filter_entry; it will be
+        // a level0 extent, then save it in rep_->filter_entry; it will be
         // released in the destructor only, hence it will be pinned in the
         // cache while this reader is alive
         if (rep->table_options.pin_l0_filter_and_index_blocks_in_cache &&
@@ -516,6 +505,8 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
         } else {
           filter_entry.Release(table_options.block_cache.get());
         }
+      } else {
+        SE_LOG(WARN, "fail to create index block iterator", KE(s.code()));
       }
     }
   } else {
@@ -532,13 +523,12 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
     if (s.ok()) {
       rep->index_reader.reset(index_reader);
     } else {
-//      delete index_reader;
+      SE_LOG(WARN, "fail to create index block iterator", KE(s.code()));
       FREE_OBJECT(IndexReader, *rep->alloc_.get(), index_reader);
     }
   }
 
   if (s.ok()) {
-//    *table_reader = std::move(new_table);
     table_reader = new_table;
   }
 
@@ -565,7 +555,7 @@ size_t ExtentBasedTable::ApproximateMemoryUsage() const {
   return usage;
 }
 
-// Load the meta-block from the file. On success, return the loaded meta block
+// Load the meta-block from the extent. On success, return the loaded meta block
 // and its iterator.
 Status ExtentBasedTable::ReadMetaBlock(
     Rep* rep, Block *&meta_block,
@@ -573,7 +563,7 @@ Status ExtentBasedTable::ReadMetaBlock(
     SimpleAllocator *alloc) {
   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
   // it is an empty block.
-  Status s = ReadBlockFromFile(rep->file.get(),
+  Status s = ReadBlockFromFile(rep->extent.get(),
                                rep->footer,
                                ReadOptions(),
                                rep->footer.metaindex_handle(),
@@ -881,7 +871,7 @@ InternalIterator* ExtentBasedTable::create_data_block_iterator(
 
   rep_->data_block.reset();
   Block *tmp_block = nullptr;
-  Status s = ReadBlockFromFile(rep_->file.get(),
+  Status s = ReadBlockFromFile(rep_->extent.get(),
                                rep_->footer,
                                ro,
                                handle,
@@ -1033,7 +1023,7 @@ int ExtentBasedTable::get_data_block(const BlockHandle& handle,
 
   ReadOptions ro;
   ro.verify_checksums = verify_checksums;
-  Status s = ReadBlock(rep_->file.get(), rep_->footer, ro, handle, &data_block,
+  Status s = ReadBlock(rep_->extent.get(), rep_->footer, ro, handle, &data_block,
                        const_cast<char*>(data_block.data()));
   return s.code();
 }
@@ -1077,7 +1067,7 @@ InternalIterator* ExtentBasedTable::NewDataBlockIterator(
     }
 
     Block *block_value = nullptr;
-    s = ReadBlockFromFile(rep->file.get(),
+    s = ReadBlockFromFile(rep->extent.get(),
                           rep->footer,
                           ro,
                           handle,
@@ -1156,7 +1146,7 @@ Status ExtentBasedTable::MaybeLoadDataBlockToCache(
 
     if (block_entry->value == nullptr && !no_io && ro.fill_cache) {
       Block *raw_block = nullptr;
-      s = ReadBlockFromFile(rep->file.get(),
+      s = ReadBlockFromFile(rep->extent.get(),
                             rep->footer,
                             ro,
                             handle,
@@ -1185,7 +1175,7 @@ Status ExtentBasedTable::MaybeLoadDataBlockToCache(
           ++(*add_blocks);
         }
       } else {
-        // set return_val, avoid to read from file again
+        // set return_val, avoid to read from extent again
         block_entry->value = raw_block;
       }
     }
@@ -1351,8 +1341,6 @@ Status ExtentBasedTable::Get(const ReadOptions& read_options, const Slice& key,
             done = true;
 
             if ((get_context->State() == GetContext::kFound) && (parsed_key.type == kTypeValueLarge)) {
-              storage::RandomAccessExtent *file = dynamic_cast<storage::RandomAccessExtent *>(rep_->file->file());
-              assert(file);
               Slice result;
               LargeValue large_value;
               std::unique_ptr<char[], ptr_delete<char>> unzip_buf;
@@ -1497,11 +1485,11 @@ Status ExtentBasedTable::CreateIndexReader(IndexReader** index_reader,
                                            int level,
                                            SimpleAllocator *alloc)
 {
-  auto file = rep_->file.get();
+  auto extent = rep_->extent.get();
   auto comparator = &rep_->internal_comparator;
   const Footer& footer = rep_->footer;
 
-  return BinarySearchIndexReader::Create(file,
+  return BinarySearchIndexReader::Create(extent,
                                          footer,
                                          footer.index_handle(),
                                          rep_->ioptions,
@@ -1525,13 +1513,13 @@ uint64_t ExtentBasedTable::ApproximateOffsetOf(const Slice& key) {
     } else {
       // Strange: we can't decode the block handle in the index block.
       // We'll just return the offset of the metaindex block, which is
-      // close to the whole file size for this case.
+      // close to the whole extent size for this case.
       result = rep_->footer.metaindex_handle().offset();
     }
   } else {
-    // key is past the last key in the file. If table_properties is not
+    // key is past the last key in the extent. If table_properties is not
     // available, approximate the offset by returning the offset of the
-    // metaindex block (which is right near the end of the file).
+    // metaindex block (which is right near the end of the extent).
     result = 0;
     if (rep_->table_properties) {
       result = rep_->table_properties->data_size;
@@ -1673,7 +1661,7 @@ Status ExtentBasedTable::DumpTable(WritableFile* out_file) {
       BlockHandle handle;
       if (FindMetaBlock(meta_iter, filter_block_key, &handle).ok()) {
         BlockContents block;
-        if (ReadBlockContents(rep_->file.get(),
+        if (ReadBlockContents(rep_->extent.get(),
                               rep_->footer,
                               ReadOptions(),
                               handle,
@@ -2084,7 +2072,7 @@ int ExtentBasedTable::do_io_prefetch(const int64_t offset,
   if (IS_NULL(aio_handle)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "aio handle is nullptr", K(ret));
-  } else if (FAILED(rep_->file->prefetch(offset, size, aio_handle))) {
+  } else if (FAILED(rep_->extent->prefetch(offset, size, aio_handle))) {
     SE_LOG(WARN, "failed to prefetch", K(ret));
   }
   return ret;
@@ -2188,7 +2176,7 @@ int ExtentBasedTable::new_data_block_iterator(const ReadOptions &read_options,
                            compressed_cache_key);
       }
       {
-        if (FAILED(ReadBlockFromFile(rep_->file.get(),
+        if (FAILED(ReadBlockFromFile(rep_->extent.get(),
                                      rep_->footer,
                                      read_options,
                                      handle.block_handle_,
@@ -2200,7 +2188,7 @@ int ExtentBasedTable::new_data_block_iterator(const ReadOptions &read_options,
                                      rep_->table_options.read_amp_bytes_per_bit,
                                      &handle.aio_handle_,
                                      nullptr /* allocator */).code())) {
-          SE_LOG(WARN, "failed to read block from file", K(ret));
+          SE_LOG(WARN, "failed to read block from extent", K(ret));
         }
         raw_block_ptr.reset(raw_block);
       }

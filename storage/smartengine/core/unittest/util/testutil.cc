@@ -20,16 +20,18 @@
 #include "util/concurrent_direct_file_writer.h"
 #include "util/file_reader_writer.h"
 
-using namespace smartengine::db;
-using namespace smartengine::storage;
-using namespace smartengine::port;
-using namespace smartengine::common;
-using namespace smartengine::table;
+namespace smartengine
+{
+using namespace common;
+using namespace db;
+using namespace port;
+using namespace storage;
+using namespace table;
 
-namespace smartengine {
-namespace util {
-namespace test {
-
+namespace util
+{
+namespace test
+{
 Slice RandomString(Random* rnd, int len, std::string* dst) {
   dst->resize(len);
   for (int i = 0; i < len; i++) {
@@ -283,6 +285,15 @@ Status DestroyDir(Env* env, const std::string& dir) {
   return s;
 }
 
+RandomInt64Generator::RandomInt64Generator(const int64_t lower_bound, const int64_t upper_bound)
+    : rd_(),
+      generator_(rd_()),
+      distribution_(lower_bound, upper_bound)
+{
+  se_assert(upper_bound >= lower_bound);
+}
+
+int64_t RandomInt64Generator::generate() { return distribution_(generator_); }
 }  // namespace test
 }  // namespace util
 }  // namespace smartengine

@@ -2517,7 +2517,7 @@ TEST_F(CompactionTest, major_single_deletion_test1) {
 void init_logger() {
   std::string log_path = test::TmpDir() + "/compaction_test.log";
 
-  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::WARN_LEVEL);
+  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::DEBUG_LEVEL);
 }
 
 int main(int argc, char **argv) {

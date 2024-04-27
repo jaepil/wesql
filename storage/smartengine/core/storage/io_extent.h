@@ -15,128 +15,92 @@
  */
 #pragma once
 
-#include "env/env.h"
 #include "storage/storage_common.h"
 #include "util/aio_wrapper.h"
-#include "util/serialization.h"
 
-namespace smartengine {
-
-namespace table {
-class Footer;
-}
-
-namespace util
+namespace smartengine
 {
-class AIOInfo;
-}
 
-namespace storage {
-// change system error number to string
-extern const size_t PAGE_SIZE;
-extern size_t upper(const size_t size, const size_t fac);
-extern std::unique_ptr<void, void (&)(void *)> NewAligned(const size_t size);
-common::Status io_error(const std::string &context, int err_number);
-extern common::Status unintr_pwrite(const int32_t fd, const char *src,
-                                    const int64_t len, const int64_t pos,
-                                    bool dio = true);
-extern common::Status unintr_pread(const int32_t fd, char *dest,
-                                   const int64_t len, const int64_t pos);
-extern std::unique_ptr<void, void (&)(void *)> new_aligned(const size_t size);
 
-// class WritableExtent
-// The fixed size of sst it's space can be reused by upper layer.
-// The main purpose is speedup the compaction process. When
-// the compaction range has some untouched extents and just
-// reference the old ones into the output range.
-class WritableExtent : public util::WritableFile {
- public:
-  WritableExtent();
-  virtual ~WritableExtent();
-  void operator=(const WritableExtent &r);
+namespace storage
+{
 
-  int init(const ExtentIOInfo &io_info);
-  void reset();
-  // Means Close() will properly take care of truncate
-  // and it does not need any additional information
-  virtual common::Status Truncate(uint64_t size) override {
-    return common::Status::OK();
-  }
-  virtual common::Status Close() override { return common::Status::OK(); }
-  // write the _data to extent
-  virtual common::Status Append(const common::Slice &data) override;
-  // DO NOT USE, only used in unittest
-  virtual common::Status AsyncAppend(util::AIO &aio, util::AIOReq *req, const common::Slice &data);
-  virtual common::Status Flush() override { return common::Status::OK(); }
-  virtual common::Status Sync() override { return common::Status::OK(); }
-  virtual common::Status Fsync() override { return common::Status::OK(); }
-  virtual bool IsSyncThreadSafe() const override { return true; }
-  virtual uint64_t GetFileSize() override { return current_write_size_; }
-  // use direct io
-  bool UseOSBuffer() const { return false; }
-  size_t GetRequiredBufferAlignment() const override { return 4 * 1024; }
-  bool UseDirectIO() const { return true; }
-  size_t GetUniqueId(char *id, size_t max_size) const override;
-  common::Status InvalidateCache(size_t offset, size_t length) override {
-    return common::Status::OK();
-  }
-
-  const ExtentId &get_extent_id() const { return io_info_.extent_id_; }
-  int32_t get_extent_size() const { return current_write_size_; }
-
- private:
-  ExtentIOInfo io_info_;
-  int32_t current_write_size_;
-};
-
-// random access extent (read data from extent)
-// direct IO implementation
-class RandomAccessExtent : public util::RandomAccessFile {
+class IOExtent
+{
 public:
-  RandomAccessExtent();
-  virtual ~RandomAccessExtent();
-  void destroy();
-  virtual int init(const ExtentIOInfo &io_info);
-  // read n byte from the offset of the extent
-  common::Status Read(uint64_t offset, size_t n, common::Slice *result,
-                      char *scratch) const override;
-  size_t GetUniqueId(char *id, size_t max_size) const override;
+  IOExtent() : is_inited_(false), io_info_() {}
+  virtual ~IOExtent() {}
 
-  // convert the offset in the extent to the offset in the file
-  virtual int fill_aio_info(const int64_t offset, const int64_t size, util::AIOInfo &aio_info) const override;
+  virtual int init(const ExtentIOInfo &io_info);
+  virtual void reset();
+  virtual int prefetch(const int64_t offset, const int64_t size, util::AIOHandle *aio_handle) { return common::Status::kNotSupported; }
+  virtual int read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result) { return common::Status::kNotSupported; }
+  virtual int append(const common::Slice &data) { return common::Status::kNotSupported; }
+  virtual ExtentId get_extent_id() const { return io_info_.get_extent_id(); }
+  virtual int64_t get_unique_id(char *id, const int64_t max_size) const;
+
+  DECLARE_AND_DEFINE_TO_STRING(KV_(io_info))
+protected:
+  bool is_aligned(const int64_t offset, const int64_t size, const char *buf) const;
 
 protected:
+  bool is_inited_;
   ExtentIOInfo io_info_;
 };
 
-class AsyncRandomAccessExtent : public RandomAccessExtent {
- public:
-  AsyncRandomAccessExtent();
-  ~AsyncRandomAccessExtent();
+class WritableExtent : public IOExtent
+{
+public:
+  WritableExtent() : curr_offset_(0) {}
+  virtual ~WritableExtent() override {}
+
+  virtual void reset() override;
+  virtual int append(const common::Slice &data) override;
+
+private:
+  int direct_write(const int fd, const int64_t offset, const char *buf, const int64_t size);
+
+private:
+  int64_t curr_offset_;
+};
+
+class ReadableExtent : public IOExtent
+{
+public:
+  ReadableExtent() {}
+  virtual ~ReadableExtent() override {}
+
+  virtual int prefetch(const int64_t offset, const int64_t size, util::AIOHandle *aio_handle) override;
+  virtual int read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result) override;
+
+protected:
+  int sync_read(const int64_t offset, const int64_t size, char *buf, common::Slice &result);
+  int async_read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result);
+  // convert the offset int the extent to the offset in the data file.
+  int fill_aio_info(const int64_t offset, const int64_t size, util::AIOInfo &aio_info) const;
+
+private:
+  int align_to_direct_read(const int fd, const int64_t offset, const int64_t size, char *buf);
+  int direct_read(const int fd, const int64_t offset, const int64_t size, char *buf);
+};
+
+class FullPrefetchExtent : public ReadableExtent
+{
+public:
+  FullPrefetchExtent() : aio_(nullptr), aio_req_() {}
+  virtual ~FullPrefetchExtent() override {}
 
   virtual int init(const ExtentIOInfo &io_info) override;
-  void set_rate_limiter(util::RateLimiter *rate_limiter) {
-    rate_limiter_ = rate_limiter;
-  }
-  // call prefetch & read in pair
-  int prefetch();
-  common::Status Read(uint64_t offset, size_t n, common::Slice *result,
-                      char *scratch) const override;
+  virtual void reset() override;
+  virtual int full_prefetch();
+  virtual int read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result) override;
 
-  void reset()
-  {
-    aio_ = nullptr;
-    aio_req_.reset();
-    rate_limiter_ = nullptr;
-  }
-
- private:
+private:
   int reap();
 
+private:
   util::AIO *aio_;
   util::AIOReq aio_req_;
-
-  util::RateLimiter* rate_limiter_;
 };
 
 }  // storage

@@ -16,6 +16,7 @@
 #include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
 #include "monitoring/statistics.h"
+#include "storage/io_extent.h"
 #include "table/block.h"
 #include "util/coding.h"
 #include "util/compression.h"
@@ -176,8 +177,11 @@ std::string Footer::ToString() const {
   return result;
 }
 
-Status ReadFooterFromFile(RandomAccessFileReader* file, uint64_t file_size,
-                          Footer* footer, uint64_t enforce_table_magic_number) {
+Status ReadFooterFromFile(storage::ReadableExtent *extent,
+                          uint64_t file_size,
+                          Footer* footer,
+                          uint64_t enforce_table_magic_number)
+{
   if (file_size < Footer::kMinEncodedLength) {
     return Status::Corruption("file is too short to be an sstable");
   }
@@ -187,8 +191,7 @@ Status ReadFooterFromFile(RandomAccessFileReader* file, uint64_t file_size,
   // the footer is always at the end of Extent
   size_t read_offset =
       static_cast<size_t>(storage::MAX_EXTENT_SIZE - Footer::kMaxEncodedLength);
-  Status s = file->Read(read_offset, Footer::kMaxEncodedLength, &footer_input,
-                        footer_space);
+  Status s = extent->read(read_offset, Footer::kMaxEncodedLength, footer_space, nullptr /*aio_handle=*/, footer_input);
   if (!s.ok()) return s;
 
   // Check that we actually read the whole footer from the file. It may be
@@ -211,14 +214,14 @@ Status ReadFooterFromFile(RandomAccessFileReader* file, uint64_t file_size,
 // Read a block and check its CRC
 // contents is the result of reading.
 // According to the implementation of file->Read, contents may not point to buf
-Status ReadBlock(RandomAccessFileReader* file, const Footer& footer,
+Status ReadBlock(storage::ReadableExtent *extent, const Footer& footer,
                  const ReadOptions& options, const BlockHandle& handle,
                  Slice* contents, /* result of reading */ char* buf,
                  AIOHandle *aio_handle) {
   size_t n = static_cast<size_t>(handle.size());
   Status s;
 
-  s = file->read(handle.offset(), n + kBlockTrailerSize, contents, buf, aio_handle);
+  s = extent->read(handle.offset(), n + kBlockTrailerSize, buf, aio_handle, *contents);
 
   if (!s.ok()) {
     return s;
@@ -253,7 +256,7 @@ Status ReadBlock(RandomAccessFileReader* file, const Footer& footer,
   return s;
 }
 
-Status ReadBlockContents(RandomAccessFileReader* file,
+Status ReadBlockContents(storage::ReadableExtent* extent,
                          const Footer& footer,
                          const ReadOptions& read_options,
                          const BlockHandle& handle,
@@ -286,7 +289,7 @@ Status ReadBlockContents(RandomAccessFileReader* file,
       used_buf = heap_buf.get();
     }
   }
-  status = ReadBlock(file, footer, read_options, handle, &slice, used_buf, aio_handle);
+  status = ReadBlock(extent, footer, read_options, handle, &slice, used_buf, aio_handle);
 
   if (!status.ok()) {
     return status;

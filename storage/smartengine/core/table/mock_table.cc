@@ -10,6 +10,7 @@
 #include "table/mock_table.h"
 
 #include "db/dbformat.h"
+#include "storage/io_extent.h"
 #include "table/get_context.h"
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
@@ -70,11 +71,12 @@ MockTableFactory::MockTableFactory() : next_id_(1) {}
 
 Status MockTableFactory::NewTableReader(
     const TableReaderOptions& table_reader_options,
-    RandomAccessFileReader *file, uint64_t file_size,
+    storage::ReadableExtent *extent,
+    uint64_t file_size,
     TableReader *&table_reader,
     bool prefetch_index_and_filter_in_cache,
     memory::SimpleAllocator *arena) const {
-  uint32_t id = GetIDFromFile(file);
+  uint32_t id = GetIDFromFile(extent);
 
   MutexLock lock_guard(&file_system_.mutex);
 
@@ -123,10 +125,10 @@ uint32_t MockTableFactory::GetAndWriteNextID(WritableFileWriter* file) const {
   return next_id;
 }
 
-uint32_t MockTableFactory::GetIDFromFile(RandomAccessFileReader* file) const {
+uint32_t MockTableFactory::GetIDFromFile(storage::ReadableExtent* extent) const {
   char buf[4];
   Slice result;
-  file->Read(0, 4, &result, buf);
+  extent->read(0, 4, buf, nullptr /*aio_handle*/, result);
   assert(result.size() == 4);
   return DecodeFixed32(buf);
 }

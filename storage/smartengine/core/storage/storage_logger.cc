@@ -955,7 +955,8 @@ int StorageLogger::internal_write_checkpoint()
 
   char *header_buffer = nullptr;
   SE_LOG(INFO, "begin to write checkpoint");
-  if (nullptr == (header_buffer = reinterpret_cast<char *>(base_memalign(PAGE_SIZE, DEFAULT_BUFFER_SIZE, ModId::kDefaultMod)))) {
+  if (IS_NULL(header_buffer = reinterpret_cast<char *>(base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, DEFAULT_BUFFER_SIZE, ModId::kDefaultMod)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for header buffer", K(ret));
   } else {

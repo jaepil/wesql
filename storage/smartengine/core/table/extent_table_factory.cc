@@ -54,7 +54,7 @@ ExtentBasedTableFactory::ExtentBasedTableFactory(
 
 Status ExtentBasedTableFactory::NewTableReader(
     const TableReaderOptions& table_reader_options,
-    RandomAccessFileReader *file,
+    storage::ReadableExtent *extent,
     uint64_t file_size,
     TableReader *&table_reader,
     bool prefetch_index_and_filter_in_cache,
@@ -62,7 +62,7 @@ Status ExtentBasedTableFactory::NewTableReader(
   return ExtentBasedTable::Open(table_reader_options.ioptions,
                                 table_options_,
                                 table_reader_options.internal_comparator,
-                                file,
+                                extent,
                                 file_size,
                                 table_reader,
                                 table_reader_options.extent_id_,
