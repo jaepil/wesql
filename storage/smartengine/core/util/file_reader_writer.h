@@ -14,19 +14,23 @@
 #include "env/env.h"
 #include "util/aligned_buffer.h"
 
-namespace smartengine {
-namespace monitor {
+namespace smartengine
+{
+namespace monitor
+{
 class Statistics;
 class HistogramImpl;
 }  // namespace monitor
 
-namespace common {
-class ImmutableCFOptions;
+namespace common
+{
+struct ImmutableCFOptions;
 }  // namespace common
 
-namespace util {
+namespace util
+{
 
-class AIOHandle;
+struct AIOHandle;
 class RateLimiter;
 
 std::unique_ptr<RandomAccessFile, memory::ptr_destruct_delete<RandomAccessFile>> NewReadaheadRandomAccessFile(

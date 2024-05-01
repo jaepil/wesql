@@ -1863,7 +1863,7 @@ int ha_smartengine::read_row_from_secondary_key(uchar *const buf,
   assert(buf != nullptr);
   QUERY_TRACE_SCOPE(monitor::TracePoint::HA_READ_ROW);
   int rc = 0;
-  uint pk_size;
+  uint pk_size = 0;
 
   if (m_keyread_only && m_lock_rows == SE_LOCK_NONE && !has_hidden_pk(table)) {
     rc = find_icp_matching_index_rec(move_forward, buf);

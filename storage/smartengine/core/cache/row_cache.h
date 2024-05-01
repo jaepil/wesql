@@ -163,8 +163,6 @@ public:
   void print_stats(std::string &stat_str) const;
 private:
   int64_t capacity_;
-  int64_t shards_num_;
-  int64_t topn_value_;
   bool strict_capacity_limit_;
   int64_t usage_;
   port::Mutex mutex_;
@@ -323,8 +321,6 @@ private:
   bool is_inited_;
   /**row cache capacity*/
   int64_t capacity_;
-  /**strict limit the row cache size*/
-  bool strict_capacity_limit_;
   /**bits num of shards count*/
   int64_t shard_bits_num_;
   /**row cache shard array*/

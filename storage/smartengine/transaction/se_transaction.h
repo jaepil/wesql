@@ -57,7 +57,8 @@ private:
 };
 
 /**This is the base class for transactions when interacting with se.*/
-class SeTransaction {
+class SeTransaction
+{
 public:
   explicit SeTransaction(THD *const thd);
 

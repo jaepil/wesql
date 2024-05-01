@@ -33,7 +33,7 @@ class MemTableAllocator : public memory::Allocator {
  public:
   explicit MemTableAllocator(memory::Allocator* allocator,
                              db::WriteBufferManager* write_buffer_manager);
-  ~MemTableAllocator();
+  ~MemTableAllocator() override;
 
   // Allocator interface
   char* Allocate(size_t bytes) override;

@@ -85,11 +85,12 @@ bool DataFileHeader::operator==(const DataFileHeader &data_file_header) const
          && extent_space_type_ == data_file_header.extent_space_type_;
 }
 
-DEFINE_TO_STRING(DataFileHeader, KV_(header_size), KV_(header_version), KV_(start_extent),
-    KV_(extent_size), KV_(data_block_size), KV_(file_number),
-    KV_(used_extent_number), KV_(total_extent_number), KV_(bitmap_offset),
-    KV_(space_file_size), KV_(create_timestamp), KV_(modified_timestamp),
-    KV_(magic_number), KV_(filename), KV_(bitmap), KV_(table_space_id), KV_(extent_space_type));
+DEFINE_TO_STRING(DataFileHeader, KV_(header_size), KV_(header_version),
+                 KV_(start_extent), KV_(extent_size), KV_(data_block_size), KV_(file_number),
+                 KV_(used_extent_number), KV_(total_extent_number), KV_(bitmap_offset),
+                 KV_(space_file_size), KV_(create_timestamp), KV_(modified_timestamp),
+                 KV_(magic_number), KV_(filename), KV_(bitmap), KV_(table_space_id),
+                 KV_(extent_space_type))
 
 int DataFileHeader::serialize(char *buf, int64_t buf_length, int64_t &pos) const
 {

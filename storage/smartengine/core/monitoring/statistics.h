@@ -411,7 +411,7 @@ class Statistics {
 class StatisticsImpl : public Statistics {
  public:
   StatisticsImpl(std::shared_ptr<Statistics> stats, bool enable_internal_stats);
-  virtual ~StatisticsImpl();
+  virtual ~StatisticsImpl() override;
 
   virtual uint64_t getTickerCount(uint32_t ticker_type) const override;
   virtual void histogramData(uint32_t histogram_type,

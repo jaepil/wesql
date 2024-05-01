@@ -318,7 +318,7 @@ bool CompareCandidateFile(const JobContext::CandidateFileInfo& first,
     return (first.path_id > second.path_id);
   }
 }
-};  // namespace
+}  // namespace
 
 // Delete obsolete files and log status and information of file deletion
 void DBImpl::DeleteObsoleteFileImpl(Status file_deletion_status, int job_id,

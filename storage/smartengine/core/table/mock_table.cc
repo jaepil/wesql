@@ -15,13 +15,15 @@
 #include "util/coding.h"
 #include "util/file_reader_writer.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace common;
 using namespace db;
 using namespace util;
 
-namespace db {
-class MiniTables;
+namespace db
+{
+struct MiniTables;
 }
 
 namespace table {

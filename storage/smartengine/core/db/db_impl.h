@@ -163,7 +163,7 @@ class DBImpl : public DB {
  public:
   static const int32_t MAX_COMPACTION_HISTORY_CNT = 128;
   DBImpl(const common::DBOptions& options, const std::string& dbname);
-  virtual ~DBImpl();
+  virtual ~DBImpl() override;
 
   // Implementations of the DB interface
   virtual common::Status Put(const common::WriteOptions& options,
@@ -820,7 +820,7 @@ protected:
 
   common::Status SyncClosedLogs(JobContext* job_context);
 
-  class STFlushJob;
+  struct STFlushJob;
   struct STDumpJob;
   // Flush the in-memory write buffer to storage.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
@@ -1000,7 +1000,6 @@ protected:
   void AddToFlushQueue(ColumnFamilyData* cfd, TaskType type);
   void remove_flush_job(STFlushJob *&flush_job, bool schedule = true);
   STFlushJob* PopFirstFromFlushQueue();
-  struct STDumpJob;
   struct GCJob;
 
   STDumpJob* pop_front_dump_job();

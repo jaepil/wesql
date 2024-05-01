@@ -65,7 +65,7 @@ class ShardedCache : public Cache {
                bool is_row_cache = false);
   ShardedCache(size_t mod_id, size_t capacity, int num_shard_bits,
                bool strict_capacity_limit, bool is_row_cache = false);
-  virtual ~ShardedCache() = default;
+  virtual ~ShardedCache() override = default;
   virtual void destroy () override;
   virtual const char* Name() const override = 0;
   virtual CacheShard* GetShard(int shard) = 0;

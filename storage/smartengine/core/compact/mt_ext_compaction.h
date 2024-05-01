@@ -25,7 +25,7 @@ class MtExtCompaction : public GeneralCompaction {
   MtExtCompaction(const CompactionContext &context,
                   const ColumnFamilyDesc &cf,
                   memory::ArenaAllocator &arena);
-  ~MtExtCompaction();
+  virtual ~MtExtCompaction() override;
   virtual int run() override;
   virtual int cleanup() override;
   int add_mem_iterators(util::autovector<table::InternalIterator *> &iters);

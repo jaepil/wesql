@@ -28,6 +28,7 @@ struct ExtentChange
 	static const uint8_t F_INIT = 0X0;
 	static const uint8_t F_ADD = 0X1;
 	static const uint8_t F_DEL = 0X2;
+
   LayerPosition layer_position_;
 	ExtentId extent_id_;
 	uint8_t flag_;
@@ -37,14 +38,14 @@ struct ExtentChange
       : layer_position_(layer_position),
         extent_id_(extent_id),
         flag_(flag)
-  {
-  }
-	~ExtentChange() {}
+  {}
+  ExtentChange(const ExtentChange &) = default;
+  ~ExtentChange() = default;
   bool is_add() const { return flag_ & F_ADD; }
   bool is_delete() const { return flag_ & F_DEL; }
 
   DECLARE_AND_DEFINE_TO_STRING(KV_(layer_position), KV_(extent_id), KV_(flag))
-  DECLARE_COMPACTIPLE_SERIALIZATION(EXTENT_CHANGE_VERSION);
+  DECLARE_COMPACTIPLE_SERIALIZATION(EXTENT_CHANGE_VERSION)
 };
 
 typedef std::unordered_map<int64_t, std::vector<ExtentChange>> ExtentChangesMap;
@@ -55,9 +56,11 @@ struct ChangeInfo
 	std::unordered_map<int64_t, std::vector<ExtentChange>> extent_change_info_;
   ExtentChangeArray lob_extent_change_info_;
   int64_t task_type_;
+  ChangeInfo();
+  ChangeInfo(const ChangeInfo &) = default;
+  ~ChangeInfo() {}
+  ChangeInfo &operator=(const ChangeInfo &) = default;
 
-	ChangeInfo();
-	~ChangeInfo();
   void clear();
 	int add_extent(const LayerPosition &layer_position, const ExtentId &extent_id);
 	int delete_extent(const LayerPosition &layer_position, const ExtentId &extent_id);
@@ -89,7 +92,7 @@ struct ChangeInfo
 
     return pos;
   }
-  DECLARE_COMPACTIPLE_SERIALIZATION(CHANGE_INFO_VERSION);
+  DECLARE_COMPACTIPLE_SERIALIZATION(CHANGE_INFO_VERSION)
 private:
 	int push_extent_change(const int64_t level, const ExtentChange &extent_change);
   int push_large_object_extent_change(const ExtentChange &extent_change);

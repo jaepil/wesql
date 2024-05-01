@@ -144,7 +144,7 @@ struct SeStatusVars
 
   SeStatusVars();
   void reset();
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 extern SeGlobalStats global_stats;

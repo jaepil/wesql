@@ -42,7 +42,7 @@ namespace util {
 class RandomAccessFile;
 class WritableFile;
 struct EnvOptions;
-class AIOHandle;
+struct AIOHandle;
 }
 
 namespace common {
@@ -166,7 +166,7 @@ class ExtentBasedTable : public TableReader {
 
   uint64_t get_usable_size() override;
 
-  ~ExtentBasedTable();
+  virtual ~ExtentBasedTable() override;
 
   bool TEST_filter_block_preloaded() const;
   bool TEST_index_reader_preloaded() const;
@@ -425,7 +425,6 @@ class ExtentBasedTable::BlockEntryIteratorState : public TwoLevelIteratorState {
   // Don't own table_
   ExtentBasedTable* table_;
   const common::ReadOptions read_options_;
-  bool skip_filters_;
   // true if the 2nd level iterator is on indexes instead of on user data.
   bool is_index_;
   common::Cleanable* block_cache_cleaner_;

@@ -22,8 +22,6 @@ using namespace common;
 
 namespace util {
 
-Comparator::~Comparator() {}
-
 namespace {
 class BytewiseComparatorImpl : public Comparator {
  public:

@@ -203,7 +203,7 @@ int ExtentBasedTableBuilder::init_one_sst() {
                         block_buf,
                         &index_buf_);
   if (rep_ == nullptr) {
-    __SE_LOG(ERROR, "Failed to init SST rep");
+    SE_LOG(ERROR, "Failed to init SST rep", KP(rep_));
     return Status::kNoSpace;
   }
 
@@ -218,7 +218,7 @@ int ExtentBasedTableBuilder::init_one_sst() {
 
   Status s(ret);
   if (!s.ok()) {
-    __SE_LOG(ERROR, "Could not allocate extent");
+    SE_LOG(ERROR, "Could not allocate extent", K(ret));
     return s.code();
   } else {
     not_flushed_normal_extent_id_ = rep_->extent_.get_extent_id();
@@ -834,11 +834,11 @@ int ExtentBasedTableBuilder::write_block(const Slice& raw_block_contents,
         if (!compressed_ok) {
           // The result of the compression was invalid. abort.
           abort_compression = true;
-          __SE_LOG(WARN, "Decompressed block did not match raw block");
+          SE_LOG(WARN, "Decompressed block did not match raw block");
         }
       } else {
         // Decompression reported an error. abort.
-        __SE_LOG(WARN, "Could not decompress");
+        SE_LOG(WARN, "Could not decompress");
         abort_compression = true;
       }
     }
@@ -983,7 +983,7 @@ int ExtentBasedTableBuilder::write_sst(Footer& footer) {
                                                       storage::HOT_EXTENT_SPACE,
                                                       &next_extent);
       if (!s.ok()) {
-        __SE_LOG(ERROR, "Could not allocate extent");
+        SE_LOG(ERROR, "Could not allocate extent", KE(s.code()));
         return s.code();
       }
       next_eid = next_extent.get_extent_id().id();
@@ -1005,26 +1005,26 @@ int ExtentBasedTableBuilder::write_sst(Footer& footer) {
       memcpy(buf + this_count + padding_size, footer_encoding.data(),
              footer_encoding.size());
       if (buf + EXTENT_SIZE > ebuf + PAGE_SIZE) {
-        __SE_LOG(ERROR, "buffer overflow");
+        SE_LOG(ERROR, "buffer overflow");
         return Status::kCorruption;
       }
 
       if (!(s = extent.append(Slice(buf, EXTENT_SIZE))).ok()) {
-        __SE_LOG(ERROR, "Could not write out extent");
+        SE_LOG(ERROR, "Could not write out extent");
         return s.code();
       }
     } else {
       // must not reach here
       se_assert(false);
-      memcpy(ebuf + padding_size, footer_encoding.data(),
-             footer_encoding.size());
-      if (!(s = extent.append(Slice(buf, this_count))).ok() ||
-          !(s = extent.append(Slice(ebuf, PAGE_SIZE))).ok()) {
-        __SE_LOG(ERROR, "Could not write out extent");
-        return s.code();
-      }
-      ebuf -= PAGE_SIZE;
-      extent = next_extent;
+      //memcpy(ebuf + padding_size, footer_encoding.data(),
+      //       footer_encoding.size());
+      //if (!(s = extent.append(Slice(buf, this_count))).ok() ||
+      //    !(s = extent.append(Slice(ebuf, PAGE_SIZE))).ok()) {
+      //  SE_LOG(ERROR, "Could not write out extent");
+      //  return s.code();
+      //}
+      //ebuf -= PAGE_SIZE;
+      //extent = next_extent;
     }
     buf += this_count;
   }

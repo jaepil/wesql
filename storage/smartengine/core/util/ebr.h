@@ -82,7 +82,6 @@ private:
   EBRNode curr_limbo_list_;
   EBRNode limbo_list_[MAX_EPOCH];
   pthread_key_t local_epoch_;
-  pthread_t pid;
   SpinLock lock_; // Protect local epoch list
   LocalEBR local_epoch_list_; // Dummy node
   std::atomic<int64_t> removed_count_;

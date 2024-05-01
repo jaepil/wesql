@@ -74,7 +74,7 @@ struct CheckpointBlockHeader
   CheckpointBlockHeader();
   ~CheckpointBlockHeader();
   void reset();
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 struct CheckpointHeader
@@ -92,7 +92,7 @@ struct CheckpointHeader
   CheckpointHeader();
   ~CheckpointHeader();
   //DECLARE_COMPACTIPLE_SERIALIZATION(CHECKPOINT_HEADER_VERSION);
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 class StorageLogger
@@ -238,7 +238,6 @@ private:
   char *log_buf_;
   util::FixedQueue<TransContext> trans_ctxs_;
   memory::ArenaAllocator allocator_;
-  util::WritableFile *checkpoint_writer_;
   int64_t current_manifest_file_number_; // current manifest file
   std::mutex trans_pool_mutex_;
   std::atomic<int64_t> active_trans_cnt_;

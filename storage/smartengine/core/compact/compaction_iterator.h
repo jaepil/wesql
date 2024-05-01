@@ -15,13 +15,16 @@
 #include "db/pinned_iterators_manager.h"
 #include "memory/page_arena.h"
 
-namespace smartengine {
-namespace util {
+namespace smartengine
+{
+namespace util
+{
 class Env;
 }
 
-namespace storage {
-class ChangeInfo;
+namespace storage
+{
+struct ChangeInfo;
 
 class CompactionIterator {
  public:
@@ -98,7 +101,6 @@ class CompactionIterator {
   const util::Comparator* cmp_;
   const std::vector<common::SequenceNumber>* snapshots_;
   const common::SequenceNumber earliest_write_conflict_snapshot_;
-  util::Env* env_;
   bool expect_valid_internal_key_;
   const std::atomic<bool>* shutting_down_;
   const std::atomic<bool>* bg_stopped_;
@@ -147,7 +149,6 @@ class CompactionIterator {
   CompactionIterationStats iter_stats_;
 
   storage::ChangeInfo &change_info_;
-  memory::ArenaAllocator &arena_;
   const common::Slice *l2_largest_key_;
   bool background_disable_merge_;
 };

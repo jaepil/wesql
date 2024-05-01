@@ -34,9 +34,11 @@ struct RecoveryPoint
   RecoveryPoint(int64_t log_file_number, uint64_t seq) : log_file_number_(log_file_number), seq_(seq)
   {
   }
+  RecoveryPoint(const RecoveryPoint &) = default;
   ~RecoveryPoint()
   {
   }
+  RecoveryPoint &operator=(const RecoveryPoint &) = default;
 
   void reset()
   {
@@ -55,8 +57,8 @@ struct RecoveryPoint
     }
     return log_file_number_ > recovery_point.log_file_number_;
   }
-  DECLARE_TO_STRING();
-  DECLARE_COMPACTIPLE_SERIALIZATION(RECOVERY_POINT_VERSION);
+  DECLARE_TO_STRING()
+  DECLARE_COMPACTIPLE_SERIALIZATION(RECOVERY_POINT_VERSION)
 
 };
 } //namespace db

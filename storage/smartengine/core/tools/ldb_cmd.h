@@ -271,8 +271,6 @@ private:
   Slice record_;
   std::string scratch_;
   StorageLoggerBuffer curr_log_buf_;
-  int64_t current_pos_;
-  int64_t current_trans_id_;
 };
 
 

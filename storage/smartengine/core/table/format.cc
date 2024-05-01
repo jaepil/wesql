@@ -464,7 +464,7 @@ int unzip_data(const char* data, size_t n,
   int ret = UncompressBlockContentsForCompressionType(
               data, n, &contents, format_version, "", compression_type).code();
   if (Status::kOk != ret) {
-    __SE_LOG(ERROR, "cannot unzip for large object");
+    SE_LOG(ERROR, "cannot unzip for large object", K(ret));
     return ret;
   }
   unzip_buf = std::move(contents.allocation);

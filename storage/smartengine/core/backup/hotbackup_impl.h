@@ -51,7 +51,7 @@ public:
                          last_manifest_file_size_(0),
                          last_wal_file_num_(0)
   {}
-  virtual ~BackupSnapshotImpl() {}
+  virtual ~BackupSnapshotImpl() override {}
 
 private:
   int create_tmp_dir(db::DB *db);

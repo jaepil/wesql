@@ -20,8 +20,6 @@
 
 namespace smartengine
 {
-
-
 namespace storage
 {
 

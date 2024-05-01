@@ -113,13 +113,11 @@ void align_test() {
   char *buf[16][61001];
 
   int64_t cnt = 0;
-  int64_t size = 0;
   for (int i = 0; i < 15; ++i) {
     for (int j = 1; j < 1024 * 1024; j += 188) {
       buf[i][cnt] =
           static_cast<char *>(base_memalign(j, align[i], ModId::kTestMod));
       ++cnt;
-      size += j;
     }
   }
 

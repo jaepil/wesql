@@ -27,12 +27,12 @@ namespace smartengine
 
 class SeAsyncCommitCallback : public common::AsyncCallback {
 public:
-  SeAsyncCommitCallback()
-                     : AsyncCallback(false){
+  SeAsyncCommitCallback() : AsyncCallback(false)
+  {
     reset();
   }
 
-  ~SeAsyncCommitCallback() {}
+  ~SeAsyncCommitCallback() override {}
 
   common::Status call_back() override {
     assert(nullptr != this->thd_);

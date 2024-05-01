@@ -28,9 +28,9 @@ struct MiniTables;
 }
 
 namespace common {
-class DBOptions;
+struct DBOptions;
 class Status;
-class ColumnFamilyOptions;
+struct ColumnFamilyOptions;
 }
 
 namespace table {
@@ -40,7 +40,7 @@ class ExtentBasedTableFactory : public TableFactory {
   explicit ExtentBasedTableFactory(
       const BlockBasedTableOptions& table_options = BlockBasedTableOptions());
 
-  ~ExtentBasedTableFactory() {}
+  ~ExtentBasedTableFactory() override {}
 
   const char* Name() const override { return "ExtentBasedTable"; }
 

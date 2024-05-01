@@ -61,7 +61,6 @@ struct ExtentId {
     return *this;
   }
 
-  DECLARE_SERIALIZATION();  // write to memtable
   inline int64_t id() const {
     int64_t hi = file_number;
     int64_t lo = offset;
@@ -79,7 +78,8 @@ struct ExtentId {
     offset = 0;
   }
 
-  DECLARE_TO_STRING();
+  DECLARE_SERIALIZATION()
+  DECLARE_TO_STRING()
 };
 
 struct LayerPosition
@@ -143,7 +143,7 @@ public:
   bool is_new_generate_layer() const { return NEW_GENERATE_LAYER_INDEX == layer_index_; }
 
   DECLARE_AND_DEFINE_TO_STRING(KV_(level), KV_(layer_index))
-  DECLARE_COMPACTIPLE_SERIALIZATION(LAYER_POSITION_VERSION);
+  DECLARE_COMPACTIPLE_SERIALIZATION(LAYER_POSITION_VERSION)
 };
 
 struct ExtentInfo
@@ -152,18 +152,14 @@ struct ExtentInfo
   LayerPosition layer_position_;
   ExtentId extent_id_;
 
-  ExtentInfo() : index_id_(0), layer_position_(), extent_id_()
-  {
-  }
+  ExtentInfo() : index_id_(0), layer_position_(), extent_id_() {}
   ExtentInfo(const int64_t index_id, const LayerPosition &layer_position, const ExtentId &extent_id)
       : index_id_(index_id),
         layer_position_(layer_position),
         extent_id_(extent_id)
-  {
-  }
-  ~ExtentInfo()
-  {
-  }
+  {}
+  ExtentInfo(const ExtentInfo &) = default;
+  ~ExtentInfo() {}
   void set(const int64_t index_id, const LayerPosition &layer_position, const ExtentId &extent_id)
   {
     index_id_ = index_id;
@@ -464,8 +460,8 @@ struct ExtentIOInfo
         extent_size_(0),
         block_size_(0),
         unique_id_(0)
-  {
-  }
+  {}
+  ExtentIOInfo(const ExtentIOInfo &) = default;
   ExtentIOInfo(const int fd,
                const ExtentId extent_id,
                int64_t extent_size,
@@ -476,12 +472,10 @@ struct ExtentIOInfo
         extent_size_(extent_size),
         block_size_(block_size),
         unique_id_(unique_id)
-  {
-  }
-  ~ExtentIOInfo()
-  {
-  }
-  
+  {}
+  ExtentIOInfo &operator=(const ExtentIOInfo &) = default;
+  ~ExtentIOInfo() = default;
+
   bool is_valid() const
   {
     return fd_ >= 0 && extent_size_ > 0 && block_size_ > 0 && unique_id_ >= 0;
@@ -538,8 +532,8 @@ struct DataFileStatistics
         total_extent_count_(0),
         used_extent_count_(0),
         free_extent_count_(0)
-  {
-  }
+  {}
+  DataFileStatistics(const DataFileStatistics &) = default;
   DataFileStatistics(int64_t table_space_id,
                      int32_t extent_space_type,
                      int64_t file_number,
@@ -583,7 +577,7 @@ struct EstimateCostStats {
   ~EstimateCostStats();
 
   void reset();
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 } //namespace smartengine

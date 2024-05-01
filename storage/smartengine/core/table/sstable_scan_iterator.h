@@ -27,7 +27,7 @@ class PinnedIteratorsManager;
 }
 namespace storage
 {
-class ExtentId;
+struct ExtentId;
 }
 namespace table
 {
@@ -345,7 +345,7 @@ public:
                           valid_(false),
                           is_inited_(false)
   {}
-  virtual ~SSTableScanIterator()
+  virtual ~SSTableScanIterator() override
   {}
 
   int init(const ScanParam &param);

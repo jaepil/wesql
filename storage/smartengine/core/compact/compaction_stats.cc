@@ -70,7 +70,7 @@ DEFINE_SERIALIZATION(CompactRecordStats, total_input_extents,
                      merge_input_raw_key_bytes, merge_replace_records,
                      merge_input_raw_value_bytes, merge_delete_records,
                      merge_expired_records, merge_corrupt_keys,
-                     single_del_fallthru, single_del_mismatch);
+                     single_del_fallthru, single_del_mismatch)
 
 DEFINE_TO_STRING(CompactRecordStats,
                  KV(total_input_extents),
@@ -98,7 +98,7 @@ DEFINE_TO_STRING(CompactRecordStats,
                  KV(single_del_fallthru),
                  KV(single_del_mismatch),
                  KV(micros),
-                 KV(write_amp));
+                 KV(write_amp))
 
 CompactPerfStats::CompactPerfStats() { reset(); }
 
@@ -133,7 +133,7 @@ DEFINE_SERIALIZATION(CompactPerfStats, check_intersect_extent,
                      renew_task,
                      schedule_task,
                      wait_task,
-                     wait_task_pend);
+                     wait_task_pend)
 
 DEFINE_TO_STRING(CompactPerfStats, KV(check_intersect_extent),
                  KV(check_intersect_datablock), KV(write_row), KV(write_block),
@@ -146,6 +146,6 @@ DEFINE_TO_STRING(CompactPerfStats, KV(check_intersect_extent),
                  KV(renew_task),
                  KV(schedule_task),
                  KV(wait_task),
-                 KV(wait_task_pend));
+                 KV(wait_task_pend))
 }
 }

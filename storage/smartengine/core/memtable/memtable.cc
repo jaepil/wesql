@@ -261,7 +261,8 @@ const char* EncodeKey(std::string* scratch, const Slice& target) {
   return scratch->data();
 }
 
-class DumpMemIterator : public InternalIterator {
+class DumpMemIterator : public InternalIterator
+{
  public:
   DumpMemIterator(const common::SequenceNumber max_seq,
                   InternalIterator *mem_iter)
@@ -269,7 +270,7 @@ class DumpMemIterator : public InternalIterator {
         mem_iter_(mem_iter),
         valid_(true) {
   }
-  ~DumpMemIterator() {}
+  virtual ~DumpMemIterator() override {}
   virtual void SeekToFirst() override {
     assert(mem_iter_);
     if (IS_NULL(mem_iter_)) {
@@ -378,7 +379,8 @@ class MemTableIterator : public InternalIterator {
     set_source(ROW_SOURCE_MEMTABLE);
   }
 
-  ~MemTableIterator() {
+  virtual ~MemTableIterator() override
+  {
 #ifndef NDEBUG
     // Assert that the MemTableIterator is never deleted while
     // Pinning is Enabled.

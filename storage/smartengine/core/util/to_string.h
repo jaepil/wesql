@@ -267,10 +267,12 @@ const char *to_cstring(const T &obj) {
 
 #define DECLARE_TO_STRING() \
 public: \
-  int64_t to_string(char *buf, const int64_t buf_len) const
+  int64_t to_string(char *buf, const int64_t buf_len) const;
+
 #define DECLARE_VIRTUAL_TO_STRING() \
 public: \
-  virtual int64_t to_string(char *buf, const int64_t buf_len) const
+  virtual int64_t to_string(char *buf, const int64_t buf_len) const;
+
 #define DEFINE_TO_STRING(clz, ...) \
   int64_t clz::to_string(char *buf, const int64_t buf_len) const { \
     int64_t pos = 0;                                               \
@@ -279,6 +281,7 @@ public: \
     util::databuff_printf(buf, buf_len, pos, "}");                 \
     return pos;                                                    \
   }
+
 #define DECLARE_AND_DEFINE_TO_STRING(...)                          \
 public: \
   int64_t to_string(char *buf, const int64_t buf_len) const {      \

@@ -29,7 +29,9 @@ namespace util {
 // from multiple threads.
 class Comparator {
  public:
-  virtual ~Comparator();
+  Comparator() {}
+  Comparator(const Comparator &) = default;
+  virtual ~Comparator() {}
 
   // Three-way comparison.  Returns value:
   //   < 0 iff "a" < "b",

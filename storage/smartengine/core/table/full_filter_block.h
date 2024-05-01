@@ -37,7 +37,7 @@ class FullFilterBlockBuilder : public FilterBlockBuilder {
                                   FilterBitsBuilder* filter_bits_builder);
   // bits_builder is created in filter_policy, it should be passed in here
   // directly. and be deleted here
-  ~FullFilterBlockBuilder() {}
+  virtual ~FullFilterBlockBuilder() override {}
 
   virtual bool IsBlockBased() override { return false; }
   virtual void StartBlock(uint64_t block_offset) override {}
@@ -84,7 +84,7 @@ class FullFilterBlockReader : public FilterBlockReader {
 
   // bits_reader is created in filter_policy, it should be passed in here
   // directly. and be deleted here
-  ~FullFilterBlockReader() {}
+  virtual ~FullFilterBlockReader() override {}
 
   virtual bool IsBlockBased() override { return false; }
   virtual bool KeyMayMatch(

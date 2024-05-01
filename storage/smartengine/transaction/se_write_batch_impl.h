@@ -35,11 +35,12 @@ namespace smartengine
    to be non-conflicting. Any further usage of this class should completely
    be thought thoroughly.
 */
-class SeWritebatchImpl : public SeTransaction {
+class SeWritebatchImpl : public SeTransaction
+{
 public:
   explicit SeWritebatchImpl(THD *const thd);
 
-  virtual ~SeWritebatchImpl();
+  virtual ~SeWritebatchImpl() override;
 
   virtual common::Status put(db::ColumnFamilyHandle *const column_family,
                              const common::Slice &key,

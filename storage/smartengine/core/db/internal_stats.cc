@@ -426,25 +426,21 @@ const std::string DB::Properties::kAggregatedTableProperties =
     smartengine_prefix + aggregated_table_properties;
 const std::string DB::Properties::kAggregatedTablePropertiesAtLevel =
     smartengine_prefix + aggregated_table_properties_at_level;
+
 #define DEFINE_DB_PROPERTY(name, str_name) \
   const std::string DB::Properties::name = smartengine_prefix + str_name;
-DEFINE_DB_PROPERTY(kDBMemoryStats, db_memory_stats);
-DEFINE_DB_PROPERTY(kActiveMemTableTotalNumber, active_mem_table_total_number);
-DEFINE_DB_PROPERTY(kActiveMemTableTotalMemoryAllocated,
-                   active_mem_table_total_memory_allocated);
-DEFINE_DB_PROPERTY(kActiveMemTableTotalMemoryUsed,
-                   active_mem_table_total_memory_used);
-DEFINE_DB_PROPERTY(kUnflushedImmTableTotalNumber,
-                   unflushed_imm_table_total_number);
-DEFINE_DB_PROPERTY(kUnflushedImmTableTotalMemoryAllocated,
-                   unflushed_imm_table_total_memory_allocated);
-DEFINE_DB_PROPERTY(kUnflushedImmTableTotalMemoryUsed,
-                   unflushed_imm_table_total_memory_used);
-DEFINE_DB_PROPERTY(kTableReaderTotalNumber, table_reader_total_number);
-DEFINE_DB_PROPERTY(kTableReaderTotalMemoryUsed, table_reader_total_memory_used);
-DEFINE_DB_PROPERTY(kBlockCacheTotalPinnedMemory,
-                   block_cache_total_pinned_memory);
-DEFINE_DB_PROPERTY(kBlockCacheTotalMemoryUsed, block_cache_total_memory_used);
+
+DEFINE_DB_PROPERTY(kDBMemoryStats, db_memory_stats)
+DEFINE_DB_PROPERTY(kActiveMemTableTotalNumber, active_mem_table_total_number)
+DEFINE_DB_PROPERTY(kActiveMemTableTotalMemoryAllocated, active_mem_table_total_memory_allocated)
+DEFINE_DB_PROPERTY(kActiveMemTableTotalMemoryUsed,active_mem_table_total_memory_used)
+DEFINE_DB_PROPERTY(kUnflushedImmTableTotalNumber, unflushed_imm_table_total_number)
+DEFINE_DB_PROPERTY(kUnflushedImmTableTotalMemoryAllocated, unflushed_imm_table_total_memory_allocated)
+DEFINE_DB_PROPERTY(kUnflushedImmTableTotalMemoryUsed, unflushed_imm_table_total_memory_used)
+DEFINE_DB_PROPERTY(kTableReaderTotalNumber, table_reader_total_number)
+DEFINE_DB_PROPERTY(kTableReaderTotalMemoryUsed, table_reader_total_memory_used)
+DEFINE_DB_PROPERTY(kBlockCacheTotalPinnedMemory, block_cache_total_pinned_memory)
+DEFINE_DB_PROPERTY(kBlockCacheTotalMemoryUsed, block_cache_total_memory_used)
 
 const std::unordered_map<std::string, DBPropertyInfo>
     InternalStats::ppt_name_to_info = {

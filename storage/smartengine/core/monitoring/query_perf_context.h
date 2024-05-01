@@ -141,7 +141,6 @@ class QueryPerfContext {
   static pthread_key_t query_trace_tls_key_;
   std::vector<TracePoint> trace_stack_;
   std::vector<TimeType> time_stack_;
-  TracePoint current_point_;
 
   std::string contents_;
   int64_t begin_nanos_;

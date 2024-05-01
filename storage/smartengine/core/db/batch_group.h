@@ -30,14 +30,17 @@
 #include "util/mutexlock.h"
 #include "write_batch/write_batch.h"
 
-namespace smartengine {
-namespace util {
+namespace smartengine
+{
+namespace util
+{
 class SpinMutex;
 }
 
-namespace common {
+namespace common
+{
 class Status;
-class WriteOptions;
+struct WriteOptions;
 }
 
 namespace db {

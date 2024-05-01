@@ -31,21 +31,24 @@
 #include "table/block.h"
 #include "util/aligned_buffer.h"
 
-namespace smartengine {
-
-namespace db {
+namespace smartengine
+{
+namespace db
+{
 class InternalKeyComparator;
-};
+}
 
-namespace util {
-class EnvOptions;
+namespace util
+{
+struct EnvOptions;
 class Env;
 class Comparator;
 }
 
-namespace common {
-class ImmutableCFOptions;
-class MutableCFOptions;
+namespace common
+{
+struct ImmutableCFOptions;
+struct MutableCFOptions;
 }
 
 namespace table {
@@ -55,7 +58,8 @@ class BlockIter;
 namespace storage {
 class NewCompactionIterator;
 
-struct CompactionContext {
+struct CompactionContext
+{
   const std::atomic<bool> *shutting_down_;
   const std::atomic<bool> *bg_stopped_;
   const std::atomic<int64_t> *cancel_type_;
@@ -161,7 +165,7 @@ class GeneralCompaction : public Compaction {
   GeneralCompaction(const CompactionContext &context,
                     const ColumnFamilyDesc &cf,
                     memory::ArenaAllocator &arena);
-  virtual ~GeneralCompaction();
+  virtual ~GeneralCompaction() override;
 
   virtual int run() override;
   virtual int cleanup() override;

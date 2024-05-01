@@ -43,7 +43,7 @@ public:
   int recover_extent_space();
   int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
                            char *str_buf, int64_t str_buf_len, int64_t &str_pos);
-  DECLARE_SERIALIZATION();
+  DECLARE_SERIALIZATION()
 private:
   int add_extent(ExtentMeta *extent_meta);
   int delete_extent(ExtentMeta *extent_meta);

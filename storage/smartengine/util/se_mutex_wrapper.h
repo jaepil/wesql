@@ -19,14 +19,9 @@
 #pragma once
 
 /* C++ standard header file */
-#include <chrono>
-#include <condition_variable>
-#include <functional>
-#include <mutex>
 #include <unordered_map>
 
 /* MySQL header files */
-#include "./my_sys.h"
 #include "mysql/plugin.h"
 
 /* se header files */
@@ -40,7 +35,7 @@ class SeMutex : public smartengine::util::TransactionDBMutex {
 
 public:
   SeMutex();
-  virtual ~SeMutex();
+  virtual ~SeMutex() override;
 
   /*
     Override parent class's virtual methods of interrest.
@@ -78,7 +73,7 @@ class SeCondVar : public smartengine::util::TransactionDBCondVar {
 
 public:
   SeCondVar();
-  virtual ~SeCondVar();
+  virtual ~SeCondVar() override;
 
   /*
     Override parent class's virtual methods of interrest.
@@ -138,7 +133,7 @@ public:
     return std::make_shared<SeCondVar>();
   }
 
-  virtual ~SeMutexFactory() {}
+  virtual ~SeMutexFactory() override {}
 };
 
 } //namespace smartengine

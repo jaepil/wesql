@@ -53,7 +53,7 @@ public:
   
   int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
                            char *str_buf, int64_t str_buf_len, int64_t &str_pos);
-  DECLARE_SERIALIZATION();
+  DECLARE_SERIALIZATION()
 public:
   static const int64_t DEFAULT_EXTENT_META_SIZE = 16;
   struct ExtentMetaCompare
@@ -104,7 +104,7 @@ class ExtentLayerIterator : public table::InternalIterator
 {
 public:
   ExtentLayerIterator();
-  virtual ~ExtentLayerIterator();
+  virtual ~ExtentLayerIterator() override;
 
   int init(const util::Comparator *comparator,
            const LayerPosition &layer_position,
@@ -167,7 +167,7 @@ public:
   int recover_reference_extents();
   ExtentStats get_extent_stats() const { return extent_stats_; }
   void merge_extent_stats(const ExtentStats &extent_stats);
-  DECLARE_SERIALIZATION();
+  DECLARE_SERIALIZATION()
 public:
   static const int64_t DEFAULT_EXTENT_LAYER_COUNT = 1;
   struct ExtentLayerCompare

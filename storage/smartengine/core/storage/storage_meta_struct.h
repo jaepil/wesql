@@ -48,8 +48,8 @@ public:
   void reset();
   bool is_valid();
 
-  DECLARE_COMPACTIPLE_SERIALIZATION(SSTABLE_META_VERSION);
-  DECLARE_TO_STRING();
+  DECLARE_COMPACTIPLE_SERIALIZATION(SSTABLE_META_VERSION)
+  DECLARE_TO_STRING()
 };
 
 //for compatibility, the variables in this struct must not been deleted or moved.
@@ -95,8 +95,8 @@ public:
   inline bool unref() { return --refs_ <= 0 ? true : false; }
   inline bool is_largest_object_extent() { return attr_ & F_LARGE_OBJECT_EXTENT; }
   inline bool is_normal_extent() { return attr_ & F_NORMAL_EXTENT; }
-  DECLARE_TO_STRING();
-  DECLARE_COMPACTIPLE_SERIALIZATION(EXTENT_META_VERSION);
+  DECLARE_TO_STRING()
+  DECLARE_COMPACTIPLE_SERIALIZATION(EXTENT_META_VERSION)
 };
 
 } //namespace storage

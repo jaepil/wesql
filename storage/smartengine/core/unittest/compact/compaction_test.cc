@@ -1833,7 +1833,7 @@ TEST_F(CompactionTest, test_many_way_compact) {
     run_compact();
     print_raw_meta();
 
-    IntRange l1_r[1] = {10000, 19999, 100};
+    IntRange l1_r[1] = {{10000, 19999, 100}};
     check_result(1, l1_r, 1);
     IntRange l0_r[5] = {{10000, 19918, 30},
                         {10000, 19996, 33},

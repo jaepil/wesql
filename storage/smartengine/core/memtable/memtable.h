@@ -32,7 +32,8 @@ namespace table {
 class InternalIterator;
 }
 
-namespace storage {
+namespace storage
+{
 struct ChangeInfo;
 }
 

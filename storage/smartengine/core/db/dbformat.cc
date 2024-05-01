@@ -52,7 +52,7 @@ int LargeValue::deserialize(const char *buffer, int64_t bufsiz, int64_t &pos) {
   return ret;
 }
 
-DEFINE_SERIALIZATION(LargeObject, key_, value_);
+DEFINE_SERIALIZATION(LargeObject, key_, value_)
 
 int get_oob_large_value(const Slice &value_in_kv,
                         db::LargeValue &large_value,
@@ -103,13 +103,13 @@ const int32_t BlockStats::LATEST_VERSION = 0;
 DEFINE_SERIALIZATION(BlockStats, version_, data_size_, key_size_, value_size_,
                      rows_, actual_disk_size_, entry_put_, entry_deletes_,
                      entry_single_deletes_, entry_merges_, entry_others_,
-                     smallest_seqno_, largest_seqno_, first_key_);
+                     smallest_seqno_, largest_seqno_, first_key_)
 
 DEFINE_TO_STRING(BlockStats, KV_(version), KV_(data_size), KV_(key_size),
                  KV_(value_size), KV_(rows), KV_(actual_disk_size),
                  KV_(entry_put), KV_(entry_deletes), KV_(entry_single_deletes),
                  KV_(entry_merges), KV_(entry_others), KV_(smallest_seqno),
-                 KV_(largest_seqno));
+                 KV_(largest_seqno))
 
 BlockStats::BlockStats()
     : version_(BlockStats::LATEST_VERSION),
@@ -271,7 +271,7 @@ std::string ParsedInternalKey::DebugString(bool hex) const {
   return result;
 }
 
-DEFINE_TO_STRING(ParsedInternalKey, KV(user_key), KV(sequence));
+DEFINE_TO_STRING(ParsedInternalKey, KV(user_key), KV(sequence))
 
 std::string InternalKey::DebugString(bool hex) const {
   std::string result;
@@ -285,7 +285,7 @@ std::string InternalKey::DebugString(bool hex) const {
   return result;
 }
 
-DEFINE_SERIALIZATION(InternalKey, rep_);
+DEFINE_SERIALIZATION(InternalKey, rep_)
 
 const char* InternalKeyComparator::Name() const {
   if (user_comparator_ != nullptr) {
@@ -394,7 +394,7 @@ LookupKey::LookupKey(const Slice& _user_key, SequenceNumber s) {
 DEFINE_TO_STRING(FileMetaData, KV_(extent_id), KV_(data_size), KV(smallest),
                  KV(largest), KV(smallest_seqno), KV(largest_seqno),
                  KV_(extent_id), KV(num_entries), KV(num_deletions),
-                 KV(raw_key_size), KV(raw_value_size));
+                 KV(raw_key_size), KV(raw_value_size))
 
 }
 }  // namespace smartengine

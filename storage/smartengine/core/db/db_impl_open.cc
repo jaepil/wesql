@@ -1395,7 +1395,7 @@ Status DB::Open(const Options &options,
   impl->batch_group_manager_.init();
 
   if (0 != impl->pipline_manager_.init_pipline_queue()) {
-    __SE_LOG(ERROR, "Failed to init pipline queue, probably memory limit");
+    SE_LOG(ERROR, "Failed to init pipline queue, probably memory limit");
     s = Status::MemoryLimit("init pipline queue failed");
     assert(s.ok());  // failed directly in dbug mode
   }

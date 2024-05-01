@@ -191,7 +191,8 @@ public:
   p->release(); \
   MOD_DELETE_OBJECT(ARTNodeBase, p); })
 
-class ARTNode256 : public ARTNodeBase {
+class ARTNode256 : public ARTNodeBase
+{
 private:
   static const int32_t FANOUT = 256;
 
@@ -199,7 +200,7 @@ private:
 
 public:
   ARTNode256() {}
-  virtual ~ARTNode256() {}
+  virtual ~ARTNode256() override {}
   virtual int init(const uint8_t *prefix, uint16_t prefix_len) override;
   virtual bool is_full() override { return count() == FANOUT; }
   virtual size_t memory_usage() override { return prefix_len() > PREFIX_BUF_SIZE ? prefix_len() + sizeof(ARTNode256) : sizeof(ARTNode256); }
@@ -216,7 +217,8 @@ public:
   virtual void dump_struct_info(FILE *fp, int64_t level, int64_t &last_node_id, int64_t &last_allocated_node_id, std::queue<ARTNodeBase *> &bfs_queue) override;
 };
 
-class ARTNode48 : public ARTNodeBase {
+class ARTNode48 : public ARTNodeBase
+{
 private:
   static const int32_t CHILDREN_MAP_SIZE = 256;
   static const int32_t FANOUT = 48;
@@ -229,7 +231,7 @@ private:
 
 public:
   ARTNode48() {}
-  virtual ~ARTNode48() {}
+  virtual ~ARTNode48() override {}
   virtual int init(const uint8_t *prefix, uint16_t prefix_len) override;
   virtual bool is_full() override { return count() == FANOUT; }
   virtual size_t memory_usage() override { return prefix_len() > PREFIX_BUF_SIZE ? prefix_len() + sizeof(ARTNode48) : sizeof(ARTNode48); }
@@ -246,7 +248,8 @@ public:
   virtual void dump_struct_info(FILE *fp, int64_t level, int64_t &last_node_id, int64_t &last_allocated_node_id, std::queue<ARTNodeBase *> &bfs_queue) override;
 };
 
-class ARTNode16 : public ARTNodeBase {
+class ARTNode16 : public ARTNodeBase
+{
 private:
 #ifdef __x86_64__
   typedef __m128i SIMD_REG;
@@ -263,7 +266,7 @@ private:
 
 public:
   ARTNode16() {}
-  virtual ~ARTNode16() {}
+  virtual ~ARTNode16() override {}
   virtual int init(const uint8_t *prefix, uint16_t prefix_len) override;
   virtual bool is_full() override { return count() == FANOUT; }
   virtual size_t memory_usage() override { return prefix_len() > PREFIX_BUF_SIZE ? prefix_len() + sizeof(ARTNode16) : sizeof(ARTNode16); }
@@ -280,7 +283,8 @@ public:
   virtual void dump_struct_info(FILE *fp, int64_t level, int64_t &last_node_id, int64_t &last_allocated_node_id, std::queue<ARTNodeBase *> &bfs_queue) override;
 };
 
-class ARTNode4 : public ARTNodeBase {
+class ARTNode4 : public ARTNodeBase
+{
 private:
   static const int32_t FANOUT = 4;
 
@@ -295,7 +299,7 @@ private:
 
 public:
   ARTNode4() {}
-  virtual ~ARTNode4() {}
+  virtual ~ARTNode4() override {}
   virtual int init(const uint8_t *prefix, uint16_t prefix_len) override;
   virtual bool is_full() override { return count() == FANOUT; }
   virtual size_t memory_usage() override { return prefix_len() > PREFIX_BUF_SIZE ? prefix_len() + sizeof(ARTNode4) : sizeof(ARTNode4); }

@@ -94,7 +94,7 @@ void HistogramStat::Clear() {
   for (unsigned int b = 0; b < num_buckets_; b++) {
     buckets_[b].store(0, std::memory_order_relaxed);
   }
-};
+}
 
 bool HistogramStat::Empty() const { return num() == 0; }
 
@@ -285,7 +285,7 @@ void HistogramStatNonThread::Clear() {
   for (unsigned int b = 0; b < num_buckets_; b++) {
     buckets_[b] = 0;
   }
-};
+}
 
 bool HistogramStatNonThread::Empty() const { return num() == 0; }
 

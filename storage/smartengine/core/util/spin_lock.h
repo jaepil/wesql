@@ -89,8 +89,8 @@ public:
   // disallow new
   void *operator new(std::size_t size) = delete;
   void *operator new(std::size_t size,
-                     const std::nothrow_t &nothrow_constant) throw() = delete;
-  void *operator new(std::size_t size, void *ptr) throw() = delete;
+                     const std::nothrow_t &nothrow_constant) noexcept = delete;
+  void *operator new(std::size_t size, void *ptr) noexcept = delete;
 
 private:
   // data members

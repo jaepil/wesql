@@ -41,7 +41,7 @@ class DumpJob : public BaseFlush {
           MemTable *dump_mem,
           const common::SequenceNumber dump_max_seq,
           memory::ArenaAllocator &arena);
-  virtual ~DumpJob();
+  virtual ~DumpJob() override;
   virtual int run(MiniTables& mtables) override;
   virtual int prepare_flush_task(MiniTables& mtables) override;
   virtual void pick_memtable() override;

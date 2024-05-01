@@ -38,7 +38,7 @@ namespace storage
 {
 struct LayerPosition;
 struct ExtentLayer;
-struct ExtentLayerVersion;
+class ExtentLayerVersion;
 class StorageManager;
 
 struct RecycleArgs
@@ -127,8 +127,8 @@ public:
   int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
                            char *str_buf, int64_t str_buf_len, int64_t &str_pos);
   int get_extent_infos(const int64_t index_id, ExtentIdInfoMap &extent_info_map);
-  DECLARE_SERIALIZATION();
-  DECLARE_TO_STRING();
+  DECLARE_SERIALIZATION()
+  DECLARE_TO_STRING()
 private:
   int init_extent_layer_versions(db::InternalKeyComparator *internalkey_comparator);
 	int normal_apply(const ChangeInfo &change_info);

@@ -32,7 +32,7 @@ class Snapshot;
 
 namespace util {
 class Env;
-class EnvOptions;
+struct EnvOptions;
 }
 
 namespace monitor {
@@ -43,7 +43,7 @@ class InstrumentedMutex;
 namespace table {
 class FilterBlockReader;
 class FilterBlockBuilder;
-class BlockContents;
+struct BlockContents;
 
 enum class FilterType {
   kNoFilter,

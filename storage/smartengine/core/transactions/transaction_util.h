@@ -11,20 +11,24 @@
 #include <unordered_map>
 #include "db/db.h"
 
-namespace smartengine {
+namespace smartengine
+{
 namespace common
 {
-class ReadOptions;
+struct ReadOptions;
 }
 
-namespace db {
+namespace db
+{
 class DBImpl;
 struct SuperVersion;
 }
 
-namespace util {
+namespace util
+{
 
-struct TransactionKeyMapInfo {
+struct TransactionKeyMapInfo
+{
   // Earliest sequence number that is relevant to this transaction for this key
   common::SequenceNumber seq;
 

@@ -2374,10 +2374,14 @@ int ha_smartengine::convert_record_to_storage_format(
     SeStringWriter *const pk_unpack_info,
     common::Slice *const packed_rec)
 {
+#ifndef __clang__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
+#endif //__clang__
   DBUG_ASSERT_IMP(m_maybe_unpack_info, pk_unpack_info);
+#ifndef __clang__
 #pragma GCC diagnostic pop
+#endif //__clang__
   QUERY_TRACE_SCOPE(monitor::TracePoint::HA_CONVERT_TO);
   m_storage_record.length(0);
 
@@ -3596,4 +3600,4 @@ bool ha_smartengine::use_read_free_rpl()
   DBUG_RETURN(false);
 }
 
-}; //namespace smartengine
+} //namespace smartengine

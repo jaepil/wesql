@@ -39,7 +39,7 @@ class DataBlockIndexRangeIterator
   explicit DataBlockIndexRangeIterator(const storage::MetaType &type,
                                        table::InternalIterator *iter)
       : RangeAdaptorIterator<table::InternalIterator>(type, iter) {}
-  virtual ~DataBlockIndexRangeIterator() {}
+  virtual ~DataBlockIndexRangeIterator() override {}
 
  protected:
   virtual int extract_range(const common::Slice &key_in,
@@ -79,7 +79,7 @@ class MetaDataIterator : public RangeAdaptorIterator<table::InternalIterator> {
     seek_key_.DecodeFrom(seek_bound_.start_key_);
     last_userkey_.clear();
   }
-  virtual ~MetaDataIterator() {}
+  virtual ~MetaDataIterator() override {}
 
  public:
   virtual void seek_to_first() override {
@@ -119,7 +119,7 @@ class MetaDataSingleIterator : public RangeAdaptorIterator<table::InternalIterat
         level_(type.level_),
         arena_(memory::CharArena::DEFAULT_PAGE_SIZE, memory::ModId::kCompaction) {
   }
-  virtual ~MetaDataSingleIterator() {}
+  virtual ~MetaDataSingleIterator() override {}
 
  public:
   virtual void seek_to_first() override {
@@ -285,7 +285,8 @@ class DynamicMergeIterator : public table::InternalIterator {
     }
   }
 
-  virtual ~DynamicMergeIterator() {
+  virtual ~DynamicMergeIterator()  override
+  {
     for (table::IteratorWrapper &wrapper : wrappers_) {
       recycle_func_(wrapper.Set(nullptr));
     }

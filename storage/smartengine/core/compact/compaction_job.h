@@ -22,13 +22,12 @@ class InstrumentedMutex;
 }
 
 namespace storage {
-class ExtentLayer;
+struct ExtentLayer;
 class MetaDataIterator;
 class MetaDataSingleIterator;
 
 // mock for compaction
 class ExtentLayerIterator;
-class ExtentLayer;
 
 // CompactionJob represents a compact task
 // which scheduled by background compaction thread

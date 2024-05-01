@@ -441,7 +441,7 @@ Status ExtentBasedTable::Open(const ImmutableCFOptions& ioptions,
       rep->table_properties.reset(table_properties);
     }
   } else {
-    __SE_LOG(ERROR, "Cannot find Properties block from extent.");
+    SE_LOG(ERROR, "Cannot find Properties block from extent.");
   }
 
   // Read the compression dictionary meta block
@@ -1189,7 +1189,6 @@ ExtentBasedTable::BlockEntryIteratorState::BlockEntryIteratorState(
     : TwoLevelIteratorState(),
       table_(table),
       read_options_(read_options),
-      skip_filters_(skip_filters),
       is_index_(is_index),
       block_cache_cleaner_(block_cache_cleaner),
       scan_add_blocks_limit_(scan_add_blocks_limit) {}
@@ -1349,7 +1348,7 @@ Status ExtentBasedTable::Get(const ReadOptions& read_options, const Slice& key,
               int64_t oob_size = 0;
               int ret = Status::kOk;
               if (FAILED(get_oob_large_value(biter.value(), large_value, oob_uptr, oob_size))) {
-                __SE_LOG(ERROR, "fail to get content of large value\n");
+                SE_LOG(ERROR, "fail to get content of large value", K(ret));
                 s = Status::kCorruption;
               } else if (kNoCompression == large_value.compression_type_) {
                 get_context->SaveLargeValue(Slice(oob_uptr.get(), large_value.size_));
@@ -1359,7 +1358,7 @@ Status ExtentBasedTable::Get(const ReadOptions& read_options, const Slice& key,
                                            static_cast<CompressionType>(large_value.compression_type_),
                                            unzip_buf,
                                            unzip_buf_size))) {
-                __SE_LOG(ERROR, "fail to unzip large value\n");
+                SE_LOG(ERROR, "fail to unzip large value", K(ret));
                 s = Status::kCorruption;
               } else {
                 get_context->SaveLargeValue(Slice(unzip_buf.get(), unzip_buf_size));
@@ -1826,10 +1825,18 @@ Status ExtentBasedTable::DumpIndexBlock(WritableFile* out_file) {
     BlockStats block_stats;
     block_stats.decode(block_index_content);
     block_stats.to_string(block_stats_buffer, 1024);
+#ifdef __GNUC__
+#ifndef __clang__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif //__clang__
+#endif //__GNUC__
     snprintf(buf, max_buf_size, "%s, first_key:(",block_stats_buffer);
-#pragma GCC diagnostic pop    
+#ifdef __GNUC__
+#ifndef __clang__
+#pragma GCC diagnostic pop
+#endif //__clang__
+#endif //__GNUC__  
     out_file->Append(Slice(buf, strlen(buf)));
     out_file->Append(
         Slice(block_stats.first_key_.c_str(), block_stats.first_key_.size())

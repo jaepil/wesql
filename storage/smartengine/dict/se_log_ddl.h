@@ -29,7 +29,7 @@ namespace db
 class SeDictionaryManager;
 class SeDdlManager;
 class SeSubtableManager;
-class SeDropIndexThread;
+struct SeDropIndexThread;
 
 #define DDL_RECORD_MAX_KEY_LENGTH (1024)
 #define DDL_RECORD_MAX_VALUE_LENGTH (1024)

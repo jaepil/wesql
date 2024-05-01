@@ -75,7 +75,8 @@ class MemTableRep {
 
     virtual int operator()(const char* prefix_len_key,
                            const common::Slice& key) const = 0;
-
+    KeyComparator() = default;
+    KeyComparator(const KeyComparator &) = default;
     virtual ~KeyComparator() {}
   };
 

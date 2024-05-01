@@ -21,11 +21,14 @@ namespace smartengine
 {
 namespace storage
 {
-DEFINE_SERIALIZATION(ExtentId, file_number, offset);
-DEFINE_TO_STRING(ExtentId, KV(file_number), KV(offset));
+DEFINE_SERIALIZATION(ExtentId, file_number, offset)
+
+DEFINE_TO_STRING(ExtentId, KV(file_number), KV(offset))
+
 const int32_t LayerPosition::INVISIBLE_LAYER_INDEX = INT32_MAX;
 const int32_t LayerPosition::NEW_GENERATE_LAYER_INDEX = INT32_MAX - 1;
-DEFINE_COMPACTIPLE_SERIALIZATION(LayerPosition, level_, layer_index_);
+DEFINE_COMPACTIPLE_SERIALIZATION(LayerPosition, level_, layer_index_)
+
 
 
 EstimateCostStats::EstimateCostStats()
@@ -49,8 +52,8 @@ void EstimateCostStats::reset()
   recalc_last_extent_ = false;
 }
 
-DEFINE_TO_STRING(EstimateCostStats, KV_(subtable_id), KV_(cost_size), KV_(total_extent_cnt),
-    KV_(total_open_extent_cnt), KV_(recalc_last_extent));
+DEFINE_TO_STRING(EstimateCostStats, KV_(subtable_id), KV_(cost_size),
+                 KV_(total_extent_cnt), KV_(total_open_extent_cnt), KV_(recalc_last_extent))
 
 } //namespace storage
 } //namespace smartengine

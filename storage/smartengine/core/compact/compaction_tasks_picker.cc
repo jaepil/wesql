@@ -53,7 +53,7 @@ CompactionTasksPicker::CompactionTasksPicker(
 }
 
 DEFINE_TO_STRING(CompactionTasksPicker::TaskInfo, KV_((int)task_type), KV_(priority_value),
-    KV_(extents_size), KV_(output_level), KV_(l1_pick_pos), KV_(need_split));
+    KV_(extents_size), KV_(output_level), KV_(l1_pick_pos), KV_(need_split))
 
 // If level_compaction_dynamic_level_bytes is set, we would adjust level 1
 // trigger dynamic between [level0_file_trigger, total_count / (multiplier + 1)];
@@ -476,7 +476,7 @@ int CompactionTasksPicker::pick_one_task(const SnapshotImpl* snapshot,
 
     if (TaskType::MAX_TYPE_TASK != mc_task_type_) {
       pick_task.task_type_ = pick_one_manual_task(snapshot, storage_manager);
-      pick_task.priority_value_ = INT64_MAX;
+      pick_task.priority_value_ = static_cast<double>(INT64_MAX);
       task_list.push_back(pick_task);
     } else {
       calc_normal_tasks(level0_layer_val, level0_num_val, intraL0_extent_size, level1_num_val, level1_trigger,

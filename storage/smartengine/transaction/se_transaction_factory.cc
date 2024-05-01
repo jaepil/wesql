@@ -30,8 +30,7 @@ namespace smartengine
 
 SeTransaction *&get_tx_from_thd(THD *const thd)
 {
-  return *reinterpret_cast<SeTransaction **>(
-      my_core::thd_ha_data(thd, se_hton));
+  return *reinterpret_cast<SeTransaction **>(my_core::thd_ha_data(thd, se_hton));
 }
 
 /**TODO: maybe, call this in external_lock() and store in ha_smartengine.*/

@@ -36,7 +36,7 @@ extern CHARSET_INFO my_charset_utf32_bin;
 
 namespace smartengine {
 
-class SeCollationCodec;
+struct SeCollationCodec;
 
 // See SeCharsetSpaceInfo::spaces_xfrm
 extern const int SE_SPACE_XFRM_SIZE;

@@ -28,10 +28,11 @@ namespace db {
 
 class DBBlockCacheTest : public DBTestBase {
  private:
-  size_t miss_count_ = 0;
-  size_t hit_count_ = 0;
-  size_t insert_count_ = 0;
-  size_t failure_count_ = 0;
+  //TODO(Zhao Dongsheng): fix this unittest later.
+  //size_t miss_count_ = 0;
+  //size_t hit_count_ = 0;
+  //size_t insert_count_ = 0;
+  //size_t failure_count_ = 0;
   size_t compressed_miss_count_ = 0;
   size_t compressed_hit_count_ = 0;
   size_t compressed_insert_count_ = 0;

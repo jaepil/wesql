@@ -37,7 +37,8 @@ public:
     : write_batch_(write_batch), log_file_number_(log_file_number),
       is_last_record_(is_last_record), last_record_end_pos_(last_record_end_pos),
       db_impl_(db_impl), replay_thread_pool_(replay_thread_pool), arena_(arena) {}
-  virtual ~ReplayTask() {
+  virtual ~ReplayTask() override
+  {
     MOD_DELETE_OBJECT(WriteBatch, write_batch_);
   }
   virtual void run() override;

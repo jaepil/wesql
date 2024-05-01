@@ -79,7 +79,7 @@ public:
    int64_t l1_pick_pos_;
    bool need_split_;
    // todo to_string
-   DECLARE_TO_STRING();
+   DECLARE_TO_STRING()
  };
 
  CompactionTasksPicker(common::MutableCFOptions &mutable_cf_options,

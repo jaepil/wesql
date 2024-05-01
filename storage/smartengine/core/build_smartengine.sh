@@ -113,8 +113,10 @@ else
   exit 1
 fi
 
-CC=/opt/rh/gcc-toolset-11/root/usr/bin/gcc
-CXX=/opt/rh/gcc-toolset-11/root/usr/bin/g++
+#CC=/opt/rh/gcc-toolset-11/root/usr/bin/gcc
+#CXX=/opt/rh/gcc-toolset-11/root/usr/bin/g++
+CC=clang
+CXX=clang++
 
 export CC CFLAGS CXX CXXFLAGS
 

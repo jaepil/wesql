@@ -37,6 +37,8 @@ class Allocator {
 
 class SimpleAllocator {
  public:
+  SimpleAllocator() = default;
+  SimpleAllocator(const SimpleAllocator &) = default;
   virtual ~SimpleAllocator(){}
   virtual void* alloc(const int64_t sz) = 0;
   virtual void free(void* p) = 0;

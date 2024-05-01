@@ -81,7 +81,8 @@ public:
      iter_->SetPinnedItersMgr(&pinned_iters_mgr_);
    }
  }
- virtual ~DBIter() {
+ virtual ~DBIter() override
+ {
    // Release pinned data if any
    if (pinned_iters_mgr_.PinningEnabled()) {
      pinned_iters_mgr_.ReleasePinnedData();
@@ -126,7 +127,7 @@ public:
                                                  large_value,
                                                  oob_aligned_buf_,
                                                  oob_aligned_size_))) {
-     __SE_LOG(ERROR, "fail to get content of large value\n");
+     SE_LOG(ERROR, "fail to get content of large value", K(ret));
      return Slice();
    } else if (kNoCompression == large_value.compression_type_) {
      result.data_ = oob_aligned_buf_.get();
@@ -135,7 +136,7 @@ public:
            large_value.size_, LargeValue::COMPRESSION_FORMAT_VERSION,
            static_cast<CompressionType>(large_value.compression_type_),
            oob_unzip_buf_, oob_unzip_size_))) {
-     __SE_LOG(ERROR, "fail to unzip large value\n");
+     SE_LOG(ERROR, "fail to unzip large value", K(ret));
      return Slice();
    } else {
      result.data_ = oob_unzip_buf_.get();
@@ -756,10 +757,10 @@ void DBIter::FindPrevUserKey() {
   if (!iter_->Valid()) {
     return;
   }
-  size_t num_skipped = 0;
+  uint64_t num_skipped = 0;
   ParsedInternalKey ikey;
   FindParseableKey(&ikey, kReverse);
-  int cmp;
+  int cmp = 0;
   while (iter_->Valid() &&
          ((cmp = user_comparator_->Compare(ikey.user_key,
                                            saved_key_.GetUserKey())) == 0 ||

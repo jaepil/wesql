@@ -26,7 +26,7 @@
 
 class Field;
 class MDL_ticket;
-class TABLE;
+struct TABLE;
 namespace dd
 {
 namespace cache

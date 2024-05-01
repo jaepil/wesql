@@ -65,7 +65,7 @@ class ha_smartengine : public my_core::handler {
 public:
   ha_smartengine(my_core::handlerton *const hton, my_core::TABLE_SHARE *const table_arg);
 
-  virtual ~ha_smartengine();
+  virtual ~ha_smartengine() override;
 
   virtual handler *clone(const char *name, MEM_ROOT *mem_root) override;
 
@@ -635,7 +635,7 @@ private:
       uint index,
       SeTransaction *const tx,
       db::ColumnFamilyHandle *const cf,
-      const common::Slice &key);;
+      const common::Slice &key);
 
   common::Status delete_or_singledelete_new_table(
       const TABLE *altered_table,
@@ -663,7 +663,7 @@ private:
       const TABLE *old_table_arg,
       const SeTableDef *old_tbl_def_arg) const;
 
-  int compare_key_parts(const KEY *const old_key, const KEY *const new_key) const;;
+  int compare_key_parts(const KEY *const old_key, const KEY *const new_key) const;
 
   int index_first_intern(uchar *buf);
 

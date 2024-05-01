@@ -475,8 +475,8 @@ int CompactionJob::prepare_major_task(const int64_t level1_pick_start_pos,
     }
   }
 
-  PLACEMENT_DELETE(RangeIterator, arena_, l1_range_iter);
-  PLACEMENT_DELETE(RangeIterator, arena_, l2_range_iter);
+  PLACEMENT_DELETE(MetaDataIterator, arena_, l1_range_iter);
+  PLACEMENT_DELETE(MetaDataIterator, arena_, l2_range_iter);
   return ret;
 }
 

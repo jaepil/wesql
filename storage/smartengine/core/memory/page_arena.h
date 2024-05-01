@@ -47,8 +47,8 @@ inline size_t get_align_offset(void *p) {
 
 struct DefaultPageAllocator : public SimpleAllocator {
   DefaultPageAllocator(size_t mod_id = ModId::kDefaultMod) : mod_id_(mod_id) {}
-
-  virtual ~DefaultPageAllocator(){}
+  DefaultPageAllocator(const DefaultPageAllocator &) = default;
+  virtual ~DefaultPageAllocator() override {}
   virtual void *alloc(const int64_t sz) override {
     return base_malloc(sz, mod_id_);
   }
@@ -64,7 +64,8 @@ struct WrapAllocator: public SimpleAllocator
       : mod_id_(mod_id),
         allocator_(nullptr) {}
   explicit WrapAllocator(SimpleAllocator &allocator) : allocator_(&allocator) {}
-  virtual ~WrapAllocator(){}
+  WrapAllocator(const WrapAllocator &) = default;
+  virtual ~WrapAllocator() override {}
   void set_mod_id(const size_t mod_id) override { mod_id_ = mod_id; }
   void *alloc(const int64_t sz) override {
     return (nullptr == allocator_) ? base_malloc(sz, mod_id_) : allocator_->alloc(sz);
@@ -552,7 +553,7 @@ class ArenaAllocator : public SimpleAllocator {
   ArenaAllocator(int64_t page_size = CharArena::DEFAULT_PAGE_SIZE,
                  const size_t mod_id = ModId::kDefaultMod)
       : arena_(page_size, mod_id){}
-  virtual ~ArenaAllocator(){}
+  virtual ~ArenaAllocator() override {}
 
  public:
   virtual void *alloc(const int64_t sz) override {

@@ -15,17 +15,21 @@
 #include "options/cf_options.h"
 #include "table/table.h"
 
-namespace smartengine {
-namespace common {
+namespace smartengine
+{
+namespace common
+{
 struct ReadOptions;
 }
 
-namespace util {
+namespace util
+{
 class RandomAccessFile;
-class AIOHandle;
+struct AIOHandle;
 }
 
-namespace table {
+namespace table
+{
 
 const int64_t LAST_EXTENT = ~0ull;
 

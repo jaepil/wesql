@@ -157,7 +157,7 @@ int ReplayThreadPool::stop() {
 int ReplayThreadPool::destroy(uint64_t* replayed_task_num) {
   int ret = Status::kOk;
   bool has_error = false;
-  uint64_t replayed_num;
+  uint64_t replayed_num = 0;
   if (UNLIKELY(!inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "destroy replay thread pool fail", K(ret));

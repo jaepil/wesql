@@ -50,9 +50,9 @@ class WritableFile;
 class RandomRWFile;
 class Directory;
 class RateLimiter;
-class ThreadStatus;
+struct ThreadStatus;
 class ThreadStatusUpdater;
-class AIOInfo;
+struct AIOInfo;
 
 using std::unique_ptr;
 using std::shared_ptr;
@@ -797,7 +797,7 @@ class EnvWrapper : public Env {
  public:
   // Initialize an EnvWrapper that delegates all calls to *t
   explicit EnvWrapper(Env* t) : target_(t) {}
-  virtual ~EnvWrapper();
+  virtual ~EnvWrapper() override;
 
   // Return the target to which this Env forwards all calls
   Env* target() const { return target_; }

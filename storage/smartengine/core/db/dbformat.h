@@ -18,9 +18,11 @@
 #include "util/coding.h"
 #include "util/serialization.h"
 
-namespace smartengine {
-namespace storage {
-class ChangeInfo;
+namespace smartengine
+{
+namespace storage
+{
+struct ChangeInfo;
 }
 
 namespace util {
@@ -79,14 +81,14 @@ struct LargeValue {
   uint64_t size_;    // size of the zipped (if applied) value
   util::autovector<storage::ExtentId> oob_extents_;
 
-  DECLARE_SERIALIZATION();
+  DECLARE_SERIALIZATION()
 };
 
 struct LargeObject {
   std::string key_;
   LargeValue value_;
 
-  DECLARE_SERIALIZATION();
+  DECLARE_SERIALIZATION()
 };
 
 // get large value from kv record
@@ -120,7 +122,7 @@ struct ParsedInternalKey {
   ParsedInternalKey deep_copy(memory::SimpleAllocator& allocator) const {
     return ParsedInternalKey(user_key.deep_copy(allocator), sequence, type);
   }
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 // Return the length of the encoding of "key".
@@ -179,7 +181,7 @@ inline common::SequenceNumber ExtractKeySeq(const common::Slice& internal_key) {
   return sequence;
 }
 
-struct BlockStats {
+class BlockStats {
  public:
   int32_t version_;
   int64_t data_size_;
@@ -207,8 +209,8 @@ struct BlockStats {
   bool equal(const BlockStats& block_stats) const;
   int estimate_size() const;
 
-  DECLARE_SERIALIZATION();
-  DECLARE_TO_STRING();
+  DECLARE_SERIALIZATION()
+  DECLARE_TO_STRING()
 
  private:
   static const int32_t LATEST_VERSION;
@@ -226,7 +228,9 @@ class InternalKeyComparator : public util::Comparator {
       : user_comparator_(c) {
         //name_ = "rocksdb.InternalKeyComparator";
       }
-  virtual ~InternalKeyComparator() {}
+  InternalKeyComparator(const InternalKeyComparator &) = default;
+  virtual ~InternalKeyComparator() override {}
+
 
   virtual const char* Name() const override;
   virtual int Compare(const common::Slice& a,
@@ -309,7 +313,7 @@ class InternalKey {
   }
 
   std::string DebugString(bool hex = false) const;
-  DECLARE_SERIALIZATION();
+  DECLARE_SERIALIZATION()
 };
 
 inline int InternalKeyComparator::Compare(const InternalKey& a,
@@ -693,7 +697,7 @@ struct FileMetaData {
     largest_seqno = std::max(largest_seqno, seqno);
   }
 
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 struct MiniTables {

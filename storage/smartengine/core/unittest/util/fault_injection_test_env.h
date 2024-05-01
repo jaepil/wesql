@@ -62,16 +62,17 @@ class TestWritableFile : public WritableFile {
   explicit TestWritableFile(const std::string& fname,
                             unique_ptr<WritableFile>&& f,
                             FaultInjectionTestEnv* env);
-  virtual ~TestWritableFile();
+  virtual ~TestWritableFile() override;
   virtual common::Status Append(const common::Slice& data) override;
   virtual common::Status Truncate(uint64_t size) override {
     return target_->Truncate(size);
   }
   virtual common::Status PositionedAppend(const common::Slice& data,
-                                          uint64_t offset) {
+                                          uint64_t offset) override
+  {
     return target_->PositionedAppend(data, offset);
   }
-  virtual uint64_t GetFileSize() { return target_->GetFileSize(); }
+  virtual uint64_t GetFileSize() override { return target_->GetFileSize(); }
   virtual common::Status Close() override;
   virtual common::Status Flush() override;
   virtual common::Status Sync() override;

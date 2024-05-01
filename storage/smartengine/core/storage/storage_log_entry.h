@@ -72,8 +72,8 @@ struct LogHeader
   LogHeader();
   ~LogHeader();
   bool is_valid();
-  DECLARE_COMPACTIPLE_SERIALIZATION(LOG_HEADER_VERSION);
-  DECLARE_TO_STRING();
+  DECLARE_COMPACTIPLE_SERIALIZATION(LOG_HEADER_VERSION)
+  DECLARE_TO_STRING()
 };
 
 //for compatibility, the variables in this struct must not been deleted or moved.
@@ -90,8 +90,8 @@ struct ManifestLogEntryHeader
   ManifestLogEntryHeader();
   ~ManifestLogEntryHeader();
   bool is_valid();
-  DECLARE_COMPACTIPLE_SERIALIZATION(LOG_ENTRY_HEADER_VERSION);
-  DECLARE_TO_STRING();
+  DECLARE_COMPACTIPLE_SERIALIZATION(LOG_ENTRY_HEADER_VERSION)
+  DECLARE_TO_STRING()
 };
 
 struct ManifestLogEntry
@@ -112,9 +112,9 @@ struct ChangeSubTableLogEntry : public ManifestLogEntry
 
   ChangeSubTableLogEntry();
   ChangeSubTableLogEntry(int64_t index_id, int64_t table_space_id);
-  virtual ~ChangeSubTableLogEntry();
-  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(CHANGE_SUB_TABLE_LOG_ENTRY_VERSION);
-  DECLARE_TO_STRING();
+  virtual ~ChangeSubTableLogEntry() override;
+  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(CHANGE_SUB_TABLE_LOG_ENTRY_VERSION)
+  DECLARE_TO_STRING()
 };
 
 //log entry of modify the exist SubTable
@@ -130,9 +130,9 @@ struct ModifySubTableLogEntry : public ManifestLogEntry
 
   ModifySubTableLogEntry(ChangeInfo &change_info);
   ModifySubTableLogEntry(int64_t index_id, ChangeInfo &change_info);
-  virtual ~ModifySubTableLogEntry();
-  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_SUBTABLE_LOG_ENTRY_VERSION);
-  DECLARE_TO_STRING();
+  virtual ~ModifySubTableLogEntry() override;
+  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_SUBTABLE_LOG_ENTRY_VERSION)
+  DECLARE_TO_STRING()
 };
 
 //log entry of modify the Extent
@@ -145,9 +145,9 @@ struct ModifyExtentMetaLogEntry : public ManifestLogEntry
   ExtentMeta extent_meta_;
   ModifyExtentMetaLogEntry();
   ModifyExtentMetaLogEntry(const ExtentMeta &extent_meta);
-  virtual ~ModifyExtentMetaLogEntry();
-  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_EXTENT_META_LOG_ENTRY_VERSION);
-  DECLARE_TO_STRING();
+  virtual ~ModifyExtentMetaLogEntry() override;
+  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_EXTENT_META_LOG_ENTRY_VERSION)
+  DECLARE_TO_STRING()
 };
 
 } // namespace storage

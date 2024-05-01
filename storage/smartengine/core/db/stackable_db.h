@@ -37,8 +37,8 @@ class StackableDB : public db::DB {
   // StackableDB is the owner of db now!
   explicit StackableDB(DB* db) : db_(db) {}
 
-  ~StackableDB() { 
-//   delete db_;
+  ~StackableDB() override
+  { 
     MOD_DELETE_OBJECT(DB, db_);
   }
 

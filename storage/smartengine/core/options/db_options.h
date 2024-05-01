@@ -50,10 +50,13 @@ struct ImmutableDBOptions {
   uint64_t table_cache_size;
 };
 
-struct MutableDBOptions {
+struct MutableDBOptions
+{
   MutableDBOptions();
   explicit MutableDBOptions(const MutableDBOptions& options) = default;
   explicit MutableDBOptions(const DBOptions& options);
+  MutableDBOptions &operator=(const MutableDBOptions &options) = default;
+
 
   void Dump() const;
 

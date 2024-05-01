@@ -35,7 +35,7 @@ class FullFilterBitsBuilder : public FilterBitsBuilder {
     assert(bits_per_key_);
   }
 
-  virtual ~FullFilterBitsBuilder() {}
+  virtual ~FullFilterBitsBuilder() override {}
 
   virtual void AddKey(const Slice& key) override {
     uint32_t hash = util::BloomHash(key);
@@ -157,18 +157,18 @@ inline void FullFilterBitsBuilder::AddHash(uint32_t h, char* data,
   }
 }
 
-class FixedSizeFullFilterBitsBuilder : public FullFilterBitsBuilder {
+class FixedSizeFullFilterBitsBuilder : public FullFilterBitsBuilder
+{
  public:
   explicit FixedSizeFullFilterBitsBuilder(const size_t bits_per_key,
                                           const size_t num_probes,
                                           const size_t total_entries)
       : FullFilterBitsBuilder(bits_per_key, num_probes),
-        first_key_(true),
         total_entries_(total_entries) {
     assert(bits_per_key_);
   }
 
-  virtual ~FixedSizeFullFilterBitsBuilder() {}
+  virtual ~FixedSizeFullFilterBitsBuilder() override {}
 
   void Initialize() {
     data_ = ReserveSpace(total_entries_, &total_bits_, &num_lines_);
@@ -187,7 +187,6 @@ class FixedSizeFullFilterBitsBuilder : public FullFilterBitsBuilder {
   }
 
  private:
-  bool first_key_;
   size_t total_entries_;
   char* data_;
   uint32_t total_bits_;
@@ -210,7 +209,7 @@ class FullFilterBitsReader : public FilterBitsReader {
     }
   }
 
-  ~FullFilterBitsReader() {}
+  virtual ~FullFilterBitsReader() override {}
 
   virtual bool MayMatch(const Slice& entry) override {
     if (data_len_ <= 5) {  // remain same with original filter
@@ -310,7 +309,7 @@ class BloomFilterPolicy : public FilterPolicy {
     initialize();
   }
 
-  ~BloomFilterPolicy() {}
+  virtual ~BloomFilterPolicy() override {}
 
   virtual const char* Name() const override {
     return "smartengine.BuiltinBloomFilter";

@@ -38,7 +38,7 @@ class SeTransactionImpl : public SeTransaction {
 public:
   explicit SeTransactionImpl(THD *const thd);
 
-  virtual ~SeTransactionImpl();
+  virtual ~SeTransactionImpl() override;
 
   virtual common::Status put(db::ColumnFamilyHandle *const column_family,
                              const common::Slice &key,

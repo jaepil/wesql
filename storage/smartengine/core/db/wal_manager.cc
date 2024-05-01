@@ -226,7 +226,7 @@ void WalManager::PurgeObsoleteWALFiles() {
   GetSortedWalsOfType(archival_dir, archived_logs, kArchivedLogFile);
 
   if (files_del_num > archived_logs.size()) {
-    __SE_LOG(WARN, "Trying to delete more archived log files than exist. Deleting all");
+    SE_LOG(WARN, "Trying to delete more archived log files than exist. Deleting all");
     files_del_num = archived_logs.size();
   }
 

@@ -23,7 +23,7 @@
 #include "se_transaction_list_walker.h"
 
 class THD;
-class handlerton;
+struct handlerton;
 
 namespace smartengine
 {

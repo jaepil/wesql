@@ -26,8 +26,11 @@
 #define POSIX_FADV_DONTNEED 4   /* [MC1] dont need these pages */
 #endif
 
-namespace smartengine {
-namespace util {
+namespace smartengine
+{
+namespace util
+{
+struct AIOInfo;
 
 common::Status IOError(const std::string& context, int err_number) __attribute__((unused));
 
@@ -36,7 +39,6 @@ class PosixHelper {
   static size_t GetUniqueIdFromFile(int fd, char* id, size_t max_size);
 };
 
-class AIOInfo;
 class PosixSequentialFile : public SequentialFile {
  private:
   std::string filename_;
@@ -48,7 +50,7 @@ class PosixSequentialFile : public SequentialFile {
  public:
   PosixSequentialFile(const std::string& fname, FILE* file, int fd,
                       const EnvOptions& options);
-  virtual ~PosixSequentialFile();
+  virtual ~PosixSequentialFile() override;
 
   virtual common::Status Read(size_t n, common::Slice* result,
                               char* scratch) override;
@@ -79,7 +81,7 @@ class PosixRandomAccessFile : public RandomAccessFile {
  public:
   PosixRandomAccessFile(const std::string& fname, int fd,
                         const EnvOptions& options);
-  virtual ~PosixRandomAccessFile();
+  virtual ~PosixRandomAccessFile() override;
 
   virtual common::Status Read(uint64_t offset, size_t n, common::Slice* result,
                               char* scratch) const override;
@@ -109,7 +111,7 @@ class PosixWritableFile : public WritableFile {
  public:
   explicit PosixWritableFile(const std::string& fname, int fd,
                              const EnvOptions& options);
-  virtual ~PosixWritableFile();
+  virtual ~PosixWritableFile() override;
 
   // Need to implement this so the file is truncated correctly
   // with direct I/O
@@ -141,7 +143,7 @@ class PosixRandomRWFile : public RandomRWFile {
  public:
   explicit PosixRandomRWFile(const std::string& fname, int fd,
                              const EnvOptions& options);
-  virtual ~PosixRandomRWFile();
+  virtual ~PosixRandomRWFile() override;
 
   virtual common::Status Write(uint64_t offset,
                                const common::Slice& data) override;
@@ -164,7 +166,7 @@ class PosixRandomRWFile : public RandomRWFile {
 class PosixDirectory : public Directory {
  public:
   explicit PosixDirectory(int fd) : fd_(fd) {}
-  ~PosixDirectory();
+  virtual ~PosixDirectory() override;
   virtual common::Status Fsync() override;
 
  private:

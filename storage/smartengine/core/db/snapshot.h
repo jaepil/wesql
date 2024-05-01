@@ -11,11 +11,13 @@
 
 #include "util/types.h"
 
-namespace smartengine {
-namespace storage {
-  struct ExtentLayerVersion;
-  struct ExtentLayer;
-  struct LayerPosition;
+namespace smartengine
+{
+namespace storage
+{
+class ExtentLayerVersion;
+struct ExtentLayer;
+struct LayerPosition;
 }
 
 namespace db {

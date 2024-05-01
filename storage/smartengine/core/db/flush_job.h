@@ -132,7 +132,7 @@ class FlushJob : public BaseFlush {
            storage::CompactionContext &context,
            memory::ArenaAllocator &arena);
 
-  virtual ~FlushJob();
+  virtual ~FlushJob() override;
 
   // Require db_mutex held.
   // Once PickMemTable() is called, either Run() or Cancel() has to be call.

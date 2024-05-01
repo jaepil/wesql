@@ -689,7 +689,7 @@ void ParallelReadTest::parallel_run(storage::Range &range, int64_t max_threads, 
       dynamic_cast<util::Transaction *>(trx), config,
       [&](const ParallelReader::ExecuteCtx *ctx, db::Iterator* it) {
         int ret_inner = 0;
-        sleep(0.0001);
+        //sleep(0.0001);
         // fprintf(stderr, "key: %s\n", key.ToString().c_str());
         n_recs++;
 

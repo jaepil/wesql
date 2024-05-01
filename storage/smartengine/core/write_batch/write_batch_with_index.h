@@ -110,7 +110,7 @@ class WriteBatchWithIndex : public db::WriteBatchBase {
       size_t reserved_bytes = 0, bool overwrite_key = false,
       size_t max_bytes = 0);
 
-  virtual ~WriteBatchWithIndex();
+  virtual ~WriteBatchWithIndex() override;
 
   using smartengine::db::WriteBatchBase::Put;
   common::Status Put(db::ColumnFamilyHandle* column_family,
@@ -238,7 +238,7 @@ class BaseDeltaIterator : public db::Iterator {
         comparator_(comparator),
         delta_valid_(true) {}
 
-  virtual ~BaseDeltaIterator() {}
+  virtual ~BaseDeltaIterator() override {}
 
   bool Valid() const override {
     return current_at_base_ ? BaseValid() : DeltaValid();

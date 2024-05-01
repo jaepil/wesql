@@ -12,12 +12,13 @@
 namespace smartengine {
 namespace util {
 
-class OptimisticTransactionDBImpl : public OptimisticTransactionDB {
+class OptimisticTransactionDBImpl : public OptimisticTransactionDB
+{
  public:
   explicit OptimisticTransactionDBImpl(db::DB* db)
       : OptimisticTransactionDB(db), db_(db) {}
 
-  ~OptimisticTransactionDBImpl() {}
+  virtual ~OptimisticTransactionDBImpl() override {}
 
   Transaction* BeginTransaction(const common::WriteOptions& write_options,
                                 const OptimisticTransactionOptions& txn_options,

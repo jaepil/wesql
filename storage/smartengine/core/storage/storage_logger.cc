@@ -142,7 +142,8 @@ void CheckpointBlockHeader::reset()
   data_offset_ = 0;
   data_size_ = 0;
 }
-DEFINE_TO_STRING(CheckpointBlockHeader, KV_(type), KV_(block_size), KV_(entry_count), KV_(data_offset), KV_(data_size), KV(reserve_[0]), KV(reserve_[1]));
+DEFINE_TO_STRING(CheckpointBlockHeader, KV_(type), KV_(block_size), KV_(entry_count),
+                 KV_(data_offset), KV_(data_size), KV(reserve_[0]), KV(reserve_[1]))
 
 StorageLogger::TransContext::TransContext(bool need_reused)
     : event_(INVALID_EVENT),
@@ -228,8 +229,9 @@ CheckpointHeader::~CheckpointHeader()
 {
 }
 //DEFINE_COMPACTIPLE_SERIALIZATION(CheckpointHeader, extent_count_, partition_group_count_);
-DEFINE_TO_STRING(CheckpointHeader, KV_(start_log_id), KV_(extent_count), KV_(sub_table_count), KV_(extent_meta_block_count),
-    KV_(sub_table_meta_block_count), KV_(extent_meta_block_offset), KV_(sub_table_meta_block_offset));
+DEFINE_TO_STRING(CheckpointHeader, KV_(start_log_id), KV_(extent_count), KV_(sub_table_count),
+                 KV_(extent_meta_block_count), KV_(sub_table_meta_block_count), KV_(extent_meta_block_offset),
+                 KV_(sub_table_meta_block_offset))
 
 StorageLogger::StorageLogger()
     : is_inited_(false),
@@ -250,7 +252,6 @@ StorageLogger::StorageLogger()
       log_buf_(nullptr),
       trans_ctxs_(),
       allocator_(),
-      checkpoint_writer_(nullptr),
       current_manifest_file_number_(0),
       trans_pool_mutex_(),
       active_trans_cnt_(0)

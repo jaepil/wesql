@@ -85,7 +85,16 @@ struct POD {
     memcpy(str_, pod.str_, 20);
   }
 
-  constexpr POD& operator=(const POD&) =default;
+  POD& operator=(const POD &val)
+  {
+    i64_ = val.i64_;
+    i32_ = val.i32_;
+    i16_ = val.i16_;
+    ui8_ = val.ui8_;
+    memcpy(str_, val.str_, 20);
+
+    return *this;
+  }
 
   bool equal(const POD &pod) {
     return i64_ == pod.i64_ && i32_ == pod.i32_ && i16_ == pod.i16_ &&
@@ -96,8 +105,8 @@ struct POD {
   DECLARE_TO_STRING();
 };
 
-DEFINE_SERIALIZATION(POD, i64_, i32_, i16_, ui8_, str_);
-DEFINE_TO_STRING(POD, KV_(i64), KV_(i32), KV_(i16), KV_(ui8), KV_(str));
+DEFINE_SERIALIZATION(POD, i64_, i32_, i16_, ui8_, str_)
+DEFINE_TO_STRING(POD, KV_(i64), KV_(i32), KV_(i16), KV_(ui8), KV_(str))
 
 struct Compound {
   int64_t ic64_;

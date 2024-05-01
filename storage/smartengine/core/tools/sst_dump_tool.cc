@@ -340,8 +340,8 @@ int SSTDumpTool::Run(int argc, char** argv) {
   std::string from_key;  //
   std::string to_key;    // from 'keym' to 'keyn' when 'scan'
   std::string block_size_str;
-  size_t block_size;
-  size_t extent_offset;
+  size_t block_size = 0;
+  size_t extent_offset = 0;
   uint64_t total_num_files = 0;
   uint64_t total_num_data_blocks = 0;
   uint64_t total_data_block_size = 0;

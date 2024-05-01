@@ -21,7 +21,7 @@ class TransactionBaseImpl : public util::Transaction {
  public:
   TransactionBaseImpl(db::DB* db, const common::WriteOptions& write_options);
 
-  virtual ~TransactionBaseImpl();
+  virtual ~TransactionBaseImpl() override;
 
   // Remove pending operations queued in this transaction.
   virtual void Clear();

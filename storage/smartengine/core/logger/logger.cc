@@ -252,13 +252,21 @@ void Logger::swith_log_file()
       struct tm tm;
       localtime_r(&t, &tm);
       do {
+#ifdef __GNUC__
+#ifndef __clang__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif //__clang__
+#endif //__GNUC__
         if (snprintf(old_file_path, sizeof(old_file_path), "%s.%04d%02d%02d%02d%02d%02d", file_path_, tm.tm_year + 1900,
             tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec) < 0) {
           // error
         }
+#ifdef __GNUC__
+#ifndef __clang__
 #pragma GCC diagnostic pop
+#endif //__clang__
+#endif //__GNUC__
         tm.tm_sec += 1;
       } while (file_exist(old_file_path));
       rename(file_path_, old_file_path);

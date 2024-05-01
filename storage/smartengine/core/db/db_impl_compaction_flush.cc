@@ -382,8 +382,7 @@ Status DBImpl::ContinueBackgroundWork() {
 void DBImpl::CancelAllBackgroundWork(bool wait) {
   InstrumentedMutexLock l(&mutex_);
 
-  __SE_LOG(INFO,
-                 "Shutdown: canceling all background work");
+  SE_LOG(INFO, "Shutdown: canceling all background work");
 
   if (!shutting_down_.load(std::memory_order_acquire) &&
       has_unpersisted_data_.load(std::memory_order_relaxed) &&
@@ -1516,11 +1515,11 @@ void DBImpl::BackgroundCallFlush() {
     mutex_.Lock();
   }
 
-  __SE_LOG(INFO, "BEFORE FindObsoleteFiles");
+  SE_LOG(INFO, "BEFORE FindObsoleteFiles");
   // If flush failed, we want to delete all temporary files that we might have
   // created. Thus, we force full scan in FindObsoleteFiles()
   FindObsoleteFiles(&job_context, !s.ok() && !s.IsShutdownInProgress());
-  __SE_LOG(INFO, "AFTER FindObsoleteFiles");
+  SE_LOG(INFO, "AFTER FindObsoleteFiles");
   // delete unnecessary files if any, this is done outside the mutex
   if (job_context.HaveSomethingToDelete()) {
     mutex_.Unlock();

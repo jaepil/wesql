@@ -67,8 +67,8 @@ MetaType::MetaType(int8_t st, int8_t dt, int8_t kt, int8_t lv, int16_t w,
       way_(w),
       sequence_(seq) {}
 
-DEFINE_TO_STRING(MetaType, KV_(store_type), KV_(data_type), KV_(key_type),
-                 KV_(level), KV_(way), KV_(sequence));
+DEFINE_TO_STRING(MetaType, KV_(store_type), KV_(data_type),
+                 KV_(key_type), KV_(level), KV_(way), KV_(sequence))
 
 MetaDescriptor::MetaDescriptor()
     : type_(),
@@ -110,7 +110,7 @@ MetaDescriptor MetaDescriptor::deep_copy(memory::SimpleAllocator &allocator) con
 
 DEFINE_TO_STRING(MetaDescriptor, KV_(type), KV_(range), "bp1",
                  block_position_.first, "bp2", block_position_.second,
-                 KV_(layer_position), KV_(extent_id), KV_(delete_percent));
+                 KV_(layer_position), KV_(extent_id), KV_(delete_percent))
 /*
   SEIterator => the single way iterator which provide reuse blocks/extents func.
 

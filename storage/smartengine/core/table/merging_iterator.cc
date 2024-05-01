@@ -97,7 +97,8 @@ class MergingIterator : public InternalIterator {
     }
   }
 
-  virtual ~MergingIterator() {
+  virtual ~MergingIterator() override
+  {
     for (auto& child : children_) {
       child.DeleteIter(is_arena_mode_);
     }

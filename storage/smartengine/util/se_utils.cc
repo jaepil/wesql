@@ -455,9 +455,12 @@ const char *get_se_io_error_string(const SE_IO_ERROR_TYPE err_type)
 // In case of core dump generation we want this function NOT to be optimized
 // so that we can capture as much data as possible to debug the root cause
 // more efficiently.
+#ifdef __GNUC__
+#ifndef __clang__
 #pragma GCC push_options
 #pragma GCC optimize("O0")
-
+#endif //__clang__
+#endif //__GNUC__
 void se_handle_io_error(const common::Status status, const SE_IO_ERROR_TYPE err_type)
 {
   if (status.IsIOError()) {
@@ -530,7 +533,11 @@ void se_handle_io_error(const common::Status status, const SE_IO_ERROR_TYPE err_
   }
 }
 
+#ifdef __GNUC__
+#ifndef __clang__
 #pragma GCC pop_options
+#endif //__clang__
+#endif //__GNUC__
 
 int se_normalize_tablename(const std::string &tablename, std::string *const strbuf)
 {

@@ -82,7 +82,7 @@ void DumpWalFile(std::string wal_file, bool print_header, bool print_values,
                  LDBCommandExecuteResult* exec_state);
 
 //void DumpSstFile(std::string filename, bool output_hex, bool show_properties);
-};
+}
 
 LDBCommand* LDBCommand::InitFromCmdLineArgs(
     int argc, char** argv, const Options& options,
@@ -1509,7 +1509,7 @@ class InMemoryHandler : public WriteBatch::Handler {
     return Status::OK();
   }
 
-  virtual ~InMemoryHandler() {}
+  virtual ~InMemoryHandler() override {}
 
  private:
   std::stringstream& row_;

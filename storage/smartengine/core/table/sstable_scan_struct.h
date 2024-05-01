@@ -31,7 +31,7 @@ class InternalStats;
 }
 namespace storage
 {
-class ExtentLayer;
+struct ExtentLayer;
 }
 namespace util
 {
@@ -47,14 +47,15 @@ namespace table
 
 // Delete the resource that is held by the iterator.
 template <class ResourceType>
-  static void delete_resource(void* arg, void* ignored) {
-//    delete reinterpret_cast<ResourceType*>(arg);
-    auto del = reinterpret_cast<ResourceType*>(arg);
-    MOD_DELETE_OBJECT(ResourceType, del);
-  }
+static void delete_resource(void* arg, void* ignored)
+{
+  auto del = reinterpret_cast<ResourceType*>(arg);
+  MOD_DELETE_OBJECT(ResourceType, del);
+}
 
 // Release the cached entry and decrement its ref count.
-static void release_cache_entry(void* arg, void* h) {
+static inline void release_cache_entry(void* arg, void* h)
+{
   cache::Cache* cache = reinterpret_cast<cache::Cache*>(arg);
   cache::Cache::Handle* handle = reinterpret_cast<cache::Cache::Handle*>(h);
   cache->Release(handle);
@@ -66,6 +67,8 @@ struct ScanParam
   {
     reset();
   }
+  ScanParam(const ScanParam &) = default;
+  ScanParam &operator=(const ScanParam &) = default;
   ~ScanParam() {}
 
   void reset()

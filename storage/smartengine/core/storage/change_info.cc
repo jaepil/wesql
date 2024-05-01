@@ -22,14 +22,12 @@ namespace smartengine
 using namespace common;
 namespace storage
 {
-DEFINE_COMPACTIPLE_SERIALIZATION(ExtentChange, layer_position_, extent_id_, flag_);
+DEFINE_COMPACTIPLE_SERIALIZATION(ExtentChange, layer_position_, extent_id_, flag_)
+
 ChangeInfo::ChangeInfo() :
     extent_change_info_(),
     lob_extent_change_info_(),
     task_type_(db::TaskType::INVALID_TYPE_TASK)
-{
-}
-ChangeInfo::~ChangeInfo()
 {
 }
 
@@ -124,6 +122,6 @@ int ChangeInfo::push_large_object_extent_change(const ExtentChange &extent_chang
   return Status::kOk;
 }
 
-DEFINE_COMPACTIPLE_SERIALIZATION(ChangeInfo, extent_change_info_, lob_extent_change_info_, task_type_);
+DEFINE_COMPACTIPLE_SERIALIZATION(ChangeInfo, extent_change_info_, lob_extent_change_info_, task_type_)
 } //namespace storage
 } //namespace smartengine

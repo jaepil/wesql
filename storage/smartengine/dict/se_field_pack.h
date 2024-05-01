@@ -30,7 +30,7 @@ extern CHARSET_INFO my_charset_utf32_bin;
 namespace smartengine
 {
 
-class SeCollationCodec;
+struct SeCollationCodec;
 
 /*
   (SE_ESCAPE_LENGTH-1) must be an even number so that pieces of lines are not

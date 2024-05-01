@@ -58,9 +58,9 @@
 //macros for declare compactiple serialize and deserialize
 #define DECLARE_COMPACTIPLE_SERIALIZATION(VERSION) \
   public: \
-    DECLARE_COMPACTIPLE_SERIALIZATION_; \
+    DECLARE_COMPACTIPLE_SERIALIZATION_ \
   private: \
-    const static int64_t VERSION_ = VERSION
+    const static int64_t VERSION_ = VERSION;
 
 #define DECLARE_COMPACTIPLE_SERIALIZATION_ \
   int serialize(char *buf, int64_t buf_len, int64_t &pos) const; \
@@ -68,14 +68,14 @@
   int deserialize(const char *buf, int64_t buf_len, int64_t &pos); \
   int deserialize_(const char *buf, int64_t buf_len, int64_t &pos); \
   int64_t get_serialize_size() const; \
-  int64_t get_serialize_size_() const
+  int64_t get_serialize_size_() const;
 
 //macros for declare compactiple serialize and deserialize with override
 #define DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(VERSION) \
   public: \
-    DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE_; \
+    DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE_ \
   private: \
-    const static int64_t VERSION_ = VERSION
+    const static int64_t VERSION_ = VERSION;
 
 #define DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE_ \
   int serialize(char *buf, int64_t buf_len, int64_t &pos) const override; \
@@ -83,7 +83,7 @@
   int deserialize(const char *buf, int64_t buf_len, int64_t &pos) override; \
   int deserialize_(const char *buf, int64_t buf_len, int64_t &pos); \
   int64_t get_serialize_size() const override; \
-  int64_t get_serialize_size_() const
+  int64_t get_serialize_size_() const;
 
 //macros for serialize and deserialize header
 #define SERIALIZE_HEADER(VERSION, LEN) \

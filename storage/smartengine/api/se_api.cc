@@ -529,7 +529,7 @@ end:
 	return DB_OUT_OF_MEMORY;
 }
 
-};  // namespace
+}  // namespace
 
 se_err_t se_trx_start(se_trx_t *trx,
                       se_trx_level_t trx_level,

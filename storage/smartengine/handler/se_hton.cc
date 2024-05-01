@@ -491,7 +491,6 @@ bool se_show_status(handlerton *const hton,
     /* Memory Statistics */
     std::vector<db::DB *> dbs;
     std::unordered_set<const cache::Cache *> cache_set;
-    size_t internal_cache_count = 0;
     size_t kDefaultInternalCacheSize = 8 * 1024 * 1024;
     char buf[100];
 
@@ -512,8 +511,6 @@ bool se_show_status(handlerton *const hton,
           if (bbt_opt != nullptr) {
             if (bbt_opt->block_cache.get() != nullptr) {
               cache_set.insert(bbt_opt->block_cache.get());
-            } else {
-              internal_cache_count++;
             }
             cache_set.insert(bbt_opt->block_cache_compressed.get());
           }
@@ -688,5 +685,3 @@ void se_post_recover() { ddl_log_manager.recover(); }
 void se_post_ddl(THD *thd) { ddl_log_manager.post_ddl(thd); }
 
 } // namespace smartengine
-
-

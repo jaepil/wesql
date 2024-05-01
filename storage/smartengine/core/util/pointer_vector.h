@@ -35,7 +35,7 @@ enum VectorErrorCode {
 };
 
 template <typename T>
-class pointer_vector_traits;
+struct pointer_vector_traits;
 
 template <typename T>
 struct pointer_vector_traits<T *> {

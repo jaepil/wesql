@@ -114,17 +114,19 @@ static int LockOrUnlock(const std::string& fname, int fd, bool lock) {
   return value;
 }
 
-class PosixFileLock : public FileLock {
+class PosixFileLock : public FileLock
+{
  public:
   int fd_;
   std::string filename;
 };
 
-class PosixEnv : public Env {
+class PosixEnv : public Env
+{
  public:
   PosixEnv();
-
-  virtual ~PosixEnv() {
+  virtual ~PosixEnv() override
+  {
     for (const auto tid : threads_to_join_) {
       pthread_join(tid, nullptr);
     }
@@ -711,9 +713,6 @@ private:
   }
 
  private:
-  bool checkedDiskForMmap_;
-  bool forceMmapOff_;  // do we override Env options?
-
   // Returns true iff the named directory exists and is a directory.
   virtual bool DirExists(const std::string& dname) {
     struct stat statbuf;
@@ -744,18 +743,13 @@ private:
 #endif
   }
 
-  size_t page_size_;
-
   std::vector<ThreadPoolImpl> thread_pools_;
   pthread_mutex_t mu_;
   std::vector<pthread_t> threads_to_join_;
 };
 
-PosixEnv::PosixEnv()
-    : checkedDiskForMmap_(false),
-      forceMmapOff_(false),
-      page_size_(getpagesize()),
-      thread_pools_(Priority::TOTAL) {
+PosixEnv::PosixEnv() : thread_pools_(Priority::TOTAL)
+{
   ThreadPoolImpl::PthreadCall("mutex_init", pthread_mutex_init(&mu_, nullptr));
   for (int pool_id = 0; pool_id < Env::Priority::TOTAL; ++pool_id) {
     thread_pools_[pool_id].SetThreadPriority(

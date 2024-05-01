@@ -56,8 +56,9 @@ bool SubTableMeta::is_valid()
 }
 
 
-DEFINE_COMPACTIPLE_SERIALIZATION(SubTableMeta, index_id_, index_no_, index_type_, row_count_, data_size_, recovery_point_, table_space_id_);
-DEFINE_TO_STRING(SubTableMeta, KV_(index_id), KV_(index_no), KV_(index_type), KV_(row_count), KV_(data_size), KV_(recovery_point), KV_(table_space_id));
+DEFINE_COMPACTIPLE_SERIALIZATION(SubTableMeta, index_id_, index_no_, index_type_, row_count_, data_size_, recovery_point_, table_space_id_)
+
+DEFINE_TO_STRING(SubTableMeta, KV_(index_id), KV_(index_no), KV_(index_type), KV_(row_count), KV_(data_size), KV_(recovery_point), KV_(table_space_id))
 
 ExtentMeta::ExtentMeta()
     : attr_(0),
@@ -211,10 +212,15 @@ int64_t ExtentMeta::get_deep_copy_size() const
 {
   return sizeof(ExtentMeta);
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(ExtentMeta, attr_, smallest_key_, largest_key_, extent_id_, smallest_seqno_, largest_seqno_,
-    data_size_, index_size_, num_data_blocks_, num_entries_, num_deletes_,
-    table_space_id_, extent_space_type_);
-DEFINE_TO_STRING(ExtentMeta, KV_(attr), KV_(smallest_key), KV_(largest_key), KV_(extent_id), KV_(smallest_seqno), KV_(largest_seqno), KV_(refs), KV_(data_size), KV_(index_size),
-    KV_(num_data_blocks), KV_(num_entries), KV_(num_deletes), KV_(table_space_id), KV_(extent_space_type));
+DEFINE_COMPACTIPLE_SERIALIZATION(ExtentMeta, attr_, smallest_key_, largest_key_,
+                                 extent_id_, smallest_seqno_, largest_seqno_, data_size_,
+                                 index_size_, num_data_blocks_, num_entries_, num_deletes_,
+                                 table_space_id_, extent_space_type_)
+
+DEFINE_TO_STRING(ExtentMeta, KV_(attr), KV_(smallest_key), KV_(largest_key), KV_(extent_id),
+                 KV_(smallest_seqno), KV_(largest_seqno), KV_(refs), KV_(data_size), KV_(index_size),
+                 KV_(num_data_blocks), KV_(num_entries), KV_(num_deletes), KV_(table_space_id),
+                 KV_(extent_space_type))
+
 } //namespace storage
 } //namespace smartengine

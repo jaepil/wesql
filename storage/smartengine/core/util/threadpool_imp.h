@@ -22,7 +22,7 @@ namespace util {
 class ThreadPoolImpl : public ThreadPool {
  public:
   ThreadPoolImpl();
-  ~ThreadPoolImpl();
+  virtual ~ThreadPoolImpl() override;
 
   ThreadPoolImpl(ThreadPoolImpl&&) = delete;
   ThreadPoolImpl& operator=(ThreadPoolImpl&&) = delete;

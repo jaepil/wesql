@@ -9,7 +9,7 @@
 #include "monitoring/query_perf_context.h"
 #include <algorithm>
 #include <iostream>
-#include <thread>
+#include <random>
 #include <vector>
 #include "db/db.h"
 #include "memtable/memtablerep.h"
@@ -120,10 +120,10 @@ TEST_F(PerfContextTest, QueryPerfContextTest) {
 }
 
 TEST_F(PerfContextTest, ThreadPerfContextTest) {
-  std::vector<std::thread> threads;
+  std::vector<std::thread *> threads;
   threads.reserve(10);
   for (size_t thread_num = 0; thread_num < 10; ++thread_num) {
-    threads.push_back(std::move(std::thread([]() {
+    std::thread *thread_ptr = new std::thread([]() {
       QUERY_TRACE_RESET();
       QUERY_TRACE_BEGIN(TracePoint::SERVER_OPERATION);
       QUERY_TRACE_END();
@@ -139,18 +139,20 @@ TEST_F(PerfContextTest, ThreadPerfContextTest) {
       int64_t size = 0;
       get_tls_query_perf_context()->to_string(10 /*total_time*/,data, size);
       fprintf(stderr, "ctx str:\n%s\n", data);
-    })));
+    });
+    threads.push_back(thread_ptr);
   }
   for (auto &t : threads) {
-    t.join();
+    t->join();
+    delete t;
   }
 }
 
 TEST_F(PerfContextTest, ScopeContextTest) {
-  std::vector<std::thread> threads;
+  std::vector<std::thread *> threads;
   threads.reserve(10);
   for (size_t thread_num = 0; thread_num < 10; ++thread_num) {
-    threads.push_back(std::move(std::thread([]() {
+    std::thread *thread_ptr = new std::thread([]() {
       {
         QUERY_TRACE_RESET();
         QUERY_TRACE_SCOPE(TracePoint::HA_INDEX_INIT);
@@ -179,10 +181,12 @@ TEST_F(PerfContextTest, ScopeContextTest) {
       int64_t size = 0;
       get_tls_query_perf_context()->to_string(10 /*total_time*/, data, size);
       fprintf(stderr, "ctx str:\n%s\n", data);
-    })));
+    });
+    threads.push_back(thread_ptr);
   }
   for (auto &t : threads) {
-    t.join();
+    t->join();
+    delete t;
   }
 }
 
@@ -218,10 +222,10 @@ TEST_F(PerfContextTest, ScopeContextTest2) {
 }
 
 TEST_F(PerfContextTest, CountShardTest) {
-  std::vector<std::thread> threads;
+  std::vector<std::thread *> threads;
   threads.reserve(10);
   for (size_t thread_num = 0; thread_num < 10; ++thread_num) {
-    threads.push_back(std::move(std::thread([]() {
+    std::thread *thread_ptr = new std::thread([]() {
       {
         QUERY_TRACE_RESET();
         for (int64_t shard = 0; shard != 256; ++shard) {
@@ -250,10 +254,12 @@ TEST_F(PerfContextTest, CountShardTest) {
       int64_t size = 0;
       get_tls_query_perf_context()->to_string(10 /*total time*/, data, size);
       fprintf(stderr, "ctx str:\n%s\n", data);
-    })));
+    });
+    threads.push_back(thread_ptr);
   }
   for (auto &t : threads) {
-    t.join();
+    t->join();
+    delete t;
   }
 }
 
@@ -500,7 +506,9 @@ TEST_F(PerfContextTest, SeekKeyComparison) {
   }
 
   if (FLAGS_random_key) {
-    std::random_shuffle(keys.begin(), keys.end());
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    std::shuffle(keys.begin(), keys.end(), generator);
   }
 
   HistogramImpl hist_put_time;
@@ -590,10 +598,10 @@ TEST_F(PerfContextTest, TraceOutputTest) {
   ASSERT_EQ(time[static_cast<int64_t>(TracePoint::META_SEARCH_LEVEL1)], 0);
 
   smartengine::monitor::QueryPerfContext::opt_trace_sum_ = true;
-  std::vector<std::thread> threads;
+  std::vector<std::thread *> threads;
   threads.reserve(10);
   for (size_t thread_num = 0; thread_num < 10; ++thread_num) {
-    threads.push_back(std::move(std::thread([]() {
+    std::thread *thread_ptr = new std::thread([]() {
       QUERY_TRACE_RESET();
       QUERY_TRACE_BEGIN(TracePoint::SERVER_OPERATION);
       QUERY_TRACE_END();
@@ -605,10 +613,12 @@ TEST_F(PerfContextTest, TraceOutputTest) {
         QUERY_TRACE_BEGIN(TracePoint::META_SEARCH_LEVEL1);
         QUERY_TRACE_END();
       }
-    })));
+    });
+    threads.push_back(thread_ptr);
   }
   for (auto &t : threads) {
-    t.join();
+    t->join();
+    delete t;
   }
 
   memset(time, 0x00, sizeof(time[0]) * MAX_TRACE_POINT);

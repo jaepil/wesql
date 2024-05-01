@@ -114,7 +114,7 @@ CompressionType GetCompressionFlush(
 
 namespace {
 void DumpSupportInfo() {
-  __SE_LOG(INFO, "Compression algorithms supported:");
+  SE_LOG(INFO, "Compression algorithms supported:");
   __SE_LOG(INFO, "\tSnappy supported: %d", Snappy_Supported());
   __SE_LOG(INFO, "\tZlib supported: %d", Zlib_Supported());
   __SE_LOG(INFO, "\tBzip supported: %d", BZip2_Supported());
@@ -548,7 +548,7 @@ DBImpl::~DBImpl() {
   if (nullptr != global_ctx) {
     MOD_DELETE_OBJECT(GlobalContext, global_ctx);
   }
-  __SE_LOG(INFO, "Shutdown complete");
+  SE_LOG(INFO, "Shutdown complete");
 }
 
 void DBImpl::schedule_master_thread() {
@@ -839,8 +839,7 @@ Status DBImpl::SetOptions(
 Status DBImpl::SetDBOptions(
     const std::unordered_map<std::string, std::string>& options_map) {
   if (options_map.empty()) {
-    __SE_LOG(WARN,
-                   "SetDBOptions(), empty input.");
+    SE_LOG(WARN, "SetDBOptions(), empty input.");
     return Status::InvalidArgument("empty input");
   }
 
@@ -873,16 +872,16 @@ Status DBImpl::SetDBOptions(
       }
     }
   }
-  __SE_LOG(INFO, "SetDBOptions(), inputs:");
+  SE_LOG(INFO, "SetDBOptions(), inputs:");
   for (const auto& o : options_map) {
     __SE_LOG(INFO, "%s: %s\n", o.first.c_str(),
                    o.second.c_str());
   }
   if (s.ok()) {
-    __SE_LOG(INFO, "SetDBOptions() succeeded");
+    SE_LOG(INFO, "SetDBOptions() succeeded");
     new_options.Dump();
   } else {
-    __SE_LOG(WARN, "SetDBOptions failed");
+    SE_LOG(WARN, "SetDBOptions failed");
   }
   return s;
 }

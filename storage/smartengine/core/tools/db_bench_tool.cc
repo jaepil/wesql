@@ -2030,7 +2030,6 @@ class Benchmark {
 
   // Used for stress test.
   size_t STRESS_VALUE_SIZE;
-  size_t STRESS_DATA_SIZE;
   FILE *bench_log;
   std::unordered_map<int32_t, ColumnFamilyHandle*> stress_cf_map_;
   std::vector<std::unique_ptr<StressBitMap>> stress_bitmap_;
@@ -2049,11 +2048,8 @@ class Benchmark {
   bool is_recover_mode;
   Random64 rand_large_val;
 
-  const uint32_t VALUE_SIZE_SIZE = 4;
   const uint32_t VALUE_META_SIZE = 16;
   // value: [round][thread][valsize][...][crc]
-  const uint32_t ROUND_NUM_OFFSET = 0;
-  const uint32_t THREAD_ID_OFFSET = 4;
   const uint32_t VALUE_SIZE_OFFSET = 8;
   const uint32_t VALUE_OFFSET = 12;
 
@@ -2236,7 +2232,6 @@ class Benchmark {
                 : ((FLAGS_writes > FLAGS_reads) ? FLAGS_writes : FLAGS_reads)),
         report_file_operations_(FLAGS_report_file_operations),
         STRESS_VALUE_SIZE(value_size_ + sizeof(uint32_t) * 3),
-        STRESS_DATA_SIZE(value_size_ + sizeof(uint32_t) * 2),
         bench_log(nullptr),
         stress_lock_mgr_(),
         stress_worker_cond_(&stress_worker_mutex_),
@@ -5165,8 +5160,10 @@ class Benchmark {
     do_random_manual_compaction(cfh, db);
   }
 
+#ifndef __clang__
 #pragma GCC push_options
 #pragma GCC optimize ("O1")
+#endif //__clang__
   void stress_single_delete(ThreadState* thread) {
     DB* db = SelectDB(thread);
 
@@ -5381,7 +5378,9 @@ class Benchmark {
       stress_log("sd-del check cf_id: %d, [%lu, %lu)\n",
                   cf_id, key_range_offset, key_range_offset + key_range_length);
   }
+#ifndef __clang__
 #pragma GCC pop_options
+#endif //__clang__
 
   std::string string_to_hex(const std::string& input) {
     static const char* const lut = "0123456789ABCDEF";
@@ -5901,8 +5900,7 @@ class Benchmark {
     };
 
     if (error_counter != nullptr && error_keys != nullptr) {
-      error_func = [this, error_counter, error_keys, db,
-                    cf_id](StressKeyID key_id) {
+      error_func = [error_counter, error_keys, cf_id](StressKeyID key_id) {
         error_keys->push_back({cf_id, key_id});
         ++(*error_counter);
       };

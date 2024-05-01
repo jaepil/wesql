@@ -1152,7 +1152,7 @@ Status DBImpl::HandleTotalWriteBufferFull(WriteContext* write_context) {
 //    SuperVersion* new_superversion = new SuperVersion();
     SuperVersion *new_superversion = MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
     if (new_superversion == nullptr) {
-      __SE_LOG(INFO, "Cannot allocate memory for superversion");
+      SE_LOG(INFO, "Cannot allocate memory for superversion");
       return Status::kMemoryLimit;
     }
 

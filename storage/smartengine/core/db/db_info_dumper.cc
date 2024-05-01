@@ -34,7 +34,7 @@ void DumpDBFileSummary(const ImmutableDBOptions& options,
   uint64_t file_size;
   std::string file_info, wal_info;
 
-  __SE_LOG(INFO, "DB SUMMARY");
+  SE_LOG(INFO, "DB SUMMARY");
   // Get files in dbname dir
   Status s = env->GetChildren(dbname, &files);
   if (!s.ok()) {

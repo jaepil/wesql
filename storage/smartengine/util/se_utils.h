@@ -293,34 +293,32 @@ inline void se_check_mutex_call_result(const char *function_name,
 typedef CHARSET_INFO charset_info_st;
 const char *se_skip_spaces(const  charset_info_st *const cs,
                             const char *str)
-    MY_ATTRIBUTE((__nonnull__, __warn_unused_result__));
+    MY_ATTRIBUTE((__warn_unused_result__));
 
 bool se_compare_strings_ic(const char *const str1, const char *const str2)
-    MY_ATTRIBUTE((__nonnull__, __warn_unused_result__));
+    MY_ATTRIBUTE((__warn_unused_result__));
 
 const char *se_find_in_string(const char *str, const char *pattern,
                                bool *const succeeded)
-    MY_ATTRIBUTE((__nonnull__, __warn_unused_result__));
+    MY_ATTRIBUTE((__warn_unused_result__));
 
 const char *se_check_next_token(const  charset_info_st *const cs,
                                  const char *str, const char *const pattern,
                                  bool *const succeeded)
-    MY_ATTRIBUTE((__nonnull__, __warn_unused_result__));
+    MY_ATTRIBUTE((__warn_unused_result__));
 
 const char *se_parse_id(const charset_info_st *const cs,
                          const char *str, std::string *const id)
-    MY_ATTRIBUTE((__nonnull__(1, 2), __warn_unused_result__));
+    MY_ATTRIBUTE((__warn_unused_result__));
 
 const char *se_skip_id(const charset_info_st *const cs, const char *str)
-    MY_ATTRIBUTE((__nonnull__, __warn_unused_result__));
+    MY_ATTRIBUTE((__warn_unused_result__));
 
 /*
   Helper functions to populate strings.
 */
 
-std::string se_hexdump(const char *data, const std::size_t data_len,
-                        const std::size_t maxsize = 0)
-    MY_ATTRIBUTE((__nonnull__));
+std::string se_hexdump(const char *data, const std::size_t data_len, const std::size_t maxsize = 0);
 
 /*
   Helper function to see if a database exists
@@ -434,7 +432,7 @@ void se_handle_io_error(const common::Status status,
                          const SE_IO_ERROR_TYPE err_type);
 
 int se_normalize_tablename(const std::string &tablename, std::string *str)
-    MY_ATTRIBUTE((__nonnull__, __warn_unused_result__));
+    MY_ATTRIBUTE((__warn_unused_result__));
 
 bool can_use_bloom_filter(THD *thd,
                           const SeKeyDef &kd,

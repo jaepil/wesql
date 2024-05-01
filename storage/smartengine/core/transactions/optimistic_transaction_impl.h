@@ -25,7 +25,7 @@ class OptimisticTransactionImpl : public TransactionBaseImpl {
       const common::WriteOptions& write_options,
       const util::OptimisticTransactionOptions& txn_options);
 
-  virtual ~OptimisticTransactionImpl();
+  virtual ~OptimisticTransactionImpl() override;
 
   void Reinitialize(util::OptimisticTransactionDB* txn_db,
                     const common::WriteOptions& write_options,

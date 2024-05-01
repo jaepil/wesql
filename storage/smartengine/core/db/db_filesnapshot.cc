@@ -28,7 +28,7 @@ Status DBImpl::DisableFileDeletions() {
   InstrumentedMutexLock l(&mutex_);
   ++disable_delete_obsolete_files_;
   if (disable_delete_obsolete_files_ == 1) {
-    __SE_LOG(INFO, "File Deletions Disabled");
+    SE_LOG(INFO, "File Deletions Disabled");
   } else {
     __SE_LOG(WARN, "File Deletions Disabled, but already disabled. Counter: %d", disable_delete_obsolete_files_);
   }
@@ -49,7 +49,7 @@ Status DBImpl::EnableFileDeletions(bool force) {
       --disable_delete_obsolete_files_;
     }
     if (disable_delete_obsolete_files_ == 0) {
-      __SE_LOG(INFO, "File Deletions Enabled");
+      SE_LOG(INFO, "File Deletions Enabled");
       should_purge_files = true;
       FindObsoleteFiles(&job_context, true);
     } else {

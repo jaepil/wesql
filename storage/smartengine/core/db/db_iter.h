@@ -62,7 +62,7 @@ extern Iterator* NewDBIterator(util::Env* env,
 class ArenaWrappedDBIter : public Iterator {
  public:
   ArenaWrappedDBIter();
-  virtual ~ArenaWrappedDBIter();
+  virtual ~ArenaWrappedDBIter() override;
 
   // Get the arena to be used to allocate memory for DBIter to be wrapped,
   // as well as child iterators in it.

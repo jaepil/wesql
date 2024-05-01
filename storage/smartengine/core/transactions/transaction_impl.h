@@ -45,7 +45,7 @@ class TransactionImpl : public TransactionBaseImpl {
                   const common::WriteOptions& write_options,
                   const util::TransactionOptions& txn_options);
 
-  virtual ~TransactionImpl();
+  virtual ~TransactionImpl() override;
 
   void Reinitialize(util::TransactionDB* txn_db,
                     const common::WriteOptions& write_options,

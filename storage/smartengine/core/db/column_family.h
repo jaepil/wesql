@@ -56,7 +56,7 @@ class ColumnFamilyHandleImpl : public ColumnFamilyHandle {
   ColumnFamilyHandleImpl(ColumnFamilyData* cfd, DBImpl* db,
                          monitor::InstrumentedMutex* mutex);
   // destroy without mutex
-  virtual ~ColumnFamilyHandleImpl();
+  virtual ~ColumnFamilyHandleImpl() override;
   virtual ColumnFamilyData* cfd() const { return cfd_; }
   virtual DBImpl* db() const { return db_; }
   virtual monitor::InstrumentedMutex* mutex() const { return mutex_; }
@@ -466,7 +466,7 @@ public:
   //use for ldb tools to dump checkpoint
   int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
                            char *str_buf, int64_t string_buf_len, int64_t &str_pos);
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
  private:
   friend class ColumnFamilySet;
   int release_memtable_resource();

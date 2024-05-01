@@ -809,7 +809,8 @@ class MemTableInserter : public WriteBatch::Handler {
     assert(cf_mems_);
   }
 
-  ~MemTableInserter() {
+  virtual ~MemTableInserter() override 
+  {
     if (post_info_created_) {
       reinterpret_cast<MemPostInfoMap*>(&mem_post_info_map_)->~MemPostInfoMap();
     }

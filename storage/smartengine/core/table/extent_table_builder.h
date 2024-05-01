@@ -25,9 +25,8 @@ namespace smartengine
 {
 namespace common
 {
-class ImmutableCFOptions;
-enum CompressionType;
-class CompressionOptions;
+struct ImmutableCFOptions;
+struct CompressionOptions;
 class Slice;
 class Status;
 }
@@ -37,8 +36,7 @@ namespace db
 class InternalKeyComparator;
 class IntTblPropCollectorFactory;
 struct MiniTables;
-enum ValueType;
-struct BlockStats;
+class BlockStats;
 }
 
 namespace storage
@@ -53,9 +51,9 @@ class WritableBuffer;
 
 namespace table
 {
-class BlockBasedTableOptions;
+struct BlockBasedTableOptions;
 class FlushBlockPolicy;
-class TableProperties;
+struct TableProperties;
 class BlockHandle;
 class PropertyBlockBuilder;
 class Footer;
@@ -81,7 +79,7 @@ class ExtentBasedTableBuilder : public TableBuilder {
       const std::string& column_family_name, const storage::LayerPosition &layer_position, bool is_flush = false);
 
   // REQUIRES: Either Finish() or Abandon() has been called.
-  ~ExtentBasedTableBuilder();
+  virtual ~ExtentBasedTableBuilder() override;
 
   int init();
   // Add key,value to the table being constructed.

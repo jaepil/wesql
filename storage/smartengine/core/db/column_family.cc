@@ -142,12 +142,12 @@ ColumnFamilyOptions SanitizeOptions(const ImmutableDBOptions& db_options,
   }
 
   if (result.level0_file_num_compaction_trigger == 0) {
-    __SE_LOG(WARN, "level0_file_num_compaction_trigger cannot be 0");
+    SE_LOG(WARN, "level0_file_num_compaction_trigger cannot be 0");
     result.level0_file_num_compaction_trigger = 1;
   }
 
   if (result.level0_layer_num_compaction_trigger <= 0) {
-    __SE_LOG(WARN, "level0_layer_num_compaction_trigger cannot be 0");
+    SE_LOG(WARN, "level0_layer_num_compaction_trigger cannot be 0");
     result.level0_layer_num_compaction_trigger = std::numeric_limits<int>::max();
   }
 
@@ -963,7 +963,7 @@ int64_t ColumnFamilyData::get_serialize_size() const
   return size;
 }
 
-DEFINE_TO_STRING(ColumnFamilyData, KV_(sub_table_meta), KV_(storage_manager));
+DEFINE_TO_STRING(ColumnFamilyData, KV_(sub_table_meta), KV_(storage_manager))
 
 SuperVersion* ColumnFamilyData::InstallSuperVersion(
     SuperVersion* new_superversion, InstrumentedMutex* db_mutex) {

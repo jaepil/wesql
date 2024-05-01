@@ -977,7 +977,7 @@ void SeDdlManager::cleanup()
 
 int SeDdlManager::scan_for_tables(Se_tables_scanner *const tables_scanner)
 {
-  int i, ret;
+  int ret = 0;
   SeTableDef *rec;
 
   assert(tables_scanner != nullptr);
@@ -985,13 +985,11 @@ int SeDdlManager::scan_for_tables(Se_tables_scanner *const tables_scanner)
   mysql_rwlock_rdlock(&m_rwlock);
 
   ret = 0;
-  i = 0;
 
   for (const auto &it : m_ddl_hash) {
     ret = tables_scanner->add_table(it.second.get());
     if (ret)
       break;
-    i++;
   }
 
   mysql_rwlock_unlock(&m_rwlock);

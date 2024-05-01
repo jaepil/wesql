@@ -39,11 +39,9 @@ class InstrumentedMutex {
   void LockInternal();
   friend class InstrumentedCondVar;
   port::Mutex mutex_;
-  Statistics* stats_;
   util::Env* env_;
   uint64_t start_nano_;
   uint64_t *backtrace_limit_nano_;
-  int32_t stats_code_;
 };
 
 // A wrapper class for port::Mutex that provides additional layer
@@ -65,10 +63,8 @@ class InstrumentedMutexLock {
 class InstrumentedCondVar {
  public:
   explicit InstrumentedCondVar(InstrumentedMutex* instrumented_mutex)
-      : cond_(&(instrumented_mutex->mutex_)),
-        stats_(instrumented_mutex->stats_),
-        env_(instrumented_mutex->env_),
-        stats_code_(instrumented_mutex->stats_code_) {}
+      : cond_(&(instrumented_mutex->mutex_))
+  {}
 
   void Wait();
 
@@ -82,9 +78,6 @@ class InstrumentedCondVar {
   void WaitInternal();
   bool TimedWaitInternal(uint64_t abs_time_us);
   port::CondVar cond_;
-  Statistics* stats_;
-  util::Env* env_;
-  int stats_code_;
 };
 
 }  // namespace monitor

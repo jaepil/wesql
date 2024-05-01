@@ -43,7 +43,7 @@ class Arena : public memory::Allocator {
   // page TLB first. If allocation fails, will fall back to normal case.
   explicit Arena(size_t block_size = kMinBlockSize, size_t huge_page_size = 0,
                  const size_t mod_id = memory::ModId::kDefaultMod);
-  ~Arena();
+  virtual ~Arena() override;
 
   char* Allocate(size_t bytes) override;
 

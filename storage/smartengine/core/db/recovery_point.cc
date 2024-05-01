@@ -20,8 +20,9 @@ namespace smartengine
 {
 namespace db
 {
-DEFINE_TO_STRING(RecoveryPoint, KV_(log_file_number), KV_(seq));
-DEFINE_COMPACTIPLE_SERIALIZATION(RecoveryPoint, log_file_number_, seq_);
+DEFINE_TO_STRING(RecoveryPoint, KV_(log_file_number), KV_(seq))
+
+DEFINE_COMPACTIPLE_SERIALIZATION(RecoveryPoint, log_file_number_, seq_)
 
 } //namespace db
 } //namespace smartengine

@@ -27,7 +27,7 @@
 namespace smartengine
 {
 class SeKeyDef;
-class SeInplaceDdlDictInfo;
+struct SeInplaceDdlDictInfo;
 class SeDdlManager;
 
 /*

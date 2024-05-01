@@ -34,8 +34,6 @@ static void delete_cache_entry(void *value, void* handler) {
 
 RowCacheShard::RowCacheShard()
     : capacity_(0),
-      shards_num_(0),
-      topn_value_(0),
       strict_capacity_limit_(false),
       usage_(0),
       alloc_()
@@ -225,7 +223,6 @@ const int64_t RowCache::MIN_ROW_CACHE_SHARD_SIZE = 8 * 1024 * 1024; //8MB
 RowCache::RowCache()
     : is_inited_(false),
       capacity_(0),
-      strict_capacity_limit_(true),
       shard_bits_num_(MIN_ROW_CACHE_SHARD_BITS_NUM),
       shards_(nullptr)
 {

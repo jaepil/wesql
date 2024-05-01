@@ -83,9 +83,6 @@ static inline TimeType get_time() {
 #endif
 }
 
-static constexpr int64_t const_strlen(const char *str) {
-  return *str == 0 ? 0 : 1 + const_strlen(str + 1);
-}
 static int64_t get_max_trace_name_length();
 static int64_t get_max_count_name_length();
 
@@ -427,7 +424,9 @@ void QueryPerfContext::to_string(int64_t total_time, const char *&res, int64_t &
 @param[in/out]  content  target trace statistics buffer*/
 void QueryPerfContext::dump_trace_to_str(const int64_t total_time, std::string &content)
 {
-  char trace_row_buffer[TRACE_ROW_FORMAT_LENGTH] = {0};
+  char trace_row_buffer[TRACE_ROW_FORMAT_LENGTH];
+  memset(trace_row_buffer, 0, TRACE_ROW_FORMAT_LENGTH);
+
   TimeType total_cost = 0;
   TimeType trace_real_time = 0;
   /*coefficient of transform cpu tick to real time.*/
@@ -474,7 +473,8 @@ void QueryPerfContext::dump_trace_to_str(const int64_t total_time, std::string &
 @param[in/out]  content target trace statistics buffer*/
 void QueryPerfContext::dump_counter_to_str(std::string &content)
 {
-  char count_row_buffer[COUNT_ROW_FORMAT_LENGTH] = {0};
+  char count_row_buffer[COUNT_ROW_FORMAT_LENGTH];
+  memset(count_row_buffer, 0, COUNT_ROW_FORMAT_LENGTH);
 
   snprintf(count_row_buffer, COUNT_ROW_FORMAT_LENGTH, "%-*s%-*s\n",
       COUNT_NAME_FORMAT_LENGTH, "COUNTER LIST",
@@ -645,11 +645,11 @@ void QueryPerfContext::schedule_log_stats(void *param) {
     LRUCache *block_cache =
         static_cast<LRUCache *>(log_stats_param->block_cache_);
     if (nullptr != block_cache) {
-      __SE_LOG(INFO, "BLOCK CACHE INFO START");
+      SE_LOG(INFO, "BLOCK CACHE INFO START");
       block_cache->print_cache_info();
-      __SE_LOG(INFO, "BLOCK CACHE INFO END");
+      SE_LOG(INFO, "BLOCK CACHE INFO END");
     } else {
-      __SE_LOG(INFO, "block is null");
+      SE_LOG(INFO, "block is null");
     }
   }
 

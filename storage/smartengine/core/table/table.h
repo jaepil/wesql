@@ -31,7 +31,7 @@ namespace smartengine
 
 namespace db
 {
-class MiniTables;
+struct MiniTables;
 }
 
 namespace storage

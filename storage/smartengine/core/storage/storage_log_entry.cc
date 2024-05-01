@@ -53,8 +53,10 @@ bool LogHeader::is_valid()
 {
   return MAGIC_NUMBER == magic_number_ && data_checksum_ > 0 && log_id_ >= 0 && log_length_ >=0;
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(LogHeader, magic_number_, data_checksum_, log_id_, log_length_);
-DEFINE_TO_STRING(LogHeader, KV_(magic_number), KV_(data_checksum), KV_(log_id), KV_(log_length));
+DEFINE_COMPACTIPLE_SERIALIZATION(LogHeader, magic_number_, data_checksum_, log_id_, log_length_)
+
+DEFINE_TO_STRING(LogHeader, KV_(magic_number), KV_(data_checksum), KV_(log_id), KV_(log_length))
+
 
 ManifestLogEntryHeader::ManifestLogEntryHeader()
     : trans_id_(0),
@@ -70,8 +72,9 @@ bool ManifestLogEntryHeader::is_valid()
 {
   return trans_id_ >= 0 && log_entry_seq_ >= 0 && log_entry_length_ >= 0;
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(ManifestLogEntryHeader, trans_id_, log_entry_seq_, log_entry_type_, log_entry_length_);
-DEFINE_TO_STRING(ManifestLogEntryHeader, KV_(trans_id), KV_(log_entry_seq), KV_(log_entry_type), KV_(log_entry_length));
+DEFINE_COMPACTIPLE_SERIALIZATION(ManifestLogEntryHeader, trans_id_, log_entry_seq_, log_entry_type_, log_entry_length_)
+
+DEFINE_TO_STRING(ManifestLogEntryHeader, KV_(trans_id), KV_(log_entry_seq), KV_(log_entry_type), KV_(log_entry_length))
 
 ChangeSubTableLogEntry::ChangeSubTableLogEntry()
     : index_id_(-1),
@@ -86,8 +89,9 @@ ChangeSubTableLogEntry::ChangeSubTableLogEntry(int64_t index_id, int64_t table_s
 ChangeSubTableLogEntry::~ChangeSubTableLogEntry()
 {
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(ChangeSubTableLogEntry, index_id_, table_space_id_);
-DEFINE_TO_STRING(ChangeSubTableLogEntry, KV_(index_id), KV_(table_space_id));
+DEFINE_COMPACTIPLE_SERIALIZATION(ChangeSubTableLogEntry, index_id_, table_space_id_)
+
+DEFINE_TO_STRING(ChangeSubTableLogEntry, KV_(index_id), KV_(table_space_id))
 
 ModifySubTableLogEntry::ModifySubTableLogEntry(ChangeInfo &change_info)
     : index_id_(-1),
@@ -104,8 +108,10 @@ ModifySubTableLogEntry::ModifySubTableLogEntry(int64_t index_id, ChangeInfo &cha
 ModifySubTableLogEntry::~ModifySubTableLogEntry()
 {
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(ModifySubTableLogEntry, index_id_, change_info_, recovery_point_);
-DEFINE_TO_STRING(ModifySubTableLogEntry, KV_(index_id), KV_(recovery_point), KV_(change_info));
+
+DEFINE_COMPACTIPLE_SERIALIZATION(ModifySubTableLogEntry, index_id_, change_info_, recovery_point_)
+
+DEFINE_TO_STRING(ModifySubTableLogEntry, KV_(index_id), KV_(recovery_point), KV_(change_info))
 
 
 ModifyExtentMetaLogEntry::ModifyExtentMetaLogEntry()
@@ -119,7 +125,10 @@ ModifyExtentMetaLogEntry::ModifyExtentMetaLogEntry(const ExtentMeta &extent_meta
 ModifyExtentMetaLogEntry::~ModifyExtentMetaLogEntry()
 {
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(ModifyExtentMetaLogEntry, extent_meta_);
-DEFINE_TO_STRING(ModifyExtentMetaLogEntry, KV_(extent_meta));
+
+DEFINE_COMPACTIPLE_SERIALIZATION(ModifyExtentMetaLogEntry, extent_meta_)
+
+DEFINE_TO_STRING(ModifyExtentMetaLogEntry, KV_(extent_meta))
+
 } //namespace storage
 } //namespace smartengine

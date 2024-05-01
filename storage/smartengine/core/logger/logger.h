@@ -182,7 +182,7 @@ public:
                      const char *function_name,
                      const int32_t line_num,
                      const char *fmt,
-                     va_list ap) __attribute__((format(gnu_printf, 7, 0)));
+                     va_list ap) __attribute__((format(printf, 7, 0)));
   bool is_inited() const { return is_inited_; }
 #ifndef NDEBUG 
   void reset() { is_inited_ = false; } 

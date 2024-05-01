@@ -169,12 +169,9 @@ class MemTableList {
                         int max_write_buffer_number_to_maintain)
       : imm_flush_needed(false),
         min_write_buffer_number_to_merge_(min_write_buffer_number_to_merge),
-//        current_(new MemTableListVersion(&current_memory_usage_,
-//                                         max_write_buffer_number_to_maintain)),
         current_(MOD_NEW_OBJECT(memory::ModId::kDefaultMod, MemTableListVersion,
             &current_memory_usage_, max_write_buffer_number_to_maintain)),
         num_flush_not_started_(0),
-        commit_in_progress_(false),
         flush_requested_(false) {
     current_->Ref();
     current_memory_usage_ = 0;
@@ -260,9 +257,6 @@ class MemTableList {
 
   // the number of elements that still need flushing
   int num_flush_not_started_;
-
-  // committing in progress
-  bool commit_in_progress_;
 
   // Requested a flush of all memtables to storage
   bool flush_requested_;

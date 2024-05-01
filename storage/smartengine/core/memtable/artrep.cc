@@ -31,14 +31,12 @@ namespace memtable {
 
 class ARTRep : public MemTableRep {
   ART art_;
-  const MemTableRep::KeyComparator& cmp_;
 
  public:
   explicit ARTRep(const MemTableRep::KeyComparator& compare,
                        MemTableAllocator* allocator)
       : MemTableRep(allocator),
-        art_(compare, allocator),
-        cmp_(compare) {}
+        art_(compare, allocator) {}
 
   void init() { art_.init(); }
 

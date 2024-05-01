@@ -28,16 +28,18 @@
 #include "util/heap.h"
 #include "table/block.h"
 
-namespace smartengine {
-namespace storage {
+namespace smartengine
+{
+namespace storage
+{
 
 // can represents Extent or DataBlock
 // if represents Extent, first and second are continuous extent_id
 // if represents DataBlock, first is offset and second is size of data block;
 typedef std::pair<int64_t, int64_t> BlockPosition;
 
-class CompactionContext;
-class ExtentMeta;
+struct CompactionContext;
+struct ExtentMeta;
 class GeneralCompaction;
 
 struct Range {
@@ -45,7 +47,7 @@ struct Range {
   common::Slice end_key_;
   Range deep_copy(memory::Allocator &allocator) const;
   Range deep_copy(memory::SimpleAllocator &allocator) const;
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 struct MetaType {
@@ -71,7 +73,7 @@ struct MetaType {
 
   MetaType();
   MetaType(int8_t st, int8_t dt, int8_t kt, int8_t lv, int16_t w, int64_t seq);
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 };
 
 struct MetaDescriptor {
@@ -86,7 +88,7 @@ struct MetaDescriptor {
   MetaDescriptor();
   MetaDescriptor deep_copy(memory::Allocator &allocator) const;
   MetaDescriptor deep_copy(memory::SimpleAllocator &allocator) const;
-  DECLARE_TO_STRING();
+  DECLARE_TO_STRING()
 
   bool is_user_key() const { return type_.key_type_ == MetaType::UserKey; }
   const ExtentId get_extent_id() const { return extent_id_; }
@@ -146,7 +148,7 @@ class RangeAdaptorIterator : public RangeIterator {
     update();
   }
 
-  virtual ~RangeAdaptorIterator() {}
+  virtual ~RangeAdaptorIterator() override {}
 
   IterType *get_inner_iterator() { return iter_; }
 
@@ -240,7 +242,7 @@ class RangeAdaptorIterator : public RangeIterator {
 class SequentialRangeIterator : public RangeIterator {
  public:
   SequentialRangeIterator() : index_(0) {}
-  virtual ~SequentialRangeIterator() {}
+  virtual ~SequentialRangeIterator() override {}
 
   int add_iterator(RangeIterator *iter) {
     list_iters_.push_back(iter);
@@ -492,7 +494,7 @@ public:
 class MemSEIterator : public SEIterator {
  public:
   MemSEIterator();
-  virtual ~MemSEIterator();
+  virtual ~MemSEIterator() override;
   virtual void seek_to_first() override;
   // through compare other key to check reuse
   // if kv level, get (key,value)
@@ -554,7 +556,7 @@ class ExtSEIterator : public SEIterator{
 
   ExtSEIterator(const util::Comparator *cmp,
              const util::Comparator *interal_cmp);
-  virtual ~ExtSEIterator();
+  virtual ~ExtSEIterator() override;
   virtual void seek_to_first() override;
   // through compare other key to check reuse
   // if kv level, get (key,value)

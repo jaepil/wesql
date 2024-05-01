@@ -29,7 +29,7 @@ class TransactionDBImpl : public util::TransactionDB {
   explicit TransactionDBImpl(util::StackableDB* db,
                              const util::TransactionDBOptions& txn_db_options);
 
-  ~TransactionDBImpl();
+  virtual ~TransactionDBImpl() override;
 
   common::Status Initialize();
 

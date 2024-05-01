@@ -148,7 +148,7 @@ public:
     range_ = range;
     read_options_ = read_options;
   }
-
+  Config(const Config &) = default;
   ~Config() {}
 
   /* subtable to scan */

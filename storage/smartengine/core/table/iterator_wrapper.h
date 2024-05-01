@@ -33,7 +33,10 @@ class IteratorWrapper {
   explicit IteratorWrapper(InternalIterator* _iter) : iter_(nullptr) {
     Set(_iter);
   }
+  IteratorWrapper(const IteratorWrapper &) = default;
+  IteratorWrapper &operator=(const IteratorWrapper &) = default;
   ~IteratorWrapper() {}
+
   InternalIterator* iter() const { return iter_; }
 
   // Set the underlying Iterator to _iter and return
@@ -53,7 +56,6 @@ class IteratorWrapper {
   void DeleteIter(bool is_arena_mode) {
     if (iter_) {
       if (!is_arena_mode) {
-//        delete iter_;
         MOD_DELETE_OBJECT(InternalIterator, iter_);
       } else {
         iter_->~InternalIterator();

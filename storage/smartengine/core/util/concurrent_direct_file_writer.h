@@ -37,7 +37,7 @@ class HistogramImpl;
 namespace util {
 
 class WritableFile;
-class EnvOptions;
+struct EnvOptions;
 class AlignedBuffer;
 
 // Immutable  buffer unit

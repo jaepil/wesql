@@ -24,7 +24,7 @@ class Field;
 
 namespace smartengine {
 
-class SeCollationCodec;
+struct SeCollationCodec;
 class SePackFieldContext;
 class SeBitWriter;
 

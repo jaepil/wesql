@@ -65,7 +65,7 @@ class GenericRateLimiter : public RateLimiter {
   GenericRateLimiter(int64_t refill_bytes, int64_t refill_period_us,
                      int32_t fairness);
 
-  virtual ~GenericRateLimiter();
+  virtual ~GenericRateLimiter() override;
 
   // This API allows user to dynamically change rate limiter's bytes per second.
   virtual void SetBytesPerSecond(int64_t bytes_per_second) override;

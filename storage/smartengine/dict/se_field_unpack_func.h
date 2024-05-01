@@ -26,7 +26,7 @@ namespace smartengine
 class SeFieldPacking;
 class SeStringReader;
 class SeBitReader;
-class SeCollationCodec;
+struct SeCollationCodec;
 
 // Possible return values for se_index_field_unpack_t functions.
 enum {

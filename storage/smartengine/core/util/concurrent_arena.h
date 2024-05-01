@@ -47,7 +47,7 @@ class ConcurrentArena : public memory::Allocator {
   explicit ConcurrentArena(size_t block_size = Arena::kMinBlockSize,
                            size_t huge_page_size = 0,
                            size_t mod_id = memory::ModId::kDefaultMod);
-  ~ConcurrentArena();
+  ~ConcurrentArena() override;
   char* Allocate(size_t bytes) override {
     char *ptr = AllocateImpl(bytes, false /*force_arena*/,
                         [=]() { return arena_.Allocate(bytes); });

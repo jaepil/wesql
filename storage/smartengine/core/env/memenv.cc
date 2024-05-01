@@ -164,13 +164,14 @@ class FileState {
   enum { kBlockSize = 8 * 1024 };
 };
 
-class SequentialFileImpl : public SequentialFile {
+class SequentialFileImpl : public SequentialFile
+{
  public:
   explicit SequentialFileImpl(FileState* file) : file_(file), pos_(0) {
     file_->Ref();
   }
 
-  ~SequentialFileImpl() { file_->Unref(); }
+  virtual ~SequentialFileImpl() override { file_->Unref(); }
 
   virtual Status Read(size_t n, Slice* result, char* scratch) override {
     Status s = file_->Read(pos_, n, result, scratch);
@@ -197,11 +198,12 @@ class SequentialFileImpl : public SequentialFile {
   size_t pos_;
 };
 
-class RandomAccessFileImpl : public RandomAccessFile {
+class RandomAccessFileImpl : public RandomAccessFile
+{
  public:
   explicit RandomAccessFileImpl(FileState* file) : file_(file) { file_->Ref(); }
 
-  ~RandomAccessFileImpl() { file_->Unref(); }
+  virtual ~RandomAccessFileImpl() override { file_->Unref(); }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const override {
@@ -212,11 +214,12 @@ class RandomAccessFileImpl : public RandomAccessFile {
   FileState* file_;
 };
 
-class WritableFileImpl : public WritableFile {
+class WritableFileImpl : public WritableFile
+{
  public:
   explicit WritableFileImpl(FileState* file) : file_(file) { file_->Ref(); }
 
-  ~WritableFileImpl() { file_->Unref(); }
+  virtual ~WritableFileImpl() override { file_->Unref(); }
 
   virtual Status Append(const Slice& data) override {
     return file_->Append(data);
@@ -230,16 +233,19 @@ class WritableFileImpl : public WritableFile {
   FileState* file_;
 };
 
-class InMemoryDirectory : public Directory {
+class InMemoryDirectory : public Directory
+{
  public:
   virtual Status Fsync() override { return Status::OK(); }
 };
 
-class InMemoryEnv : public EnvWrapper {
+class InMemoryEnv : public EnvWrapper
+{
  public:
   explicit InMemoryEnv(Env* base_env) : EnvWrapper(base_env) {}
 
-  virtual ~InMemoryEnv() {
+  virtual ~InMemoryEnv() override
+  {
     for (FileSystem::iterator i = file_map_.begin(); i != file_map_.end();
          ++i) {
       i->second->Unref();
@@ -257,7 +263,6 @@ class InMemoryEnv : public EnvWrapper {
       return Status::IOError(fname, "File not found");
     }
 
-//    result->reset(new SequentialFileImpl(file_map_[nfname]));
     result = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, SequentialFileImpl, file_map_[nfname]);
     return Status::OK();
   }
@@ -272,7 +277,6 @@ class InMemoryEnv : public EnvWrapper {
       return Status::IOError(fname, "File not found");
     }
 
-//    result->reset(new RandomAccessFileImpl(file_map_[nfname]));
     result = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, RandomAccessFileImpl, file_map_[nfname]);
     return Status::OK();
   }
@@ -290,14 +294,12 @@ class InMemoryEnv : public EnvWrapper {
     file->Ref();
     file_map_[nfname] = file;
 
-//    result->reset(new WritableFileImpl(file));
     result = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, WritableFileImpl, file);
     return Status::OK();
   }
 
   virtual Status NewDirectory(const std::string& name,
                               Directory *&result) override {
-//    result->reset(new InMemoryDirectory());
     result = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, InMemoryDirectory);
     return Status::OK();
   }

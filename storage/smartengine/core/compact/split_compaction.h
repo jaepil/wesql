@@ -28,7 +28,7 @@ class SplitCompaction : public GeneralCompaction {
   SplitCompaction(const CompactionContext &context,
                   const ColumnFamilyDesc &cf,
                   memory::ArenaAllocator &arena);
-  ~SplitCompaction();
+  virtual ~SplitCompaction() override;
 
   void add_split_key(const common::Slice &split_key);
   int run() override;

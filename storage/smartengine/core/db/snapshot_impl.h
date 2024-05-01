@@ -27,7 +27,7 @@ class SnapshotImpl : public Snapshot {
   std::atomic<uint32_t> ref_;
 
   SnapshotImpl();
-  virtual ~SnapshotImpl();
+  virtual ~SnapshotImpl() override;
   int init(storage::ExtentLayerVersion **extent_layer_versions, common::SequenceNumber seq_num);
   void destroy(util::autovector<storage::ExtentLayerVersion *> &recyle_extent_layer_versions);
   bool ref() { return 0 == ref_++ ? true : false; }

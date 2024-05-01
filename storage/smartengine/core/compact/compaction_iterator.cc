@@ -41,14 +41,12 @@ CompactionIterator::CompactionIterator(
       cmp_(cmp),
       snapshots_(snapshots),
       earliest_write_conflict_snapshot_(earliest_write_conflict_snapshot),
-      env_(env),
       expect_valid_internal_key_(expect_valid_internal_key),
       shutting_down_(shutting_down),
       bg_stopped_(bg_stopped),
       cancel_type_(cancel_type),
       valid_(false),
       change_info_(change_info),
-      arena_(arena),
       l2_largest_key_(l2_largest_key),
       background_disable_merge_(background_disable_merge) {
 

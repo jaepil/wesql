@@ -35,7 +35,7 @@ class WBWIIteratorImpl : public WBWIIterator {
         skip_list_iter_(skip_list),
         write_batch_(write_batch) {}
 
-  virtual ~WBWIIteratorImpl() {}
+  virtual ~WBWIIteratorImpl() override {}
 
   virtual bool Valid() const override {
     if (!skip_list_iter_.Valid()) {

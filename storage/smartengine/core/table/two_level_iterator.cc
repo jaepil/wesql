@@ -30,7 +30,8 @@ class TwoLevelIterator : public InternalIterator {
                             TracePoint point,
                             bool need_free_iter_and_state);
 
-  virtual ~TwoLevelIterator() {
+  virtual ~TwoLevelIterator() override
+  {
     // Assert that the TwoLevelIterator is never deleted while Pinning is
     // Enabled.
     assert(!pinned_iters_mgr_ ||

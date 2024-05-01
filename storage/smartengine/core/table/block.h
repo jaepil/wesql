@@ -321,7 +321,8 @@ class BlockIter : public InternalIterator {
   virtual void SeekToLast() override;
 
 #ifndef NDEBUG
-  ~BlockIter() {
+  ~BlockIter() override
+  {
     // Assert that the BlockIter is never deleted while Pinning is Enabled.
     assert(!pinned_iters_mgr_ ||
            (pinned_iters_mgr_ && !pinned_iters_mgr_->PinningEnabled()));

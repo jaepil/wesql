@@ -16,7 +16,7 @@ namespace util {
 class TransactionDBMutexImpl : public TransactionDBMutex {
  public:
   TransactionDBMutexImpl() {}
-  ~TransactionDBMutexImpl() {}
+  virtual ~TransactionDBMutexImpl() override {}
 
   Status Lock() override;
 
@@ -33,7 +33,7 @@ class TransactionDBMutexImpl : public TransactionDBMutex {
 class TransactionDBCondVarImpl : public TransactionDBCondVar {
  public:
   TransactionDBCondVarImpl() {}
-  ~TransactionDBCondVarImpl() {}
+  virtual ~TransactionDBCondVarImpl() override {}
 
   Status Wait(std::shared_ptr<TransactionDBMutex> mutex) override;
 

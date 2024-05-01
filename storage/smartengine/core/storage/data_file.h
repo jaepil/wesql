@@ -67,8 +67,8 @@ public:
   DataFileHeader &operator=(const DataFileHeader &data_file_header);
   bool operator==(const DataFileHeader &data_file_header) const;
 
-  DECLARE_TO_STRING();
-  DECLARE_SERIALIZATION();
+  DECLARE_TO_STRING()
+  DECLARE_SERIALIZATION()
 };
 
 class DataFile

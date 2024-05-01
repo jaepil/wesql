@@ -254,7 +254,7 @@ class LRUCacheShard : public CacheShard {
   };
 
   LRUCacheShard();
-  virtual ~LRUCacheShard();
+  virtual ~LRUCacheShard() override;
 
   // Separate from constructor so caller can easily make an array of LRUCache
   // if current usage is more than new capacity, the function will attempt to
@@ -424,7 +424,7 @@ class LRUCache : public ShardedCache {
   LRUCache(size_t mod_id, size_t capacity, int num_shard_bits,
            bool strict_capacity_limit, double high_pri_pool_ratio,
            double old_pool_ratio, bool is_row_cache = false);
-  virtual ~LRUCache();
+  virtual ~LRUCache() override;
   virtual const char* Name() const override { return "LRUCache"; }
   virtual CacheShard* GetShard(int shard) override;
   virtual const CacheShard* GetShard(int shard) const override;

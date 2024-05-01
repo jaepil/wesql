@@ -30,8 +30,8 @@ struct CompactRecordStats {
   void reset();
   CompactRecordStats &add(const CompactRecordStats &stats);
 
-  DECLARE_SERIALIZATION();
-  DECLARE_TO_STRING();
+  DECLARE_SERIALIZATION()
+  DECLARE_TO_STRING()
 
   uint64_t start_micros;
   uint64_t end_micros;
@@ -108,8 +108,8 @@ struct CompactPerfStats {
   void reset();
   CompactPerfStats &add(const CompactPerfStats &stats);
 
-  DECLARE_SERIALIZATION();
-  DECLARE_TO_STRING();
+  DECLARE_SERIALIZATION()
+  DECLARE_TO_STRING()
 
   int64_t check_intersect_extent;
   int64_t check_intersect_datablock;
