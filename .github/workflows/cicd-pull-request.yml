@@ -8,7 +8,7 @@ env:
 
 jobs:
   enable-runner:
-    uses: ./.github/workflows/enable-gke-runner.yml
+    uses: wesql/wesql-cd/.github/workflows/enable-gke-runner.yml
     with:
       RUNNER_LABEL: "gke-amd-runner"
     secrets: inherit
