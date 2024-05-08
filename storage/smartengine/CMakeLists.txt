@@ -181,13 +181,13 @@ IF (WITH_ZSTD)
 #    EXECUTE_PROCESS(COMMAND make -j
 #                    WORKING_DIRECTORY  ${CMAKE_SOURCE_DIR}/extra/zstd/lib)
 #  endif()
-  SET(smartengine_static_libs ${smartengine_static_libs} ${ZSTD_LIBRARY})
+  SET(smartengine_static_libs ${smartengine_static_libs} ext::zstd)
   ADD_DEFINITIONS(-DHAVE_ZSTD)
 ENDIF()
 
 #SET(IS_LIB ${CMAKE_BINARY_DIR}/IS.build/libis_all.a)
 #SET(smartengine_static_libs ${smartengine_static_libs} ${ZLIB_LIBRARY} "-lrt" "-laio" ${IS_LIB})
-SET(smartengine_static_libs ${smartengine_static_libs} ${ZLIB_LIBRARY} "-lrt" "-laio")
+SET(smartengine_static_libs ${smartengine_static_libs} ZLIB::ZLIB "-lrt" "-laio")
 
 if (WITH_TBB)
   include_directories(${CMAKE_SOURCE_DIR}/storage/smartengine/core/third-party/tbb/include)
