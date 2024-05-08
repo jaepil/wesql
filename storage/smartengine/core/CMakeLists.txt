@@ -318,7 +318,7 @@ list(APPEND THIRDPARTY_LIBS ${ZLIB_LIBRARY})
 # Add bundled or system zstd.
 MYSQL_CHECK_ZSTD()
 IF(BUILD_BUNDLED_ZSTD)
-  SET(ZSTD_HOME ${CMAKE_SOURCE_DIR}/../../../extra/zstd/zstd-1.5.0)
+  SET(ZSTD_HOME ${CMAKE_SOURCE_DIR}/../../../extra/zstd/zstd-1.5.5)
   #  INCLUDE_DIRECTORIES(${ZSTD_HOME}/lib)
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/../../../include ${ZSTD_HOME}/lib)
   BUILD_MYSQL_BUNDLED_ZSTD(${ZSTD_HOME} ${CMAKE_BINARY_DIR}/third-party/zstd)
