@@ -1,6 +1,8 @@
 DROP TABLE IF EXISTS test_index_merge;
 CREATE TABLE test_index_merge (id INT AUTO_INCREMENT PRIMARY KEY, c1 INT, c2 INT, c3 INT, index idx_c1c2(c1,c2), index idx_c1c3(c1,c3)) ENGINE = SMARTENGINE;
 set session binlog_format=row;
+Warnings:
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 show variables like '%log_bin%';
 Variable_name	Value
 log_bin	#
