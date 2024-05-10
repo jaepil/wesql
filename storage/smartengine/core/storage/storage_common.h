@@ -18,12 +18,18 @@
 #define SMARTENGINE_INCLUDE_STORAGE_COMMON_H_
 #include <unordered_map>
 #include <set>
+
 #include "memory/stl_adapt_allocator.h"
+#include "objstore.h"
 #include "options/options.h"
 #include "util/autovector.h"
 #include "util/to_string.h"
 #include "util/se_constants.h"
 #include "util/serialization.h"
+
+namespace objstore {
+class ObjectStore;
+}  // namespace objstore
 
 namespace smartengine
 {
@@ -72,7 +78,7 @@ struct ExtentId {
     return (this->file_number == eid.file_number) &&
            (this->offset == eid.offset);
   }
-  
+
   void reset() {
     file_number = 0;
     offset = 0;
@@ -87,7 +93,7 @@ struct LayerPosition
 public:
   static const int64_t LAYER_POSITION_VERSION = 0;
   static const int32_t INVISIBLE_LAYER_INDEX;
-  static const int32_t NEW_GENERATE_LAYER_INDEX; 
+  static const int32_t NEW_GENERATE_LAYER_INDEX;
 public:
   int32_t level_;
   int32_t layer_index_;
@@ -115,7 +121,7 @@ public:
         layer_index_(layer_position.layer_index_)
   {
   }
-  
+
   LayerPosition &operator=(const LayerPosition &layer_position)
   {
     this->level_ = layer_position.level_;
@@ -177,9 +183,9 @@ struct ExtentStats
   int64_t num_deletes_;
   int64_t disk_size_;
 
-  explicit ExtentStats() : data_size_(0), 
-                           num_entries_(0), 
-                           num_deletes_(0), 
+  explicit ExtentStats() : data_size_(0),
+                           num_entries_(0),
+                           num_deletes_(0),
                            disk_size_(0) {}
 
   explicit ExtentStats(int64_t data_size,
@@ -220,17 +226,15 @@ struct ExtentStats
   DECLARE_AND_DEFINE_TO_STRING(KV_(data_size), KV_(num_entries), KV_(num_deletes), KV_(disk_size))
 };
 
-enum ExtentSpaceType
-{
-  HOT_EXTENT_SPACE = 0,
-  WARM_EXTENT_SPACE = 1,
-  COLD_EXTENT_SPACE = 2,
+enum ExtentSpaceType {
+  FILE_EXTENT_SPACE = 0,
+  OBJ_EXTENT_SPACE = 1,
   MAX_EXTENT_SPACE
 };
 
 inline bool is_valid_extent_space_type(const int32_t extent_space_type)
 {
-  return extent_space_type >= HOT_EXTENT_SPACE && extent_space_type < MAX_EXTENT_SPACE;
+  return extent_space_type >= FILE_EXTENT_SPACE && extent_space_type < MAX_EXTENT_SPACE;
 }
 
 struct CreateTableSpaceArgs
@@ -268,9 +272,10 @@ struct CreateExtentSpaceArgs
   int32_t extent_space_type_;
   common::DbPath db_path_;
 
-  CreateExtentSpaceArgs() : table_space_id_(0),
-                            extent_space_type_(HOT_EXTENT_SPACE),
-                            db_path_()
+  CreateExtentSpaceArgs()
+      : table_space_id_(0),
+        extent_space_type_(FILE_EXTENT_SPACE),
+        db_path_()
   {
   }
   CreateExtentSpaceArgs(int64_t table_space_id,
@@ -287,8 +292,8 @@ struct CreateExtentSpaceArgs
 
   bool is_valid() const
   {
-    return table_space_id_ >= 0
-           && (extent_space_type_ >= HOT_EXTENT_SPACE && extent_space_type_ <= COLD_EXTENT_SPACE);
+    return table_space_id_ >= 0 &&
+           (extent_space_type_ >= FILE_EXTENT_SPACE && extent_space_type_ < MAX_EXTENT_SPACE);
   }
 
   DECLARE_AND_DEFINE_TO_STRING(KV_(table_space_id), KV_(extent_space_type))
@@ -324,9 +329,8 @@ struct CreateDataFileArgs
 
   bool is_valid() const
   {
-    return table_space_id_ >= 0
-           && (extent_space_type_ >= HOT_EXTENT_SPACE && extent_space_type_ <= HOT_EXTENT_SPACE)
-           && file_number_ >= 0;
+    return table_space_id_ >= 0 && extent_space_type_ == FILE_EXTENT_SPACE &&
+           file_number_ >= 0;
   }
   DECLARE_AND_DEFINE_TO_STRING(KV_(table_space_id), KV_(extent_space_type), KV_(file_number), KV_(data_file_path))
 };
@@ -394,7 +398,7 @@ struct ShrinkInfo
   ShrinkInfo()
       : shrink_condition_(),
         table_space_id_(0),
-        extent_space_type_(0), 
+        extent_space_type_(0),
         index_id_set_(),
         total_need_shrink_extent_count_(0),
         shrink_extent_count_(0)
@@ -453,14 +457,19 @@ struct ExtentIOInfo
   int64_t extent_size_;
   int64_t block_size_;
   int64_t unique_id_;
+  ::objstore::ObjectStore *objstore_;
+  std::string bucket_;
 
   ExtentIOInfo()
       : fd_(-1),
         extent_id_(),
         extent_size_(0),
         block_size_(0),
-        unique_id_(0)
-  {}
+        unique_id_(0),
+        objstore_(nullptr),
+        bucket_()
+  {
+  }
   ExtentIOInfo(const ExtentIOInfo &) = default;
   ExtentIOInfo(const int fd,
                const ExtentId extent_id,
@@ -471,14 +480,37 @@ struct ExtentIOInfo
         extent_id_(extent_id),
         extent_size_(extent_size),
         block_size_(block_size),
-        unique_id_(unique_id)
-  {}
+        unique_id_(unique_id),
+        objstore_(nullptr),
+        bucket_()
+  {
+  }
+  ExtentIOInfo(const int fd,
+               const ExtentId extent_id,
+               int64_t extent_size,
+               int64_t block_size,
+               int64_t unique_id,
+               ::objstore::ObjectStore *objstore,
+               std::string_view bucket)
+      : fd_(fd),
+        extent_id_(extent_id),
+        extent_size_(extent_size),
+        block_size_(block_size),
+        unique_id_(unique_id),
+        objstore_(objstore),
+        bucket_(bucket)
+  {
+  }
+  ~ExtentIOInfo()
+  {
+  }
   ExtentIOInfo &operator=(const ExtentIOInfo &) = default;
-  ~ExtentIOInfo() = default;
 
   bool is_valid() const
   {
-    return fd_ >= 0 && extent_size_ > 0 && block_size_ > 0 && unique_id_ >= 0;
+    return ((objstore_ != nullptr && fd_ < 0) ||
+            (objstore_ == nullptr && fd_ >= 0)) &&
+           extent_size_ > 0 && block_size_ > 0 && unique_id_ >= 0;
   }
 
   void reset()
@@ -488,6 +520,8 @@ struct ExtentIOInfo
     extent_size_ = 0;
     block_size_ = 0;
     unique_id_ = 0;
+    objstore_ = nullptr;
+    bucket_.clear();
   }
   void set_param(const int fd,
                  const ExtentId extent_id,
@@ -501,19 +535,40 @@ struct ExtentIOInfo
     block_size_ = block_size;
     unique_id_ = unique_id;
   }
+  void set_param(const int fd,
+                 const ExtentId extent_id,
+                 const int64_t extent_size,
+                 const int64_t block_size,
+                 const int64_t unique_id,
+                 ::objstore::ObjectStore *objstore,
+                 std::string_view bucket) {
+    fd_ = fd;
+    extent_id_ = extent_id;
+    extent_size_ = extent_size;
+    block_size_ = block_size;
+    unique_id_ = unique_id;
+    objstore_ = objstore;
+    bucket_ = bucket;
+  }
+
   void set_fd(const int fd) { fd_ = fd; }
   void set_extent_id(const ExtentId extent_id) { extent_id_ = extent_id; }
   void set_extent_size(const int64_t extent_size) { extent_size_ = extent_size; }
   void set_block_size(const int64_t block_size) { block_size_ = block_size; }
   void set_unique_id(const int64_t unique_id) { unique_id_ = unique_id; }
+  void set_objstore(::objstore::ObjectStore *objstore) { objstore_ = objstore; }
+  void set_bucket(const std::string_view bucket) { bucket_ = bucket; }
   int64_t get_offset() const { return extent_id_.offset * extent_size_; }
   int get_fd() const { return fd_; }
   ExtentId get_extent_id() const { return extent_id_; }
   int64_t get_extent_size() const { return extent_size_; }
   int64_t get_block_size() const { return block_size_; }
   int64_t get_unique_id() const { return unique_id_; }
-  
-  DECLARE_AND_DEFINE_TO_STRING(KV_(fd), KV_(extent_id), KV_(extent_size), KV_(block_size), KV_(unique_id))
+  ::objstore::ObjectStore *get_objstore() const { return objstore_; }
+  const std::string &get_bucket() const { return bucket_; }
+
+  DECLARE_AND_DEFINE_TO_STRING(KV_(fd), KV_(extent_id), KV_(extent_size),
+                               KV_(block_size), KV_(unique_id), KVP_(objstore))
 };
 
 struct DataFileStatistics
@@ -579,6 +634,33 @@ struct EstimateCostStats {
   void reset();
   DECLARE_TO_STRING()
 };
+
+inline constexpr int32_t kObjStoreFDBit = 31;
+inline constexpr int64_t kMaxTableSpaceId = 1LL << kObjStoreFDBit;
+
+inline int32_t convert_table_space_to_fdfn(int64_t table_space_id) {
+  assert(static_cast<int64_t>(table_space_id) < kMaxTableSpaceId);
+  int32_t fd = table_space_id;
+  // make fd negative, so that it can be distinguished from normal file number.
+  return fd | (1 << kObjStoreFDBit);
+}
+
+inline int32_t convert_fdfn_to_table_spaceid(int32_t fdfn) {
+  assert((fdfn & (1 << kObjStoreFDBit)) != 0);
+  int32_t table_spaceid = fdfn & (~(1 << kObjStoreFDBit));
+  return table_spaceid;
+}
+
+inline uint64_t assemble_objid(int32_t table_spaceid, int32_t offset_id) {
+  assert((table_spaceid & (1 << kObjStoreFDBit)) == 0);
+  assert(offset_id < INT32_MAX);
+  return (static_cast<uint64_t>(offset_id) << 32) |
+         static_cast<uint64_t>(table_spaceid);
+}
+
+inline uint64_t assemble_objid_by_fdfn(int32_t fdfn, int32_t offset_id) {
+  return assemble_objid(convert_fdfn_to_table_spaceid(fdfn), offset_id);
+}
 
 } //namespace smartengine
 } //namespace smartengine

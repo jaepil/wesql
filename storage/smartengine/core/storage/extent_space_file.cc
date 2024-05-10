@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
+#include "storage/extent_space_file.h"
+
 #include "util/filename.h"
 #include "util/increment_number_allocator.h"
-#include "storage/extent_space.h"
 
 namespace smartengine
 {
@@ -24,12 +25,13 @@ using namespace common;
 using namespace util;
 namespace storage
 {
-ExtentSpace::ExtentSpace(util::Env *env, const util::EnvOptions &env_options)
+FileExtentSpace::FileExtentSpace(util::Env *env,
+                                 const util::EnvOptions &env_options)
     : is_inited_(false),
       env_(env),
       env_options_(env_options),
       table_space_id_(0),
-      extent_space_type_(HOT_EXTENT_SPACE),
+      extent_space_type_(FILE_EXTENT_SPACE),
       extent_space_path_(),
       full_data_file_map_(),
       not_full_data_file_map_(),
@@ -37,12 +39,12 @@ ExtentSpace::ExtentSpace(util::Env *env, const util::EnvOptions &env_options)
 {
 }
 
-ExtentSpace::~ExtentSpace()
+FileExtentSpace::~FileExtentSpace()
 {
   destroy();
 }
 
-void ExtentSpace::destroy()
+void FileExtentSpace::destroy()
 {
   if (is_inited_) {
     for (auto iter = all_data_file_map_.begin(); all_data_file_map_.end() != iter; ++iter) {
@@ -55,14 +57,14 @@ void ExtentSpace::destroy()
   }
 }
 
-int ExtentSpace::create(const CreateExtentSpaceArgs &args)
+int FileExtentSpace::create(const CreateExtentSpaceArgs &args)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
 
   if (UNLIKELY(is_inited_)) {
     ret = Status::kInitTwice;
-    SE_LOG(WARN, "ExtentSpace has been inited", K(ret));
+    SE_LOG(WARN, "FileExtentSpace has been inited", K(ret));
   } else if (UNLIKELY(!args.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(args));
@@ -77,7 +79,7 @@ int ExtentSpace::create(const CreateExtentSpaceArgs &args)
   return ret;
 }
 
-int ExtentSpace::remove()
+int FileExtentSpace::remove()
 {
   int ret = Status::kOk;
   bool can_remove = true;
@@ -85,10 +87,10 @@ int ExtentSpace::remove()
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (!is_free()) {
     ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, ExtentSpace is not free", K(ret));
+    SE_LOG(WARN, "unexpected error, FileExtentSpace is not free", K(ret));
   } else {
     for (auto iter = all_data_file_map_.begin(); SUCCED(ret) && all_data_file_map_.end() != iter; ++iter) {
       if (FAILED(iter->second->remove())) {
@@ -100,14 +102,14 @@ int ExtentSpace::remove()
   return ret;
 }
 
-int ExtentSpace::allocate(ExtentIOInfo& io_info)
+int FileExtentSpace::allocate(ExtentIOInfo& io_info)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (FAILED(allocate_extent(io_info))) {
     SE_LOG(WARN, "fail to allocate extent from data file", K(ret));
   } else {
@@ -117,14 +119,14 @@ int ExtentSpace::allocate(ExtentIOInfo& io_info)
   return ret;
 }
 
-int ExtentSpace::recycle(const ExtentId extent_id)
+int FileExtentSpace::recycle(const ExtentId extent_id)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file = get_data_file(extent_id.file_number))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to get data file", K(ret), K(extent_id));
@@ -137,14 +139,14 @@ int ExtentSpace::recycle(const ExtentId extent_id)
   return ret;
 }
 
-int ExtentSpace::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
+int FileExtentSpace::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file = get_data_file(extent_id.file_number))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to get data file", K(ret), K(extent_id));
@@ -157,7 +159,7 @@ int ExtentSpace::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
   return ret;
 }
 
-int ExtentSpace::get_shrink_info_if_need(const ShrinkCondition &shrink_condition, bool &need_shrink, ShrinkInfo &shrink_info)
+int FileExtentSpace::get_shrink_info_if_need(const ShrinkCondition &shrink_condition, bool &need_shrink, ShrinkInfo &shrink_info)
 {
   int ret = Status::kOk;
   int64_t total_extent_count = 0;
@@ -166,7 +168,7 @@ int ExtentSpace::get_shrink_info_if_need(const ShrinkCondition &shrink_condition
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else {
     total_extent_count = get_total_extent_count();
     free_extent_count = get_free_extent_count();
@@ -179,7 +181,7 @@ int ExtentSpace::get_shrink_info_if_need(const ShrinkCondition &shrink_condition
   return ret;
 }
 
-int ExtentSpace::move_extens_to_front(const int64_t move_extent_count, std::unordered_map<int64_t, ExtentIOInfo> &replace_map)
+int FileExtentSpace::move_extens_to_front(const int64_t move_extent_count, std::unordered_map<int64_t, ExtentIOInfo> &replace_map)
 {
   int ret = Status::kOk;
   int64_t free_extent_count = 0;
@@ -236,7 +238,7 @@ int ExtentSpace::move_extens_to_front(const int64_t move_extent_count, std::unor
   return ret;
 }
 
-int ExtentSpace::shrink(const int64_t shrink_extent_count)
+int FileExtentSpace::shrink(const int64_t shrink_extent_count)
 {
   int ret = Status::kOk;
   int64_t free_extent_count = 0;
@@ -246,7 +248,7 @@ int ExtentSpace::shrink(const int64_t shrink_extent_count)
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (UNLIKELY(shrink_extent_count <= 0)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(shrink_extent_count));
@@ -273,7 +275,7 @@ int ExtentSpace::shrink(const int64_t shrink_extent_count)
   return ret;
 }
 
-bool ExtentSpace::is_free()
+bool FileExtentSpace::is_free()
 {
   bool free = true;
   for (auto iter = all_data_file_map_.begin(); all_data_file_map_.end() != iter; ++iter) {
@@ -285,7 +287,7 @@ bool ExtentSpace::is_free()
   return free;
 }
 
-int ExtentSpace::get_data_file_stats(std::vector<DataFileStatistics> &data_file_stats)
+int FileExtentSpace::get_data_file_stats(std::vector<DataFileStatistics> &data_file_stats)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
@@ -293,7 +295,7 @@ int ExtentSpace::get_data_file_stats(std::vector<DataFileStatistics> &data_file_
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else {
     for (auto iter = all_data_file_map_.begin(); SUCCED(ret) && all_data_file_map_.end() != iter; ++iter) {
       data_file_statistic.reset();
@@ -311,13 +313,13 @@ int ExtentSpace::get_data_file_stats(std::vector<DataFileStatistics> &data_file_
   return ret;
 }
 
-int ExtentSpace::add_data_file(DataFile *data_file)
+int FileExtentSpace::add_data_file(DataFile *data_file)
 {
   int ret = Status::kOk;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace shoule been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace shoule been inited first", K(ret));
   } else if (IS_NULL(data_file)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(data_file));
@@ -328,7 +330,7 @@ int ExtentSpace::add_data_file(DataFile *data_file)
   return ret;
 }
 
-int ExtentSpace::rebuild()
+int FileExtentSpace::rebuild()
 {
   int ret = Status::kOk;
   int64_t file_number;
@@ -337,7 +339,7 @@ int ExtentSpace::rebuild()
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else {
     for (auto iter = not_full_data_file_map_.begin(); SUCCED(ret) && not_full_data_file_map_.end() != iter; ++iter) {
       file_number = iter->first;
@@ -371,7 +373,7 @@ int ExtentSpace::rebuild()
   return ret;
 }
 
-int64_t ExtentSpace::get_free_extent_count()
+int64_t FileExtentSpace::get_free_extent_count()
 {
   int64_t free_extent_count = 0;
   for (auto iter = not_full_data_file_map_.begin(); not_full_data_file_map_.end() != iter; ++iter) {
@@ -380,7 +382,7 @@ int64_t ExtentSpace::get_free_extent_count()
   return free_extent_count;
 }
 
-int64_t ExtentSpace::get_total_extent_count()
+int64_t FileExtentSpace::get_total_extent_count()
 {
   int64_t total_extent_count = 0;
   for (auto iter = not_full_data_file_map_.begin(); not_full_data_file_map_.end() != iter; ++iter) {
@@ -389,7 +391,7 @@ int64_t ExtentSpace::get_total_extent_count()
   return total_extent_count;
 }
 
-int ExtentSpace::find_allocatable_data_file(DataFile *&allocatable_data_file)
+int FileExtentSpace::find_allocatable_data_file(DataFile *&allocatable_data_file)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
@@ -419,7 +421,7 @@ int ExtentSpace::find_allocatable_data_file(DataFile *&allocatable_data_file)
   return ret;
 }
 
-DataFile *ExtentSpace::get_data_file(const int32_t file_number)
+DataFile *FileExtentSpace::get_data_file(const int32_t file_number)
 {
   DataFile *data_file = nullptr;
   auto iter = all_data_file_map_.find(file_number);
@@ -429,7 +431,7 @@ DataFile *ExtentSpace::get_data_file(const int32_t file_number)
   return data_file;
 }
 
-int ExtentSpace::create_data_file()
+int FileExtentSpace::create_data_file()
 {
   int ret = Status::kOk;
   int64_t file_number = util::FileNumberAllocator::get_instance().alloc();
@@ -437,7 +439,7 @@ int ExtentSpace::create_data_file()
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else {
     std::string data_file_path = util::MakeTableFileName(extent_space_path_, file_number);
     CreateDataFileArgs data_file_args(table_space_id_, extent_space_type_, file_number, data_file_path);
@@ -454,18 +456,18 @@ int ExtentSpace::create_data_file()
   return ret;
 }
 
-int ExtentSpace::add_new_data_file(DataFile *data_file)
+int FileExtentSpace::add_new_data_file(DataFile *data_file)
 {
   int ret = Status::kOk;
   int64_t file_number = 0;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(data_file));
-  } else { 
+  } else {
     file_number = data_file->get_file_number();
     if (!(not_full_data_file_map_.emplace(file_number, data_file).second)) {
       ret = Status::kErrorUnexpected;
@@ -481,7 +483,7 @@ int ExtentSpace::add_new_data_file(DataFile *data_file)
   return ret;
 }
 
-int ExtentSpace::delete_data_file(DataFile *data_file)
+int FileExtentSpace::delete_data_file(DataFile *data_file)
 {
   int ret = Status::kOk;
   int64_t file_number;
@@ -489,11 +491,11 @@ int ExtentSpace::delete_data_file(DataFile *data_file)
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(data_file));
-  } else { 
+  } else {
     file_number = data_file->get_file_number();
     if (1 != (erase_count = not_full_data_file_map_.erase(file_number))) {
       ret = Status::kErrorUnexpected;
@@ -513,7 +515,7 @@ int ExtentSpace::delete_data_file(DataFile *data_file)
 
 }
 
-int ExtentSpace::allocate_extent(ExtentIOInfo &io_info)
+int FileExtentSpace::allocate_extent(ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
@@ -529,13 +531,13 @@ int ExtentSpace::allocate_extent(ExtentIOInfo &io_info)
   return ret;
 }
 
-int ExtentSpace::alloc_extent_from_data_file(DataFile *data_file, ExtentIOInfo &io_info)
+int FileExtentSpace::alloc_extent_from_data_file(DataFile *data_file, ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file) || UNLIKELY(data_file->is_full())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(data_file));
@@ -548,14 +550,14 @@ int ExtentSpace::alloc_extent_from_data_file(DataFile *data_file, ExtentIOInfo &
   return ret;
 }
 
-int ExtentSpace::recycle_extent_to_data_file(DataFile *data_file, const ExtentId extent_id)
+int FileExtentSpace::recycle_extent_to_data_file(DataFile *data_file, const ExtentId extent_id)
 {
   int ret = Status::kOk;
   bool is_full = false;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(data_file));
@@ -571,14 +573,14 @@ int ExtentSpace::recycle_extent_to_data_file(DataFile *data_file, const ExtentId
   return ret;
 }
 
-int ExtentSpace::move_to_full_map(DataFile *data_file)
+int FileExtentSpace::move_to_full_map(DataFile *data_file)
 {
   int ret = Status::kOk;
   int64_t file_number = 0;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file) || UNLIKELY(!data_file->is_full())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(data_file));
@@ -604,14 +606,14 @@ int ExtentSpace::move_to_full_map(DataFile *data_file)
   return ret;
 }
 
-int ExtentSpace::move_to_not_full_map(DataFile *data_file)
+int FileExtentSpace::move_to_not_full_map(DataFile *data_file)
 {
   int ret = Status::kOk;
   int64_t file_number = 0;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(data_file));
@@ -630,17 +632,17 @@ int ExtentSpace::move_to_not_full_map(DataFile *data_file)
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "unexpected error, fail to emplace to not_full_map", K(ret), K(file_number));
     } else {
-     SE_LOG(INFO, "success to move datafile to not_full_map", K(file_number)); 
+     SE_LOG(INFO, "success to move datafile to not_full_map", K(file_number));
     }
   }
 
   return ret;
 }
 
-int ExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
-                                          const ExtentId origin_extent_id,
-                                          char *extent_buf,
-                                          ExtentIOInfo &new_io_info)
+int FileExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
+                                              const ExtentId origin_extent_id,
+                                              char *extent_buf,
+                                              ExtentIOInfo &new_io_info)
 {
   int ret = Status::kOk;
   ExtentIOInfo origin_io_info;
@@ -650,7 +652,7 @@ int ExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(src_data_file) || IS_NULL(extent_buf)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(src_data_file), KP(extent_buf));
@@ -676,9 +678,9 @@ int ExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
   return ret;
 }
 
-bool ExtentSpace::need_shrink_extent_space(const ShrinkCondition &shrink_condition,
-                                           const int64_t total_extent_count,
-                                           const int64_t free_extent_count)
+bool FileExtentSpace::need_shrink_extent_space(const ShrinkCondition &shrink_condition,
+                                               const int64_t total_extent_count,
+                                               const int64_t free_extent_count)
 {
   double max_free_extent_percent = (shrink_condition.max_free_extent_percent_ * 1.0) / 100;
   int64_t shrink_allocate_interval = shrink_condition.shrink_allocate_interval_ * 1000000; //us
@@ -688,10 +690,10 @@ bool ExtentSpace::need_shrink_extent_space(const ShrinkCondition &shrink_conditi
          && free_extent_count > max_free_extent_count;
 }
 
-void ExtentSpace::calc_shrink_info(const ShrinkCondition &shrink_condition,
-                                   const int64_t total_extent_count,
-                                   const int64_t free_extent_count,
-                                   ShrinkInfo &shrink_info)
+void FileExtentSpace::calc_shrink_info(const ShrinkCondition &shrink_condition,
+                                       const int64_t total_extent_count,
+                                       const int64_t free_extent_count,
+                                       ShrinkInfo &shrink_info)
 {
   double max_free_extent_percent = (shrink_condition.max_free_extent_percent_ * 1.0) / 100;
   int64_t max_free_extent_count = total_extent_count * max_free_extent_percent;
@@ -701,7 +703,7 @@ void ExtentSpace::calc_shrink_info(const ShrinkCondition &shrink_condition,
   shrink_info.shrink_extent_count_ = std::min(shrink_info.total_need_shrink_extent_count_, shrink_condition.max_shrink_extent_count_);
 }
 
-int64_t ExtentSpace::calc_tail_continuous_free_extent_count() const
+int64_t FileExtentSpace::calc_tail_continuous_free_extent_count() const
 {
   const DataFile *data_file = nullptr;
   int64_t free_extent_count = 0;
@@ -717,14 +719,14 @@ int64_t ExtentSpace::calc_tail_continuous_free_extent_count() const
   return free_extent_count;
 }
 
-int ExtentSpace::shrink_data_file(DataFile *data_file, int64_t &left_shrink_extent_count)
+int FileExtentSpace::shrink_data_file(DataFile *data_file, int64_t &left_shrink_extent_count)
 {
   int ret = Status::kOk;
   int64_t file_number = 0;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "ExtentSpace should been inited first", K(ret));
+    SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else if (IS_NULL(data_file)
              || UNLIKELY(left_shrink_extent_count <= 0)) {
     ret = Status::kInvalidArgument;

@@ -1,0 +1,170 @@
+#
+# Test for binlog archive to object store.
+#
+# Case 1: mysql binlog absolute path
+--echo # Binlog persist to object store
+--echo # Create binlog local archive tmp path
+--let $archive_dir=$MYSQL_TMP_DIR/mysql_archive
+--mkdir $archive_dir
+
+--echo # Create object store
+--let $objstore_dir=$MYSQL_TMP_DIR/objstore
+--mkdir $objstore_dir
+--echo # Create object store bucket
+--let $bucket=bucket1
+--let $objstore_bucket=$objstore_dir/$bucket
+--mkdir $objstore_bucket
+
+--echo # Create binlog path
+--let $binlog_dir=$MYSQL_TMP_DIR/mysql-binlog
+--mkdir $binlog_dir
+--let $binlog_base_name=$binlog_dir/binlog
+
+--echo # Create binlog index path
+--let $binlog_index_dir=$MYSQL_TMP_DIR/mysql-binlog-index
+--mkdir $binlog_index_dir
+--let $binlog_index=$binlog_index_dir/binlog.index
+
+--let $MYSQLD_DATADIR=`select @@datadir`
+
+--echo # Server restart with --binlog-archive=true
+--replace_result $binlog_base_name binlog_base_name $binlog_index binlog_index $archive_dir archive_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=$binlog_base_name --log-bin-index=$binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=$archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--source include/restart_mysqld.inc
+
+CREATE DATABASE db1;
+CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1);
+INSERT INTO t1 values(2);
+
+FLUSH logs;
+
+INSERT INTO t1 values(3);
+
+FLUSH logs;
+
+INSERT INTO t1 values(4);
+
+FLUSH logs;
+
+SELECT * FROM t1;
+SHOW CREATE TABLE t1;
+
+--source include/show_binary_logs.inc
+
+SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+--disable_warnings
+SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
+--enable_warnings
+
+sleep 2;
+--echo #
+--echo # Mysql Sever binlog
+--echo #
+--exec cat $binlog_index_dir/binlog.index | rev | cut -d'/' -f1 | rev
+--echo #
+--echo # Object store archive binlog
+--echo #
+--exec cat $objstore_dir/$bucket/binlog/binlog.index | rev | cut -d'/' -f1 | rev
+
+# Case 2: Change binlog local archive path
+--echo # Change binlog archive path and restart server
+--let $archive_dir=$MYSQL_TMP_DIR/mysql_archive1
+--mkdir $archive_dir
+--replace_result $binlog_base_name binlog_base_name $binlog_index binlog_index $archive_dir archive_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=$binlog_base_name --log-bin-index=$binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=$archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--source include/restart_mysqld.inc
+
+FLUSH logs;
+FLUSH logs;
+sleep 2;
+
+--source include/show_binary_logs.inc
+
+SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+--disable_warnings
+SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
+--enable_warnings
+
+--echo #
+--echo # Mysql Sever binlog
+--echo #
+--exec cat $binlog_index_dir/binlog.index | rev | cut -d'/' -f1 | rev
+--echo #
+--echo # Object store archive binlog
+--echo #
+--exec cat $objstore_dir/$bucket/binlog/binlog.index | rev | cut -d'/' -f1 | rev
+
+# Case 3: Change mysql binlog to relative path
+--echo # Change mysql binlog path to relative path
+--let $binlog_dir=$MYSQLD_DATADIR/mysql-binlog
+--mkdir $binlog_dir
+--let $binlog_base_name=mysql-binlog/my-binlog
+
+--echo # Change mysql binlog index path to relative path
+--let $binlog_index_dir=$MYSQLD_DATADIR/mysql-binlog-index
+--mkdir $binlog_index_dir
+--let $binlog_index=mysql-binlog-index/binlog.index
+
+--echo # Server restart with --binlog-archive=true
+--replace_result $binlog_base_name binlog_base_name $binlog_index binlog_index $archive_dir archive_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=$binlog_base_name --log-bin-index=$binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=$archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--source include/restart_mysqld.inc
+
+FLUSH logs;
+FLUSH logs;
+sleep 2;
+
+--source include/show_binary_logs.inc
+
+SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+--disable_warnings
+SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
+--enable_warnings
+
+--echo #
+--echo # Mysql Sever binlog
+--echo #
+--exec cat $binlog_index_dir/binlog.index | rev | cut -d'/' -f1 | rev
+--echo #
+--echo # Object store archive binlog
+--echo #
+--exec cat $objstore_dir/$bucket/binlog/binlog.index | rev | cut -d'/' -f1 | rev
+
+--let purge_start = `SELECT Log_name_with_path FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX limit 1 offset 1;`
+--let purge_res = `SELECT BINLOG_PERSISTENT_PURGE('$purge_start');`
+--let $assert_text= Purge binlog persistent files.
+--let $assert_cond= "$purge_res" = "Purge binlog persistent files successfully"
+--source include/assert.inc
+
+SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+--disable_warnings
+SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
+--enable_warnings
+
+# Case 4: Binlog local archive, not persist object store
+--echo # Binlog local archive, not persist object store
+--let $archive_dir=$MYSQL_TMP_DIR/mysql_archive_local
+--mkdir $archive_dir
+--replace_result $binlog_base_name binlog_base_name $binlog_index binlog_index $archive_dir archive_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=$binlog_base_name --log-bin-index=$binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=$archive_dir
+--source include/restart_mysqld.inc
+
+FLUSH logs;
+FLUSH logs;
+sleep 2;
+
+--source include/show_binary_logs.inc
+
+SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+
+--echo #
+--echo # Mysql Sever binlog
+--echo #
+--exec cat $binlog_index_dir/binlog.index | rev | cut -d'/' -f1 | rev
+--echo #
+--echo # Local archive binlog
+--echo #
+--exec cat $archive_dir/binlog/binlog.index | rev | cut -d'/' -f1 | rev
+
+DROP DATABASE db1;

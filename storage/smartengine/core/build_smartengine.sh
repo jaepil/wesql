@@ -34,6 +34,16 @@ parse_options()
     -t)
       shift
       build_type=`get_key_value "$1"`;;
+    -cc=*)
+      compiler=`get_key_value "$1"`;;
+    -cc)
+      shift
+      compiler=`get_key_value "$1"`;;
+    -cxx=*)
+      cxx_compiler=`get_key_value "$1"`;;
+    -cxx)
+      shift
+      cxx_compiler=`get_key_value "$1"`;;
     -d=*)
       dest_dir=`get_key_value "$1"`;;
     -d)
@@ -113,10 +123,29 @@ else
   exit 1
 fi
 
+if [ x"$compiler" != x"" ] && [ x"$cxx_compiler" != x"" ]; then
+  CC=$compiler
+  CXX=$cxx_compiler
+else
+  if [ -f /etc/redhat-release ]; then
+    if grep -q "CentOS Linux release 7" /etc/redhat-release; then
+      CC=/opt/rh/devtoolset-7/root/usr/bin/gcc
+      CXX=/opt/rh/devtoolset-7/root/usr/bin/g++
+    elif grep -q "CentOS Linux release 8" /etc/redhat-release; then
+      CC=/opt/rh/gcc-toolset-11/root/usr/bin/gcc
+      CXX=/opt/rh/gcc-toolset-11/root/usr/bin/g++
+    fi
+  fi
+fi
+
+if [ ! -f $CC ] || [ ! -f $CXX ]; then
+  CC=`which gcc`
+  CXX=`which g++`
+fi
 #CC=/opt/rh/gcc-toolset-11/root/usr/bin/gcc
 #CXX=/opt/rh/gcc-toolset-11/root/usr/bin/g++
-CC=clang
-CXX=clang++
+#CC=clang
+#CXX=clang++
 
 export CC CFLAGS CXX CXXFLAGS
 

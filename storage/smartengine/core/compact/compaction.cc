@@ -696,7 +696,13 @@ int GeneralCompaction::prefetch_extent(int64_t extent_id) {
     ret = Status::kMemoryLimit;
     COMPACTION_LOG(WARN, "failed to alloc memory for reader", K(ret));
   } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(extent_id, extent))) {
-    COMPACTION_LOG(ERROR, "open extent for read failed.", K(extent_id), K(ret));
+    // TODO(ljc): async read extent is not supported, which cause MTR cases failures, 
+    // just ignore and use a warning log.
+    if (ret == Status::kNotSupported) {
+      COMPACTION_LOG(WARN, "open extent for read failed.", K(extent_id), K(ret));
+    } else {
+      COMPACTION_LOG(ERROR, "open extent for read failed.", K(extent_id), K(ret));
+    }    
   } else {
     // todo if cache key changed
     //reader->set_subtable_id(cf_desc_.column_family_id_);

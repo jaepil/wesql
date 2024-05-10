@@ -93,6 +93,18 @@ int WritableExtent::append(const Slice &data)
   } else if (UNLIKELY(!is_aligned(offset, data.size(), data.data()))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "the write buf should be aligned", K(ret), K(offset), K_(curr_offset), K(data));
+  } else if (io_info_.get_objstore()) {
+    std::string objid = std::to_string(assemble_objid_by_fdfn(
+        io_info_.get_extent_id().file_number, io_info_.get_extent_id().offset));
+    objstore::Status st = io_info_.get_objstore()->put_object(
+        io_info_.get_bucket(), objid,
+        std::string_view(data.data(), data.size()));
+    if (!st.is_succ()) {
+      ret = Status::kObjStoreError;
+      SE_LOG(WARN, "io error, failed to put obj", "data_size", data.size(),
+             K_(io_info), K(int(st.error_code())),
+             K(std::string(st.error_message())), K(ret));
+    }
   } else if (FAILED(direct_write(io_info_.fd_, offset, data.data(), data.size()))) {
     SE_LOG(WARN, "fail to direct write", K(ret), K_(io_info), K(offset), K_(curr_offset), K(data));
   } else {
@@ -179,6 +191,22 @@ int ReadableExtent::read(const int64_t offset, const int64_t size, char *buf, AI
     ret = Status::kOverLimit;
     SE_LOG(WARN, "extent size overflow", K(ret), K(offset), K(size),
         K(buf), K_(io_info));
+  } else if (io_info_.get_objstore()) {
+    std::string objid = std::to_string(assemble_objid_by_fdfn(
+        io_info_.get_extent_id().file_number, io_info_.get_extent_id().offset));
+    std::string body;
+    ::objstore::Status st = io_info_.get_objstore()->get_object(
+        io_info_.get_bucket(), objid, offset, size, body);
+    if (st.is_succ()) {
+      assert(static_cast<int64_t>(body.size()) <= size);
+      memcpy(buf, body.data(), body.size());
+      result.assign(buf, size);
+    } else {
+      ret = Status::kObjStoreError;
+      SE_LOG(WARN, "io error, failed to get obj", K(size), K_(io_info),
+             K(int(st.error_code())), K(std::string(st.error_message())),
+             K(ret));
+    }
   } else {
     if (IS_NULL(aio_handle)) {
       // sync read
@@ -246,7 +274,14 @@ int ReadableExtent::fill_aio_info(const int64_t offset, const int64_t size, AIOI
   int ret = Status::kOk;
   aio_info.reset();
 
-  if (UNLIKELY((offset + size) > io_info_.extent_size_)) {
+  if (offset + size > io_info_.extent_size_) {
+    ret = Status::kNotSupported;
+    SE_LOG(INFO, "larger than one extent, will try sync IO!", K(ret));
+  } else if (io_info_.get_objstore()) {
+    ret = Status::kNotSupported;
+    SE_LOG(INFO, "not support aio operation on obj extent, will try sync IO!",
+           K(ret));
+  } else if (UNLIKELY((offset + size) > io_info_.extent_size_)) {
     ret = Status::kOverLimit;
     SE_LOG(WARN, "extent size overflow!", K(ret), K(offset), K(size), K_(io_info));
   } else {
@@ -327,7 +362,10 @@ int FullPrefetchExtent::init(const ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
 
-  if (FAILED(IOExtent::init(io_info))) {
+  if (io_info.get_objstore()) {
+    ret = Status::kNotSupported;
+    SE_LOG(WARN, "async op is not supported on a obj extent", K(ret), K(io_info));
+  } else if (FAILED(IOExtent::init(io_info))) {
     SE_LOG(WARN, "fail to init basic io", K(ret));
   } else {
     aio_req_.status_ = Status::kInvalidArgument; // not prepare
@@ -340,6 +378,7 @@ int FullPrefetchExtent::init(const ExtentIOInfo &io_info)
   return ret;
 }
 
+
 void FullPrefetchExtent::reset()
 {
   IOExtent::reset();
@@ -349,6 +388,7 @@ void FullPrefetchExtent::reset()
 
 int FullPrefetchExtent::full_prefetch()
 {
+  assert(!io_info_.get_objstore());
   int ret = Status::kOk;
   AIOInfo aio_info(io_info_.fd_, io_info_.get_offset(), io_info_.extent_size_);
 

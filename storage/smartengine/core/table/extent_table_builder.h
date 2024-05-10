@@ -225,6 +225,7 @@ class ExtentBasedTableBuilder : public TableBuilder {
   storage::ExtentId not_flushed_lob_extent_id_;
   util::autovector<storage::ExtentId> flushed_lob_extent_ids_;
   bool is_flush_;
+  int32_t extent_space_type_;
 #ifndef NDEBUG
   bool test_ignore_flush_data_;
 #endif

@@ -16,6 +16,12 @@
 
 #ifndef SMARTENGINE_INCLUDE_EXTENT_SPACE_MANAGER_H_
 #define SMARTENGINE_INCLUDE_EXTENT_SPACE_MANAGER_H_
+
+#include <map>
+#include <unordered_map>
+
+#include "storage/io_extent.h"
+#include "storage/table_space.h"
 #include "util/spin_rwlock.h"
 #include "storage/table_space.h"
 #include "storage/io_extent.h"

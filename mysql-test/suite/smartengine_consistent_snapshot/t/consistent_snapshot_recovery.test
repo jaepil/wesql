@@ -1,0 +1,66 @@
+#
+# Test for consistent snapshot recovery from object store
+#
+
+# 1. install mysql_clone plugin
+--replace_result $CLONE_PLUGIN CLONE_PLUGIN
+--eval INSTALL PLUGIN clone SONAME '$CLONE_PLUGIN'
+
+# 2. create run directory
+--echo # Create binlog archive path
+--let $archive_dir=$MYSQL_TMP_DIR/mysql_archive
+--mkdir $archive_dir
+
+--echo # Create recovery temp path
+--let $recovery_tmp_dir=$MYSQL_TMP_DIR/mysql_recovery_tmp
+--mkdir $recovery_tmp_dir
+
+--echo # Create local object store
+--let $objstore_dir=$MYSQL_TMP_DIR/objstore
+--mkdir $objstore_dir
+--echo # Create local object store bucket
+--let $bucket=bucket1
+--let $objstore_bucket=$objstore_dir/$bucket
+--mkdir $objstore_bucket
+
+--echo # Create binlog path
+--let $binlog_dir=$MYSQL_TMP_DIR/mysql-binlog
+--mkdir $binlog_dir
+--let $binlog_base_name=$binlog_dir/binlog
+
+--echo # Create binlog index path
+--let $binlog_index_dir=$MYSQL_TMP_DIR/mysql-binlog-index
+--mkdir $binlog_index_dir
+--let $binlog_index=$binlog_index_dir/binlog.index
+
+--let $MYSQLD_DATADIR=`select @@datadir`
+
+# 3. start with consistent-snapshot-archive
+--echo # Server restart with --consistent-snapshot-archive=true
+--replace_result $binlog_base_name binlog_base_name $binlog_index binlog_index $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --log-bin=$binlog_base_name --log-bin-index=$binlog_index --binlog-archive=true --consistent-snapshot-archive=true --consistent-archive-time=1 --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=$archive_dir --mysql-archive-recovery-tmpdir=$recovery_tmp_dir --persistent_on_objstore=true --table-on-objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--source include/restart_mysqld.inc
+
+CREATE DATABASE db1;
+CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1);
+INSERT INTO t1 values(2);
+INSERT INTO t1 values(3);
+INSERT INTO t1 values(4);
+SELECT * FROM t1;
+SHOW CREATE TABLE t1;
+
+# 4. shutdown server and rmdir datadir
+--echo # Shutdown server
+--source include/shutdown_mysqld.inc
+
+--echo # Force rmdir datadir for recovery test
+--force-rmdir $MYSQLD_DATADIR
+
+# 5. recovery
+--echo # Recovery start from object store.
+--replace_result $binlog_base_name binlog_base_name $binlog_index binlog_index $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
+--source include/start_mysqld.inc
+
+SELECT * FROM t1;
+DROP DATABASE db1;

@@ -41,8 +41,7 @@ DataFileHeader::DataFileHeader()
       magic_number_(DATA_FILE_HEADER_MAGIC_NUMBER),
       checksum_(0),
       table_space_id_(0),
-      extent_space_type_(HOT_EXTENT_SPACE)
-{
+      extent_space_type_(FILE_EXTENT_SPACE) {
   memset(filename_, 0, MAX_FILE_PATH_SIZE);
   memset(bitmap_, 0, MAX_EXTENT_NUM);
   memset(reserved_, 0, RESERVED_SIZE);

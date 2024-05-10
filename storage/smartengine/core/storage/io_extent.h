@@ -22,7 +22,6 @@ namespace smartengine
 {
 namespace storage
 {
-
 class IOExtent
 {
 public:

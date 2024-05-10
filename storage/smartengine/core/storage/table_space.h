@@ -17,9 +17,12 @@
 #ifndef SMARTENGINE_INCLUDE_TABLE_SPACE_H_
 #define SMARTENGINE_INCLUDE_TABLE_SPACE_H_
 
+#include "storage/extent_space.h"
+
+#include <map>
 #include <mutex>
 #include <set>
-#include "storage/extent_space.h"
+#include <vector>
 
 namespace smartengine
 {

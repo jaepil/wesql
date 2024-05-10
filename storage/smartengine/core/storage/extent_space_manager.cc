@@ -600,6 +600,10 @@ int ExtentSpaceManager::open_all_data_file()
     SE_LOG(WARN, "ExtentSpaceManager should been inited first", K(ret));
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < db_options_.db_paths.size(); ++i) {
+      if (i == OBJ_EXTENT_SPACE) {
+        // there is no file in object extent space.
+        continue;
+      }
       dir_path = db_options_.db_paths.at(i).path;
       SE_LOG(INFO, "open datafiles in directory", K(dir_path));
       if (FAILED(open_specific_directory(dir_path))) {

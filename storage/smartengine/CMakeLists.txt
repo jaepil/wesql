@@ -189,6 +189,8 @@ ENDIF()
 #SET(smartengine_static_libs ${smartengine_static_libs} ${ZLIB_LIBRARY} "-lrt" "-laio" ${IS_LIB})
 SET(smartengine_static_libs ${smartengine_static_libs} ZLIB::ZLIB "-lrt" "-laio")
 
+SET(smartengine_static_libs ${smartengine_static_libs} "myobjstore")
+
 if (WITH_TBB)
   include_directories(${CMAKE_SOURCE_DIR}/storage/smartengine/core/third-party/tbb/include)
   SET(smartengine_static_libs ${smartengine_static_libs} ${TBB_LIBRARIES})
@@ -198,10 +200,6 @@ MYSQL_ADD_PLUGIN(smartengine ${SE_SOURCES} STORAGE_ENGINE DEFAULT STATIC_ONLY
   LINK_LIBRARIES ${smartengine_static_libs} extra::rapidjson
   #  DEPENDENCIES libis_all tbb
 )
-
-IF(WITH_EMBEDDED_SERVER)
-  ADD_SUBDIRECTORY(unittest)
-ENDIF()
 
 # TODO: read this file list from src.mk:TOOL_SOURCES
 SET(SE_TOOL_SOURCES

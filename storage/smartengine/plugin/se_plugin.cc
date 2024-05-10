@@ -16,6 +16,8 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#include <string_view>
+
 #include "se_api.h"
 #include "se_hton.h"
 #include "se_status_vars.h"
@@ -216,6 +218,38 @@ static int se_init_func(void *const p)
   main_opts.env->SetBackgroundThreads(main_opts.max_background_compactions +
                                       main_opts.max_background_dumps + 3,
                                       smartengine::util::Env::Priority::LOW);
+
+  if (opt_table_on_objstore) {
+    if (!(opt_objstore_provider && opt_objstore_region &&
+          opt_objstore_bucket)) {
+      sql_print_error(
+          "SE: if want to use objstore, object store provider(%s), region(%s) "
+          "and bucket(%s) must be set",
+          !opt_objstore_provider ? "NULL" : opt_objstore_provider,
+          !opt_objstore_region ? "NULL" : opt_objstore_region,
+          !opt_objstore_bucket ? "NULL" : opt_objstore_bucket);
+      se_open_tables.free_hash();
+      DBUG_RETURN(HA_EXIT_FAILURE);
+    }
+    std::string_view endpoint(
+        opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
+    common::Status status = main_opts.env->SetObjectStore(
+        std::string_view(opt_objstore_provider),
+        std::string_view(opt_objstore_region),
+        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https,
+        opt_objstore_bucket);
+    if (!status.ok()) {
+      std::string err_text = status.ToString();
+      sql_print_error("SE: fail to create object store: %s", err_text.c_str());
+      se_open_tables.free_hash();
+      DBUG_RETURN(HA_EXIT_FAILURE);
+    } else {
+      sql_print_information(
+          "SE: smartengine object store is enabled, object store provider: %s, "
+          "region: %s, bucket: %s",
+          opt_objstore_provider, opt_objstore_region, opt_objstore_bucket);
+    }
+  }
 
   util::TransactionDBOptions tx_db_options;
   tx_db_options.transaction_lock_timeout = 2; // 2 seconds

@@ -45,7 +45,7 @@ public:
   void build_data_file_args(int64_t table_space_id, int64_t file_number, CreateDataFileArgs &args)
   {
     args.table_space_id_ = table_space_id;
-    args.extent_space_type_ = HOT_EXTENT_SPACE;
+    args.extent_space_type_ = FILE_EXTENT_SPACE;
     args.data_file_path_ = util::MakeTableFileName(test_dir, file_number);
     args.file_number_ = file_number;
   }

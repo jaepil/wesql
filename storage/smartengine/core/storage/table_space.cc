@@ -16,6 +16,9 @@
 
 #include "storage/table_space.h"
 
+#include "storage/extent_space_file.h"
+#include "storage/extent_space_obj.h"
+
 namespace smartengine
 {
 using namespace common;
@@ -62,19 +65,43 @@ int TableSpace::create(const CreateTableSpaceArgs &args)
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret));
   } else {
-    for (uint32_t i = 0; i < args.db_paths_.size(); ++i) {
-      CreateExtentSpaceArgs extent_space_args(args.table_space_id_, i, args.db_paths_.at(i));
-      if (IS_NULL(extent_space = MOD_NEW_OBJECT(memory::ModId::kExtentSpaceMgr, ExtentSpace, env_, env_options_))) {
-        ret = Status::kMemoryLimit;
-        SE_LOG(WARN, "fail to allocate memory for ExtentSpace", K(ret));
-      } else if (FAILED(extent_space->create(extent_space_args))) {
-        SE_LOG(ERROR, "fail to create extent space", K(ret), K(i), K(extent_space_args));
-      } else if (!(extent_space_map_.emplace(i, extent_space).second)) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(ERROR, "unexpected error, fail to emplace extent_space", K(ret), K(i));
-      }
+    // ugly code, old code use index to represent space type, but it can not
+    // express object store attribute, so when enable object store, we get
+    // objstore from global env.
+    assert(args.db_paths_.size() == 1);
+    int32_t extent_space_type = FILE_EXTENT_SPACE;
+    CreateExtentSpaceArgs extent_space_args(
+        args.table_space_id_, extent_space_type, args.db_paths_[0]);
+    ::objstore::ObjectStore *objstore = nullptr;
+    Status objstore_status = env_->GetObjectStore(objstore);
+    if (!objstore_status.ok()) {
+      // extent_space_args is aready set.
+      extent_space = MOD_NEW_OBJECT(memory::ModId::kExtentSpaceMgr,
+                                    FileExtentSpace, env_, env_options_);
+    } else {
+      // extent_space_type & extent_space_args need to revise.
+      extent_space_type = OBJ_EXTENT_SPACE;
+      extent_space_args.extent_space_type_ = extent_space_type;
+      // args.db_paths_ is the local path for manifest file and so on.
+      extent_space_args.db_path_.path = env_->GetObjectStoreBucket();
+      extent_space_args.db_path_.target_size = UINT64_MAX;
+      extent_space =
+          MOD_NEW_OBJECT(memory::ModId::kExtentSpaceMgr, ObjectExtentSpace,
+                         env_, env_options_, objstore);
     }
-    
+    if (IS_NULL(extent_space)) {
+      ret = Status::kMemoryLimit;
+      SE_LOG(WARN, "fail to allocate memory for ExtentSpace", K(ret));
+    } else if (FAILED(extent_space->create(extent_space_args))) {
+      SE_LOG(ERROR, "fail to create extent space", K(ret), K(extent_space_type),
+             K(extent_space_args));
+    } else if (!(extent_space_map_.emplace(extent_space_type, extent_space)
+                     .second)) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(ERROR, "unexpected error, fail to emplace extent_space", K(ret),
+             K(extent_space_type));
+    }
+
     if (SUCCED(ret)) {
       table_space_id_ = args.table_space_id_;
       db_paths_ = args.db_paths_;

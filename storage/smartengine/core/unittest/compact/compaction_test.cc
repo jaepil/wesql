@@ -18,14 +18,17 @@
 #include "compact/mt_ext_compaction.h"
 #include "compact/task_type.h"
 #include "db/column_family.h"
+#include "db/db.h"
 #include "db/db_impl.h"
 #include "db/db_iter.h"
-#include "db/dbformat.h"
 #include "db/db_test_util.h"
+#include "db/dbformat.h"
 #include "db/log_writer.h"
 #include "db/version_set.h"
+#include "env/env.h"
 #include "logger/log_module.h"
 #include "memory/page_arena.h"
+#include "options/options.h"
 #include "options/options_helper.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
@@ -36,13 +39,16 @@
 #include "table/block.h"
 #include "table/extent_table_factory.h"
 #include "table/merging_iterator.h"
+#include "table/table.h"
 #include "table/table_reader.h"
 #include "util/arena.h"
 #include "util/autovector.h"
 #include "util/rate_limiter.h"
+#include "util/se_constants.h"
 #include "util/serialization.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
+#include "util/types.h"
 #include "write_batch/write_batch.h"
 #include "write_batch/write_batch_internal.h"
 
@@ -66,6 +72,8 @@ DEFINE_bool(snapshot_task, false, "Whether to snapshot each task");
 DEFINE_int32(stats_interval, 5, "Interval between two reports");
 DEFINE_int32(device_id, 0, "FPGA device ID");
 DEFINE_int32(fpga_driver_threads_num, 12, "FPGA driver thread num");
+DEFINE_bool(use_objstore, false, "Whether to use fpga or not");
+DEFINE_string(bucket, "compaction_test_bucket", "bucket of compaction_test");
 
 //size_t g_thread_num = 1;
 //size_t g_key_size = 20;
@@ -213,6 +221,20 @@ class CompactionTest : public testing::Test {
 
     env_->CreateDir(dbname_);
     env_->NewDirectory(dbname_, db_dir);
+
+    if (FLAGS_use_objstore) {
+      auto s = env_->SetObjectStore("local", dbname_ + "/local_obs", nullptr,
+                                    false, FLAGS_bucket);
+      assert(s.ok());
+      objstore::ObjectStore *object_store = nullptr;
+      s = env_->GetObjectStore(object_store);
+      assert(s.ok());
+      assert(object_store != nullptr);
+      auto ss = object_store->delete_bucket(FLAGS_bucket);
+      assert(ss.is_succ());
+      ss = object_store->create_bucket(FLAGS_bucket);
+      assert(ss.is_succ());
+    }
     Status s;
 
     GlobalContext *global_ctx = ALLOC_OBJECT(GlobalContext, alloc_, dbname_, *(const_cast<Options*>(context_->options_)));

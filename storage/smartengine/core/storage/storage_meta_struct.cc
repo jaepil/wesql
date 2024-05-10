@@ -73,7 +73,7 @@ ExtentMeta::ExtentMeta()
       num_data_blocks_(0),
       num_entries_(0),
       table_space_id_(0),
-      extent_space_type_(HOT_EXTENT_SPACE)
+      extent_space_type_(FILE_EXTENT_SPACE)
 {
 }
 

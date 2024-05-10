@@ -1,0 +1,37 @@
+INSTALL PLUGIN clone SONAME 'CLONE_PLUGIN';
+# Create binlog archive path
+# Create recovery temp path
+# Create local object store
+# Create local object store bucket
+# Create binlog path
+# Create binlog index path
+# Server restart with --consistent-snapshot-archive=true
+# restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --log-bin=binlog_base_name --log-bin-index=binlog_index --binlog-archive=true --consistent-snapshot-archive=true --consistent-archive-time=1 --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=archive_dir --mysql-archive-recovery-tmpdir=recovery_tmp_dir --persistent_on_objstore=true --table-on-objstore=true --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
+CREATE DATABASE db1;
+CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1);
+INSERT INTO t1 values(2);
+INSERT INTO t1 values(3);
+INSERT INTO t1 values(4);
+SELECT * FROM t1;
+c1
+1
+2
+3
+4
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `c1` int DEFAULT NULL
+) ENGINE=SMARTENGINE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+# Shutdown server
+# Force rmdir datadir for recovery test
+# Recovery start from object store.
+# restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --log-bin=binlog_base_name --log-bin-index=binlog_index --binlog-archive=true --consistent-snapshot-archive=true --consistent-archive-time=1 --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=archive_dir --mysql-archive-recovery-tmpdir=recovery_tmp_dir --persistent_on_objstore=true --table-on-objstore=true --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
+SELECT * FROM t1;
+c1
+1
+2
+3
+4
+DROP DATABASE db1;

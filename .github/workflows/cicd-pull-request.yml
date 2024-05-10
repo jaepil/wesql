@@ -46,17 +46,32 @@ jobs:
           cd bu
           make -j$(echo "4 * $(nproc)" | bc) && make install
 
-      - name: run mtr
+      - name: run mtr on normal file
         run: |
           cd bu
           cd mysql-test
-          ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=8 --force --report-unstable-tests
+          ./mysql-test-run.pl --suite=smartengine,smartengine_consistent_snapshot  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
 
-      - name: view mtr logs
+      - name: view logs of mtr on normal file
         if: ${{ failure() }}
         run: |
-          for logFile in $( ls bu/mysql-test/var/log/*/*.log ); do
-              echo "logFile:"$logFile
-              cat $logFile
+          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
+              echo "logfile:"$logfile
+              cat $logfile
           done
 
+      - name: run mtr on objstore
+        run: |
+          cd bu
+          cd mysql-test
+          CUR_DIR=`pwd`
+          ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
+             --initialize="--table_on_objstore=true" --initialize="--objstore_provider=local"
+
+      - name: view logs of mtr objstore
+        if: ${{ failure() }}
+        run: |
+          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
+              echo "logfile:"$logfile
+              cat $logfile
+          done

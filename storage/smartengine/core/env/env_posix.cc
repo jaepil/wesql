@@ -43,6 +43,7 @@
 #include "env/io_posix.h"
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_updater.h"
+#include "objstore.h"
 #include "options/options.h"
 #include "util/random.h"
 #include "util/se_constants.h"
@@ -566,6 +567,36 @@ class PosixEnv : public Env
     return gettid(pthread_self());
   }
 
+   virtual common::Status SetObjectStore(
+      const std::string_view provider, const std::string_view region,
+      const std::string_view* endpoint, bool use_https,
+      const std::string_view bucket) override {
+     Status result;
+     obj_store_ =
+         objstore::create_object_store(provider, region, endpoint, use_https);
+     if (obj_store_ == nullptr) {
+       result = common::Status::InvalidArgument();
+     } else {
+       obj_store_bucket_ = bucket;
+     }
+     return result;
+  }
+
+  virtual bool IsObjectStoreSupported() const override {
+    return obj_store_ != nullptr;
+  }
+
+  virtual common::Status GetObjectStore(
+      objstore::ObjectStore*& object_store) override {
+    object_store = obj_store_;
+    return object_store != nullptr ? common::Status::OK()
+                                   : common::Status::NotSupported();
+  }
+
+  virtual std::string& GetObjectStoreBucket() override {
+    return obj_store_bucket_;
+  }
+
   virtual uint64_t NowMicros() override {
     struct timeval tv;
     gettimeofday(&tv, nullptr);
@@ -746,6 +777,9 @@ private:
   std::vector<ThreadPoolImpl> thread_pools_;
   pthread_mutex_t mu_;
   std::vector<pthread_t> threads_to_join_;
+
+  objstore::ObjectStore* obj_store_;
+  std::string obj_store_bucket_;
 };
 
 PosixEnv::PosixEnv() : thread_pools_(Priority::TOTAL)

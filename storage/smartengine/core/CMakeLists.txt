@@ -303,6 +303,8 @@ INCLUDE(${CMAKE_SOURCE_DIR}/../../../cmake/libutils.cmake)
 INCLUDE(zlib)
 # import zstd related macroes
 INCLUDE(zstd)
+# import objstore related macroes
+INCLUDE(aws_sdk_cpp)
 
 # Add bundled or system zlib.
 MYSQL_CHECK_ZLIB_WITH_COMPRESS()
@@ -326,6 +328,10 @@ IF(BUILD_BUNDLED_ZSTD)
 ENDIF()
 ADD_DEFINITIONS(-DZSTD)
 list(APPEND THIRDPARTY_LIBS ${ZSTD_LIBRARY})
+
+MYSQL_CHECK_OBJSTORE()
+MYSQL_BUILD_OBJSTORE()
+list(APPEND THIRDPARTY_LIBS myobjstore)
 
 #for zstd compile to find my_compiler.h
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/../../../include)
@@ -415,8 +421,9 @@ set(SOURCES
         storage/change_info.cc
         storage/data_file.cc
         storage/extent_meta_manager.cc
-        storage/extent_space.cc
+        storage/extent_space_file.cc
         storage/extent_space_manager.cc
+        storage/extent_space_obj.cc
         storage/io_extent.cc
         storage/large_object_extent_manager.cc
         storage/multi_version_extent_meta_layer.cc
@@ -665,6 +672,7 @@ set(TESTS
         #db/db_dynamic_level_test.cc
         #db/db_flush_test.cc
         unittest/db/db_recovery_failed_test.cc
+        unittest/db/db_recovery_test.cc
         unittest/db/db_transaction_pipline_test.cc
         #db/db_io_failure_test.cc
         unittest/db/db_iter_test.cc

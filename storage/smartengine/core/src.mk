@@ -80,8 +80,9 @@ LIB_SOURCES =                                                   \
   storage/change_info.cc                                        \
   storage/data_file.cc                                          \
   storage/extent_meta_manager.cc                                \
-  storage/extent_space.cc                                       \
+  storage/extent_space_file.cc                                  \
   storage/extent_space_manager.cc                               \
+  storage/extent_space_obj.cc                                   \
   storage/io_extent.cc                                          \
   storage/large_object_extent_manager.cc                        \
   storage/shrink_job.cc                                         \

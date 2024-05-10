@@ -34,6 +34,10 @@
 #undef GetCurrentTime
 #endif
 
+namespace objstore {
+class ObjectStore;
+}
+
 namespace smartengine {
 
 namespace common {
@@ -387,6 +391,29 @@ class Env {
 
   // Returns the ID of the current thread.
   virtual uint64_t GetThreadID() const;
+
+  virtual common::Status SetObjectStore(const std::string_view provider,
+                                        const std::string_view region,
+                                        const std::string_view* endpoint,
+                                        bool use_https,
+                                        const std::string_view bucket) {
+    return common::Status::NotSupported("Not supported.");
+  }
+
+  virtual bool IsObjectStoreSupported() const { return false; }
+
+  // if user need use objstore interface, he/she still need include
+  // objstore.h. this choice is not very good, since this env header
+  // is not self contained. TODO(cnut): refine me.
+  virtual common::Status GetObjectStore(objstore::ObjectStore*& object_store) {
+    object_store = nullptr;
+    return common::Status::NotSupported("Not supported.");
+  }
+
+  virtual const std::string &GetObjectStoreBucket() {
+    static std::string kNotSupportedStr("Not supported.");
+    return kNotSupportedStr;
+  }
 
  protected:
   // The pointer to an internal structure that will update the
