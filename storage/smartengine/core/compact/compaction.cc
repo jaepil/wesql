@@ -19,14 +19,10 @@
 #include "compact/new_compaction_iterator.h"
 #include "logger/log_module.h"
 #include "memory/mod_info.h"
-#include "options/options_helper.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
-#include "storage/io_extent.h"
 #include "table/extent_table_factory.h"
-#include "table/extent_table_reader.h"
-#include "table/table_builder.h"
-#include "util/file_reader_writer.h"
+#include "table/extent_writer.h"
 #include "util/rate_limiter.h"
 #include "util/string_util.h"
 #include "util/stop_watch.h"
@@ -38,28 +34,45 @@
 #define RECORD_PERF_STATS(item) \
   stats_.perf_stats_.item += item.ElapsedNanos(false);
 
-namespace smartengine {
-using namespace table;
-using namespace util;
+namespace smartengine
+{
+using namespace cache;
 using namespace common;
 using namespace db;
-using namespace monitor;
 using namespace memory;
-using namespace logger;
+using namespace monitor;
+using namespace table;
+using namespace util;
+
+namespace common
+{
+extern CompressionType get_compression_type(const ImmutableCFOptions &ioptions, const int level);
+}
 
 namespace storage {
 GeneralCompaction::GeneralCompaction(const CompactionContext &context,
                                      const ColumnFamilyDesc &cf,
                                      ArenaAllocator &arena)
-    : context_(context),
+    : compression_dict_(),
+      context_(context),
       cf_desc_(cf),
+      merge_extents_(),
+      merge_batch_indexes_(),
+      prefetched_extents_(),
       write_extent_opened_(false),
+      extent_writer_(nullptr),
+      block_buffer_(),
+      mini_tables_(),
+      change_info_(),
+      stats_(),
       input_extents_{0,0,0},
       l2_largest_key_(nullptr),
       delete_percent_(0),
+      se_iterators_(nullptr),
       arena_(CharArena::DEFAULT_PAGE_SIZE, ModId::kCompaction),
       stl_alloc_(WrapAllocator(arena_)),
-      reader_reps_(stl_alloc_) {
+      reader_reps_(stl_alloc_)
+{
   //change_info_.task_type_ = context_.task_type_;
   se_iterators_ = static_cast<ExtSEIterator *>(arena_.alloc(sizeof(ExtSEIterator) * RESERVE_MERGE_WAY_SIZE));
   for (int  i = 0; i < RESERVE_MERGE_WAY_SIZE; ++i) {
@@ -108,76 +121,88 @@ int GeneralCompaction::add_merge_batch(
 }
 
 int GeneralCompaction::open_extent() {
-  if (write_extent_opened_) {
-    // already open
-    return 0;
-  }
-  START_PERF_STATS(create_extent);
-  mini_tables_.change_info_ = &change_info_;
-  mini_tables_.table_space_id_ = context_.table_space_id_;
-  bool is_flush= TaskType::FLUSH_LEVEL1_TASK == context_.task_type_;
-  storage::LayerPosition output_layer_position(context_.output_level_);
-  if (0 == context_.output_level_) {
-    output_layer_position.layer_index_ = storage::LayerPosition::NEW_GENERATE_LAYER_INDEX;
-  } else {
-    output_layer_position.layer_index_ = 0;
-  }
+  int ret = Status::kOk;
 
-  CompressionType compression_type = get_compression_type(*(context_.cf_options_),
-                                                          context_.output_level_);
-  TableBuilderOptions table_builder_opts(*(context_.cf_options_),
-                                         *(context_.internal_comparator_),
-                                         compression_type, 
-                                         context_.cf_options_->compression_opts,
-                                         &compression_dict_,
-                                         true /**skip_filters*/,
-                                         cf_desc_.column_family_name_,
-                                         output_layer_position,
-                                         is_flush);
-  extent_builder_.reset(context_.cf_options_->table_factory->NewTableBuilderExt(
-        table_builder_opts, cf_desc_.column_family_id_, &mini_tables_)); 
-  if (nullptr == extent_builder_.get()) {
-    COMPACTION_LOG(WARN,
-                   "create new table builder error",
-                   K(cf_desc_.column_family_id_),
-                   K(cf_desc_.column_family_name_.c_str()));
-    return Status::kMemoryLimit;
-  }
-  write_extent_opened_ = true;
-  RECORD_PERF_STATS(create_extent);
-  return 0;
-}
-
-int GeneralCompaction::close_extent(MiniTables *flush_tables) {
   if (!write_extent_opened_) {
-    return 0;
-  }
-  START_PERF_STATS(finish_extent);
-  int ret = extent_builder_->Finish();
-  RECORD_PERF_STATS(finish_extent);
-  if (Status::kOk != ret) {
-    COMPACTION_LOG(ERROR, "write extent failed", K(ret));
-  } else {
-    int64_t compaction_delete_percent = context_.mutable_cf_options_->compaction_delete_percent;
-    stats_.record_stats_.merge_output_extents += mini_tables_.metas.size();
+    se_assert(nullptr == extent_writer_);
+    START_PERF_STATS(create_extent);
+    mini_tables_.change_info_ = &change_info_;
+    mini_tables_.table_space_id_ = context_.table_space_id_;
+    bool is_flush = (TaskType::FLUSH_LEVEL1_TASK == context_.task_type_);
+    storage::LayerPosition output_layer_position(context_.output_level_);
+    if (0 == context_.output_level_) {
+      output_layer_position.layer_index_ = storage::LayerPosition::NEW_GENERATE_LAYER_INDEX;
+    } else {
+      output_layer_position.layer_index_ = 0;
+    }
 
-    COMPACTION_LOG(INFO, "compaction generate new extent stats",
-        "column_family_id", cf_desc_.column_family_id_,
-        "extent_count", mini_tables_.metas.size());
+    CompressionType compression_type = get_compression_type(*(context_.cf_options_), context_.output_level_);
+    /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
+    ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
+        context_.cf_options_->table_factory);
+    ExtentWriterArgs writer_args(cf_desc_.column_family_id_,
+                                 context_.table_space_id_,
+                                 tmp_factory->table_options().block_size,
+                                 tmp_factory->table_options().block_restart_interval,
+                                 context_.cf_options_->env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                                 context_.internal_comparator_,
+                                 output_layer_position,
+                                 tmp_factory->table_options().block_cache.get(),
+                                 context_.cf_options_->row_cache.get(),
+                                 compression_type,
+                                 &change_info_);
+    if (IS_NULL(extent_writer_ = MOD_NEW_OBJECT(ModId::kExtentWriter, ExtentWriter))) {
+      ret = Status::kMemoryLimit;
+      COMPACTION_LOG(WARN, "fail to allocate memory for ExtentWriter", K(ret));
+    } else if (FAILED(extent_writer_->init(writer_args))) {
+      COMPACTION_LOG(WARN, "fail to init extent writer", K(ret), K(writer_args));
+    } else {
+      write_extent_opened_ = true;
+    }
+    RECORD_PERF_STATS(create_extent);
 
-    for (FileMetaData &meta : mini_tables_.metas) {
-      stats_.record_stats_.total_output_bytes += meta.data_size_;
-      if (nullptr != flush_tables) {
-        // for mt_ext task, need preheat table_cache
-        flush_tables->metas.push_back(meta);
+    if (FAILED(ret)) {
+      if (IS_NOTNULL(extent_writer_)) {
+        MOD_DELETE_OBJECT(ExtentWriter, extent_writer_);
       }
     }
-    for (table::TableProperties &prop : mini_tables_.props) {
-      stats_.record_stats_.merge_datablocks += prop.num_data_blocks;
-    }
   }
-  write_extent_opened_ = false;
-  clear_current_writers();
+
+  return ret;
+}
+
+int GeneralCompaction::close_extent(MiniTables *flush_tables)
+{
+  int ret = Status::kOk;
+  std::vector<ExtentInfo> extent_infos;
+  
+  if (write_extent_opened_) {
+    se_assert(nullptr != extent_writer_);
+    START_PERF_STATS(finish_extent);
+    ret = extent_writer_->finish(&extent_infos);
+    RECORD_PERF_STATS(finish_extent);
+    if (FAILED(ret)) {
+      COMPACTION_LOG(ERROR, "write extent failed", K(ret));
+    } else {
+      COMPACTION_LOG(INFO, "compaction generate new extent stats",
+          "index_id", cf_desc_.column_family_id_, "extent_count", extent_infos.size());
+
+      stats_.record_stats_.merge_output_extents += extent_infos.size();
+      for (ExtentInfo &extent_info : extent_infos) {
+        stats_.record_stats_.total_output_bytes += extent_info.data_size_;
+        stats_.record_stats_.merge_datablocks += extent_info.data_block_count_;
+        //TODO(Zhao Dongsheng) : The MiniTables structure will be deleted later. 
+        //if (nullptr != flush_tables) {
+        //  // for mt_ext task, need preheat table_cache
+        //  flush_tables->metas.push_back(meta);
+        //}
+      }
+    }
+    MOD_DELETE_OBJECT(ExtentWriter, extent_writer_);
+    write_extent_opened_ = false;
+    clear_current_writers();
+  }
+
   return ret;
 }
 
@@ -243,35 +268,6 @@ void GeneralCompaction::stop_record_compaction_stats() {
       "merge ratio", merge_ratio.ToString(false).c_str());
 }
 
-int GeneralCompaction::create_extent_index_iterator(const MetaDescriptor &extent,
-                                                    size_t &iterator_index,
-                                                    DataBlockIterator *&iterator,
-                                                    ExtSEIterator::ReaderRep &rep) {
-  int ret = 0;
-  if (IS_NULL(get_prefetched_extent(extent.block_position_.first))) {
-    // if prefetch failed, just ignore it
-    prefetch_extent(extent.block_position_.first);
-  }
-  iterator_index = reader_reps_.size();
-  rep.extent_id_ = extent.block_position_.first;
-  if (FAILED(get_extent_index_iterator(extent, rep.table_reader_, rep.index_iterator_))) {
-    COMPACTION_LOG(WARN, "get extent index iterator failed.", K(ret));
-  } else {
-    MetaType type(MetaType::SSTable, MetaType::DataBlock, MetaType::InternalKey,
-                  extent.type_.level_, extent.type_.way_, iterator_index);
-    rep.block_iter_ = ALLOC_OBJECT(DataBlockIterator, arena_, type, rep.index_iterator_);
-    if (nullptr == rep.block_iter_) {
-      ret = Status::kMemoryLimit;
-      COMPACTION_LOG(WARN, "create new block iterator error", K(ret));
-    } else {
-      stats_.record_stats_.total_input_bytes += rep.table_reader_->GetTableProperties()->data_size;
-      iterator = rep.block_iter_;
-      reader_reps_.emplace_back(rep);
-    }
-  }
-  return ret;
-}
-
 int GeneralCompaction::down_level_extent(const MetaDescriptor &extent) {
   // move level 1 's extent to level 2;
   int ret = 0;
@@ -293,16 +289,15 @@ int GeneralCompaction::down_level_extent(const MetaDescriptor &extent) {
   } else if (FAILED(change_info_.add_extent(layer_position, extent.extent_id_))) {
     COMPACTION_LOG(WARN, "fail to reuse extent.", K(ret), K(extent));
   } else {
-    destroy_async_extent_reader(extent.block_position_.first, true);
+    // stats
+    stats_.record_stats_.reuse_extents += 1;
+    if (1 == extent.type_.level_) {
+      stats_.record_stats_.reuse_extents_at_l1 += 1;
+    } else if (0 == extent.type_.level_) {
+      stats_.record_stats_.reuse_extents_at_l0 += 1;
+    }
   }
 
-  // stats
-  stats_.record_stats_.reuse_extents += 1;
-  if (1 == extent.type_.level_) {
-    stats_.record_stats_.reuse_extents_at_l1 += 1;
-  } else if (0 == extent.type_.level_) {
-    stats_.record_stats_.reuse_extents_at_l0 += 1;
-  }
   return ret;
 }
 
@@ -317,61 +312,121 @@ bool GeneralCompaction::check_do_reuse(const MetaDescriptor &meta) const {
   return bret;
 }
 
-int GeneralCompaction::copy_data_block(const MetaDescriptor &data_block
-                                       /*const SeSchema *schema*/) {
-  int ret = 0;
-  if (!write_extent_opened_) {
-    FAIL_RETURN(open_extent());
-  }
+// TODO(Zhao Dongsheng): The reused block need migrate block cache?
+int GeneralCompaction::copy_data_block(const MetaDescriptor &data_block_desc)
+{
+  int ret = Status::kOk;
+  Slice data_block;
+  ExtentReader *extent_reader = nullptr;
 
-  TableReader *table_reader = reader_reps_[data_block.type_.sequence_].table_reader_;
-  COMPACTION_LOG(DEBUG, "NOT changed: copy block to dest.", K(data_block));
-
-  ExtentBasedTable *reader = dynamic_cast<ExtentBasedTable *>(table_reader);
-  BlockHandle handle(data_block.block_position_.first,
-                     data_block.block_position_.second);
-  int64_t block_size = handle.size() + kBlockTrailerSize;
-  if (FAILED(block_buffer_.reserve(block_size))) {
-    COMPACTION_LOG(WARN, "reserve buffer for read block failed", K(ret),
-                   K(handle.offset()), K(handle.size()), K(data_block));
+  if (!write_extent_opened_ && FAILED(open_extent())) {
+    COMPACTION_LOG(WARN, "fail to open extent to write", K(ret));
+  } else if (IS_NULL(extent_reader = reader_reps_[data_block_desc.type_.sequence_].extent_reader_)) {
+    ret = Status::kErrorUnexpected;
+    COMPACTION_LOG(WARN, "the extent reader must not be nullptr", K(ret), K(data_block_desc));
+  } else if (FAILED(extent_reader->read_persistent_data_block(data_block_desc.block_info_.handle_, data_block))) {
+    COMPACTION_LOG(WARN, "fail to get data block", K(ret), K(data_block_desc));
+  } else if (FAILED(extent_writer_->append_block(data_block,
+                                                 data_block_desc.value_,
+                                                 data_block_desc.range_.end_key_))) {
+    COMPACTION_LOG(WARN, "fail to write block", K(ret));
   } else {
-    common::Slice block_data(block_buffer_.all_data(), block_size);
-    if (FAILED(reader->get_data_block(handle, block_data))) {
-      COMPACTION_LOG(WARN, "read data block from extent failed", K(ret), K(handle.offset()), K(handle.size()));
-    } else if (FAILED(extent_builder_->AddBlock(block_data, data_block.value_, data_block.range_.end_key_))) {
-      COMPACTION_LOG(ERROR, "add block to extent failed", K(data_block.range_.end_key_), K(data_block.range_.start_key_));
-    }
-  }
-  if (SUCCED(ret)) {
-    stats_.record_stats_.total_input_bytes += block_size;
+    stats_.record_stats_.total_input_bytes += data_block.size();
     stats_.record_stats_.reuse_datablocks += 1;
-    if (1 == data_block.type_.level_) {
+    if (1 == data_block_desc.type_.level_) {
       stats_.record_stats_.reuse_datablocks_at_l1 += 1;
-    } else if (0 == data_block.type_.level_) {
+    } else if (0 == data_block_desc.type_.level_) {
       stats_.record_stats_.reuse_datablocks_at_l0 += 1;
     }
   }
+  
+  // TODO(Zhao Dongsheng) : The memory of data block can be reused for performance optimization.
+  if (IS_NOTNULL(data_block.data())) {
+    base_free(const_cast<char *>(data_block.data()));
+  }
+
   return ret;
 }
 
-int GeneralCompaction::destroy_extent_index_iterator(
-    const int64_t iterator_index) {
-  int ret = 0;
-  if (iterator_index >= (int64_t)reader_reps_.size()) {
+int GeneralCompaction::create_extent_index_iterator(const MetaDescriptor &extent_desc,
+                                                    int64_t &iterator_index,
+                                                    DataBlockIterator *&iterator,
+                                                    ExtSEIterator::ReaderRep &rep)
+{
+  int ret = Status::kOk;
+
+  if (IS_NULL(rep.extent_reader_ = get_prefetched_extent(extent_desc.block_position_.first)) &&
+      FAILED(prefetch_extent(extent_desc.block_position_.first, rep.extent_reader_))) {
+    COMPACTION_LOG(WARN, "fail to get prefetched extent", K(ret), K(extent_desc));
+  } else if (IS_NULL(rep.index_iterator_ = MOD_NEW_OBJECT(ModId::kCompaction, RowBlockIterator))) {
+    ret = Status::kMemoryLimit;
+    COMPACTION_LOG(WARN, "fail to allocate memory for index block iterator", K(ret));
+  } else if (FAILED(rep.extent_reader_->setup_index_block_iterator(rep.index_iterator_))) {
+    COMPACTION_LOG(WARN, "fail to setup index block iterator", K(ret));
   } else {
-    ExtSEIterator::ReaderRep &rep = reader_reps_[iterator_index];
-    if (0 == rep.extent_id_) return ret;
-    destroy_async_extent_reader(rep.extent_id_);
-    if (nullptr != rep.table_reader_) {
-      FREE_OBJECT(TableReader, arena_, rep.table_reader_);
+    iterator_index = reader_reps_.size();
+    rep.extent_id_ = extent_desc.block_position_.first;
+    MetaType meta_type(MetaType::SSTable,
+                       MetaType::DataBlock,
+                       MetaType::InternalKey,
+                       extent_desc.type_.level_,
+                       extent_desc.type_.way_,
+                       iterator_index);
+    if (IS_NULL(rep.block_iter_ = MOD_NEW_OBJECT(ModId::kCompaction, DataBlockIterator, meta_type, rep.index_iterator_))) {
+      ret = Status::kMemoryLimit;
+      COMPACTION_LOG(WARN, "fail to allocate memory for data block iterator", K(ret));
+    } else {
+      stats_.record_stats_.total_input_bytes += rep.extent_reader_->get_data_size();
+      iterator = rep.block_iter_;
+      reader_reps_.emplace_back(rep);
     }
-    if (nullptr != rep.block_iter_) {
-      rep.block_iter_->~DataBlockIterator();
-    }
-    // reset reader_rep, avoid re-destroy
-    rep.extent_id_ = 0;
   }
-  stats_.record_stats_.merge_extents += 1;
+
+  // Resource clean
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(rep.index_iterator_)) {
+      MOD_DELETE_OBJECT(RowBlockIterator, rep.index_iterator_);
+    }
+    if (IS_NOTNULL(rep.block_iter_)) {
+      MOD_DELETE_OBJECT(DataBlockIterator, rep.block_iter_);
+    }
+  }
+
+  return ret;
+}
+
+int GeneralCompaction::destroy_extent_index_iterator(const int64_t iterator_index)
+{
+  int ret = Status::kOk;
+  int64_t erase_count = 0;
+
+  if (iterator_index < (int64_t)reader_reps_.size()) {
+    ExtSEIterator::ReaderRep &rep = reader_reps_[iterator_index];
+    if (0 != rep.extent_id_) {
+      if (1 != (erase_count = prefetched_extents_.erase(rep.extent_id_))) {
+        ret = Status::kErrorUnexpected;
+        COMMON_LOG(WARN, "fail to erase prefetched extent", K(ret), 
+            K(erase_count), "extent_id", ExtentId(rep.extent_id_));
+      }
+
+      if (IS_NOTNULL(rep.extent_reader_)) {
+        MOD_DELETE_OBJECT(ExtentReader, rep.extent_reader_);
+      }
+
+      if (IS_NOTNULL(rep.index_iterator_)) {
+        MOD_DELETE_OBJECT(RowBlockIterator, rep.index_iterator_);
+      }
+
+      if (IS_NOTNULL(rep.block_iter_)) {
+        MOD_DELETE_OBJECT(DataBlockIterator, rep.block_iter_);
+      }
+
+      // reset reader_rep, avoid re-destroy
+      rep.extent_id_ = 0;
+      stats_.record_stats_.merge_extents += 1;
+    }
+  }
+
   return ret;
 }
 
@@ -382,136 +437,52 @@ int GeneralCompaction::delete_extent_meta(const MetaDescriptor &extent) {
   return ret;
 }
 
-int GeneralCompaction::get_table_reader(const MetaDescriptor &extent_desc, TableReader *&reader)
+int GeneralCompaction::create_data_block_iterator(ExtentReader *extent_reader,
+                                                  BlockDataHandle<RowBlock> &block_handle,
+                                                  RowBlockIterator *&block_iterator)
 {
   int ret = Status::kOk;
-  ExtentId extent_id(extent_desc.block_position_.first);
-  ReadableExtent *extent = nullptr;
-  FullPrefetchExtent *prefetched_extent = nullptr;
-  TableReader *table_reader = nullptr;
-
-  // get readable extent
-  if (IS_NOTNULL(prefetched_extent = get_prefetched_extent(extent_id.id()))) {
-    extent = prefetched_extent;
-  } else {
-      if (IS_NULL(extent = ALLOC_OBJECT(ReadableExtent, arena_))) {
-        ret = Status::kMemoryLimit;
-        SE_LOG(WARN, "fail to allocate memory for extent file", K(ret));
-      } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(
-          extent_id, extent))) {
-        SE_LOG(WARN, "fail to get random access extent", K(ret), K(extent));
-      }
-  }
-
-  if (SUCCED(ret)) {
-    TableReaderOptions reader_options(*context_.cf_options_,
-                                      *context_.internal_comparator_,
-                                      extent_id,
-                                      false /**skip_filter*/,
-                                      extent_desc.type_.level_);
-    if (FAILED(context_.cf_options_->table_factory->NewTableReader(
-        reader_options,
-        extent,
-        MAX_EXTENT_SIZE,
-        table_reader,
-        false /**prefetch_index_and_filter_in_cache*/,
-        &arena_).code())) {
-      SE_LOG(WARN, "fail to create new table reader", K(ret)/*, K_(cf_desc)*/);
-    } else {
-      reader = table_reader;
-    }
-  }
-
-  // resource clean
-  if (FAILED(ret)) {
-    // ensure that the extent is allocated through arena.
-    if (IS_NOTNULL(extent) && IS_NULL(prefetched_extent)) {
-      FREE_OBJECT(ReadableExtent, arena_, extent);
-    }
-  }
-
-  return ret;
-}
-
-int GeneralCompaction::get_extent_index_iterator(
-    const MetaDescriptor &extent, table::TableReader *&table_reader,
-    table::BlockIter *&index_iterator) {
-  int ret = 0;
-
-  START_PERF_STATS(read_extent);
-  FAIL_RETURN(get_table_reader(extent, table_reader));
-  RECORD_PERF_STATS(read_extent);
-
-  FAIL_RETURN(get_extent_index_iterator(table_reader, index_iterator));
-  return ret;
-}
-
-int GeneralCompaction::get_extent_index_iterator(
-    table::TableReader *table_reader, table::BlockIter *&index_iterator) {
-  int ret = 0;
-  table::ExtentBasedTable *reader = dynamic_cast<ExtentBasedTable *>(table_reader);
-  table::BlockIter *iterator = ALLOC_OBJECT(BlockIter, arena_);
-  if (nullptr == iterator) {
-    ret = Status::kMemoryLimit;
-    COMPACTION_LOG(WARN, "create new iterator object error", K(ret));
-  } else {
-    START_PERF_STATS(read_index);
-    ExtentBasedTable::IndexReader *index_reader = nullptr;
-    reader->create_index_iterator(ReadOptions(), iterator, index_reader, arena_);
-
-    index_iterator = iterator;
-    RECORD_PERF_STATS(read_index);
-
-    if (!iterator->status().ok()) {
-      COMPACTION_LOG(WARN, "create new index iterator error(%s)", K(iterator->status().ToString().c_str()));
-      ret = iterator->status().code();
-    }
-  }
-  return ret;
-}
-
-int GeneralCompaction::create_data_block_iterator(
-    const storage::BlockPosition &data_block,
-    table::TableReader *table_reader,
-    table::BlockIter *&iterator) {
-  int ret = 0;
-  assert(nullptr != table_reader);
-  table::BlockHandle handle(data_block.first, data_block.second);
-  START_PERF_STATS(read_block);
-  ExtentBasedTable *reader = dynamic_cast<ExtentBasedTable *>(table_reader);
-  table::BlockIter *input_iterator = MOD_NEW_OBJECT(ModId::kCompaction, BlockIter);
-//  BlockIter *input_iterator = ALLOC_OBJECT(BlockIter, arena_);
-  reader->create_data_block_iterator(ReadOptions(), handle, input_iterator);
-  iterator = input_iterator;
-  RECORD_PERF_STATS(read_block);
   bool in_cache = false;
-  if (nullptr == iterator) {
+
+  if (IS_NULL(extent_reader)) {
+    ret = Status::kInvalidArgument;
+    COMPACTION_LOG(WARN, "the extent reader must not be nullptr", K(ret));
+  } else if (IS_NULL(block_iterator = MOD_NEW_OBJECT(ModId::kCompaction, RowBlockIterator))) {
     ret = Status::kMemoryLimit;
-    COMPACTION_LOG(WARN, "create data block iterator error", K(ret), K(handle.offset()), K(handle.size()));
-  } else if (iterator->status().code()) {
-    COMPACTION_LOG(WARN, "create data block iterator error(%s)", K(iterator->status().ToString().c_str()));
-    ret = iterator->status().code();
-  } else if (1 == context_.output_level_
-             && FAILED(reader->check_block_if_in_cache(handle, in_cache))) {
-    COMPACTION_LOG(WARN, "check block if is in cache failed", K(handle.offset()), K(handle.size()));
-  } else if (in_cache) {
-//    if (FAILED(reader->erase_block_from_cache(handle))) {
-//      COMPACTION_LOG(WARN, "erase block from cache failed", K(handle.offset()), K(handle.size()));
-    if (nullptr != extent_builder_) {
-      extent_builder_->set_in_cache_flag();
+    COMPACTION_LOG(WARN, "fail to allocate memory for data block iterator", K(ret));
+  } else if (FAILED(extent_reader->setup_data_block_iterator(block_handle, block_iterator))) {
+    COMPACTION_LOG(WARN, "fail to setup data block iterator", K(ret));
+  } else {
+    // TODO(Zhao Dongsheng) : Does the cache migration mechanism only apply to data
+    // compacted to level 1?
+    if (1 == context_.output_level_ && FAILED(extent_reader->check_block_in_cache(block_handle.block_info_.handle_, in_cache))) {
+      COMPACTION_LOG(WARN, "fail to check block in cache", K(ret), K(block_handle.block_info_));
+    } else if (in_cache) {
+      // TODO(Zhao Dongsheng): We need to evaluate whether to proactively invalidate the
+      // current block cache here.And the extent writer may not be open at this point,
+      // which could lead to missing some blocks that should have been migrated.
+      if (IS_NOTNULL(extent_writer_)) {
+        extent_writer_->set_migrate_flag();
+      }
     }
-  } else {}
+  }
+
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(block_iterator)) {
+      MOD_DELETE_OBJECT(RowBlockIterator, block_iterator);
+    }
+  }
+
   return ret;
 }
 
-int GeneralCompaction::destroy_data_block_iterator(
-    table::BlockIter *block_iterator) {
-  int ret = 0;
-  if (nullptr != block_iterator) {
-//    FREE_OBJECT(BlockIter, arena_, block_iterator);
-    MOD_DELETE_OBJECT(BlockIter, block_iterator);
+int GeneralCompaction::destroy_data_block_iterator(table::RowBlockIterator *block_iter)
+{
+  if (IS_NOTNULL(block_iter)) {
+    MOD_DELETE_OBJECT(RowBlockIterator, block_iter);
   }
-  return ret;
+
+  return Status::kOk;
 }
 
 int GeneralCompaction::build_multiple_seiterators(
@@ -588,7 +559,7 @@ int GeneralCompaction::merge_extents(MultipleSEIterator *&merge_iterator,
           break;
         }
       }
-      if (FAILED(extent_builder_->Add(compactor->key(), compactor->value()))) {
+      if (FAILED(extent_writer_->append_row(compactor->key(), compactor->value()))) {
         COMPACTION_LOG(WARN, "add kv failed", K(ret), K(compactor->key()));
       } else {
         stats_.record_stats_.merge_output_records += 1;
@@ -688,72 +659,45 @@ int GeneralCompaction::run() {
   return ret;
 }
 
-int GeneralCompaction::prefetch_extent(int64_t extent_id) {
+int GeneralCompaction::prefetch_extent(int64_t id, ExtentReader *&extent_reader)
+{
   int ret = Status::kOk;
-  FullPrefetchExtent *extent = nullptr;
+  ExtentId extent_id(id);
+  /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
+  ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory*>(context_.cf_options_->table_factory);
+  Cache *block_cache = tmp_factory->table_options().block_cache.get();
+  ExtentReaderArgs extent_reader_args(extent_id, true, context_.internal_comparator_, block_cache);
+  extent_reader = nullptr;
 
-  if (IS_NULL(extent = ALLOC_OBJECT(FullPrefetchExtent, arena_))) {
+  if (IS_NULL(extent_reader = MOD_NEW_OBJECT(ModId::kExtentReader, ExtentReader))) {
     ret = Status::kMemoryLimit;
-    COMPACTION_LOG(WARN, "failed to alloc memory for reader", K(ret));
-  } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(extent_id, extent))) {
-    // TODO(ljc): async read extent is not supported, which cause MTR cases failures, 
-    // just ignore and use a warning log.
-    if (ret == Status::kNotSupported) {
-      COMPACTION_LOG(WARN, "open extent for read failed.", K(extent_id), K(ret));
-    } else {
-      COMPACTION_LOG(ERROR, "open extent for read failed.", K(extent_id), K(ret));
-    }    
+    COMPACTION_LOG(WARN, "fail to allocate memory for ExtentReader", K(ret));
+  } else if (FAILED(extent_reader->init(extent_reader_args))) {
+    COMPACTION_LOG(WARN, "fail to init extent reader", K(ret), K(extent_reader_args));
   } else {
-    // todo if cache key changed
-    //reader->set_subtable_id(cf_desc_.column_family_id_);
-    //TODO(Zhao Dongsheng) : the rate limiter is out of work.
-    if (nullptr != context_.cf_options_->rate_limiter) {
-      //reader->set_rate_limiter(context_.cf_options_->rate_limiter);
-    }
-    if (FAILED(extent->full_prefetch())) {
-      COMPACTION_LOG(WARN, "failed to prefetch", K(ret));
-    } else {
-      prefetched_extents_.insert(std::make_pair(extent_id, extent));
-    }
+    prefetched_extents_.insert(std::make_pair(id, extent_reader));
   }
 
-  // resource clean
+  // Resource clean
   if (FAILED(ret)) {
-    if (IS_NOTNULL(extent)) {
-      FREE_OBJECT(FullPrefetchExtent, arena_, extent);
+    if (IS_NOTNULL(extent_reader)) {
+      MOD_DELETE_OBJECT(ExtentReader, extent_reader);
     }
   }
 
   return ret;
 }
 
-FullPrefetchExtent *GeneralCompaction::get_prefetched_extent(int64_t extent_id) const
+ExtentReader *GeneralCompaction::get_prefetched_extent(int64_t extent_id) const
 {
-  FullPrefetchExtent *extent = nullptr;
-  std::unordered_map<int64_t, FullPrefetchExtent*>::const_iterator iter =
+  ExtentReader *extent_reader = nullptr;
+  std::unordered_map<int64_t, ExtentReader*>::const_iterator iter =
       prefetched_extents_.find(extent_id);
   if (iter != prefetched_extents_.end()) {
-    extent = iter->second;
-    se_assert(IS_NOTNULL(extent));
+    extent_reader = iter->second;
+    se_assert(IS_NOTNULL(extent_reader));
   }
-  return extent;
-}
-
-void GeneralCompaction::destroy_async_extent_reader(int64_t extent_id, bool is_reuse) {
-  std::unordered_map<int64_t, FullPrefetchExtent*>::iterator iter =
-      prefetched_extents_.find(extent_id);
-  if (iter != prefetched_extents_.end() && nullptr != iter->second) {
-    iter->second->reset();
-    if (is_reuse) {
-      FREE_OBJECT(FullPrefetchExtent, arena_, iter->second);
-    } else {
-      // no need delete it->second(FullPrefetchExtent), delete with table_reader
-    }
-    iter->second = nullptr;
-  }
-  if (iter != prefetched_extents_.end()) {
-    prefetched_extents_.erase(iter);
-  }
+  return extent_reader;
 }
 
 int GeneralCompaction::cleanup() {
@@ -767,7 +711,9 @@ int GeneralCompaction::cleanup() {
   clear_current_readers();
   clear_current_writers();
   if (write_extent_opened_) {
-    extent_builder_->Abandon();
+    se_assert(nullptr != extent_writer_);
+    extent_writer_->rollback();
+    MOD_DELETE_OBJECT(ExtentWriter, extent_writer_);
     write_extent_opened_ = false;
   }
   // cleanup change_info_
@@ -790,9 +736,7 @@ void GeneralCompaction::clear_current_readers() {
   reader_reps_.clear();
   for (auto &item : prefetched_extents_) {
     if (nullptr != item.second) {
-      item.second->reset();
-      // AsyncExtentExtent needs delete if not used.
-      FREE_OBJECT(FullPrefetchExtent, arena_, item.second);
+      MOD_DELETE_OBJECT(ExtentReader, item.second);
     }
   }
   prefetched_extents_.clear();

@@ -146,17 +146,17 @@ int TablePrefetchHelper::do_prefetch_index_block()
   Slice meta_handle = extent_layer_iter_.value();
   TableReaderHandle &handle = get_table_reader_handle(table_reader_prefetch_pos_);
   handle.reset();
-  BlockDataHandle<ExtentBasedTable::IndexReader> &index_handle = get_index_handle(table_reader_prefetch_pos_);
+  BlockDataHandle<RowBlock> &index_handle = get_index_handle(table_reader_prefetch_pos_);
   index_handle.reset();
   index_handle.is_boundary_ = extent_layer_iter_.get_is_boundary();
   if (FAILED(load_table_reader(meta_handle, handle))) {
     SE_LOG(WARN, "failed to get table reader", K(ret), K(meta_handle),
         K(table_reader_prefetch_pos_), K(index_block_cur_pos_));
-  } else if (IS_NULL(handle.reader())) {
+  } else if (IS_NULL(handle.extent_reader_)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "table reader is nullptr", K(ret), K(table_reader_prefetch_pos_),
         K(index_block_cur_pos_));
-  } else if (FAILED(handle.reader()->prefetch_index_block(index_handle))) {
+  } else if (FAILED(handle.extent_reader_->prefetch_index_block(index_handle))) {
     SE_LOG(WARN, "failed to prefetch index block", K(ret), K(meta_handle),
         K(table_reader_prefetch_pos_), K(index_block_cur_pos_));
   } else {
@@ -174,20 +174,20 @@ int TablePrefetchHelper::load_table_reader(const Slice &meta_handle, TableReader
   if (UNLIKELY(nullptr != table_reader_handle.cache_handle_)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "table cache handle was not released", K(ret));
-  } else if (FAILED(scan_param_->table_cache_->find_table_reader(*(scan_param_->icomparator_),
-                                                                 *eid,
-                                                                 scan_param_->read_options_->read_tier == kBlockCacheTier /* no_io */,
-                                                                 scan_param_->skip_filters_,
-                                                                 scan_param_->layer_position_.get_level(),
-                                                                 true /* TODO: prefetch_index_and_filter_in_cache */,
-                                                                 &table_reader_handle.cache_handle_))) {
+  } else if (FAILED(scan_param_->table_cache_->find_extent_reader(*(scan_param_->icomparator_),
+                                                                  *eid,
+                                                                  scan_param_->read_options_->read_tier == kBlockCacheTier /* no_io */,
+                                                                  scan_param_->skip_filters_,
+                                                                  scan_param_->layer_position_.get_level(),
+                                                                  true /* TODO: prefetch_index_and_filter_in_cache */,
+                                                                  &table_reader_handle.cache_handle_))) {
     SE_LOG(WARN, "failed to find table from table cache", K(ret));
   } else if (IS_NULL(table_reader_handle.cache_handle_)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "handle is nullptr", K(ret));
   } else {
     table_reader_handle.table_cache_ = scan_param_->table_cache_;
-    table_reader_handle.table_reader_ = scan_param_->table_cache_->get_table_reader_from_handle(table_reader_handle.cache_handle_);
+    table_reader_handle.extent_reader_ = scan_param_->table_cache_->get_extent_reader_from_handle(table_reader_handle.cache_handle_);
     // TODO: we can set AIORandomAccessExtent to table_reader here,
     //       but the table_reader might be used by multiple SSTableScanIterators,
     //       thus it seems we should keep AIORandomAccessExtent in SSTableScanIterator?
@@ -212,18 +212,16 @@ int TablePrefetchHelper::prev()
   return next();
 }
 
-int TablePrefetchHelper::init_index_block_iter(BlockIter &index_block_iter)
+int TablePrefetchHelper::init_index_block_iter(RowBlockIterator &index_block_iter)
 {
   int ret = Status::kOk;
-  ExtentBasedTable *table_reader = get_table_reader_handle(index_block_cur_pos_).reader();
-  BlockDataHandle<ExtentBasedTable::IndexReader> &index_handle = get_index_handle(index_block_cur_pos_);
+  ExtentReader *extent_reader = get_table_reader_handle(index_block_cur_pos_).extent_reader_;
+  BlockDataHandle<RowBlock> &index_handle = get_index_handle(index_block_cur_pos_);
   index_block_iter.reset();
-  if (IS_NULL(table_reader)) {
+  if (IS_NULL(extent_reader)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "current table reader is nullptr", K(ret));
-  } else if (FAILED(table_reader->new_index_iterator(*(scan_param_->read_options_),
-                                                     index_handle,
-                                                     index_block_iter /* BlockIter will reuse index_block_iter*/))) {
+  } else if (FAILED(extent_reader->setup_index_block_iterator(&index_block_iter))) {
     SE_LOG(WARN, "failed to new index iterator", K(ret), K(index_block_cur_pos_), K(table_reader_prefetch_pos_));
   } else {
     index_block_iter.set_end_key(extent_layer_iter_.get_end_key(), index_handle.is_boundary_);
@@ -316,37 +314,45 @@ int BlockPrefetchHelper::seek_to_last()
 int BlockPrefetchHelper::do_prefetch_data_block(const bool send_req_after_add)
 {
   int ret = Status::kOk;
-  assert(index_block_iter_.Valid());
-  BlockDataHandle<Block> &handle = get_block_handle(data_block_prefetch_pos_);
+  bool need_send_req = false;
+  int64_t pos = 0;
+  ExtentReader *extent_reader = nullptr;
+  BlockDataHandle<RowBlock> &handle = get_block_handle(data_block_prefetch_pos_);
   handle.reset();
-  Slice index_value = index_block_iter_.value();
   handle.extent_id_ = ExtentId(index_block_iter_.get_source());
-  handle.block_handle_.DecodeFrom(&index_value);
   handle.is_boundary_ = index_block_iter_.get_is_boundary();
-  ExtentBasedTable *table_reader = index_table_reader();
-  if (FAILED(table_reader->prefetch_data_block(*(scan_param_->read_options_), handle))) {
-    SE_LOG(WARN, "failed to prefetch data block", K(ret));
+
+  if (!index_block_iter_.Valid()) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the inde block iterator must be valid", K(ret));
+  } else if (FAILED(handle.block_info_.deserialize(index_block_iter_.value().data(), index_block_iter_.value().size(), pos))) {
+    SE_LOG(WARN, "fail to deserialize BlockInfo", K(ret));
+  } else if (IS_NULL(extent_reader = index_extent_reader())) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the extent reader must not be nullptr", K(ret));
+  } else if (FAILED(extent_reader->prefetch_data_block(handle))) {
+    SE_LOG(WARN, "fail to prefetch data block", K(ret));
   } else {
-    bool need_send_req = false;
     if (FAILED(merge_io_request(handle, need_send_req))) {
-      SE_LOG(WARN, "failed to merge io request", K(ret));
+      SE_LOG(WARN, "fail to merge io request", K(ret));
     } else if (need_send_req || send_req_after_add) {
       if (FAILED(send_merged_io_request())) {
-        SE_LOG(WARN, "failed to send merged io request", K(ret));
+        SE_LOG(WARN, "fail to send merged io request", K(ret));
       }
     }
-    data_block_prefetch_pos_++;
+    ++data_block_prefetch_pos_;
   }
+
   return ret;
 }
 
-int BlockPrefetchHelper::merge_io_request(const BlockDataHandle<Block> &handle,
+int BlockPrefetchHelper::merge_io_request(const BlockDataHandle<RowBlock> &handle,
                                           bool &need_send_req)
 {
   int ret = Status::kOk;
   need_send_req = false;
   // merge continuous io blocks
-  if (nullptr == handle.block_entry_.value) {
+  if (nullptr == handle.block_entry_.value_) {
     // not in block cache, merge
     if (io_merge_handle_.is_empty()) {
       io_merge_handle_.set_start_pos(data_block_prefetch_pos_);
@@ -367,22 +373,23 @@ int BlockPrefetchHelper::send_merged_io_request()
     int64_t offset = 0;
     int64_t size = 0;
 
-    BlockDataHandle<Block> &start_handle = get_block_handle(io_merge_handle_.get_start_pos());
-    BlockDataHandle<Block> &end_handle = get_block_handle(io_merge_handle_.get_end_pos());
+    BlockDataHandle<RowBlock> &start_handle = get_block_handle(io_merge_handle_.get_start_pos());
+    BlockDataHandle<RowBlock> &end_handle = get_block_handle(io_merge_handle_.get_end_pos());
     // in forward scan, the offset of merged io is the start_handle's offset
     // in backward scan, the offset of merged io is the end_handle's offset
-    offset = std::min(start_handle.block_handle_.offset(), end_handle.block_handle_.offset());
+    offset = std::min(start_handle.block_info_.get_offset(), end_handle.block_info_.get_offset());
     // all handles share one AIOReq
     std::shared_ptr<AIOReq> aio_req(new AIOReq());
 
     for (int64_t i = io_merge_handle_.get_start_pos(); i <= io_merge_handle_.get_end_pos(); i++) {
-      BlockDataHandle<Block> &handle = get_block_handle(i);
-      size += handle.block_handle_.size() + kBlockTrailerSize;
+      BlockDataHandle<RowBlock> &handle = get_block_handle(i);
+      size += handle.block_info_.get_size();
       handle.aio_handle_.aio_req_ = aio_req;
+      handle.has_prefetched_ = true;
     }
 
-    ExtentBasedTable *table_reader = index_table_reader();
-    if (table_reader->do_io_prefetch(offset, size, &start_handle.aio_handle_)) {
+    ExtentReader *extent_reader = index_extent_reader();
+    if (extent_reader->do_io_prefetch(offset, size, &start_handle.aio_handle_)) {
       SE_LOG(WARN, "failed to do io prefetch", K(ret), K(offset), K(size));
     }
     io_merge_handle_.reset();
@@ -502,22 +509,22 @@ int BlockPrefetchHelper::prev()
   return ret;
 }
 
-int BlockPrefetchHelper::init_data_block_iter(BlockIter &data_block_iter)
+int BlockPrefetchHelper::init_data_block_iter(RowBlockIterator &data_block_iter)
 {
   int ret = Status::kOk;
-  ExtentBasedTable *table_reader = nullptr;
+  ExtentReader *extent_reader = nullptr;
   data_block_iter.reset();
-  BlockDataHandle<Block> &block_handle = get_block_handle(data_block_cur_pos_);
-  if (FAILED(get_table_reader(block_handle.extent_id_, table_reader))) {
+  BlockDataHandle<RowBlock> &block_handle = get_block_handle(data_block_cur_pos_);
+  if (FAILED(get_extent_reader(block_handle.extent_id_, extent_reader))) {
     SE_LOG(WARN, "failed to get table reader", K(ret));
-  } else if (IS_NULL(table_reader)) {
+  } else if (IS_NULL(extent_reader)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "current table reader is nullptr", K(ret));
-  } else if (FAILED(table_reader->new_data_block_iterator(*(scan_param_->read_options_),
-                                                          block_handle,
-                                                          data_block_iter,
-                                                          &add_blocks_,
-                                                          scan_param_->scan_add_blocks_limit_))) {
+  } else if (FAILED(extent_reader->setup_data_block_iterator(block_handle,
+                                                             scan_param_->scan_add_blocks_limit_,
+                                                             add_blocks_,
+                                                             data_block_iter))) {
+  
     SE_LOG(WARN, "failed to new data block iterator", K(ret));
   } else {
     data_block_iter.set_end_key(index_block_iter_.get_end_key(), block_handle.is_boundary_);
@@ -684,6 +691,8 @@ void SSTableScanIterator::Prev()
 void SSTableScanIterator::skip_empty_data_blocks_forward()
 {
   int ret = Status::kOk;
+  // TODO(Zhao Dongsheng): This function will mask read errors, causing it
+  // to skip certain exceptional data, ultimately returing fewer data than excepted.
   while (!data_block_iter_.Valid() && block_prefetch_helper_.valid()) {
     if (FAILED(block_prefetch_helper_.next())) {
       status_ = Status(ret);

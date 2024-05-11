@@ -18,8 +18,10 @@
 #include <cstdint>
 #include "port/likely.h"
 
-namespace smartengine {
-namespace storage {
+namespace smartengine
+{
+namespace storage
+{
 
 // the size of one extent
 const int64_t MAX_EXTENT_SIZE = (2 * 1024 * 1024);
@@ -30,9 +32,8 @@ const int32_t BITS_PER_BYTE = (8);  // 8 bits of a char
 static const int32_t MAX_FILE_PATH_SIZE = 1024;
 static const int32_t RESERVED_SIZE = 32; 
 static const int64_t MAX_TIER_COUNT = 3;
-static const int64_t MAX_LOB_KV_SIZE = 36 * 1024;
-}  // storage
-}  // smartengine
+}  // namespace storage
+}  // namespace smartengine
 
 #ifndef UNUSED
 #define UNUSED(x) ((void)x)

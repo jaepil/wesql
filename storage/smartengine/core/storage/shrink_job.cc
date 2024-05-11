@@ -200,7 +200,7 @@ int ShrinkJob::move_extent()
 {
   int ret = Status::kOk;
 
-  if (FAILED(get_extent_infos())) {
+  if (FAILED(get_extent_positions())) {
     SE_LOG(WARN, "fail to get extent infos", K(ret));
   } else if (FAILED(ExtentSpaceManager::get_instance().move_extens_to_front(shrink_info_, extent_replace_map_))) {
     SE_LOG(WARN, "fail to move extents to front", K(ret));
@@ -242,8 +242,8 @@ int ShrinkJob::write_extent_metas()
        SUCCED(ret) && extent_replace_map_.end() != extent_iter; ++extent_iter) {
     old_extent_id = extent_iter->first;
     new_extent_id = extent_iter->second.extent_id_;
-    auto extent_info_iter = extent_info_map_.find(old_extent_id.id());
-    if (extent_info_map_.end() == extent_info_iter) {
+    auto extent_position_iter = extent_positions_.find(old_extent_id.id());
+    if (extent_positions_.end() == extent_position_iter) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "unexpected error, fail to find old extent info", K(ret), K(old_extent_id), K(new_extent_id));
     }
@@ -264,19 +264,19 @@ int ShrinkJob::write_extent_metas()
 
     if (SUCCED(ret)) {
       //step2: build change info
-      const ExtentInfo &extent_info = extent_info_iter->second;
-      auto change_info_iter = change_info_map_.find(extent_info.index_id_);
+      const ExtentPosition &extent_position = extent_position_iter->second;
+      auto change_info_iter = change_info_map_.find(extent_position.index_id_);
       if (change_info_map_.end() == change_info_iter) {
-        if (!(change_info_map_.emplace(extent_info.index_id_, ChangeInfo()).second)) {
-          SE_LOG(WARN, "fail to emplace changeinfo", K(ret), K(extent_info));
+        if (!(change_info_map_.emplace(extent_position.index_id_, ChangeInfo()).second)) {
+          SE_LOG(WARN, "fail to emplace changeinfo", K(ret), K(extent_position));
         } else {
-          change_info_iter = change_info_map_.find(extent_info.index_id_);
+          change_info_iter = change_info_map_.find(extent_position.index_id_);
         }
       }
 
       if (SUCCED(ret)) {
-        if (FAILED(change_info_iter->second.replace_extent(extent_info.layer_position_, old_extent_id, new_extent_id))) {
-          SE_LOG(WARN, "fail to replace extent", K(ret), K(extent_info), K(old_extent_id), K(new_extent_id));
+        if (FAILED(change_info_iter->second.replace_extent(extent_position.layer_position_, old_extent_id, new_extent_id))) {
+          SE_LOG(WARN, "fail to replace extent", K(ret), K(extent_position), K(old_extent_id), K(new_extent_id));
         }
       }
     }
@@ -380,12 +380,12 @@ bool ShrinkJob::can_physical_shrink()
   return can_shrink;
 }
 
-int ShrinkJob::get_extent_infos()
+int ShrinkJob::get_extent_positions()
 {
   int ret = Status::kOk;
 
   for (auto iter = subtable_map_.begin(); SUCCED(ret) && subtable_map_.end() != iter; ++iter) {
-    if (FAILED(iter->second->get_extent_infos(extent_info_map_))) {
+    if (FAILED(iter->second->get_extent_positions(extent_positions_))) {
       SE_LOG(WARN, "fail to get extent infos", K(ret), "index_id", iter->first);
     }
   }

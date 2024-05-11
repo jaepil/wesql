@@ -15,8 +15,9 @@
  */
 #pragma once
 
+#include "cache/cache_entry.h"
+#include "db/pinned_iterators_manager.h"
 #include "db/table_cache.h"
-#include "table/extent_table_reader.h"
 #include "util/aio_wrapper.h"
 
 namespace smartengine
@@ -24,15 +25,15 @@ namespace smartengine
 namespace cache
 {
 class Cache;
-}
+} // namespace cache
 namespace db
 {
 class InternalStats;
-}
+} // namespace db
 namespace storage
 {
 struct ExtentLayer;
-}
+} // namespace storage
 namespace util
 {
 class Arena;
@@ -117,7 +118,7 @@ struct ScanParam
 struct TableReaderHandle
 {
   TableReaderHandle() : extent_id_(),
-                        table_reader_(nullptr),
+                        extent_reader_(nullptr),
                         cache_handle_(nullptr),
                         table_cache_(nullptr)
   {}
@@ -128,15 +129,12 @@ struct TableReaderHandle
       table_cache_->release_handle(cache_handle_);
     }
     cache_handle_ = nullptr;
-    table_reader_ = nullptr;
+    extent_reader_ = nullptr;
     table_cache_ = nullptr;
   }
-  ExtentBasedTable *reader()
-  {
-    return reinterpret_cast<ExtentBasedTable *>(table_reader_);
-  }
+
   storage::ExtentId extent_id_;
-  TableReader *table_reader_;
+  ExtentReader *extent_reader_;
   cache::Cache::Handle *cache_handle_;
   db::TableCache *table_cache_;
 };
@@ -144,48 +142,55 @@ struct TableReaderHandle
 template <typename T>
 struct BlockDataHandle
 {
-  BlockDataHandle() : cache_(nullptr),
+  BlockDataHandle() : extent_id_(),
+                      block_info_(),
+                      block_entry_(),
+                      cache_(nullptr),
+                      aio_handle_(),
+                      has_prefetched_(false),
                       need_do_cleanup_(false),
                       is_boundary_(false)
   {}
   void reset(db::PinnedIteratorsManager *pinned_iters_mgr = nullptr)
   {
     extent_id_.reset();
-    block_handle_.reset();
+    block_info_.reset();
     if (need_do_cleanup_) {
       if (pinned_iters_mgr != nullptr) {
         // pinned_iters_mgr will take the ownership of the cache value
-        if (nullptr != cache_ && nullptr != block_entry_.cache_handle) {
+        if (nullptr != cache_ && nullptr != block_entry_.handle_) {
           pinned_iters_mgr->RegisterCleanup(&release_cache_entry,
                                             cache_,
-                                            block_entry_.cache_handle);
-        } else if (nullptr != block_entry_.value) {
+                                            block_entry_.handle_);
+        } else if (nullptr != block_entry_.value_) {
           pinned_iters_mgr->RegisterCleanup(&delete_resource<T>, 
-                                            block_entry_.value, 
+                                            block_entry_.value_, 
                                             nullptr);
         }
       } else {
-        if (nullptr != cache_ && nullptr != block_entry_.cache_handle) {
-          cache_->Release(block_entry_.cache_handle);
-        } else if (nullptr != block_entry_.value) {
-//          delete block_entry_.value;
-          MOD_DELETE_OBJECT(T, block_entry_.value);
+        if (nullptr != cache_ && nullptr != block_entry_.handle_) {
+          cache_->Release(block_entry_.handle_);
+        } else if (nullptr != block_entry_.value_) {
+          MOD_DELETE_OBJECT(T, block_entry_.value_);
         }
       }
     }
-    block_entry_.cache_handle = nullptr;
-    block_entry_.value = nullptr;
+    block_entry_.handle_ = nullptr;
+    block_entry_.value_ = nullptr;
     cache_ = nullptr;
     aio_handle_.reset();
+    has_prefetched_ = false;
     need_do_cleanup_ = false;
     is_boundary_ = false;
   }
+
   storage::ExtentId extent_id_;
-  BlockHandle block_handle_;
-  ExtentBasedTable::CachableEntry<T> block_entry_;
+  BlockInfo block_info_;
+  CacheEntry<T> block_entry_;
   // used to release cache handle
   cache::Cache *cache_;
   util::AIOHandle aio_handle_;
+  bool has_prefetched_;
   bool need_do_cleanup_;
   bool is_boundary_;
 };

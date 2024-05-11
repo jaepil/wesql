@@ -206,6 +206,11 @@ public:
                  const uint64_t seq = 0,
                  Cache::Handle** handle = nullptr);
 
+  /**Evict row from row cache.
+  @param[in] index_id  id of the index to which key BeforeMarkLogsSynced
+  @param[in] key  internal key*/
+  int evict(const uint32_t index_id, const common::Slice &key);
+
   /** Look up row from row cache.
   @param[in]  key         row cache key
   @param[in]  snapshot    read snapshot

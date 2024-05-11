@@ -1613,7 +1613,7 @@ static int se_i_s_se_subtable_fill_table(
           smartengine::common::Slice extent_meta_buf = iter->key();
           extents_number++;
           data_size += ((storage::ExtentMeta*)extent_meta_buf.data())->data_size_;
-          index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_size_;
+          index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.size_;
           iter->Next();
         }
         tables->table->field[SMARTENGINE_SUBTABLE_FIELD::TABLE_NAME]->store(

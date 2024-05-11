@@ -22,7 +22,6 @@
 #include "logger/log_module.h"
 #include "storage/multi_version_extent_meta_layer.h"
 #include "storage/storage_meta_struct.h"
-#include "table/format.h"
 #include "table/iter_heap.h"
 #include "table/iterator_wrapper.h"
 #include "util/heap.h"
@@ -30,36 +29,6 @@
 
 namespace smartengine {
 namespace storage {
-
-class DataBlockIndexRangeIterator
-    : public RangeAdaptorIterator<table::InternalIterator> {
- public:
-  DataBlockIndexRangeIterator()
-      : RangeAdaptorIterator<table::InternalIterator>() {}
-  explicit DataBlockIndexRangeIterator(const storage::MetaType &type,
-                                       table::InternalIterator *iter)
-      : RangeAdaptorIterator<table::InternalIterator>(type, iter) {}
-  virtual ~DataBlockIndexRangeIterator() override {}
-
- protected:
-  virtual int extract_range(const common::Slice &key_in,
-                            const common::Slice &value_in) override {
-    int ret = 0;
-    meta_descriptor_.range_.end_key_ = key_in;
-    common::Slice block_index_content = value_in;
-    table::BlockHandle handle;
-    handle.DecodeFrom(const_cast<common::Slice *>(&block_index_content));
-    meta_descriptor_.block_position_.first = handle.offset();
-    meta_descriptor_.block_position_.second = handle.size();
-    // save block_stats to value_
-    meta_descriptor_.value_ = block_index_content;
-    int64_t delete_percent = 0;
-    FAIL_RETURN(db::BlockStats::decode(block_index_content,
-                                       meta_descriptor_.range_.start_key_,
-                                       delete_percent));
-    return ret;
-  }
-};
 
 class MetaDataIterator : public RangeAdaptorIterator<table::InternalIterator> {
  public:
@@ -238,158 +207,6 @@ class ReuseBlockMergeIterator {
   ReuseBlockMergeIterator &operator=(const ReuseBlockMergeIterator &) = delete;
 };
 
-template <typename RawIterator>
-class MinRawIteratorComparator {
- public:
-  MinRawIteratorComparator(const util::Comparator *comparator)
-      : comparator_(comparator) {}
-
-  bool operator()(RawIterator *a, RawIterator *b) const {
-    return comparator_->Compare(a->key(), b->key()) > 0;
-  }
-
- private:
-  const util::Comparator *comparator_;
-};
-
-// only for compaction use;
-// do not take charge for all iterators in merging.
-class DynamicMergeIterator : public table::InternalIterator {
- public:
-  typedef util::BinaryHeap<table::IteratorWrapper *,
-                           table::MinIteratorComparator>
-      MergerMinIterHeap;
-  typedef std::function<void(table::InternalIterator *)> RecycleOnFinish;
-  static const int64_t MAX_RESERVE_WRAPPER_NUM =
-      ReuseBlockMergeIterator::MAX_CHILD_NUM;
-
-  DynamicMergeIterator(const util::Comparator *comparator, RecycleOnFinish func)
-      : comparator_(comparator),
-        current_(nullptr),
-        min_heap_(comparator_),
-        recycle_func_(func),
-        status_(common::Status::kOk) {}
-
-  void add_new_child(const int32_t way, InternalIterator *iter
-      /*const common::SeSchema *schema = nullptr*/) {
-    assert(nullptr != iter);
-    assert(nullptr == wrappers_[way].iter());
-    InternalIterator *old = wrappers_[way].Set(iter);
-    assert(nullptr == old);
-    wrappers_[way].SeekToFirst();
-    status_ = wrappers_[way].status().code();
-    if (common::Status::kOk == status_ && iter->Valid()) {
-      min_heap_.push(&wrappers_[way]);
-      current_ = current_forward();
-//      wrappers_[way].set_schema(schema);
-    }
-  }
-
-  virtual ~DynamicMergeIterator()  override
-  {
-    for (table::IteratorWrapper &wrapper : wrappers_) {
-      recycle_func_(wrapper.Set(nullptr));
-    }
-  }
-
-  virtual bool Valid() const override { return (current_ != nullptr); }
-
-  virtual void SeekToFirst() override {
-    // do nothing.. we 've already seek to first in add_new_child;
-    assert(nullptr != current_);
-    status_ = current_->status().code();
-  }
-
-  virtual void SeekToLast() override { assert(false); }
-
-  virtual void Seek(const common::Slice &target) override { assert(false); }
-
-  virtual void SeekForPrev(const common::Slice &target) override {
-    assert(false);
-  }
-
-  virtual void Next() override {
-    assert(Valid());
-
-    // For the heap modifications below to be correct, current_ must be the
-    // current top of the heap.
-    assert(current_ == current_forward());
-
-    // as the current points to the current record. move the iterator forward.
-    current_->Next();
-    status_ = current_->status().code();
-    if (LIKELY(common::Status::kOk == status_ && current_->Valid())) {
-      // current is still valid after the Next() call above.  Call
-      // replace_top() to restore the heap property.  When the same child
-      // iterator yields a sequence of keys, this is cheap.
-      min_heap_.replace_top(current_);
-    } else {
-      // current stopped being valid, remove it from the heap.
-      min_heap_.pop();
-      recycle_func_(current_->iter());
-      current_->Set(nullptr);
-    }
-    current_ = current_forward();
-  }
-
-  virtual void Prev() override { assert(false); }
-
-  virtual common::Slice key() const override {
-    assert(Valid());
-    return current_->key();
-  }
-
-  virtual common::Slice value() const override {
-    assert(Valid());
-    return current_->value();
-  }
-
-  virtual common::Status status() const override {
-    return common::Status(status_);
-  }
-
-  virtual void SetPinnedItersMgr(
-      db::PinnedIteratorsManager *pinned_iters_mgr) override {
-    UNUSED(pinned_iters_mgr);
-  }
-
-  virtual bool IsKeyPinned() const override {
-    assert(Valid());
-    return false;
-  }
-
-  virtual bool IsValuePinned() const override {
-    assert(Valid());
-    return false;
-  }
-
-//  virtual const common::SeSchema* get_schema() override {
-//    if (nullptr != current_) {
-//      return current_->get_schema();
-//    } else {
-//      return nullptr;
-//    }
-//  }
- private:
-  table::IteratorWrapper *current_forward() const {
-    return !min_heap_.empty() ? min_heap_.top() : nullptr;
-  }
-
-  table::IteratorWrapper wrappers_[MAX_RESERVE_WRAPPER_NUM];
-
-  const util::Comparator *comparator_;
-  // Cached pointer to child iterator with the current key, or nullptr if no
-  // child iterators are valid.  This is the top of minHeap_ or maxHeap_
-  // depending on the direction.
-  table::IteratorWrapper *current_;
-  // Which direction is the iterator moving?
-  MergerMinIterHeap min_heap_;
-  RecycleOnFinish recycle_func_;
-  int status_;
-
-  // Max heap is used for reverse iteration, which is way less common than
-  // forward.  Lazily initialize it to save memory.
-};
 
 } // storage
 } // smartengine

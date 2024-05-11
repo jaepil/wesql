@@ -55,6 +55,7 @@ class Slice {
 
   Slice(const memory::xstring& s) : data_(s.data()), size_(s.size()) {}
 
+  //TODO(Zhao Dongsheng) : this implicit constructor from c-style string is dangerous.
   // Create a slice that refers to s[0,strlen(s)-1]
   /* implicit */
   Slice(const char* s) : data_(s), size_(strlen(s)) {}

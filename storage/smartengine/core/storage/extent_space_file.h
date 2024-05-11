@@ -27,7 +27,7 @@ namespace storage {
 class FileExtentSpace : public ExtentSpace {
  public:
   FileExtentSpace(util::Env *env, const util::EnvOptions &env_options);
-  virtual ~FileExtentSpace();
+  virtual ~FileExtentSpace() override;
 
   void destroy() override;
 

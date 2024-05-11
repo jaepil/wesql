@@ -417,7 +417,8 @@ int FullPrefetchExtent::read(const int64_t offset, const int64_t size, char *buf
     ret = Status::kOverLimit;
     SE_LOG(WARN, "extent size overflow", K(ret), K(offset), K(size), K_(aio_req));
   } else {
-    result.assign(aio_req_.aio_buf_.data() + offset, size);
+    memcpy(buf, aio_req_.aio_buf_.data() + offset, size);
+    result.assign(buf, size);
   }
 
   // async read failed, try sync read, overwrite ret here.

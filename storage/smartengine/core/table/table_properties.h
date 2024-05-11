@@ -13,10 +13,6 @@
 #include "util/status.h"
 
 namespace smartengine {
-namespace db {
-class BlockStats;
-}
-
 namespace table {
 class InternalIterator;
 
@@ -140,14 +136,14 @@ struct TableProperties {
 // Seek to the properties block.
 // If it successfully seeks to the properties block, "is_found" will be
 // set to true.
-common::Status SeekToPropertiesBlock(InternalIterator* meta_iter,
-                                     bool* is_found);
-
+//common::Status SeekToPropertiesBlock(InternalIterator* meta_iter,
+//                                     bool* is_found);
+//
 // Seek to the compression dictionary block.
 // If it successfully seeks to the properties block, "is_found" will be
 // set to true.
-common::Status SeekToCompressionDictBlock(InternalIterator* meta_iter,
-                                          bool* is_found);
-
+//common::Status SeekToCompressionDictBlock(InternalIterator* meta_iter,
+//                                          bool* is_found);
+//
 }  // namespace table
 }  // namespace smartengine

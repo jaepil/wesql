@@ -29,6 +29,7 @@
 /* clang-format off */
 namespace smartengine
 {
+using namespace cache;
 using namespace common;
 using namespace memory;
 using namespace monitor;
@@ -347,6 +348,41 @@ int64_t StorageManager::approximate_size(const db::ColumnFamilyData *cfd,
   return result_size;
 }
 
+int StorageManager::approximate_key_offet(const Slice &key,
+                                          const ColumnFamilyData *cfd,
+                                          const ExtentId &extent_id,
+                                          const int32_t level,
+                                          int64_t &offset)
+{
+  int ret = Status::kOk;
+  Cache::Handle *extent_reader_handle = nullptr;
+  ExtentReader *extent_reader = nullptr;
+
+  if (FAILED(cfd->table_cache()->find_extent_reader(cfd->internal_comparator(),
+                                                    extent_id,
+                                                    false /*no_io*/,
+                                                    true /*skip_filters*/,
+                                                    level,
+                                                    false /*prefetch_index_and_filter_in_cache*/,
+                                                    &extent_reader_handle))) {
+    SE_LOG(WARN, "fail to find extent reader", K(ret), K(extent_id));
+  } else if (IS_NULL(extent_reader = cfd->table_cache()->get_extent_reader_from_handle(extent_reader_handle))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the extent reader must not be nullptr", K(ret), K(extent_id));
+  } else if (FAILED(extent_reader->approximate_key_offet(key, offset))) {
+    SE_LOG(WARN, "fail to approximate key offset", K(ret));
+  } else {
+    // succeed
+  }
+
+  if (IS_NOTNULL(extent_reader_handle)) {
+    cfd->table_cache()->release_handle(extent_reader_handle);
+    extent_reader_handle = nullptr;
+  }
+
+  return ret;
+}
+
 void StorageManager::print_raw_meta()
 {
   std::lock_guard<std::mutex> guard(meta_mutex_);
@@ -623,7 +659,7 @@ int StorageManager::deserialize_and_dump(const char *buf, int64_t buf_len, int64
   return ret;
 }
 
-int StorageManager::get_extent_infos(const int64_t index_id, ExtentIdInfoMap &extent_info_map)
+int StorageManager::get_extent_positions(const int64_t index_id, ExtentPositionMap &extent_positions)
 {
   int ret = Status::kOk;
   ExtentLayerVersion *extent_layer_version = nullptr;
@@ -640,7 +676,7 @@ int StorageManager::get_extent_infos(const int64_t index_id, ExtentIdInfoMap &ex
        if (IS_NULL(extent_layer_version = current_meta_->get_extent_layer_version(level))) {
          ret = Status::kErrorUnexpected;
          SE_LOG(WARN, "unexpected error, extent layer version should not been nullptr", K(ret), K(level));
-       } else if (FAILED(extent_layer_version->get_all_extent_infos(index_id, extent_info_map))) {
+       } else if (FAILED(extent_layer_version->get_extent_positions(index_id, extent_positions))) {
          SE_LOG(WARN, "fail to get extent infos", K(ret), K(index_id), K(level));
        }
      }
@@ -1192,10 +1228,14 @@ int StorageManager::create_extent_layer_iterator(util::Arena *arena,
   return ret;
 }
 
-int64_t StorageManager::one_layer_approximate_size(
-    const db::ColumnFamilyData *cfd, const Slice &start, const Slice &end,
-    int level, table::InternalIterator *iter, int64_t estimate_cost_depth,
-    EstimateCostStats &cost_stats) {
+int64_t StorageManager::one_layer_approximate_size(const db::ColumnFamilyData *cfd,
+                                                   const Slice &start,
+                                                   const Slice &end,
+                                                   int level,
+                                                   table::InternalIterator *iter,
+                                                   int64_t estimate_cost_depth,
+                                                   EstimateCostStats &cost_stats)
+{
   int ret = Status::kOk;
   /**variables for calculate cost size*/
   int64_t start_off = 0;              // extent's start offset in [start, end]
@@ -1209,13 +1249,8 @@ int64_t StorageManager::one_layer_approximate_size(
   bool reach_end = false;             // reach to range end
 
   /**variables for read extent*/
-  ReadOptions read_options;
   Slice extent_meta_slice;                     // current extent meta buffer
   ExtentMeta *extent_meta = nullptr;           // current extent meta
-  table::TableReader *table_reader = nullptr;  // current extent's TableReader
-  std::unique_ptr<table::InternalIterator,
-                  ptr_destruct_delete<InternalIterator>>
-      table_iter;  // current extent's Iterator
 
   /**estimate calculate logical:
    * first extent must been opened to calculate start_off, middle extents not
@@ -1243,16 +1278,9 @@ int64_t StorageManager::one_layer_approximate_size(
       SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret));
     } else if (0 == include_extent_count) {
       /**first extent should calculate start_off*/
-      table_iter.reset(cfd->table_cache()->create_iterator(read_options,
-                                                           cfd->internal_comparator(),
-                                                           -1 /*level*/,
-                                                           extent_meta->extent_id_,
-                                                           table_reader));
-      if (IS_NULL(table_reader)) {                                        
-        ret = Status::kErrorUnexpected;                                   
-        SE_LOG(WARN, "unexpected error, TableReader should not be nullptr", K(ret), K(*extent_meta));                             
-      } else {                                                            
-        start_off = table_reader->ApproximateOffsetOf(start);             
+      if (FAILED(approximate_key_offet(start, cfd, extent_meta->extent_id_, level, start_off))) {
+        SE_LOG(WARN, "fail to approximate start offset", K(ret), K(*extent_meta));
+      } else {
         ++cost_stats.total_open_extent_cnt_;
       }
     }
@@ -1269,22 +1297,13 @@ int64_t StorageManager::one_layer_approximate_size(
          * if this is first extent(include_extent_count == 0), TableReader has
          * been created. if not the fisrt extent, TableReader need create here*/
         if (0 == include_extent_count) {
-          end_off = table_reader->ApproximateOffsetOf(end);
-        } else {
-          table_iter.reset(cfd->table_cache()->create_iterator(read_options,
-                                                               cfd->internal_comparator(),
-                                                               -1 /*level*/,
-                                                               extent_meta->extent_id_,
-                                                               table_reader));
-          if (IS_NULL(table_reader)) {
-            ret = Status::kErrorUnexpected;
-            SE_LOG(WARN,
-                        "unexpected error, TableReader shoule not nullptr",
-                        K(ret), K(*extent_meta));
-          } else {
-            end_off = table_reader->ApproximateOffsetOf(end);
-            ++cost_stats.total_open_extent_cnt_;
+          if (FAILED(approximate_key_offet(end, cfd, extent_meta->extent_id_, level, end_off))) {
+            SE_LOG(WARN, "fail to approximate end offset", K(ret), K(*extent_meta));
           }
+        } else if (FAILED(approximate_key_offet(end, cfd, extent_meta->extent_id_, level, end_off))) {
+          SE_LOG(WARN, "fail to approximate end offset", K(ret), K(*extent_meta));
+        } else {
+          ++cost_stats.total_extent_cnt_;
         }
       }
     }
@@ -1306,29 +1325,22 @@ int64_t StorageManager::one_layer_approximate_size(
   if (include_extent_count > 0 && recalc_last_extent) {
     cost_stats.recalc_last_extent_ = true;
     if (1 == include_extent_count) {
-      if (IS_NULL(table_reader)) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, TableReader must not nullptr",
-                    K(ret), K(*extent_meta));
+      if (FAILED(approximate_key_offet(end, cfd, last_extent_id, level, end_off))) {
+        SE_LOG(WARN, "fail to approximate end offset", K(ret), K(last_extent_id));
       } else {
-        // TableReader has been created on upper stream
-        end_off = table_reader->ApproximateOffsetOf(end);
         assert(cost_size >= (end_off - start_off));
         cost_size += (end_off - start_off) - last_extent_cost_size;
       }
     } else {
-      // last extent has not been openen, need create it's TableReader
       start_off = 0;
       end_off = MAX_EXTENT_SIZE;
-      table_iter.reset(cfd->table_cache()->create_iterator(read_options,
-                                                           cfd->internal_comparator(),
-                                                           -1 /*level*/,
-                                                           last_extent_id,
-                                                           table_reader));
-      end_off = table_reader->ApproximateOffsetOf(end);
-      assert(last_extent_cost_size >= (end_off - start_off));
-      cost_size += (end_off - start_off) - last_extent_cost_size;
-      ++cost_stats.total_open_extent_cnt_;
+      if (FAILED(approximate_key_offet(end, cfd, last_extent_id, level, end_off))) {
+        SE_LOG(WARN, "fail to approximate end offset", K(ret), K(last_extent_id));
+      } else {
+        assert(last_extent_cost_size >= (end_off - start_off));
+        cost_size += (end_off - start_off) - last_extent_cost_size;
+        ++cost_stats.total_open_extent_cnt_;
+      }
     }
   }
   cost_stats.cost_size_ += cost_size;
@@ -1467,7 +1479,7 @@ int StorageManager::get_level_usage_percent(const Snapshot *current_meta,
       if (meta->num_deletes_ > 0) {
         ++delete_size;
       }
-      int64_t one_usage = meta->data_size_ + meta->index_size_;
+      int64_t one_usage = meta->data_size_ + meta->index_block_handle_.size_;
       total_usage += one_usage;
       ++size;
       level_iter->Next();
@@ -1599,7 +1611,7 @@ int StorageManager::recycle_lob_extent(bool for_recovery)
 {
   int ret = Status::kOk;
   SnapshotImpl *oldest_snapshot = nullptr;
-  common::SequenceNumber min_seq = db::kMaxSequenceNumber; 
+  common::SequenceNumber min_seq = common::kMaxSequenceNumber; 
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -1618,7 +1630,7 @@ int StorageManager::recycle_lob_extent(bool for_recovery)
     if (SUCCED(ret)) {
       if (for_recovery) {
         //for recovery, recycle the deleted lob extent in time
-        min_seq = db::kMaxSequenceNumber;
+        min_seq = common::kMaxSequenceNumber;
       }
       if (FAILED(lob_extent_mgr_->recycle(min_seq, for_recovery))) {
         SE_LOG(WARN, "fail to recycle lob extent", K(ret));

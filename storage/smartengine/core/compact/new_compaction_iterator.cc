@@ -17,6 +17,7 @@
 #include "compact/new_compaction_iterator.h"
 #include "compact/task_type.h"
 #include "logger/log_module.h"
+#include "table/large_object.h"
 
 namespace smartengine
 {
@@ -234,13 +235,13 @@ int NewCompactionIterator::record_large_objects_info(
   UNUSED(large_key);
   int ret = Status::kOk;
   int64_t pos = 0;
-  LargeValue lob_value;
+  table::LargeValue lob_value;
   if (FAILED(lob_value.deserialize(large_value.data(), large_value.size(), pos))) {
     COMPACTION_LOG(WARN, "fail to deserialize large value", K(ret), "size", large_value.size(), K(pos));
   } else {
-    for (uint32_t i = 0; SUCCED(ret) && i < lob_value.oob_extents_.size(); ++i) {
-      if (FAILED(change_info_.delete_large_object_extent(lob_value.oob_extents_.at(i)))) {
-        COMPACTION_LOG(WARN, "fail to delete large object extent", K(ret), K(i), "extents_size", lob_value.oob_extents_.size(), "extent_id", lob_value.oob_extents_.at(i));
+    for (uint32_t i = 0; SUCCED(ret) && i < lob_value.extents_.size(); ++i) {
+      if (FAILED(change_info_.delete_large_object_extent(lob_value.extents_.at(i)))) {
+        COMPACTION_LOG(WARN, "fail to delete large object extent", K(ret), K(i), "extents_size", lob_value.extents_.size(), "extent_id", lob_value.extents_.at(i));
       }
     }
   }

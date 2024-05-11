@@ -86,7 +86,7 @@ void SSTableScanIteratorTest::generate_data(const DataGenParam &param)
   int64_t row_id = 0;
   bool flush_block = false;
   for (int64_t extent_id = 0; extent_id < param.extent_count_; extent_id++) {
-    open_extent_builder();
+    open_extent_writer();
     for (int64_t block_id = 0; block_id < param.extent_size_; block_id++) {
       //// build key-source map
       //for (int64_t i = 0; i < param.block_size_ - 1; i++) {

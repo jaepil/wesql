@@ -90,10 +90,11 @@ void Cleanable::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
 }
 }  // namespace common
 
+// TODO(Zhao Dongsheng): inappropriate code location.
 namespace db {
 common::SequenceNumber Iterator::key_seq() const
 {
-  return kMaxSequenceNumber;
+  return common::kMaxSequenceNumber;
 }
 }  // namespace db
 

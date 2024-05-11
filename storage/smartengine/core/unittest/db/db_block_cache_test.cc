@@ -33,14 +33,14 @@ class DBBlockCacheTest : public DBTestBase {
   //size_t hit_count_ = 0;
   //size_t insert_count_ = 0;
   //size_t failure_count_ = 0;
-  size_t compressed_miss_count_ = 0;
-  size_t compressed_hit_count_ = 0;
-  size_t compressed_insert_count_ = 0;
-  size_t compressed_failure_count_ = 0;
+  int64_t compressed_miss_count_ = 0;
+  int64_t compressed_hit_count_ = 0;
+  int64_t compressed_insert_count_ = 0;
+  int64_t compressed_failure_count_ = 0;
 
  public:
-  const size_t kNumBlocks = 10;
-  const size_t kValueSize = 100;
+  const int64_t kNumBlocks = 10;
+  const int64_t kValueSize = 100;
 
   DBBlockCacheTest()
       : DBTestBase("/db_block_cache_test"),
@@ -80,7 +80,7 @@ class DBBlockCacheTest : public DBTestBase {
 
   void InitTable(const Options& options) {
     std::string value(kValueSize, 'a');
-    for (size_t i = 0; i < kNumBlocks; i++) {
+    for (int64_t i = 0; i < kNumBlocks; i++) {
       ASSERT_OK(Put(ToString(i), value.c_str()));
     }
   }
@@ -106,14 +106,17 @@ class DBBlockCacheTest : public DBTestBase {
     data_insert_bytes_ = TestGetGlobalCount(CountPoint::BLOCK_CACHE_DATA_BYTES_INSERT);
   }
 
-  void CheckCacheCounters(const Options& options, size_t expected_misses,
-                          size_t expected_hits, size_t expected_inserts,
-                          size_t expected_failures) {
-    size_t new_miss_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_MISS);
-    size_t new_hit_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_HIT);
-    size_t new_insert_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD);
-    size_t new_failure_count =
-        TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD_FAILURES);
+  void CheckCacheCounters(const Options& options,
+                          int64_t expected_misses,
+                          int64_t expected_hits,
+                          int64_t expected_inserts,
+                          int64_t expected_failures)
+  {
+    int64_t new_miss_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_MISS);
+    int64_t new_hit_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_HIT);
+    int64_t new_insert_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD);
+    int64_t new_failure_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD_FAILURES);
+
     ASSERT_EQ(cache_miss_cnt_ + expected_misses, new_miss_count);
     ASSERT_EQ(cache_hit_cnt_ + expected_hits, new_hit_count);
     ASSERT_EQ(cache_add_cnt_ + expected_inserts, new_insert_count);
@@ -121,18 +124,17 @@ class DBBlockCacheTest : public DBTestBase {
   }
 
   void CheckCompressedCacheCounters(const Options& options,
-                                    size_t expected_misses,
-                                    size_t expected_hits,
-                                    size_t expected_inserts,
-                                    size_t expected_failures) {
-    size_t new_miss_count =
-        TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_MISS);
-    size_t new_hit_count =
-        TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_HIT);
-    size_t new_insert_count =
-        TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_ADD);
-    size_t new_failure_count =
-        TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_ADD_FAILURES);
+                                   int64_t expected_misses,
+                                   int64_t expected_hits,
+                                   int64_t expected_inserts,
+                                   int64_t expected_failures)
+  {
+    //int ret = Status::kOk;
+    int64_t new_miss_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_MISS);
+    int64_t new_hit_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_HIT);
+    int64_t new_insert_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_ADD);
+    int64_t new_failure_count = TestGetGlobalCount(CountPoint::BLOCK_CACHE_COMPRESSED_ADD_FAILURES);
+
     ASSERT_EQ(compressed_miss_count_ + expected_misses, new_miss_count);
     ASSERT_EQ(compressed_hit_count_ + expected_hits, new_hit_count);
     ASSERT_EQ(compressed_insert_count_ + expected_inserts, new_insert_count);
@@ -142,14 +144,7 @@ class DBBlockCacheTest : public DBTestBase {
     compressed_insert_count_ = new_insert_count;
     compressed_failure_count_ = new_failure_count;
   }
-//  void set_tmp_schema(int cf) {
-//    // set tmp schema
-//    ColumnFamilyData *cfd = get_column_family_data(cf);
-//    assert(cfd);
-//    SeSchema tmp_schema;
-//    tmp_schema.schema_version = 1;
-//    cfd->mem()->add_schema(tmp_schema);
-//  }
+
  public:
   int64_t index_add_cnt_;
   int64_t index_miss_cnt_;
@@ -168,7 +163,8 @@ class DBBlockCacheTest : public DBTestBase {
   int64_t data_insert_bytes_;
 };
 
-TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache) {
+TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache)
+{
   set_trace_count();
   ReadOptions read_options;
   auto table_options = GetTableOptions();
@@ -183,21 +179,19 @@ TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache) {
 
   std::vector<Iterator *> iterators(kNumBlocks - 1);
   Iterator* iter = nullptr;
-  // set tmp schema
-//  set_tmp_schema(0);
-  for (size_t i = 0; i < kNumBlocks; i++) {
+  for (int64_t i = 0; i < kNumBlocks; i++) {
     ASSERT_OK(Put(ToString(i), "value"));
   }
   ASSERT_OK(Flush(0));
   // Load blocks into cache.
   // flush to sst
   set_trace_count();
-  for (size_t i = 0; i < kNumBlocks - 1; i++) {
+  for (int64_t i = 0; i < kNumBlocks - 1; i++) {
     iter = db_->NewIterator(read_options, db_->DefaultColumnFamily());
+    iterators[i] = iter;
     iter->Seek(ToString(i));
     ASSERT_OK(iter->status());
     CheckCacheCounters(options, 1, 0, 1, 0);
-    iterators[i] = iter;
   }
 
   size_t usage = cache->GetUsage();
@@ -211,25 +205,22 @@ TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache) {
   iter->Seek(ToString(kNumBlocks - 1));
   ASSERT_TRUE(iter->status().IsIncomplete());
   CheckCacheCounters(options, 1, 0, 0, 1);
-//  delete iter;
-//  iter = nullptr;
   MOD_DELETE_OBJECT(Iterator, iter);
 
   // Release interators and access cache again.
-  for (size_t i = 0; i < kNumBlocks - 1; i++) {
-//    iterators[i] = nullptr;
+  for (int64_t i = 0; i < kNumBlocks - 1; i++) {
     MOD_DELETE_OBJECT(Iterator, iterators[i]);
     CheckCacheCounters(options, 0, 0, 0, 0);
   }
   ASSERT_EQ(0, cache->GetPinnedUsage());
-  for (size_t i = 0; i < kNumBlocks - 1; i++) {
+  for (int64_t i = 0; i < kNumBlocks - 1; i++) {
     iter = db_->NewIterator(read_options, db_->DefaultColumnFamily());
     iter->Seek(ToString(i));
     ASSERT_OK(iter->status());
     CheckCacheCounters(options, 0, 1, 0, 0);
     iterators[i] = iter;
   }
-  for (size_t i = 0; i < kNumBlocks - 1; i++) {
+  for (int64_t i = 0; i < kNumBlocks - 1; i++) {
     MOD_DELETE_OBJECT(Iterator, iterators[i]);
   }
 }
@@ -455,7 +446,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksCachePriority) {
     // Create a new table. two minitables
     ASSERT_OK(Put("foo", "value"));
     set_trace_count();
-//    set_tmp_schema(0);
     ASSERT_OK(Flush(0));
     dbfull()->TEST_WaitForFlushMemTable();
     ASSERT_OK(Put("bar", "value"));
@@ -465,14 +455,19 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksCachePriority) {
 
     // index/filter blocks added to block cache right after table creation.
     // builder.cc: new index
-    ASSERT_EQ(index_miss_cnt_ + 2, TestGetGlobalCount(CountPoint::BLOCK_CACHE_INDEX_MISS));
+    // The lifecycle of the index block remains consistent with the extent reader.
+    // There is currently no scenario where the index block is stored separately in
+    // the block cache.
+    ASSERT_EQ(index_miss_cnt_ + 0, TestGetGlobalCount(CountPoint::BLOCK_CACHE_INDEX_MISS));
    // ASSERT_EQ(1, TestGetGlobalCount(CountPoint::BLOCK_CACHE_FILTER_MISS));
     // two extents
     // when flush, two data blocks, two index blocks
     // after flush ,when prefetch, two index blocks(above index blocks is no used todo fixed)
-    ASSERT_EQ(cache_add_cnt_ + 6,
-              TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
-    ASSERT_EQ(cache_miss_cnt_ + 2, TestGetGlobalCount(CountPoint::BLOCK_CACHE_MISS));
+    // Now, index block is not added to the block cache anymore.Therefore, the four cache add
+    // for index block should be subtracted and the two cache miss for prefetch index block also
+    // should be subtracted.
+    ASSERT_EQ(cache_add_cnt_ + 2, TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
+    ASSERT_EQ(cache_miss_cnt_ + 0, TestGetGlobalCount(CountPoint::BLOCK_CACHE_MISS));
     if (priority == Cache::Priority::LOW) {
       // 1.data block
       // 2.properties block
@@ -481,29 +476,28 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksCachePriority) {
       // 5.index reader -> index blocks
       // 6.filter blocks
       ASSERT_EQ(0, MockCache::high_pri_insert_count);
-      ASSERT_EQ(6, MockCache::low_pri_insert_count);
+      ASSERT_EQ(2, MockCache::low_pri_insert_count);
     } else {
-      ASSERT_EQ(2, MockCache::high_pri_insert_count);
-      ASSERT_EQ(4, MockCache::low_pri_insert_count);
+      ASSERT_EQ(0, MockCache::high_pri_insert_count);
+      ASSERT_EQ(2, MockCache::low_pri_insert_count);
     }
 
     // Access data block.
     ASSERT_EQ("value", Get("foo"));
     ASSERT_EQ("value", Get("bar"));
 
-    ASSERT_EQ(index_miss_cnt_ + 2, TestGetGlobalCount(CountPoint::BLOCK_CACHE_INDEX_MISS));
+    ASSERT_EQ(index_miss_cnt_ + 0, TestGetGlobalCount(CountPoint::BLOCK_CACHE_INDEX_MISS));
     //ASSERT_EQ(1, TestGetGlobalCount(CountPoint::BLOCK_CACHE_FILTER_MISS));
-    ASSERT_EQ(cache_add_cnt_ + 6, /*adding data block*/
-              TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
+    ASSERT_EQ(cache_add_cnt_ + 2, /*adding data block*/ TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
     ASSERT_EQ(cache_data_miss_cnt_, TestGetGlobalCount(CountPoint::BLOCK_CACHE_DATA_MISS));
 
     // Data block should be inserted with low priority.
     if (priority == Cache::Priority::LOW) {
       ASSERT_EQ(0, MockCache::high_pri_insert_count);
-      ASSERT_EQ(6, MockCache::low_pri_insert_count);
+      ASSERT_EQ(2, MockCache::low_pri_insert_count);
     } else {
-      ASSERT_EQ(2, MockCache::high_pri_insert_count);
-      ASSERT_EQ(4, MockCache::low_pri_insert_count);
+      ASSERT_EQ(0, MockCache::high_pri_insert_count);
+      ASSERT_EQ(2, MockCache::low_pri_insert_count);
     }
   }
 }
@@ -528,7 +522,7 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   ASSERT_OK(Flush(1));
   dbfull()->TEST_WaitForFlushMemTable(get_column_family_handle(1));
 //  dbfull()->TEST_wait_for_filter_build();
-  ASSERT_EQ(cache_add_cnt_ + 2, /* read and cache data block */
+  ASSERT_EQ(cache_add_cnt_ + 1, /* read and cache data block */
             TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
 
   ASSERT_OK(Put(1, "1_key2", "val2"));
@@ -538,7 +532,7 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   ASSERT_OK(Flush(1));
   dbfull()->TEST_wait_for_filter_build();
   dbfull()->TEST_WaitForCompact();
-  ASSERT_EQ(cache_add_cnt_ + 4,
+  ASSERT_EQ(cache_add_cnt_ + 2,
             TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
 
   ASSERT_OK(Put(1, "1_key3", "val3"));
@@ -549,7 +543,7 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   ASSERT_OK(Flush(1));
   dbfull()->TEST_wait_for_filter_build();
   dbfull()->TEST_WaitForCompact();
-  ASSERT_EQ(cache_add_cnt_ + 8, /* Totally 3 files created up to now */
+  ASSERT_EQ(cache_add_cnt_ + 4, /* Totally 3 files created up to now */
             TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
 }
 

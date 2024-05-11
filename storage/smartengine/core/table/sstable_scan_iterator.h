@@ -69,7 +69,7 @@ struct IOReqMergeHandle
   int64_t end_handle_pos_;
 };
 
-// BlockPrefetchHelper will do table reader and index block prefetch and init next/prev index block iterator
+// TablePrefetchHelper will do table reader and index block prefetch and init next/prev index block iterator
 class TablePrefetchHelper
 {
 public:
@@ -100,7 +100,7 @@ public:
   int prefetch_next();
   // prefetch table reader and index block backward
   int prefetch_prev();
-  int init_index_block_iter(BlockIter &index_block_iter);
+  int init_index_block_iter(RowBlockIterator &index_block_reader);
   bool valid()
   {
     return valid_;
@@ -120,34 +120,38 @@ public:
     }
     extent_layer_iter_.set_end_key(end_key_slice, need_seek_end_key);
   }
-  // The table reader will be released only when all the data blocks of this table
+  // The extent reader will be released only when all the data blocks of this table
   // have been scanned. This func is used to get the table reader to new data
   // block iterator, and will return the cur table reader or the next table reader
   // (if need switch table reader) and release the previous table reader.
-  int get_table_reader(const storage::ExtentId &extent_id, ExtentBasedTable *&table_reader)
+  int get_extent_reader(const storage::ExtentId &extent_id, ExtentReader *&extent_reader)
   {
     int ret = common::Status::kOk;
-    table_reader = nullptr;
+    extent_reader = nullptr;
     if (!extent_id.is_equal(get_table_reader_handle(table_reader_cur_pos_).extent_id_)) {
       // release table handle
       get_table_reader_handle(table_reader_cur_pos_).reset();
       table_reader_cur_pos_++;
       if (UNLIKELY(!extent_id.is_equal(get_table_reader_handle(table_reader_cur_pos_).extent_id_))) {
         ret = common::Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected table reader", K(ret), K(extent_id), K(table_reader_cur_pos_),
+        SE_LOG(WARN, "unexpected extent reader", K(ret), K(extent_id), K(table_reader_cur_pos_),
             K(get_table_reader_handle(table_reader_cur_pos_).extent_id_));
       }
     }
+
     if (SUCCED(ret)) {
-      table_reader = get_table_reader_handle(table_reader_cur_pos_).reader();
+      extent_reader = get_table_reader_handle(table_reader_cur_pos_).extent_reader_;
     }
+
     return ret;
   }
-  // get the table reader to prefetch data blocks
-  ExtentBasedTable *index_table_reader()
+
+  // get the extent reader to prefetch data blocks
+  ExtentReader *index_extent_reader()
   {
-    return get_table_reader_handle(index_block_cur_pos_).reader();
+    return get_table_reader_handle(index_block_cur_pos_).extent_reader_;  
   }
+
   void reset()
   {
     valid_ = false;
@@ -161,7 +165,7 @@ private:
   int load_table_reader(const common::Slice &meta_handle, TableReaderHandle &table_reader_handle);
   // prefetch a table reader and the corresponding index block
   int do_prefetch_index_block();
-  void release_handle(BlockDataHandle<ExtentBasedTable::IndexReader> &index_handle)
+  void release_handle(BlockDataHandle<RowBlock> &index_handle)
   {
     index_handle.reset();
   }
@@ -183,7 +187,7 @@ private:
   {
     return table_reader_handles_[pos % TABLE_READER_HANDLE_CNT];
   }
-  BlockDataHandle<ExtentBasedTable::IndexReader> &get_index_handle(const int64_t pos)
+  BlockDataHandle<RowBlock> &get_index_handle(const int64_t pos)
   {
     return index_block_handles_[pos % TABLE_READER_HANDLE_CNT];
   }
@@ -201,7 +205,7 @@ private:
   int64_t table_reader_prefetch_pos_;
   // used as a fixed queue, index_block_cur_pos_ points the index block,
   // which is using to prefetch the data block
-  BlockDataHandle<ExtentBasedTable::IndexReader> index_block_handles_[TABLE_READER_HANDLE_CNT];
+  BlockDataHandle<RowBlock> index_block_handles_[TABLE_READER_HANDLE_CNT];
   int64_t index_block_cur_pos_;
   bool enable_prefetch_;
   bool valid_;
@@ -237,7 +241,7 @@ public:
   int prefetch_next();
   // prefetch data blocks backward
   int prefetch_prev();
-  int init_data_block_iter(BlockIter &data_block_iter);
+  int init_data_block_iter(RowBlockIterator &data_block_iter);
   bool valid()
   {
     return valid_;
@@ -253,16 +257,18 @@ public:
     }
     table_prefetch_helper_.set_end_key(end_key_slice, need_seek_end_key);
   }
-  // get the table reader to new data block iterator
-  int get_table_reader(const storage::ExtentId &extent_id, ExtentBasedTable *&table_reader)
+  // get the extent reader to new data block iterator
+  int get_extent_reader(const storage::ExtentId &extent_id, ExtentReader *&extent_reader)
   {
-    return table_prefetch_helper_.get_table_reader(extent_id, table_reader);
+    return table_prefetch_helper_.get_extent_reader(extent_id, extent_reader);
   }
-  // get the table reader to prefetch data blocks
-  ExtentBasedTable *index_table_reader()
+
+  // get the extent reader to prefetch data blocks
+  ExtentReader *index_extent_reader()
   {
-    return table_prefetch_helper_.index_table_reader();
+    return table_prefetch_helper_.index_extent_reader();
   }
+
   void reset()
   {
     valid_ = false;
@@ -279,9 +285,9 @@ public:
 
 private:
   int do_prefetch_data_block(const bool force_send_req);
-  int merge_io_request(const BlockDataHandle<Block> &handle, bool &need_send_req);
+  int merge_io_request(const BlockDataHandle<RowBlock> &handle, bool &need_send_req);
   int send_merged_io_request();
-  void release_handle(BlockDataHandle<Block> &handle)
+  void release_handle(BlockDataHandle<RowBlock> &handle)
   {
     if (pinned_iters_mgr_ && pinned_iters_mgr_->PinningEnabled()) {
       handle.reset(pinned_iters_mgr_);
@@ -311,7 +317,7 @@ private:
     }
     return prefetch_cnt;
   }
-  BlockDataHandle<Block> &get_block_handle(const int64_t pos)
+  BlockDataHandle<RowBlock> &get_block_handle(const int64_t pos)
   {
     return block_handles_[pos % DATA_BLOCK_HANDLE_CNT];
   }
@@ -320,15 +326,15 @@ private:
   static const int64_t DATA_BLOCK_HANDLE_CNT = 16;
   const ScanParam *scan_param_;
   TablePrefetchHelper table_prefetch_helper_;
-  BlockIter index_block_iter_;
+  RowBlockIterator index_block_iter_;
   // used as a fixed queue, data_block_prefetch_pos_ is the header
   // and data_block_prefetch_pos_ is the tail
-  BlockDataHandle<Block> block_handles_[DATA_BLOCK_HANDLE_CNT];
+  BlockDataHandle<RowBlock> block_handles_[DATA_BLOCK_HANDLE_CNT];
   int64_t data_block_prefetch_cnt_;
   int64_t data_block_prefetch_pos_;
   int64_t data_block_cur_pos_;
   // the count of blocks added into block cache
-  uint64_t add_blocks_;
+  int64_t add_blocks_;
   // merge io request
   IOReqMergeHandle io_merge_handle_;
   db::PinnedIteratorsManager* pinned_iters_mgr_;
@@ -413,7 +419,7 @@ private:
   ScanParam scan_param_;
   common::ReadOptions read_options_;
   BlockPrefetchHelper block_prefetch_helper_;
-  BlockIter data_block_iter_;
+  RowBlockIterator data_block_iter_;
   db::PinnedIteratorsManager* pinned_iters_mgr_;
   common::Status status_;
   bool first_time_prefetch_;

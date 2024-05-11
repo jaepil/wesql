@@ -163,26 +163,25 @@ IF (NOT "$ENV{WITH_SNAPPY}" STREQUAL "")
   ADD_DEFINITIONS(-DHAVE_SNAPPY)
 ENDIF()
 
-IF (NOT "$ENV{WITH_LZ4}" STREQUAL "")
-  SET(smartengine_static_libs ${smartengine_static_libs}
-  $ENV{WITH_LZ4}/lib/liblz4${PIC_EXT}.a)
+IF ((WITH_LZ4 STREQUAL "bundled") OR (WITH_LZ4 STREQUAL "system"))
+  SET(smartengine_static_libs ${smartengine_static_libs} ext::lz4)
   ADD_DEFINITIONS(-DHAVE_LZ4)
+ELSE()
+  MESSAGE(FATAL_ERROR "WITH_LZ4 must be bundled or system")
 ENDIF()
 
-# link ZSTD by default
-SET(WITH_ZSTD 1)
-IF (WITH_ZSTD)
-#  if (EXISTS ${CMAKE_SOURCE_DIR}/extra/zstd/lib/libzstd${PIC_EXT}.a)
-#    MESSAGE("Use existing zstd library ${CMAKE_SOURCE_DIR}/extra/zstd/lib/libzstd${PIC_EXT}.a")
-#  else()
-#    MESSAGE("compile bundled zstd library")
-#    EXECUTE_PROCESS(COMMAND tar zxvf zstd.tar.gz 
-#                    WORKING_DIRECTORY  ${CMAKE_SOURCE_DIR}/extra/)
-#    EXECUTE_PROCESS(COMMAND make -j
-#                    WORKING_DIRECTORY  ${CMAKE_SOURCE_DIR}/extra/zstd/lib)
-#  endif()
+IF ((WITH_ZSTD STREQUAL "bundled") OR (WITH_ZSTD STREQUAL "system"))
   SET(smartengine_static_libs ${smartengine_static_libs} ext::zstd)
   ADD_DEFINITIONS(-DHAVE_ZSTD)
+ELSE()
+  MESSAGE(FATAL_ERROR "WITH_ZSTD must be bundled or system")
+ENDIF()
+
+IF ((WITH_ZLIB STREQUAL "bundled") OR (WITH_ZLIB STREQUAL "system"))
+  SET(smartengine_static_libs ${smartengine_static_libs} ext::zlib)  
+  ADD_DEFINITIONS(-DHAVE_ZLIB)
+ELSE()
+  MESSAGE(FATAL_ERROR "WITH_ZLIB must be bundled or system")
 ENDIF()
 
 #SET(IS_LIB ${CMAKE_BINARY_DIR}/IS.build/libis_all.a)

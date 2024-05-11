@@ -24,7 +24,6 @@
 #include "storage/storage_common.h"
 #include "table/filter_block.h"
 #include "table/filter_policy.h"
-#include "table/format.h"
 #include "table/full_filter_block.h"
 #include "table/internal_iterator.h"
 #include "util/murmurhash.h"
@@ -221,13 +220,13 @@ int FilterManager::build_filter(const std::string &request_key,
   // been
   // recycled. So its data should be seen as corrupted and not to be loaded
   // again.
-  ret = table_cache_->find_table_reader(*icmp_,
-                                        max_element.extent_id_,
-                                        true /* no_io */,
-                                        true /* skip_filters */,
-                                        max_element.level_,
-                                        false /* prefetch_index_and_filter_in_cache */,
-                                        &table_handle);
+  ret = table_cache_->find_extent_reader(*icmp_,
+                                         max_element.extent_id_,
+                                         true /* no_io */,
+                                         true /* skip_filters */,
+                                         max_element.level_,
+                                         false /* prefetch_index_and_filter_in_cache */,
+                                         &table_handle);
   if (FAILED(ret)) {
     release_meta_snapshot(meta_snapshot);
     return ret;
@@ -235,14 +234,13 @@ int FilterManager::build_filter(const std::string &request_key,
 
   TEST_SYNC_POINT_CALLBACK("FilterManager::BuildFilter:Running", nullptr);
   // Iter the table and fill the filter builder.
-  TableReader *table_reader =
-      table_cache_->get_table_reader_from_handle(table_handle);
+  ExtentReader *extent_reader = table_cache_->get_extent_reader_from_handle(table_handle);
 
-  uint64_t num_entries = table_reader->GetTableProperties()->num_entries;
+  uint64_t row_count = extent_reader->get_row_count();
   std::unique_ptr<FilterBlockBuilder> filter_builder;
   ret = create_filter_builder(whole_key_filtering_,
                               filter_policy_.get(),
-                              num_entries,
+                              row_count,
                               filter_builder);
   if (ret != Status::kOk) {
     table_cache_->release_handle(table_handle);
@@ -252,8 +250,8 @@ int FilterManager::build_filter(const std::string &request_key,
   filter_builder->StartBlock(0);
   ReadOptions ro;
   ro.fill_cache = false;
-  std::unique_ptr<InternalIterator> iter(table_reader->NewIterator(
-      ro, nullptr /* arena */, true /* skip_filters */));
+  std::unique_ptr<InternalIterator> iter(extent_reader->NewIterator(
+      ro, nullptr /* arena */, true /* skip_filters */, 0 /*scan_add_blocks_limit*/));
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     // Could not ingore kTypeDeletion or kTypeSingleDeletion.
     // 'Get' needs the delete record to stop futher search.

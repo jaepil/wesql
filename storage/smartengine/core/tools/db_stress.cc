@@ -46,6 +46,7 @@ int main() {
 #include "monitoring/histogram.h"
 #include "port/port.h"
 #include "table/filter_policy.h"
+#include "table/table.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"

@@ -18,8 +18,8 @@
 
 #include "logger/log_module.h"
 #include "table/extent_table_factory.h"
+#include "table/extent_writer.h"
 #include "table/merging_iterator.h"
-#include "table/table_builder.h"
 
 namespace smartengine {
 using namespace table;
@@ -95,10 +95,10 @@ int SplitCompaction::split_extents(ExtSEIterator &iterator)
       if (FAILED(ret)) {
       } else if (FAILED(open_extent())) {
         COMPACTION_LOG(WARN, "open extent failed", K(ret));
-      } else if (nullptr == extent_builder_) {
+      } else if (IS_NULL(extent_writer_)) {
         ret = Status::kCorruption;
         COMPACTION_LOG(WARN, "extent builder is null", K(ret));
-      } else if (FAILED(extent_builder_->Add(iterator.get_key(), iterator.get_value()))) {
+      } else if (FAILED(extent_writer_->append_row(iterator.get_key(), iterator.get_value()))) {
         COMPACTION_LOG(WARN, "add kv failed", K(ret), K(iterator.get_key()));
       } else if (FAILED(iterator.next())) {
         COMPACTION_LOG(WARN, "failed to call next", K(ret));
@@ -152,29 +152,29 @@ int SplitCompaction::run()
 
 int SplitCompaction::close_split_extent(const int64_t level)
 {
-  int ret = 0;
-  if (!write_extent_opened_) {
-    return 0;
-  }
-  // just split one extent to two extents, not change other info
-  if (FAILED(extent_builder_->Finish())) {
-    COMPACTION_LOG(WARN, "write extent failed",
-                   K(extent_builder_->status().getState()));
-  } else {
-    stats_.record_stats_.merge_output_extents += mini_tables_.metas.size();
-    for (FileMetaData &meta : mini_tables_.metas) {
-      stats_.record_stats_.merge_output_records += meta.num_entries;
-      stats_.record_stats_.total_output_bytes += meta.data_size_;
-      COMPACTION_LOG(INFO, "[SPLIT]GENERATE new extent", K(meta));
+  int ret = Status::kOk;
+  std::vector<ExtentInfo> extent_infos;
+
+  if (write_extent_opened_) {
+    se_assert(nullptr != extent_writer_);
+    // just split one extent to two extents, not change other info
+    if (FAILED(extent_writer_->finish(&extent_infos))) {
+      COMPACTION_LOG(WARN, "write extent failed", K(ret));
+    } else {
+      stats_.record_stats_.merge_output_extents += extent_infos.size();
+      for (ExtentInfo &extent_info : extent_infos) {
+        stats_.record_stats_.merge_output_records += extent_info.row_count_;
+        stats_.record_stats_.total_output_bytes += extent_info.data_size_;
+        COMPACTION_LOG(INFO, "[SPLIT]GENERATE new extent", K(extent_info));
+      }
+      assert(1 == level);
     }
-    assert(1 == level);
-    //TODO: @yuanfeng ugly, level_ should been set to 1 in split task
-//    for (uint32_t i = 0; i < change_info_.add_extents_.size(); ++i) {
-//      change_info_.add_extents_.at(i).level_ = level;
-//    }
+
+    MOD_DELETE_OBJECT(ExtentWriter, extent_writer_);
+    write_extent_opened_ = false;
+    clear_current_writers();
   }
-  write_extent_opened_ = false;
-  clear_current_writers();
+
   return ret;
 }
 

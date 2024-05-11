@@ -14,10 +14,7 @@
 #include <stdint.h>
 #include <string>
 
-#include "table/extent_table_builder.h"
-#include "table/extent_table_reader.h"
 #include "table/filter_policy.h"
-#include "table/flush_block_policy.h"
 
 namespace smartengine {
 using namespace common;
@@ -30,10 +27,6 @@ namespace table {
 ExtentBasedTableFactory::ExtentBasedTableFactory(
     const BlockBasedTableOptions& _table_options)
     : table_options_(_table_options) {
-  if (table_options_.flush_block_policy_factory == nullptr) {
-    table_options_.flush_block_policy_factory.reset(
-        new FlushBlockBySizePolicyFactory());
-  }
   if (table_options_.no_block_cache) {
     table_options_.block_cache.reset();
   } else if (table_options_.block_cache == nullptr) {
@@ -50,55 +43,6 @@ ExtentBasedTableFactory::ExtentBasedTableFactory(
   if (table_options_.index_block_restart_interval < 1) {
     table_options_.index_block_restart_interval = 1;
   }
-}
-
-Status ExtentBasedTableFactory::NewTableReader(
-    const TableReaderOptions& table_reader_options,
-    storage::ReadableExtent *extent,
-    uint64_t file_size,
-    TableReader *&table_reader,
-    bool prefetch_index_and_filter_in_cache,
-    memory::SimpleAllocator *arena) const {
-  return ExtentBasedTable::Open(table_reader_options.ioptions,
-                                table_options_,
-                                table_reader_options.internal_comparator,
-                                extent,
-                                file_size,
-                                table_reader,
-                                table_reader_options.extent_id_,
-                                prefetch_index_and_filter_in_cache,
-                                table_reader_options.skip_filters,
-                                table_reader_options.level,
-                                arena);
-}
-
-TableBuilder* ExtentBasedTableFactory::NewTableBuilderExt(
-    const TableBuilderOptions& table_builder_options, uint32_t column_family_id,
-    MiniTables* mtables) const {
-  int ret = Status::kOk;
-  ExtentBasedTableBuilder *tmp_table_builder = nullptr;
-  ExtentBasedTableBuilder *table_builder = nullptr;
-
-  if (IS_NULL(tmp_table_builder = new ExtentBasedTableBuilder(
-          table_builder_options.ioptions, table_options_,
-          table_builder_options.internal_comparator,
-          column_family_id,
-          mtables, table_builder_options.compression_type,
-          table_builder_options.compression_opts,
-          table_builder_options.compression_dict,
-          table_builder_options.skip_filters,
-          table_builder_options.column_family_name,
-          table_builder_options.output_position_,
-          table_builder_options.is_flush))) {
-    ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for ExtentBasedTableBuilder", K(ret));
-  } else if (FAILED(tmp_table_builder->init())) {
-    SE_LOG(WARN, "fail to init table builder", K(ret));
-  } else {
-    table_builder = tmp_table_builder;
-  }
-
-  return table_builder;
 }
 
 //TODO(Zhao Dongsheng): This function is useless.
@@ -121,11 +65,7 @@ Status ExtentBasedTableFactory::SanitizeOptions(
         "Enable pin_l0_filter_and_index_blocks_in_cache, "
         ", but block cache is disabled");
   }
-  if (!BlockBasedTableSupportedVersion(table_options_.format_version)) {
-    return Status::InvalidArgument(
-        "Unsupported ExtentBasedTable format_version. Please check "
-        "include/smartengine/table.h for more info");
-  }
+
   return Status::OK();
 }
 
@@ -135,10 +75,6 @@ std::string ExtentBasedTableFactory::GetPrintableTableOptions() const {
   const int kBufferSize = 200;
   char buffer[kBufferSize];
 
-  snprintf(buffer, kBufferSize, "  flush_block_policy_factory: %s (%p)\n",
-           table_options_.flush_block_policy_factory->Name(),
-           static_cast<void*>(table_options_.flush_block_policy_factory.get()));
-  ret.append(buffer);
   snprintf(buffer, kBufferSize, "  cache_index_and_filter_blocks: %d\n",
            table_options_.cache_index_and_filter_blocks);
   ret.append(buffer);

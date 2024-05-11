@@ -116,5 +116,13 @@ DEFINE_MOD_TYPE(kParallelRead)
 DEFINE_MOD_TYPE(kShrinkJob)
 DEFINE_MOD_TYPE(kMetaDescriptor)
 DEFINE_MOD_TYPE(kReadableExtent)
+DEFINE_MOD_TYPE(kBlock)
+DEFINE_MOD_TYPE(kRowBlockWriter)
+DEFINE_MOD_TYPE(kIndexBlockWriter)
+DEFINE_MOD_TYPE(kExtentWriter)
+DEFINE_MOD_TYPE(kIndexBlockReader)
+DEFINE_MOD_TYPE(kExtentReader)
+DEFINE_MOD_TYPE(kCompressor)
+
 DEFINE_MOD_TYPE(kMaxMod)
 #endif

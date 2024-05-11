@@ -44,18 +44,6 @@ class ExtentBasedTableFactory : public TableFactory {
 
   const char* Name() const override { return "ExtentBasedTable"; }
 
-  common::Status NewTableReader(
-      const TableReaderOptions& table_reader_options,
-      storage::ReadableExtent *extent,
-      uint64_t file_size,
-      TableReader *&table_reader,
-      bool prefetch_index_and_filter_in_cache = true,
-      memory::SimpleAllocator *arena = nullptr) const override;
-
-  TableBuilder* NewTableBuilderExt(
-      const TableBuilderOptions& table_builder_options,
-      uint32_t column_family_id, db::MiniTables* mtables) const override;
-
   // Sanitizes the specified DB Options.
   common::Status SanitizeOptions(
       const common::DBOptions& db_opts,

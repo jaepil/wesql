@@ -102,6 +102,11 @@ public:
                            int32_t end_level,
                            const db::Snapshot *sn,
                            int64_t estimate_cost_depth);
+  int approximate_key_offet(const common::Slice &key,
+                            const db::ColumnFamilyData *cfd,
+                            const ExtentId &extent_id,
+                            const int32_t level,
+                            int64_t &offset);
 	void print_raw_meta();
   const db::SnapshotImpl *acquire_meta_snapshot();
   void release_meta_snapshot(const db::SnapshotImpl *meta_snapshot);
@@ -126,7 +131,7 @@ public:
   }
   int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
                            char *str_buf, int64_t str_buf_len, int64_t &str_pos);
-  int get_extent_infos(const int64_t index_id, ExtentIdInfoMap &extent_info_map);
+  int get_extent_positions(const int64_t index_id, ExtentPositionMap &extent_info_map);
   DECLARE_SERIALIZATION()
   DECLARE_TO_STRING()
 private:

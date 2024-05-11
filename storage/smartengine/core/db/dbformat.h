@@ -25,11 +25,13 @@ namespace storage
 struct ChangeInfo;
 }
 
-namespace util {
+namespace util
+{
 class Comparator;
 }
 
-namespace db {
+namespace db
+{
 
 class InternalKey;
 
@@ -73,41 +75,7 @@ inline bool IsValueOrLargeType(ValueType t) {
   return t == kTypeValue || t == kTypeValueLarge;
 }
 
-struct LargeValue {
-  static const int32_t COMPRESSION_FORMAT_VERSION = 2;
-  static const int32_t LATEST_VERSION = 0;
-  int32_t version_;  // version of this structure
-  int32_t compression_type_;
-  uint64_t size_;    // size of the zipped (if applied) value
-  util::autovector<storage::ExtentId> oob_extents_;
-
-  DECLARE_SERIALIZATION()
-};
-
-struct LargeObject {
-  std::string key_;
-  LargeValue value_;
-
-  DECLARE_SERIALIZATION()
-};
-
-// get large value from kv record
-// oob_uptr: points to the full content
-// oob_size: [in] buffer size in oob_uptr;
-//           [out] resize buffer size if necessary
-extern int get_oob_large_value(const common::Slice& value_in_kv,
-                               db::LargeValue& large_value,
-                               std::unique_ptr<char[], void(&)(void *)>& oob_uptr,
-                               int64_t &oob_size);
-
 static const int MAX_SNAP = 32;
-
-// We leave eight bits empty at the bottom so a type and sequence#
-// can be packed together into 64-bits.
-static const common::SequenceNumber kMaxSequenceNumber = ((0x1ull << 56) - 1);
-
-static const common::SequenceNumber kDisableGlobalSequenceNumber =
-    port::kMaxUint64;
 
 struct ParsedInternalKey {
   common::Slice user_key;
@@ -181,41 +149,6 @@ inline common::SequenceNumber ExtractKeySeq(const common::Slice& internal_key) {
   return sequence;
 }
 
-class BlockStats {
- public:
-  int32_t version_;
-  int64_t data_size_;
-  int64_t key_size_;
-  int64_t value_size_;
-  int64_t rows_;
-  int64_t actual_disk_size_;
-  int64_t entry_put_;
-  int64_t entry_deletes_;
-  int64_t entry_single_deletes_;
-  int64_t entry_merges_;
-  int64_t entry_others_;
-  common::SequenceNumber smallest_seqno_;
-  common::SequenceNumber largest_seqno_;
-  std::string first_key_;
-  std::vector<int64_t> distinct_keys_per_prefix_;
-
-  BlockStats();
-  int decode(const common::Slice& index_entry_slice);
-  static int decode(const common::Slice& index_entry_slice,
-                    common::Slice& first_key,
-                    int64_t &delete_percent);
-  std::string encode() const;
-  void reset();
-  bool equal(const BlockStats& block_stats) const;
-  int estimate_size() const;
-
-  DECLARE_SERIALIZATION()
-  DECLARE_TO_STRING()
-
- private:
-  static const int32_t LATEST_VERSION;
-};
-
 // A comparator for internal keys that uses a specified comparator for
 // the user key portion and breaks ties by decreasing sequence number.
 class InternalKeyComparator : public util::Comparator {
@@ -262,7 +195,7 @@ class InternalKey {
   // sets the internal key to be bigger or equal to all internal keys with this
   // user key
   void SetMaxPossibleForUserKey(const common::Slice& _user_key) {
-    AppendInternalKey(&rep_, ParsedInternalKey(_user_key, kMaxSequenceNumber,
+    AppendInternalKey(&rep_, ParsedInternalKey(_user_key, common::kMaxSequenceNumber,
                                                kValueTypeForSeek));
   }
 
@@ -676,7 +609,7 @@ struct FileMetaData {
         smallest(),
         largest(),
         being_compacted(false),
-        smallest_seqno(db::kMaxSequenceNumber),
+        smallest_seqno(common::kMaxSequenceNumber),
         largest_seqno(0),
         num_entries(0),
         num_deletions(0),

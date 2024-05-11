@@ -144,6 +144,13 @@ class InternalIterator : public common::Cleanable {
   }
 
 protected:
+  // If the end key push down is set, the end_ikey_ is set to upper
+  // boundary of range scan. And the end_ikey_ is not includes in the
+  // result.For example, if the range condition is "a > 1 and a < 10",
+  // the endkey_ is set to "10". If the range condition is "a > 1 and
+  // a <= 10", the end_ikey_ is set to "11"(11 may not exist actually).
+  // The detailed setup logic is located in ha_smartengine::index_read_map_impl::
+  // setup_scan_iterator.
   common::Slice end_ikey_;
   bool is_boundary_ = false;
   bool need_seek_end_key_ = false;

@@ -6,15 +6,16 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "table/get_context.h"
+#include "db/dbformat.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace common;
 using namespace util;
 using namespace db;
-using namespace monitor;
 
-namespace table {
-
+namespace table
+{
 GetContext::GetContext(const Comparator* ucmp,
                        GetState init_state,
                        const Slice& user_key,
@@ -47,7 +48,9 @@ void GetContext::MarkKeyMayExist() {
 
 void GetContext::SaveLargeValue(const Slice& value) {
   assert(state_ == kFound);
+  se_assert(IS_NOTNULL(pinnable_val_));
 
+  // TODO(Zhao Dongsheng) : Memory copying of large object can be optimized.
   if (LIKELY(pinnable_val_ != nullptr)) {
     pinnable_val_->Reset();
     pinnable_val_->PinSelf(value);

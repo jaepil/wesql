@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 #include "compact/mt_ext_compaction.h"
+#include "cache/row_cache.h"
 #include "compact/new_compaction_iterator.h"
-#include "table/extent_table_builder.h"
 
 namespace smartengine {
 namespace storage {
@@ -71,8 +71,7 @@ int MtExtCompaction::update_row_cache() {
       if (nullptr != mem_iter) {
         mem_iter->SeekToFirst();
         while(mem_iter->Valid() && SUCCED(ret)) {
-          if (FAILED(ExtentBasedTableBuilder::update_row_cache(
-              cf_desc_.column_family_id_, mem_iter->key(), mem_iter->value(), *context_.cf_options_))) {
+          if (FAILED(context_.cf_options_->row_cache->evict(cf_desc_.column_family_id_, mem_iter->key()))) {
             SE_LOG(WARN, "failed to update row cache", K(ret), K(mem_iter->key()), K(mem_iter->value()));
           } else {
             mem_iter->Next();
@@ -114,6 +113,8 @@ int MtExtCompaction::run() {
         COMPACTION_LOG(WARN, "failed to build mem merge iterator", K(ret));
       } else if (FAILED(merge_extents(merge_iterator, &flush_minitables_))) {
         COMPACTION_LOG(WARN, "merge extents failed", K(ret));
+      // TODO(Zhao Dongsheng): We need to iterate through each line of memtables again.
+      // If it affects compaction speed, there is room for optimization.
       } else if (FAILED(update_row_cache())) {
         COMPACTION_LOG(WARN, "failed to update row cache", K(ret));
       }

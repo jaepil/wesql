@@ -24,8 +24,6 @@
 #include "storage/extent_space_manager.h"
 #include "storage/storage_log_entry.h"
 #include "storage/storage_logger.h"
-#include "table/format.h"
-#include "table/table_reader.h"
 #include "memory/mod_info.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
@@ -155,14 +153,14 @@ VersionSet::VersionSet(const std::string& dbname,
 }
 
 void CloseTables(void* ptr, size_t) {
-  TableReader* table_reader = reinterpret_cast<TableReader*>(ptr);
-  table_reader->Close();
+  ExtentReader* extent_reader = reinterpret_cast<ExtentReader*>(ptr);
+  extent_reader->destroy();
 }
 
 VersionSet::~VersionSet() {
   // we need to delete column_family_set_ because its destructor depends on
-  // VersionSet
   if (is_inited_) {
+    //TODO(Zhao Dongsheng): It's not suitable to release extent reader cache at here.
     global_ctx_->cache_->ApplyToAllCacheEntries(&CloseTables, false);
     column_family_set_.reset();
   }

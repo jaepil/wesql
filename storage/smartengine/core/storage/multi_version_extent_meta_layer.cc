@@ -635,12 +635,12 @@ int ExtentLayerVersion::get_all_extent_ids(util::autovector<ExtentId> &extent_id
   return ret;
 }
 
-int ExtentLayerVersion::get_all_extent_infos(const int64_t index_id, ExtentIdInfoMap &extent_infos) const
+int ExtentLayerVersion::get_extent_positions(const int64_t index_id, ExtentPositionMap &extent_positions) const
 {
   int ret = Status::kOk;
   ExtentLayer *extent_layer = nullptr;
   ExtentMeta *extent_meta = nullptr;
-  ExtentInfo extent_info;
+  ExtentPosition extent_position;
   
 
   for (int64_t layer_index = 0; SUCCED(ret) && layer_index < extent_layer_arr_.size(); ++layer_index) {
@@ -653,10 +653,10 @@ int ExtentLayerVersion::get_all_extent_infos(const int64_t index_id, ExtentIdInf
           ret = Status::kErrorUnexpected;
           SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret));
         } else {
-          extent_info.set(index_id, LayerPosition(level_, layer_index), extent_meta->extent_id_);
-          if (!(extent_infos.emplace(extent_meta->extent_id_.id(), extent_info).second)) {
+          extent_position.set(index_id, LayerPosition(level_, layer_index), extent_meta->extent_id_);
+          if (!(extent_positions.emplace(extent_meta->extent_id_.id(), extent_position).second)) {
             ret = Status::kErrorUnexpected;
-            SE_LOG(WARN, "fail to push back extent info", K(ret), K(extent_info));
+            SE_LOG(WARN, "fail to push back extent info", K(ret), K(extent_position));
           }
         }
       }
@@ -669,10 +669,10 @@ int ExtentLayerVersion::get_all_extent_infos(const int64_t index_id, ExtentIdInf
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret));
       } else {
-        extent_info.set(index_id, LayerPosition(0, LayerPosition::INVISIBLE_LAYER_INDEX), extent_meta->extent_id_);
-        if (!(extent_infos.emplace(extent_meta->extent_id_.id(), extent_info).second)) {
+        extent_position.set(index_id, LayerPosition(0, LayerPosition::INVISIBLE_LAYER_INDEX), extent_meta->extent_id_);
+        if (!(extent_positions.emplace(extent_meta->extent_id_.id(), extent_position).second)) {
           ret = Status::kErrorUnexpected;
-          SE_LOG(WARN, "fail to push back extent info", K(ret), K(extent_info));
+          SE_LOG(WARN, "fail to push back extent info", K(ret), K(extent_position));
         }
       }
     }

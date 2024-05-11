@@ -11,6 +11,7 @@
 
 #include "db/db_test_util.h"
 #include "table/filter_policy.h"
+#include "table/table.h"
 
 namespace smartengine {
 using namespace util;

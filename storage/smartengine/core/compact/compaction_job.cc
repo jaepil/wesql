@@ -311,8 +311,8 @@ int CompactionJob::pick_extents(
       --pick_extents_cnt;
     }
     if (0 == cmp_val || pick_extents_cnt < extents_cnt_limit) {
-      extents_usage.push_back(meta->data_size_+meta->index_size_);
-      total_usage += meta->data_size_ + meta->index_size_;
+      extents_usage.push_back(meta->data_size_+meta->index_block_handle_.size_);
+      total_usage += meta->data_size_ + meta->index_block_handle_.size_;
       last_userkey = md.get_end_user_key().deep_copy(arena_);
       ++cur_extents_cnt;
       ++pick_extents_cnt;
@@ -539,7 +539,7 @@ int CompactionJob::prepare() {
     }
 
     if (Status::kOk == ret &&
-        FAILED(build_multiple_compaction(arena_, iterators, all_way_size, db::kMaxSequenceNumber))) {
+        FAILED(build_multiple_compaction(arena_, iterators, all_way_size, common::kMaxSequenceNumber))) {
       COMPACTION_LOG(WARN, "build compaction failed.", K(way_size), K(wide_range), K(ret));
     }
   }
@@ -561,7 +561,7 @@ int CompactionJob::run() {
   int ret = Status::kOk;
   for (Compaction *compaction : compaction_tasks_) {
     ret = compaction->run();
-    if (ret) {
+    if (FAILED(ret)) {
       COMPACTION_LOG(ERROR, "run compaction failed, cleanup compact data.", K(ret));
       compaction->cleanup();
       break;

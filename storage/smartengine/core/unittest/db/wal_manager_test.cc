@@ -14,7 +14,6 @@
 #include "db/wal_manager.h"
 #include "env/mock_env.h"
 #include "storage/storage_logger.h"
-#include "table/mock_table.h"
 #include "util/concurrent_direct_file_writer.h"
 #include "util/file_reader_writer.h"
 #include "util/string_util.h"

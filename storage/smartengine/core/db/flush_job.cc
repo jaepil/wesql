@@ -10,7 +10,6 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/flush_job.h"
-#include "table/table_reader.h"
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -33,18 +32,20 @@
 #include "storage/multi_version_extent_meta_layer.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_logger.h"
+#include "table/extent_table_factory.h"
 #include "table/merging_iterator.h"
-#include "table/table_builder.h"
+#include "table/extent_writer.h"
 #include "util/filename.h"
 #include "util/sync_point.h"
 
 namespace smartengine {
-using namespace util;
+using namespace cache;
 using namespace common;
-using namespace monitor;
-using namespace table;
-using namespace storage;
 using namespace memory;
+using namespace monitor;
+using namespace storage;
+using namespace table;
+using namespace util;
 
 namespace db {
 
@@ -154,26 +155,32 @@ int BaseFlush::flush_data(const LayerPosition &output_layer_position,
   int ret = Status::kOk;
   InternalIterator *memtable_merge_iterator = nullptr;
   FlushIterator flush_iterator;
-  TableBuilder *table_builder = nullptr;
-  TableBuilderOptions builder_options(*cfd_->ioptions(),
-                                      cfd_->internal_comparator(),
-                                      output_compression_,
-                                      cfd_->ioptions()->compression_opts,
-                                      nullptr /**compression_dict*/,
-                                      false /**skip_filter*/,
-                                      cfd_->GetName(),
-                                      output_layer_position,
-                                      is_flush);
+  ExtentWriter *extent_writer = nullptr;
   /**TODO(Zhao Dongsheng): The table space id pass by MiniTables is unsuitable.*/
   mini_tables.table_space_id_ = cfd_->get_table_space_id();
+  /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
+  ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
+      cfd_->ioptions()->table_factory);
+  ExtentWriterArgs writer_args(cfd_->GetID(),
+                               cfd_->get_table_space_id(),
+                               tmp_factory->table_options().block_size,
+                               tmp_factory->table_options().block_restart_interval,
+                               cfd_->ioptions()->env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                               &cfd_->internal_comparator(),
+                               output_layer_position,
+                               tmp_factory->table_options().block_cache.get(),
+                               cfd_->ioptions()->row_cache.get(),
+                               output_compression_,
+                               mini_tables.change_info_);
 
   if (!output_layer_position.is_valid()) {
     ret = Status::kInvalidArgument;
     FLUSH_LOG(WARN, "invalid argument", K(ret), K(output_layer_position), K(is_flush));
-  } else if (IS_NULL(table_builder = cfd_->ioptions()->table_factory->NewTableBuilderExt(
-      builder_options, cfd_->GetID(), &mini_tables))) {
+  } else if (IS_NULL(extent_writer = MOD_NEW_OBJECT(ModId::kExtentWriter, ExtentWriter))) {
     ret = Status::kMemoryLimit;
     FLUSH_LOG(WARN, "fail to construct table builder", K(ret));
+  } else if (FAILED(extent_writer->init(writer_args))) {
+    SE_LOG(WARN, "fail to init extent writer", K(ret));
   } else if (FAILED(build_memtable_merge_iterator(memtable_merge_iterator))) {
     FLUSH_LOG(WARN, "fail to build memtable merge iterator", K(ret));
   } else if (FAILED(flush_iterator.init(memtable_merge_iterator,
@@ -185,7 +192,9 @@ int BaseFlush::flush_data(const LayerPosition &output_layer_position,
   } else {
     flush_iterator.SeekToFirst();
     while (SUCCED(ret) && flush_iterator.Valid()) {
-      if (FAILED(table_builder->Add(flush_iterator.key(), flush_iterator.value()))) {
+      //TODO(Zhao Dongsheng): All flushed data should migrate to block cache.
+      extent_writer->set_migrate_flag();
+      if (FAILED(extent_writer->append_row(flush_iterator.key(), flush_iterator.value()))) {
         FLUSH_LOG(WARN, "fail to append kv", K(ret));
       } else {
         flush_iterator.Next();
@@ -193,9 +202,9 @@ int BaseFlush::flush_data(const LayerPosition &output_layer_position,
       }
     }
 
-    if (FAILED(ret) || (0 == table_builder->NumEntries())) {
-      table_builder->Abandon();
-    } else if (FAILED(table_builder->Finish())) {
+    if (FAILED(ret) || extent_writer->is_empty()) {
+      extent_writer->rollback();
+    } else if (FAILED(extent_writer->finish(nullptr /*extent_infos*/))) {
       FLUSH_LOG(WARN, "fail to finish table builder", K(ret));
     } else {
       //TODO(Zhao Dongsheng): fsync the directory is needless?
@@ -206,8 +215,8 @@ int BaseFlush::flush_data(const LayerPosition &output_layer_position,
   }
 
   //TODO(Zhao Dongsheng): Add destroy function for TableBuilder
-  if (nullptr != table_builder) {
-    delete table_builder;
+  if (IS_NOTNULL(extent_writer)) {
+    MOD_DELETE_OBJECT(ExtentWriter, extent_writer);
   }
 
   return ret;
@@ -391,6 +400,7 @@ int BaseFlush::delete_old_M0(const InternalKeyComparator *internal_comparator, M
   return ret;
 }
 
+// TODO(Zhao Dongsheng) : The function fill_table_cache is useless now.
 int BaseFlush::fill_table_cache(const MiniTables &mtables) {
   int ret = 0;
   // Verify that the table is usable
@@ -407,28 +417,28 @@ int BaseFlush::fill_table_cache(const MiniTables &mtables) {
     FLUSH_LOG(WARN, "invalid ptr", K(ret), KP(db_options_.env), KP(env_options_), K(cfd_->GetID()));
     return ret;
   }
-  for (size_t i = 0; i < mtables.metas.size() && SUCCED(ret); i++) {
-    const FileMetaData* meta = &mtables.metas[i];
-    TableReader *table_reader = nullptr;
-    std::unique_ptr<InternalIterator, memory::ptr_destruct_delete<InternalIterator>> it(
-        cfd_->table_cache()->create_iterator(ReadOptions(),
-                                             cfd_->internal_comparator(),
-                                             job_context_.output_level_ /*level*/,
-                                             meta->extent_id_,
-                                             table_reader));
-    if (FAILED(it->status().code())) {
-      FLUSH_LOG(WARN, "iterator occur error", K(ret), K(i));
-    //TODO(Zhao Dongsheng): Depreatd parameter paranoid_file_checks's value
-    //is false. Remove paranoid_file_checks and move this check logic to
-    //appropriate place in the future.
-    } else if (false) {
-      for (it->SeekToFirst(); it->Valid(); it->Next()) {
-      }
-      if (FAILED(it->status().code())) {
-        FLUSH_LOG(WARN, "iterator is invalid", K(ret));
-      }
-    }
-  }
+  //for (size_t i = 0; i < mtables.metas.size() && SUCCED(ret); i++) {
+  //  const FileMetaData* meta = &mtables.metas[i];
+  //  ExtentReader *extent_reader = nullptr;
+  //  std::unique_ptr<InternalIterator, memory::ptr_destruct_delete<InternalIterator>> it(
+  //      cfd_->table_cache()->create_iterator(ReadOptions(),
+  //                                           cfd_->internal_comparator(),
+  //                                           job_context_.output_level_ /*level*/,
+  //                                           meta->extent_id_,
+  //                                           extent_reader));
+  //  if (FAILED(it->status().code())) {
+  //    FLUSH_LOG(WARN, "iterator occur error", K(ret), K(i));
+  //  //TODO(Zhao Dongsheng): Depreatd parameter paranoid_file_checks's value
+  //  //is false. Remove paranoid_file_checks and move this check logic to
+  //  //appropriate place in the future.
+  //  } else if (false) {
+  //    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+  //    }
+  //    if (FAILED(it->status().code())) {
+  //      FLUSH_LOG(WARN, "iterator is invalid", K(ret));
+  //    }
+  //  }
+  //}
   return ret;
 }
 

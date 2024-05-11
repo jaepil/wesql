@@ -13,6 +13,7 @@
 #include "memory/base_malloc.h"
 #include "options/options.h"
 #include "table/filter_block.h"
+#include "table/row_block.h"
 
 namespace smartengine {
 namespace table {

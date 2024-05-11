@@ -242,7 +242,7 @@ struct BlockContents {
         compression_type(_compression_type),
         allocation(std::move(_data)) {}
 
-  BlockContents(BlockContents&& other) ROCKSDB_NOEXCEPT {
+  BlockContents(BlockContents&& other) noexcept {
     *this = std::move(other);
   }
 

@@ -8,18 +8,27 @@
 #pragma once
 #include <string>
 #include "env/env.h"
-#include "table/block.h"
+#include "util/types.h"
+//#include "table/block.h"
 
-namespace smartengine {
-namespace db {
+namespace smartengine
+{
+namespace db
+{
+struct ParsedInternalKey;
 class PinnedIteratorsManager;
-}
-
-namespace table {
-
-class GetContext {
+} // namespace db
+namespace util
+{
+class Comparator;
+} // namespace util
+namespace table
+{
+class GetContext
+{
  public:
-  enum GetState {
+  enum GetState
+  {
     kNotFound,
     kFound,
     kDeleted,

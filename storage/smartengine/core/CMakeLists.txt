@@ -299,35 +299,53 @@ add_definitions(-DGFLAGS=gflags)
 
 # import ADD_CONVENIENCE_LIBRARY from MySQL cmake util module
 INCLUDE(${CMAKE_SOURCE_DIR}/../../../cmake/libutils.cmake)
-# import zlib related macroes
-INCLUDE(zlib)
-# import zstd related macroes
-INCLUDE(zstd)
 # import objstore related macroes
 INCLUDE(aws_sdk_cpp)
 
-# Add bundled or system zlib.
-MYSQL_CHECK_ZLIB_WITH_COMPRESS()
-IF(BUILD_BUNDLED_ZLIB)
-  SET(ZLIB_HOME ${CMAKE_SOURCE_DIR}/../../../extra/zlib/zlib-1.2.13/)
-  INCLUDE_DIRECTORIES(${ZLIB_HOME})
-  BUILD_MYSQL_BUNDLED_ZLIB(${ZLIB_HOME} ${CMAKE_BINARY_DIR}/third-party/zlib)
-  SET(ZLIB_LIBRARY ${CMAKE_BINARY_DIR}/archive_output_directory/libz.a)
-ENDIF()
-add_definitions(-DZLIB)
-list(APPEND THIRDPARTY_LIBS ${ZLIB_LIBRARY})
+IF(NOT WITH_SMARTENGINE)
+  # import lz4 related macroes
+  INCLUDE(cmake/lz4.cmake)
+  MYSQL_CHECK_LZ4()
+  IF (WITH_LZ4 STREQUAL "bundled")
+    SET(LZ4_HOME ${CMAKE_SOURCE_DIR}/../../../extra/lz4/lz4-1.9.4/lib)
+    INCLUDE_DIRECTORIES(BEFORE SYSTEM ${LZ4_HOME})
+    BUILD_MYSQL_BUNDLED_LZ4(${LZ4_HOME} ${CMAKE_BINARY_DIR}/third-party/lz4)
+    SET(LZ4_LIBRARY ${CMAKE_BINARY_DIR}/archive_output_directory/liblz4.a)
+    ADD_DEFINITIONS(-DHAVE_LZ4)
+    list(APPEND THIRDPARTY_LIBS ${LZ4_LIBRARY})
+  ELSE()
+    MESSAGE(FATAL_ERROR "WITH_LZ4 must be bundled now")
+  ENDIF() 
 
-# Add bundled or system zstd.
-MYSQL_CHECK_ZSTD()
-IF(BUILD_BUNDLED_ZSTD)
-  SET(ZSTD_HOME ${CMAKE_SOURCE_DIR}/../../../extra/zstd/zstd-1.5.5)
-  #  INCLUDE_DIRECTORIES(${ZSTD_HOME}/lib)
-  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/../../../include ${ZSTD_HOME}/lib)
-  BUILD_MYSQL_BUNDLED_ZSTD(${ZSTD_HOME} ${CMAKE_BINARY_DIR}/third-party/zstd)
-  SET(ZSTD_LIBRARY ${CMAKE_BINARY_DIR}/archive_output_directory/libzstd.a)
+  # import zlib related macroes
+  INCLUDE(cmake/zlib.cmake)
+  MYSQL_CHECK_ZLIB_WITH_COMPRESS()
+  IF(BUILD_BUNDLED_ZLIB)
+    SET(ZLIB_HOME ${CMAKE_SOURCE_DIR}/../../../extra/zlib/zlib-1.2.13/)
+    INCLUDE_DIRECTORIES(${ZLIB_HOME})
+    BUILD_MYSQL_BUNDLED_ZLIB(${ZLIB_HOME} ${CMAKE_BINARY_DIR}/third-party/zlib)
+    SET(ZLIB_LIBRARY ${CMAKE_BINARY_DIR}/archive_output_directory/libz.a)
+    ADD_DEFINITIONS(-DHAVE_ZLIB) 
+    list(APPEND THIRDPARTY_LIBS ${ZLIB_LIBRARY}) 
+  ELSE()
+    MESSAGE(FATAL_ERROR "WITH_ZLIB must be bundled now")
+  ENDIF()
+
+  # import zstd related macroes
+  INCLUDE(cmake/zstd.cmake)
+  ENABLE_LANGUAGE(ASM)
+  MYSQL_CHECK_ZSTD()
+  IF (BUILD_BUNDLED_ZSTD)
+    SET(ZSTD_HOME ${CMAKE_SOURCE_DIR}/../../../extra/zstd/zstd-1.5.5) 
+    INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/../../../include ${ZSTD_HOME}/lib)
+    BUILD_MYSQL_BUNDLED_ZSTD(${ZSTD_HOME} ${CMAKE_BINARY_DIR}/third-party/zstd)
+    SET(ZSTD_LIBRARY ${CMAKE_BINARY_DIR}/archive_output_directory/libzstd.a) 
+    ADD_DEFINITIONS(-DHAVE_ZSTD)
+    list(APPEND THIRDPARTY_LIBS ${ZSTD_LIBRARY})
+  ELSE()
+    MESSAGE(FATAL_ERROR "WITH_ZSTD must be bundled now")
+  ENDIF()
 ENDIF()
-ADD_DEFINITIONS(-DZSTD)
-list(APPEND THIRDPARTY_LIBS ${ZSTD_LIBRARY})
 
 MYSQL_CHECK_OBJSTORE()
 MYSQL_BUILD_OBJSTORE()
@@ -358,6 +376,7 @@ ENDIF()
 
 set(SOURCES
         backup/hotbackup_impl.cc
+        cache/cache_entry.cc
         cache/clock_cache.cc
         cache/lru_cache.cc
         cache/sharded_cache.cc
@@ -427,7 +446,6 @@ set(SOURCES
         storage/io_extent.cc
         storage/large_object_extent_manager.cc
         storage/multi_version_extent_meta_layer.cc
-        #storage/shrink_extent_spaces.cc
         storage/shrink_job.cc
         storage/storage_common.cc
         storage/storage_log_entry.cc
@@ -435,22 +453,24 @@ set(SOURCES
         storage/storage_meta_struct.cc
         storage/storage_logger.cc
         storage/table_space.cc
-        table/block.cc
-        table/extent_table_builder.cc
+        table/block_struct.cc
+        table/extent_reader.cc
+        table/extent_struct.cc
         table/extent_table_factory.cc
-        table/extent_table_reader.cc
-        table/block_builder.cc
+        table/extent_writer.cc
         table/bloom_block.cc
-        table/flush_block_policy.cc
-        table/format.cc
         table/full_filter_block.cc
         table/filter_manager.cc
         table/get_context.cc
-        table/index_builder.cc
+        table/index_block_reader.cc
+        table/index_block_writer.cc
         table/iterator.cc
+        table/large_object.cc
         table/merging_iterator.cc
-        table/meta_blocks.cc
         table/parallel_read.cc
+        table/row_block.cc
+        table/row_block_iterator.cc
+        table/row_block_writer.cc
         table/sst_file_writer.cc
         table/table_properties.cc
         table/two_level_iterator.cc
@@ -462,10 +482,15 @@ set(SOURCES
         tools/sst_dump_tool.cc
         util/aio_wrapper.cc
         util/arena.cc
-        #util/auto_roll_logger.cc
         util/bloom.cc
         util/coding.cc
         util/comparator.cc
+        util/compress/compressor.cc
+        util/compress/compressor_factory.cc
+        util/compress/compressor_helper.cc
+        util/compress/lz4_compressor.cc
+        util/compress/zlib_compressor.cc
+        util/compress/zstd_compressor.cc
         util/concurrent_arena.cc
         util/crc32c.cc
         util/dio_helper.cc
@@ -491,10 +516,7 @@ set(SOURCES
         util/xxhash.cc
         util/to_string.cc
         util/misc_utility.cc
-        #util/print_util.cc
         util/memory_stat.cc
-        #util/alloc_mgr.cc
-        #util/mod_info.cc
         compact/compaction.cc
         compact/compaction_job.cc
         compact/compaction_iterator.cc
@@ -621,6 +643,7 @@ set(TESTS
         unittest/table/merger_test.cc
         #unittest/table/extent_table_test.cc
         unittest/table/in_mem_extent_table_test.cc
+        unittest/table/large_object_test.cc
         unittest/table/sstable_scan_iterator_test.cc
         unittest/tools/ldb_cmd_test.cc
         #unittest/tools/reduce_levels_test.cc
@@ -633,6 +656,7 @@ set(TESTS
         unittest/util/bloom_test.cc
         unittest/util/aio_test.cc
         unittest/util/coding_test.cc
+        unittest/util/compress/compressor_test.cc
         unittest/util/crc32c_test.cc
         unittest/util/defer_test.cc
         unittest/util/dio_helper_test.cc
@@ -644,6 +668,7 @@ set(TESTS
         unittest/util/heap_test.cc
         unittest/util/rate_limiter_test.cc
         unittest/util/ring_buffer_test.cc
+        unittest/util/slice_test.cc
         unittest/util/thread_list_test.cc
         unittest/util/thread_local_test.cc
         unittest/util/concurrent_direct_file_writer_test.cc
@@ -740,7 +765,6 @@ endforeach(sourcefile ${BENCHMARKS})
 set(TESTUTIL_SOURCE
     env/mock_env.cc
     monitoring/thread_status_updater_debug.cc
-    table/mock_table.cc
     unittest/db/db_test_util.cc
     unittest/util/fault_injection_test_env.cc
 )

@@ -9,7 +9,6 @@
 #include <thread>
 
 #include "db/db_impl.h"
-#include "table/mock_table.h"
 #include "util/fault_injection_test_env.h"
 #include "util/logging.h"
 #include "util/random.h"

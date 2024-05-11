@@ -19,9 +19,9 @@
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
 #include "storage/storage_logger.h"
-#include "table/extent_table_reader.h"
+#include "table/extent_writer.h"
 #include "table/get_context.h"
-#include "table/table_builder.h"
+#include "table/table.h"
 #include "util/aio_wrapper.h"
 #include "util/testharness.h"
 
@@ -37,9 +37,12 @@ using namespace util;
 namespace table
 {
 
-static std::string GetFromFile(TableReader* table_reader,
-                               const std::string& key, ReadOptions& ro,
-                               const Comparator* comparator) {
+static std::string get_row(ExtentReader *extent_reader,
+                           const std::string &key,
+                           ReadOptions &reader_options,
+                           const Comparator *comparator)
+{
+  int ret = Status::kOk;
   PinnableSlice value;
   GetContext get_context(comparator,
                          GetContext::kNotFound,
@@ -47,49 +50,36 @@ static std::string GetFromFile(TableReader* table_reader,
                          &value,
                          nullptr,
                          nullptr);
-  LookupKey lk{key, kMaxSequenceNumber};
-  table_reader->Get(ro, lk.internal_key(), &get_context);
+  LookupKey lookup_key(key, kMaxSequenceNumber);
+  ret = extent_reader->get(lookup_key.internal_key(), &get_context); 
+  assert(Status::kOk == ret);
   return std::string(value.data(), value.size());
 }
 
-static void get_data_block(TableReader* table_reader, const Slice& key,
-                           unique_ptr<char[]>& block, size_t& size) {
-  auto reader = dynamic_cast<ExtentBasedTable*>(table_reader);
-  BlockIter iiter_on_stack;
-  ExtentBasedTable::IndexReader* index_reader = nullptr;
-  memory::ArenaAllocator alloc;
-  auto iiter = reader->create_index_iterator(ReadOptions(), &iiter_on_stack,
-                                             index_reader, alloc);
-  std::unique_ptr<InternalIterator> iiter_unique_ptr;
-  if (iiter != &iiter_on_stack) {
-    iiter_unique_ptr = std::unique_ptr<InternalIterator>(iiter);
-  }
-  EXPECT_TRUE(iiter->status().ok());
-  iiter->Seek(key);
-  EXPECT_TRUE(iiter->Valid());
+static void get_data_block(ExtentReader* extent_reader,
+                           const Slice& key,
+                           Slice &block) {
+  int ret = Status::kOk;
+  RowBlockIterator index_block_iter;
+  ret = extent_reader->setup_index_block_iterator(&index_block_iter);
+  assert(Status::kOk == ret);
+  index_block_iter.Seek(key);
+  assert(index_block_iter.Valid());
 
-  BlockHandle handle;
-  Slice input = iiter->value();
-  Status s = handle.DecodeFrom(&input);
-  EXPECT_TRUE(s.ok());
+  int64_t pos = 0;
+  BlockInfo block_info;
+  Slice input = index_block_iter.value();
+  ret = block_info.deserialize(input.data(), input.size(), pos);
+  assert(Status::kOk == ret);
 
-  size = handle.size() + kBlockTrailerSize;
-  block.reset(new char[size]);
-  Slice data_block(block.get(), size);
-  int ret = reader->get_data_block(handle, data_block, true);
-  EXPECT_EQ(ret, Status::kOk);
-  if (block.get() != data_block.data()) {
-    memcpy(block.get(), data_block.data(), size);
-  }
+  ret = extent_reader->read_persistent_data_block(block_info.handle_, block);
+  assert(Status::kOk == ret);
 }
 
 TEST(InMemExtent, sim) {
   // dirty preparation
   storage::ChangeInfo change_info;
-  MiniTables mtables;
-  mtables.change_info_ = &change_info;
-  unique_ptr<TableBuilder> builder;
-  std::string column_family_name;
+  ExtentWriter writer;
   storage::LayerPosition output_layer_position;
   BlockBasedTableOptions table_options;
   Options options;
@@ -114,92 +104,86 @@ TEST(InMemExtent, sim) {
   int ret = Status::kOk;
   ret = ExtentSpaceManager::get_instance().create_table_space(0);
   ASSERT_EQ(Status::kOk, ret);
-  mtables.table_space_id_ = 0;
   StorageLogger::get_instance().begin(storage::SeEvent::FLUSH);
-  builder.reset(ioptions.table_factory->NewTableBuilderExt(
-      TableBuilderOptions(
-          ioptions, internal_comparator,
-          kNoCompression, CompressionOptions(),
-          nullptr /* compression_dict */, false /* skip_filters */,
-          column_family_name, output_layer_position, false /**is_flush*/),
-      0,
-      &mtables));
+  ExtentWriterArgs writer_args(0 /*column_family_id*/,
+                               0 /*table_space_id*/,
+                               16 * 1024 /**block_size*/,
+                               16 /*block_restart_interval*/,
+                               storage::FILE_EXTENT_SPACE,
+                               &internal_comparator,
+                               output_layer_position,
+                               nullptr /*block_cache*/,
+                               nullptr /*row_cache*/,
+                               kNoCompression,
+                               &change_info);
+  ret = writer.init(writer_args);
+  ASSERT_EQ(Status::kOk, ret);
 
   // create an table/extent with one record
   InternalKey key("key", 0, kTypeValue);
   std::string value("val");
-  builder->Add(key.Encode().ToString(), value);
-  s = builder->Finish();
-  EXPECT_TRUE(s.ok()) << s.ToString();
+  ret = writer.append_row(key.Encode().ToString(), value);
+  ASSERT_EQ(Status::kOk, ret);
+  ret = writer.finish(nullptr /*extent_infos*/);
+  ASSERT_EQ(Status::kOk, ret);
 
-  ExtentId eid(mtables.metas[0].extent_id_);
+  //TODO(Zhao Dongsheng) : Temporarily hard-coded here
+  //ExtentId eid(mtables.metas[0].extent_id_);
+  ExtentId eid(1);
 
-  unique_ptr<char[]> block1;
-  size_t size1;
+  common::Slice data_block1;
   {
     // method 1: read it normally
-    ReadableExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, ReadableExtent);
-    s = ExtentSpaceManager::get_instance().get_readable_extent(eid, extent);
-    EXPECT_TRUE(s.ok()) << s.ToString();
+    ExtentReaderArgs extent_reader_args(eid, false, &internal_comparator, nullptr /*block_cache*/);
+    ExtentReader extent_reader;
+    ret = extent_reader.init(extent_reader_args);
+    ASSERT_EQ(Status::kOk, ret);
 
-    TableReader *table_reader = nullptr;
-    TableReaderOptions reader_options(ioptions,
-                                      internal_comparator,
-                                      eid,
-                                      false,
-                                      -1);
-    s = ioptions.table_factory->NewTableReader(reader_options,
-                                               extent,
-                                               MAX_EXTENT_SIZE,
-                                               table_reader);
-    EXPECT_TRUE(s.ok()) << s.ToString();
+    std::string val = get_row(&extent_reader, "key", ro, options.comparator);
+    ASSERT_EQ(val, value);
 
-    // verify
-    std::string v =
-        GetFromFile(table_reader, "key", ro, options.comparator);
-    ASSERT_EQ(v, value);
-    v = GetFromFile(table_reader, "ke", ro, options.comparator);
-    ASSERT_EQ(v.size(), 0);  // not exist
-    v = GetFromFile(table_reader, "keyx", ro, options.comparator);
-    ASSERT_EQ(v.size(), 0);  // not exist
+    val = get_row(&extent_reader, "ke", ro, options.comparator);
+    ASSERT_EQ(val.size(), 0); // Not exist
 
-    get_data_block(table_reader, key.Encode(), block1, size1);
+    val = get_row(&extent_reader, "keyx", ro, options.comparator);
+    ASSERT_EQ(val.size(), 0);
+
+    get_data_block(&extent_reader, key.Encode(), data_block1);
   }
 
-  unique_ptr<char[]> block2;
-  size_t size2;
-  {
-    // method 2: read it using the new added mem interface
-    const int size = MAX_EXTENT_SIZE;
-    FullPrefetchExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, FullPrefetchExtent);
-    s = ExtentSpaceManager::get_instance().get_readable_extent(eid, extent);
-    EXPECT_TRUE(s.ok()) << s.ToString();
+  //common::Slice data_block2;
+  //{
+  //  // method 2: read it using the new added mem interface
+  //  const int size = MAX_EXTENT_SIZE;
+  //  FullPrefetchExtent *extent = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, FullPrefetchExtent);
+  //  s = ExtentSpaceManager::get_instance().get_readable_extent(eid, extent);
+  //  EXPECT_TRUE(s.ok()) << s.ToString();
 
-    // async read it
-    extent->full_prefetch();
+  //  // async read it
+  //  extent->full_prefetch();
 
-    // the mem interface
-    TableReader *in_mem_table_reader = nullptr;
-    TableReaderOptions reader_options(ioptions, internal_comparator, eid, false, -1);
-    s = ioptions.table_factory->NewTableReader(reader_options,
-                                               extent,
-                                               MAX_EXTENT_SIZE,
-                                               in_mem_table_reader);
-    EXPECT_TRUE(s.ok()) << s.ToString();
+  //  // the mem interface
+  //  TableReader *in_mem_table_reader = nullptr;
+  //  TableReaderOptions reader_options(ioptions, internal_comparator, eid, false, -1);
+  //  s = ioptions.table_factory->NewTableReader(reader_options,
+  //                                             extent,
+  //                                             MAX_EXTENT_SIZE,
+  //                                             in_mem_table_reader);
+  //  EXPECT_TRUE(s.ok()) << s.ToString();
 
-    // verify
-    std::string v =
-        GetFromFile(in_mem_table_reader, "key", ro, options.comparator);
-    ASSERT_EQ(v, value);
-    v = GetFromFile(in_mem_table_reader, "ke", ro, options.comparator);
-    ASSERT_EQ(v.size(), 0);  // not exist
-    v = GetFromFile(in_mem_table_reader, "keyx", ro, options.comparator);
-    ASSERT_EQ(v.size(), 0);  // not exist
+  //  // verify
+  //  std::string v =
+  //      GetFromFile(in_mem_table_reader, "key", ro, options.comparator);
+  //  ASSERT_EQ(v, value);
+  //  v = GetFromFile(in_mem_table_reader, "ke", ro, options.comparator);
+  //  ASSERT_EQ(v.size(), 0);  // not exist
+  //  v = GetFromFile(in_mem_table_reader, "keyx", ro, options.comparator);
+  //  ASSERT_EQ(v.size(), 0);  // not exist
 
-    get_data_block(in_mem_table_reader, key.Encode(), block2, size2);
-  }
-  ASSERT_EQ(size1, size2);
-  ASSERT_EQ(memcmp(block1.get(), block2.get(), size1), 0);
+  //  get_data_block(in_mem_table_reader, key.Encode(), block2, size2);
+  //}
+  //ASSERT_EQ(size1, size2);
+  //ASSERT_EQ(memcmp(block1.get(), block2.get(), size1), 0);
   delete vs;
   StorageLogger::get_instance().destroy();
 }

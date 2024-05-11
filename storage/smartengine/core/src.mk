@@ -1,6 +1,7 @@
 # These are the sources from which librocksdb.a is built:
 LIB_SOURCES =                                                   \
   backup/hotbackup_impl.cc                                      \
+  cache/cache_entry.cc                                          \
   cache/clock_cache.cc                                          \
   cache/lru_cache.cc                                            \
   cache/row_cache.cc                                            \
@@ -93,22 +94,24 @@ LIB_SOURCES =                                                   \
   storage/storage_meta_struct.cc                                \
   storage/table_space.cc                                        \
   storage/multi_version_extent_meta_layer.cc                    \
-  table/block.cc                                                \
-  table/extent_table_builder.cc                                 \
+  table/block_struct.cc                                         \
   table/extent_table_factory.cc                                 \
-  table/extent_table_reader.cc                                  \
-  table/block_builder.cc                                        \
   table/bloom_block.cc                                          \
-  table/flush_block_policy.cc                                   \
-  table/format.cc                                               \
+  table/extent_reader.cc                                        \
+  table/extent_struct.cc                                        \
+  table/extent_writer.cc                                        \
   table/full_filter_block.cc                                    \
   table/filter_manager.cc                                       \
   table/get_context.cc                                          \
-  table/index_builder.cc                                        \
+  table/index_block_reader.cc                                   \
+  table/index_block_writer.cc                                   \
   table/iterator.cc                                             \
+  table/large_object.cc                                         \
   table/merging_iterator.cc                                     \
-  table/meta_blocks.cc                                          \
   table/parallel_read.cc                                        \
+  table/row_block.cc                                            \
+  table/row_block_iterator.cc                                   \
+  table/row_block_writer.cc                                     \
   table/sst_file_writer.cc                                      \
   table/table_properties.cc                                     \
   table/two_level_iterator.cc                                   \
@@ -119,6 +122,12 @@ LIB_SOURCES =                                                   \
   util/build_version.cc                                         \
   util/coding.cc                                                \
   util/comparator.cc                                            \
+  util/compress/compressor.cc                                   \
+  util/compress/compressor_factory.cc                           \
+  util/compress/compressor_helper.cc                            \
+  util/compress/lz4_compressor.cc                               \
+  util/compress/zlib_compressor.cc                              \
+  util/compress/zstd_compressor.cc                              \
   util/concurrent_arena.cc                                      \
   util/crc32c.cc                                                \
   util/dio_helper.cc                                            \
@@ -166,7 +175,6 @@ TOOL_LIB_SOURCES = \
 
 MOCK_LIB_SOURCES = \
   env/mock_env.cc \
-  table/mock_table.cc \
   util/fault_injection_test_env.cc
 
 BENCH_LIB_SOURCES = \

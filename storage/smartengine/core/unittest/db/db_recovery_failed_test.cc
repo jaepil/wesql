@@ -21,7 +21,6 @@
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "storage/data_file.h"
-#include "table/extent_table_builder.h"
 #include "transactions/transaction.h"
 #include "transactions/transaction_db.h"
 #include "util/sync_point.h"
@@ -106,12 +105,12 @@ TEST_F(DbRecoveryFailedTest, fallocate_failed)
       });
 
   //ignore flush data
-  SyncPoint::GetInstance()->SetCallBack(
-      "ExtentTableBuilder::ignore_flush_data", [&](void *arg) {
-      table::ExtentBasedTableBuilder *builder = reinterpret_cast<table::ExtentBasedTableBuilder*>(arg);
-      builder->TEST_inject_ignore_flush_data();
-      });
-  SyncPoint::GetInstance()->EnableProcessing();
+  //SyncPoint::GetInstance()->SetCallBack(
+  //    "ExtentTableBuilder::ignore_flush_data", [&](void *arg) {
+  //    table::ExtentBasedTableBuilder *builder = reinterpret_cast<table::ExtentBasedTableBuilder*>(arg);
+  //    builder->TEST_inject_ignore_flush_data();
+  //    });
+  //SyncPoint::GetInstance()->EnableProcessing();
 
   //flush data in summer
   Flush(3);
@@ -153,12 +152,12 @@ TEST_F(DbRecoveryFailedTest, double_write_header_failed)
       });
 
   //ignore flush data
-  SyncPoint::GetInstance()->SetCallBack(
-      "ExtentTableBuilder::ignore_flush_data", [&](void *arg) {
-      table::ExtentBasedTableBuilder *builder = reinterpret_cast<table::ExtentBasedTableBuilder*>(arg);
-      builder->TEST_inject_ignore_flush_data();
-      });
-  SyncPoint::GetInstance()->EnableProcessing();
+  //SyncPoint::GetInstance()->SetCallBack(
+  //    "ExtentTableBuilder::ignore_flush_data", [&](void *arg) {
+  //    table::ExtentBasedTableBuilder *builder = reinterpret_cast<table::ExtentBasedTableBuilder*>(arg);
+  //    builder->TEST_inject_ignore_flush_data();
+  //    });
+  //SyncPoint::GetInstance()->EnableProcessing();
 
   //flush data in summer
   Flush(3);

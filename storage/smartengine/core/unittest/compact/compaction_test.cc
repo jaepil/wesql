@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 #include <gflags/gflags.h>
+#include <memory>
+#include "cache/cache.h"
 #include "compact/compaction_job.h"
 #include "compact/mt_ext_compaction.h"
 #include "compact/task_type.h"
+#include "db/db.h"
 #include "db/column_family.h"
 #include "db/db.h"
 #include "db/db_impl.h"
@@ -27,28 +30,28 @@
 #include "db/version_set.h"
 #include "env/env.h"
 #include "logger/log_module.h"
+#include "logger/logger.h"
 #include "memory/page_arena.h"
 #include "options/options.h"
 #include "options/options_helper.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
-#include "storage/io_extent.h"
 #include "storage/multi_version_extent_meta_layer.h"
 #include "storage/storage_logger.h"
 #include "storage/storage_manager.h"
-#include "table/block.h"
 #include "table/extent_table_factory.h"
+#include "table/extent_writer.h"
 #include "table/merging_iterator.h"
-#include "table/table.h"
-#include "table/table_reader.h"
 #include "util/arena.h"
 #include "util/autovector.h"
-#include "util/rate_limiter.h"
+#include "util/file_reader_writer.h"
 #include "util/se_constants.h"
 #include "util/serialization.h"
+#include "util/status.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
-#include "util/types.h"
+#include "util/rate_limiter.h"
+#include "util/write_buffer_manager.h"
 #include "write_batch/write_batch.h"
 #include "write_batch/write_batch_internal.h"
 
@@ -539,17 +542,22 @@ class CompactionTest : public testing::Test {
     
     common::CompressionType compression_type = get_compression_type(context_->icf_options_,
                                                                     level);
-    TableBuilderOptions table_builder_opts(context_->icf_options_,
-                                           internal_comparator_,
-                                           compression_type,
-                                           context_->icf_options_.compression_opts,
-                                           &compression_dict_,
-                                           true /**skip_filter*/,
-                                           cf_desc_.column_family_name_,
-                                           output_layer_position,
-                                           false /**is_flush*/);
-    extent_builder_.reset(context_->icf_options_.table_factory->NewTableBuilderExt(
-          table_builder_opts, cf_desc_.column_family_id_, &mini_tables_));
+    ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
+        context_->icf_options_.table_factory);
+    ExtentWriterArgs writer_args(1 /**column_family_id*/,
+                                 0 /**table_space_id*/,
+                                 tmp_factory->table_options().block_size,
+                                 tmp_factory->table_options().block_restart_interval,
+                                 env_->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                                 &internal_comparator_,
+                                 output_layer_position,
+                                 tmp_factory->table_options().block_cache.get(),
+                                 context_->icf_options_.row_cache.get(),
+                                 compression_type,
+                                 &change_info_);
+    extent_builder_.reset(new ExtentWriter);
+    ret = extent_builder_->init(writer_args);
+    se_assert(Status::kOk == ret);
   }
 
   void build_memtable(MemTable*& mem) {
@@ -592,12 +600,10 @@ class CompactionTest : public testing::Test {
     for (int64_t key = key_start; key < key_end; key += step) {
       snprintf(buf, key_size, "%010ld", key);
       InternalKey ikey(Slice(buf, strlen(buf)), sequence, value_type);
-      extent_builder_->Add(ikey.Encode(), Slice(buf, row_size));
-      ASSERT_TRUE(extent_builder_->status().ok());
+      ASSERT_EQ(Status::kOk, extent_builder_->append_row(ikey.Encode(), Slice(buf, row_size)));
     }
     if (finish) {
-      extent_builder_->Finish();
-      ASSERT_TRUE(extent_builder_->status().ok());
+      ASSERT_EQ(Status::kOk, extent_builder_->finish(nullptr /*extent_infos*/));
     }
   }
 
@@ -622,8 +628,7 @@ class CompactionTest : public testing::Test {
     for (int64_t key = key_start; key < key_end; key += step) {
       snprintf(buf, key_size, "%010ld", key);
       InternalKey ikey(Slice(buf, strlen(buf)), sequence, value_type);
-      extent_builder_->Add(ikey.Encode(), Slice(buf + 20, row_size));
-      ASSERT_TRUE(extent_builder_->status().ok());
+      ASSERT_EQ(Status::kOk, extent_builder_->append_row(ikey.Encode(), Slice(buf + 20, row_size)));
     }
   }
 //  void append_special(const int64_t key_start, const int64_t key_end,
@@ -650,8 +655,7 @@ class CompactionTest : public testing::Test {
     int ret = Status::kOk;
     int64_t commit_seq = 0;
     if (finish) {
-      extent_builder_->Finish();
-      ASSERT_TRUE(extent_builder_->status().ok());
+      ASSERT_EQ(Status::kOk, extent_builder_->finish(nullptr /*extent_infos*/));
     }
     ret = StorageLogger::get_instance().commit(commit_seq);
     ASSERT_EQ(Status::kOk, ret);
@@ -710,14 +714,14 @@ class CompactionTest : public testing::Test {
       for (int64_t t = repeat_end; t >= repeat_start; --t) {
         snprintf(buf, key_size, "%010ld", key);
         InternalKey ikey(Slice(buf, strlen(buf)), t, vtype);
-        extent_builder_->Add(ikey.Encode(), Slice(buf, row_size));
+        ASSERT_EQ(Status::kOk, extent_builder_->append_row(ikey.Encode(), Slice(buf, row_size)));
       }
-      ASSERT_TRUE(extent_builder_->status().ok());
     }
     close(level);
   }
 
   void run_mt_ext_task() {
+    int ret = Status::kOk;
     CompactionContext ct;
     build_compact_context(&ct);
     JobContext jct(0);
@@ -726,6 +730,7 @@ class CompactionTest : public testing::Test {
     ImmutableCFOptions &ioptions = context_->icf_options_;
     Options option;
     ColumnFamilyData sub_table(option);
+    sub_table.test_set_index_id(1);
     monitor::InstrumentedMutex mutex(nullptr, env_);
     Directory* output_file_directory = nullptr;
     monitor::Statistics* stats = nullptr;
@@ -740,7 +745,7 @@ class CompactionTest : public testing::Test {
     flush_job.set_memtables(mems_);
     flush_job.set_meta_snapshot(storage_manager_->get_current_version());
     MiniTables minitables;
-    int ret = flush_job.prepare_flush_task(minitables);
+    ret = flush_job.prepare_flush_task(minitables);
     ASSERT_EQ(ret, 0);
 
     MtExtCompaction *compaction = flush_job.get_compaction();
@@ -762,7 +767,7 @@ class CompactionTest : public testing::Test {
     ct.task_type_ = db::TaskType::STREAM_COMPACTION_TASK;
     // after removing the snapshot list check, minor no need the snapshot,
     // just set the max seq
-    ct.earliest_write_conflict_snapshot_ = db::kMaxSequenceNumber;
+    ct.earliest_write_conflict_snapshot_ = common::kMaxSequenceNumber;
     int ret =
         job.init(ct, cf_desc_, storage_manager_->get_current_version());
     if (nullptr != (storage_manager_->get_current_version()->get_extent_layer_version(0))) {
@@ -832,7 +837,7 @@ class CompactionTest : public testing::Test {
     //existing_snapshots.push_back(20);
     //existing_snapshots.push_back(50);
     ct.existing_snapshots_ = existing_snapshots;
-    ct.earliest_write_conflict_snapshot_ = db::kMaxSequenceNumber;
+    ct.earliest_write_conflict_snapshot_ = common::kMaxSequenceNumber;
     SnapshotImpl *snapshot = new SnapshotImpl();
     snapshot->number_ = storage_manager_->get_current_version()->GetSequenceNumber();
     snapshot->extent_layer_versions_[0] = storage_manager_->get_current_version()->get_extent_layer_version(0);
@@ -922,7 +927,7 @@ class CompactionTest : public testing::Test {
   ColumnFamilyDesc cf_desc_;
   std::string compression_dict_;
   MiniTables mini_tables_;
-  std::unique_ptr<table::TableBuilder> extent_builder_;
+  std::unique_ptr<table::ExtentWriter> extent_builder_;
   InternalKeyComparator internal_comparator_;
   db::FileNumber next_file_number_;
   std::atomic<bool> shutting_down_;
@@ -1182,7 +1187,7 @@ TEST_F(CompactionTest, test_intra_l0_overflow_layer) {
   ASSERT_EQ(ret, 0);
   // IntraL0 only support 1 task
   //ret = job.prepare_minor_task(5);
-  ret = job.prepare_minor_task(db::kMaxSequenceNumber);
+  ret = job.prepare_minor_task(common::kMaxSequenceNumber);
   ASSERT_EQ(ret, 0);
 
   ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
@@ -1272,7 +1277,7 @@ TEST_F(CompactionTest, test_intra_l0_muliple_task) {
     storage_manager_->get_current_version()->get_extent_layer_version(0)->ref();
     ASSERT_EQ(ret, 0);
     // Intra L0 only split 1 task, so we use a big int
-    ret = job.prepare_minor_task(db::kMaxSequenceNumber);
+    ret = job.prepare_minor_task(common::kMaxSequenceNumber);
     ASSERT_EQ(ret, 0);
 
     ret = StorageLogger::get_instance().begin(MINOR_COMPACTION);
@@ -2131,7 +2136,7 @@ TEST_F(CompactionTest, test_single_del) {
   run_major_compact();
   print_raw_meta();
 
-  IntRange r[2] = { {40001, 49635, 2 }, {49637, 49999, 2 } };
+  IntRange r[2] = {{40001, 49643, 2}, {49645, 49999, 2}};
   check_result(2, r, 2);
   auto check_func = [&r](int64_t row, const Slice &key,
       const Slice &value) -> bool {

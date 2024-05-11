@@ -32,11 +32,12 @@
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "table/extent_table_factory.h"
+#include "table/extent_writer.h"
 #include "table/merging_iterator.h"
 #include "table/parallel_read.h"
-#include "table/table_reader.h"
 #include "table/merging_iterator.h"
 #include "transactions/transaction_db_impl.h"
+#include "util/file_reader_writer.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
 
@@ -233,7 +234,8 @@ public:
   Directory *db_dir_;
 
   MiniTables mini_tables_;
-  std::unique_ptr<table::TableBuilder> extent_builder_;
+  //std::unique_ptr<table::TableBuilder> extent_builder_;
+  std::unique_ptr<table::ExtentWriter> extent_writer_;
 
   db::FileNumber next_file_number_;
 
@@ -347,7 +349,8 @@ void ParallelReadTest::reset() {
   db_dir_ = nullptr;
   mini_tables_.metas.clear();
   mini_tables_.props.clear();
-  extent_builder_.reset();
+  //extent_builder_.reset();
+  extent_writer_.reset();
 
   table_cache_ = nullptr;
   cache_.reset();
@@ -392,17 +395,22 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
   }
   mini_tables_.table_space_id_ = 0;
   common::CompressionType compression_type = get_compression_type(context_->icf_options_, level);
-  TableBuilderOptions table_builder_opts(context_->icf_options_,
-                                         internal_comparator_,
-                                         compression_type,
-                                         context_->icf_options_.compression_opts,
-                                         &compression_dict_,
-                                         true /**skip_filter*/,
-                                         cf_desc_.column_family_name_,
-                                         output_layer_position,
-                                         false /**is_flush*/);
-  extent_builder_.reset(context_->icf_options_.table_factory->NewTableBuilderExt(
-        table_builder_opts, cf_desc_.column_family_id_, &mini_tables_));
+  ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
+      context_->icf_options_.table_factory);
+  ExtentWriterArgs writer_args(cf_desc_.column_family_id_,
+                               0 /*table_space_id*/,
+                               tmp_factory->table_options().block_size,
+                               tmp_factory->table_options().block_restart_interval,
+                               context_->icf_options_.env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                               &internal_comparator_,
+                               output_layer_position,
+                               tmp_factory->table_options().block_cache.get(),
+                               context_->icf_options_.row_cache.get(),
+                               compression_type,
+                               &change_info_);
+  extent_writer_.reset(new ExtentWriter());
+  ret = extent_writer_->init(writer_args);
+  ASSERT_EQ(Status::kOk, ret);
 }
 
 void ParallelReadTest::close(const int64_t level, bool finish)
@@ -410,8 +418,8 @@ void ParallelReadTest::close(const int64_t level, bool finish)
   int ret = Status::kOk;
   int64_t commit_seq = 0;
   if (finish) {
-    extent_builder_->Finish();
-    ASSERT_TRUE(extent_builder_->status().ok());
+    ret = extent_writer_->finish(nullptr /*extent_infos*/);
+    ASSERT_EQ(Status::kOk, ret);
   }
 
   ret = StorageLogger::get_instance().commit(commit_seq);
@@ -493,7 +501,9 @@ void ParallelReadTest::append(const int64_t key_start, const int64_t key_end,
                               const ValueType value_type,
                               const int64_t row_size, bool finish)
 {
-  ASSERT_TRUE(nullptr != extent_builder_.get());
+  int ret = Status::kOk;
+  //ASSERT_TRUE(nullptr != extent_builder_.get());
+  ASSERT_TRUE(nullptr != extent_writer_);
   const int64_t key_size = 20;
   char buf[row_size];
 
@@ -502,14 +512,13 @@ void ParallelReadTest::append(const int64_t key_start, const int64_t key_end,
   for (int64_t key = key_start; key < key_end; key++) {
     snprintf(buf, key_size, "%010ld", key);
     InternalKey ikey(Slice(buf, strlen(buf)), sequence, value_type);
-    extent_builder_->Add(ikey.Encode() /* key */,
-                         Slice(buf, row_size) /* value */);
-    ASSERT_TRUE(extent_builder_->status().ok());
+    ret = extent_writer_->append_row(ikey.Encode(), Slice(buf, row_size));
+    ASSERT_EQ(Status::kOk, ret);
   }
 
   if (finish) {
-    extent_builder_->Finish();
-    ASSERT_TRUE(extent_builder_->status().ok());
+    ret = extent_writer_->finish(nullptr /*extent_infos*/);
+    ASSERT_EQ(Status::kOk, ret);
   }
 }
 

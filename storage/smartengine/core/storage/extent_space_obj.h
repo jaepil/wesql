@@ -28,7 +28,7 @@ class ObjectExtentSpace : public ExtentSpace {
  public:
   ObjectExtentSpace(util::Env *env, const util::EnvOptions &env_options,
                     ::objstore::ObjectStore *objstore);
-  virtual ~ObjectExtentSpace();
+  virtual ~ObjectExtentSpace() override;
 
   void destroy() override;
 

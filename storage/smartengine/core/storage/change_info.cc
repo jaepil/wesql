@@ -22,6 +22,32 @@ namespace smartengine
 using namespace common;
 namespace storage
 {
+ExtentChange::ExtentChange() : layer_position_(), extent_id_(), flag_(F_INIT) {}
+
+ExtentChange::ExtentChange(const LayerPosition &layer_position, const ExtentId &extent_id, uint8_t flag)
+    : layer_position_(layer_position),
+      extent_id_(extent_id),
+      flag_(flag)
+{}
+
+ExtentChange::ExtentChange(const ExtentChange &extent_change)
+    : layer_position_(extent_change.layer_position_),
+      extent_id_(extent_change.extent_id_),
+      flag_(extent_change.flag_)
+{}
+
+ExtentChange::~ExtentChange() {}
+
+ExtentChange &ExtentChange::operator=(const ExtentChange &extent_change)
+{
+  layer_position_ = extent_change.layer_position_;
+  extent_id_ = extent_change.extent_id_;
+  flag_ = extent_change.flag_;
+
+  return *this;
+}
+
+
 DEFINE_COMPACTIPLE_SERIALIZATION(ExtentChange, layer_position_, extent_id_, flag_)
 
 ChangeInfo::ChangeInfo() :

@@ -37,8 +37,11 @@ MACRO (FIND_SYSTEM_ZSTD)
   ENDIF()
 ENDMACRO()
 
+SET(BUNDLED_ZSTD_PATH ${CMAKE_SOURCE_DIR}/extra/zstd/zstd-1.5.5/lib)
 MACRO (MYSQL_USE_BUNDLED_ZSTD)
   SET(WITH_ZSTD "bundled" CACHE STRING "By default use bundled zstd library")
+  SET(ZSTD_INCLUDE_DIR ${BUNDLED_ZSTD_PATH})
+  INCLUDE_DIRECTORIES(BEFORE SYSTEM ${ZSTD_INCLUDE_DIR})
   SET(BUILD_BUNDLED_ZSTD 1)
   SET(ZSTD_LIBRARY zstd CACHE INTERNAL "Bundled zlib library")
   MESSAGE(STATUS "ZSTD_LIBRARY(Bundled) " ${ZSTD_LIBRARY})
@@ -66,43 +69,46 @@ FUNCTION(BUILD_MYSQL_BUNDLED_ZSTD ZSTD_ROOT DEST)
   INCLUDE_DIRECTORIES(${ZSTD_LIB_DIR}/common)
 
   SET(ZSTD_PUBLIC_HDRS
-    ${ZSTD_LIB_DIR}/common/bitstream.h
-    ${ZSTD_LIB_DIR}/common/compiler.h
-    ${ZSTD_LIB_DIR}/common/cpu.h
-    ${ZSTD_LIB_DIR}/common/debug.h
-    ${ZSTD_LIB_DIR}/common/error_private.h
-    ${ZSTD_LIB_DIR}/common/fse.h
-    ${ZSTD_LIB_DIR}/common/huf.h
-    ${ZSTD_LIB_DIR}/common/mem.h
-    ${ZSTD_LIB_DIR}/common/pool.h
-    ${ZSTD_LIB_DIR}/common/threading.h
-    ${ZSTD_LIB_DIR}/common/xxhash.h
-    ${ZSTD_LIB_DIR}/common/zstd_deps.h
-    ${ZSTD_LIB_DIR}/common/zstd_internal.h
-    ${ZSTD_LIB_DIR}/common/zstd_trace.h
-    ${ZSTD_LIB_DIR}/compress/hist.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_internal.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_literals.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_sequences.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_superblock.h
-    ${ZSTD_LIB_DIR}/compress/zstd_cwksp.h
-    ${ZSTD_LIB_DIR}/compress/zstd_double_fast.h
-    ${ZSTD_LIB_DIR}/compress/zstd_fast.h
-    ${ZSTD_LIB_DIR}/compress/zstd_lazy.h
-    ${ZSTD_LIB_DIR}/compress/zstd_ldm_geartab.h
-    ${ZSTD_LIB_DIR}/compress/zstd_ldm.h
-    ${ZSTD_LIB_DIR}/compress/zstdmt_compress.h
-    ${ZSTD_LIB_DIR}/compress/zstd_opt.h
-    ${ZSTD_LIB_DIR}/decompress/zstd_ddict.h
-    ${ZSTD_LIB_DIR}/decompress/zstd_decompress_block.h
-    ${ZSTD_LIB_DIR}/decompress/zstd_decompress_internal.h
-    ${ZSTD_LIB_DIR}/deprecated/zbuff.h
-    ${ZSTD_LIB_DIR}/dictBuilder/cover.h
-    ${ZSTD_LIB_DIR}/dictBuilder/divsufsort.h
+		${ZSTD_LIB_DIR}/common/allocations.h
+		${ZSTD_LIB_DIR}/common/bits.h
+		${ZSTD_LIB_DIR}/common/bitstream.h
+		${ZSTD_LIB_DIR}/common/compiler.h
+		${ZSTD_LIB_DIR}/common/cpu.h
+		${ZSTD_LIB_DIR}/common/debug.h
+		${ZSTD_LIB_DIR}/common/error_private.h
+		${ZSTD_LIB_DIR}/common/fse.h
+		${ZSTD_LIB_DIR}/common/huf.h
+		${ZSTD_LIB_DIR}/common/mem.h
+		${ZSTD_LIB_DIR}/common/pool.h
+		${ZSTD_LIB_DIR}/common/portability_macros.h
+		${ZSTD_LIB_DIR}/common/threading.h
+		${ZSTD_LIB_DIR}/common/xxhash.h
+		${ZSTD_LIB_DIR}/common/zstd_deps.h
+		${ZSTD_LIB_DIR}/common/zstd_internal.h
+		${ZSTD_LIB_DIR}/common/zstd_trace.h
+		${ZSTD_LIB_DIR}/compress/clevels.h
+		${ZSTD_LIB_DIR}/compress/hist.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_internal.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_literals.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_sequences.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_superblock.h
+		${ZSTD_LIB_DIR}/compress/zstd_cwksp.h
+		${ZSTD_LIB_DIR}/compress/zstd_double_fast.h
+		${ZSTD_LIB_DIR}/compress/zstd_fast.h
+		${ZSTD_LIB_DIR}/compress/zstd_lazy.h
+		${ZSTD_LIB_DIR}/compress/zstd_ldm_geartab.h
+		${ZSTD_LIB_DIR}/compress/zstd_ldm.h
+		${ZSTD_LIB_DIR}/compress/zstdmt_compress.h
+		${ZSTD_LIB_DIR}/compress/zstd_opt.h
+		${ZSTD_LIB_DIR}/decompress/zstd_ddict.h
+		${ZSTD_LIB_DIR}/decompress/zstd_decompress_block.h
+		${ZSTD_LIB_DIR}/decompress/zstd_decompress_internal.h
+		${ZSTD_LIB_DIR}/dictBuilder/cover.h
+		${ZSTD_LIB_DIR}/dictBuilder/divsufsort.h
     ${ZSTD_LIB_DIR}/zdict.h
     ${ZSTD_LIB_DIR}/zstd_errors.h
     ${ZSTD_LIB_DIR}/zstd.h
-  )
+	)
 
   SET(ZSTD_SRCS
     ${ZSTD_LIB_DIR}/common/debug.c
@@ -130,54 +136,68 @@ FUNCTION(BUILD_MYSQL_BUNDLED_ZSTD ZSTD_ROOT DEST)
     ${ZSTD_LIB_DIR}/decompress/zstd_ddict.c
     ${ZSTD_LIB_DIR}/decompress/zstd_decompress_block.c
     ${ZSTD_LIB_DIR}/decompress/zstd_decompress.c
-    ${ZSTD_LIB_DIR}/deprecated/zbuff_common.c
-    ${ZSTD_LIB_DIR}/deprecated/zbuff_compress.c
-    ${ZSTD_LIB_DIR}/deprecated/zbuff_decompress.c
     ${ZSTD_LIB_DIR}/dictBuilder/cover.c
     ${ZSTD_LIB_DIR}/dictBuilder/divsufsort.c
     ${ZSTD_LIB_DIR}/dictBuilder/fastcover.c
     ${ZSTD_LIB_DIR}/dictBuilder/zdict.c
-    ${ZSTD_LIB_DIR}/common/bitstream.h
-    ${ZSTD_LIB_DIR}/common/compiler.h
-    ${ZSTD_LIB_DIR}/common/cpu.h
-    ${ZSTD_LIB_DIR}/common/debug.h
-    ${ZSTD_LIB_DIR}/common/error_private.h
-    ${ZSTD_LIB_DIR}/common/fse.h
-    ${ZSTD_LIB_DIR}/common/huf.h
-    ${ZSTD_LIB_DIR}/common/mem.h
-    ${ZSTD_LIB_DIR}/common/pool.h
-    ${ZSTD_LIB_DIR}/common/threading.h
-    ${ZSTD_LIB_DIR}/common/xxhash.h
-    ${ZSTD_LIB_DIR}/common/zstd_deps.h
-    ${ZSTD_LIB_DIR}/common/zstd_internal.h
-    ${ZSTD_LIB_DIR}/common/zstd_trace.h
-    ${ZSTD_LIB_DIR}/compress/hist.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_internal.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_literals.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_sequences.h
-    ${ZSTD_LIB_DIR}/compress/zstd_compress_superblock.h
-    ${ZSTD_LIB_DIR}/compress/zstd_cwksp.h
-    ${ZSTD_LIB_DIR}/compress/zstd_double_fast.h
-    ${ZSTD_LIB_DIR}/compress/zstd_fast.h
-    ${ZSTD_LIB_DIR}/compress/zstd_lazy.h
-    ${ZSTD_LIB_DIR}/compress/zstd_ldm_geartab.h
-    ${ZSTD_LIB_DIR}/compress/zstd_ldm.h
-    ${ZSTD_LIB_DIR}/compress/zstdmt_compress.h
-    ${ZSTD_LIB_DIR}/compress/zstd_opt.h
-    ${ZSTD_LIB_DIR}/decompress/zstd_ddict.h
-    ${ZSTD_LIB_DIR}/decompress/zstd_decompress_block.h
-    ${ZSTD_LIB_DIR}/decompress/zstd_decompress_internal.h
-    ${ZSTD_LIB_DIR}/deprecated/zbuff.h
-    ${ZSTD_LIB_DIR}/dictBuilder/cover.h
-    ${ZSTD_LIB_DIR}/dictBuilder/divsufsort.h
+		${ZSTD_LIB_DIR}/common/allocations.h
+		${ZSTD_LIB_DIR}/common/bits.h
+		${ZSTD_LIB_DIR}/common/bitstream.h
+		${ZSTD_LIB_DIR}/common/compiler.h
+		${ZSTD_LIB_DIR}/common/cpu.h
+		${ZSTD_LIB_DIR}/common/debug.h
+		${ZSTD_LIB_DIR}/common/error_private.h
+		${ZSTD_LIB_DIR}/common/fse.h
+		${ZSTD_LIB_DIR}/common/huf.h
+		${ZSTD_LIB_DIR}/common/mem.h
+		${ZSTD_LIB_DIR}/common/pool.h
+		${ZSTD_LIB_DIR}/common/portability_macros.h
+		${ZSTD_LIB_DIR}/common/threading.h
+		${ZSTD_LIB_DIR}/common/xxhash.h
+		${ZSTD_LIB_DIR}/common/zstd_deps.h
+		${ZSTD_LIB_DIR}/common/zstd_internal.h
+		${ZSTD_LIB_DIR}/common/zstd_trace.h
+		${ZSTD_LIB_DIR}/compress/clevels.h
+		${ZSTD_LIB_DIR}/compress/hist.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_internal.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_literals.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_sequences.h
+		${ZSTD_LIB_DIR}/compress/zstd_compress_superblock.h
+		${ZSTD_LIB_DIR}/compress/zstd_cwksp.h
+		${ZSTD_LIB_DIR}/compress/zstd_double_fast.h
+		${ZSTD_LIB_DIR}/compress/zstd_fast.h
+		${ZSTD_LIB_DIR}/compress/zstd_lazy.h
+		${ZSTD_LIB_DIR}/compress/zstd_ldm_geartab.h
+		${ZSTD_LIB_DIR}/compress/zstd_ldm.h
+		${ZSTD_LIB_DIR}/compress/zstdmt_compress.h
+		${ZSTD_LIB_DIR}/compress/zstd_opt.h
+		${ZSTD_LIB_DIR}/decompress/zstd_ddict.h
+		${ZSTD_LIB_DIR}/decompress/zstd_decompress_block.h
+		${ZSTD_LIB_DIR}/decompress/zstd_decompress_internal.h
+		${ZSTD_LIB_DIR}/dictBuilder/cover.h
+		${ZSTD_LIB_DIR}/dictBuilder/divsufsort.h
     ${ZSTD_LIB_DIR}/zdict.h
     ${ZSTD_LIB_DIR}/zstd_errors.h
     ${ZSTD_LIB_DIR}/zstd.h
   )
 
-  ADD_CONVENIENCE_LIBRARY(zstd
-    ${ZSTD_SRCS} ${ZSTD_PUBLIC_HDRS} COMPILE_OPTIONS "-fPIC")
+  IF((LINUX AND NOT LINUX_ARM) OR
+      (APPLE AND NOT APPLE_ARM))
+    ENABLE_LANGUAGE(ASM)
+    LIST(APPEND ZSTD_SRCS
+      ${ZSTD_LIB_DIR}/decompress/huf_decompress_amd64.S
+      )
+  ENDIF()
 
+  ADD_CONVENIENCE_LIBRARY(zstd
+    ${ZSTD_SRCS} COMPILE_OPTIONS "-fPIC")
+  #ADD_CONVENIENCE_LIBRARY(zstd
+  #  ${ZSTD_SRCS} ${ZSTD_PUBLIC_HDRS} COMPILE_OPTIONS "-fPIC")
+
+  # In case we have OPTIMIZE_DEBUG_BUILDS:BOOL=ON
+  # This seems to be a gcc12 bug, the combination
+  # FORCE_INLINE_TEMPLATE and -Og breaks the build.
+  STRING(REPLACE " -Og " "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
   # Always hide XXHash symbols
   ADD_DEFINITIONS(-DXXH_NAMESPACE=ZSTD_)
 

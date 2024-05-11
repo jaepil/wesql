@@ -273,27 +273,29 @@ public: \
 public: \
   virtual int64_t to_string(char *buf, const int64_t buf_len) const;
 
-#define DEFINE_TO_STRING(clz, ...) \
+#define DEFINE_TO_STRING(clz, args...) \
   int64_t clz::to_string(char *buf, const int64_t buf_len) const { \
     int64_t pos = 0;                                               \
     util::databuff_printf(buf, buf_len, pos, "{");                 \
-    util::databuff_print_kv_list(buf, buf_len, pos, __VA_ARGS__);  \
+    util::databuff_print_kv_list(buf, buf_len, pos, ##args);  \
     util::databuff_printf(buf, buf_len, pos, "}");                 \
     return pos;                                                    \
   }
 
-#define DECLARE_AND_DEFINE_TO_STRING(...)                          \
+#define DECLARE_AND_DEFINE_TO_STRING(args...)                          \
 public: \
   int64_t to_string(char *buf, const int64_t buf_len) const {      \
     int64_t pos = 0;                                               \
     util::databuff_printf(buf, buf_len, pos, "{");                 \
-    util::databuff_print_kv_list(buf, buf_len, pos, __VA_ARGS__);  \
+    util::databuff_print_kv_list(buf, buf_len, pos, ##args);  \
     util::databuff_printf(buf, buf_len, pos, "}");                 \
     return pos;                                                    \
   }
 
 #define KV(obj) #obj, obj
 #define KV_(obj) #obj, obj##_
+#define KVE(obj) #obj, ((const uint32_t&)(obj))
+#define KVE_(obj) #obj, ((const unsigned int &)(obj##_))
 #define KVP(obj) #obj, (const util::MyVoid*&)obj
 #define KVP_(obj) #obj, (const util::MyVoid*&)obj##_
 #define VP(obj) (const util::MyVoid*&)obj

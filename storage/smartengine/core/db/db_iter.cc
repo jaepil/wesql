@@ -12,13 +12,13 @@
 #include "db/db_iter.h"
 #include <string>
 
-#include "table/format.h"
 #include "db/dbformat.h"
 #include "db/pinned_iterators_manager.h"
 #include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
 #include "options/options.h"
 #include "table/internal_iterator.h"
+#include "table/large_object.h"
 #include "util/arena.h"
 #include "util/filename.h"
 #include "util/string_util.h"
@@ -60,10 +60,7 @@ public:
        user_comparator_(cmp),
        iter_(iter),
        sequence_(s),
-       oob_aligned_buf_(nullptr, memory::base_memalign_free),
-       oob_aligned_size_(0),
-       oob_unzip_buf_(nullptr),
-       oob_unzip_size_(0),
+       large_value_(),
        direction_(kForward),
        valid_(false),
        statistics_(cf_options.statistics),
@@ -87,6 +84,7 @@ public:
    if (pinned_iters_mgr_.PinningEnabled()) {
      pinned_iters_mgr_.ReleasePinnedData();
    }
+
    if (!arena_mode_) {
      MOD_DELETE_OBJECT(InternalIterator, iter_);
    } else {
@@ -119,29 +117,14 @@ public:
      return plain_value;
    }
 
-   // retrieve data from off page extents for large object
-   Slice result;
-   LargeValue large_value;
+   // retrieve data from extents for large object
    int ret = Status::kOk;
-   if (Status::kOk != (ret = get_oob_large_value(plain_value,
-                                                 large_value,
-                                                 oob_aligned_buf_,
-                                                 oob_aligned_size_))) {
-     SE_LOG(ERROR, "fail to get content of large value", K(ret));
-     return Slice();
-   } else if (kNoCompression == large_value.compression_type_) {
-     result.data_ = oob_aligned_buf_.get();
-     result.size_ = large_value.size_;
-   } else if (Status::kOk != (ret = unzip_data(oob_aligned_buf_.get(),
-           large_value.size_, LargeValue::COMPRESSION_FORMAT_VERSION,
-           static_cast<CompressionType>(large_value.compression_type_),
-           oob_unzip_buf_, oob_unzip_size_))) {
-     SE_LOG(ERROR, "fail to unzip large value", K(ret));
-     return Slice();
-   } else {
-     result.data_ = oob_unzip_buf_.get();
-     result.size_ = oob_unzip_size_;
+   Slice result;
+   large_value_.reset();
+   if (FAILED(large_value_.convert_to_normal_format(plain_value, result))) {
+    SE_LOG(WARN, "fail to covert large value to normal format", K(ret));
    }
+
    return result;
  }
 
@@ -218,10 +201,7 @@ protected:
  IterKey saved_key_;
  IterKey saved_end_key_;
  std::string saved_value_;
- mutable std::unique_ptr<char[], void(&)(void *)> oob_aligned_buf_;
- mutable int64_t oob_aligned_size_;
- mutable std::unique_ptr<char[], memory::ptr_delete<char>> oob_unzip_buf_;
- mutable size_t oob_unzip_size_;
+ mutable LargeValue large_value_;
  Slice pinned_value_;
  ValueType pinned_key_type_;  // key type of pinned_value_
  Direction direction_;

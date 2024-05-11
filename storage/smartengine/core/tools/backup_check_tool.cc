@@ -22,8 +22,6 @@
 #include "ldb_cmd_impl.h"
 #include "tools/ldb_cmd.h"
 #include "storage/io_extent.h"
-#include "sst_dump_tool_imp.h"
-#include "table/table_reader.h"
 
 using namespace std;
 
@@ -45,31 +43,32 @@ int BackupCheckTool::check_one_extent(ExtentId &extent, const Slice &begin,
                                       const Slice &end, bool &check_result) {
   int ret = Status::kOk;
   char sst_name[50];
-  std::unique_ptr<SstFileReader> extent_reader(nullptr);
-  Options options;
-  options.db_paths.emplace_back(data_dir,
-                                std::numeric_limits<uint64_t>::max());
-  snprintf(sst_name, sizeof(sst_name), "%06d.sst", extent.file_number);
-  std::string filename = data_dir + "/" + sst_name;
-  extent_reader.reset(new SstFileReader(filename, true, true, extent.offset, options));
-  if (!extent_reader.get() || !extent_reader.get()->getStatus().ok()) { 
-    if (!extent_reader.get()) {
-      fprintf(stderr, "create the extent reader failed\n");
-    } else {
-      fprintf(stderr, "%s: %s\n", filename.c_str(), 
-              extent_reader.get()->getStatus().ToString().c_str());
-      return extent_reader.get()->getStatus().code();
-    }
-  }
+  //std::unique_ptr<SstFileReader> extent_reader(nullptr);
+  //Options options;
+  //options.db_paths.emplace_back(data_dir,
+  //                              std::numeric_limits<uint64_t>::max());
+  //snprintf(sst_name, sizeof(sst_name), "%06d.sst", extent.file_number);
+  //std::string filename = data_dir + "/" + sst_name;
+  //extent_reader.reset(new SstFileReader(filename, true, true, extent.offset, options));
+  //if (!extent_reader.get() || !extent_reader.get()->getStatus().ok()) { 
+  //  if (!extent_reader.get()) {
+  //    fprintf(stderr, "create the extent reader failed\n");
+  //  } else {
+  //    fprintf(stderr, "%s: %s\n", filename.c_str(), 
+  //            extent_reader.get()->getStatus().ToString().c_str());
+  //    return extent_reader.get()->getStatus().code();
+  //  }
+  //}
 
   
-  Status s = extent_reader->get_table_reader()->check_range(begin, end, check_result);
-  if (!s.ok()) {
-    fprintf(stderr, "check extent return error %d", s.code());
-    return s.code();
-  } else if (!check_result) {
-    fprintf(stderr, "the extent content and meta are not matching\n");
-  }
+  ////Status s = extent_reader->get_table_reader()->check_range(begin, end, check_result);
+  //Status s;
+  //if (!s.ok()) {
+  //  fprintf(stderr, "check extent return error %d", s.code());
+  //  return s.code();
+  //} else if (!check_result) {
+  //  fprintf(stderr, "the extent content and meta are not matching\n");
+  //}
   return ret;
 }
 

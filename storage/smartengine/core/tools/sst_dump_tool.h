@@ -8,8 +8,37 @@
 // of patent rights can be found in the PATENTS file in the same directory.
 #pragma once
 
-namespace smartengine {
-namespace tools {
+#include "storage/io_extent.h"
+#include "table/extent_struct.h"
+namespace smartengine
+{
+namespace table
+{
+struct RowBlock;
+} // namespace table
+namespace tools
+{
+class ExtentDumper
+{
+public:
+  ExtentDumper() : internal_comparator_(util::BytewiseComparator()), extent_() {}
+  ~ExtentDumper() {}
+
+  int init(const std::string &file_path, const int32_t offset);
+  int dump();
+
+private:
+  int read_footer(table::Footer &footer);
+  int dump_footer(const table::Footer &footer);
+  int dump_index_block(table::RowBlock *index_block);
+  int dump_all_data_block(table::RowBlock *index_block);
+  int dump_data_block(const table::BlockInfo &block_info);
+  int summry(const table::Footer &footer, table::RowBlock *index_block);
+
+private:
+  db::InternalKeyComparator internal_comparator_;
+  storage::ReadableExtent extent_;
+};
 
 class SSTDumpTool {
  public:

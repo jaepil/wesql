@@ -170,7 +170,7 @@ public:
   void destroy();
   // thread-safe
 
-  uint32_t GetID() const { return sub_table_meta_.index_id_; }
+  int64_t GetID() const { return sub_table_meta_.index_id_; }
   int64_t get_table_space_id() const { return sub_table_meta_.table_space_id_; }
   // thread-safe
   // TODO(Zhao Dongsheng), deprecated?
@@ -445,9 +445,9 @@ public:
   common::SequenceNumber get_range_end() const {
     return range_end_.load(std::memory_order_relaxed);
   }
-  int get_extent_infos(storage::ExtentIdInfoMap &extent_info_map)
+  int get_extent_positions(storage::ExtentPositionMap &extent_positions)
   {
-    return storage_manager_.get_extent_infos(sub_table_meta_.index_id_, extent_info_map);
+    return storage_manager_.get_extent_positions(sub_table_meta_.index_id_, extent_positions);
   }
   void set_autocheck_info(const int64_t delete_extents_size,
                            const int64_t l1_usage_percent,
@@ -467,6 +467,10 @@ public:
   int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
                            char *str_buf, int64_t string_buf_len, int64_t &str_pos);
   DECLARE_TO_STRING()
+
+#ifndef NDEBUG
+  void test_set_index_id(const int64_t index_id) { sub_table_meta_.index_id_ = index_id; }
+#endif 
  private:
   friend class ColumnFamilySet;
   int release_memtable_resource();

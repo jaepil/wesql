@@ -2,20 +2,18 @@
 #include "cache/lru_cache.h"
 #include "cache/row_cache.h"
 #include "db/db_test_util.h"
-#include "port/stack_trace.h"
-#include "table/extent_table_factory.h"
 
-using namespace smartengine;
+namespace smartengine
+{
 using namespace common;
 using namespace util;
 using namespace table;
-using namespace cache;
 using namespace memtable;
 using namespace monitor;
 using namespace storage;
 using namespace db;
-namespace smartengine {
-namespace cache {
+namespace cache
+{
 
 class RowCacheTest : public DBTestBase {
  public:
@@ -34,15 +32,6 @@ class RowCacheTest : public DBTestBase {
     cache_evict_ = TestGetGlobalCount(CountPoint::ROW_CACHE_EVICT);
   }
 
-//  void set_tmp_schema(int cf) {
-    // set tmp schema
-//    ColumnFamilyData *cfd = get_column_family_data(cf);
-//    assert(cfd);
-//    SeSchema tmp_schema;
-//    tmp_schema.schema_version = 1;
-//    cfd->mem()->add_schema(tmp_schema);
-//  }
-
   Options get_options() {
     option_config_ = kRowCache;
     Options options = CurrentOptions();
@@ -60,8 +49,6 @@ TEST_F(RowCacheTest, normal_test) {
   CreateAndReopenWithCF({"row_cache"}, options);
   const Snapshot* snapshot1 = db_->GetSnapshot();
   ASSERT_OK(Put(1, "key1", "val1"));
-  // set tmp schema
-//  set_tmp_schema(1);
   ASSERT_OK(Flush(1));
   dbfull()->TEST_WaitForCompact(); // wait flush
   record_trace_count();
@@ -102,8 +89,6 @@ TEST_F(RowCacheTest, snapshot_test) {
   const Snapshot* snapshot2 = db_->GetSnapshot();
   ASSERT_OK(Put(1, "key3", "val3"));
 
-  // set tmp schema
-//  set_tmp_schema(1);
   ASSERT_OK(Flush(1));
   dbfull()->TEST_WaitForCompact(); // wait flush
   record_trace_count();
@@ -133,8 +118,6 @@ TEST_F(RowCacheTest, lru_cache_test) {
   ASSERT_OK(Put(1, "b", "b"));
   ASSERT_OK(Put(1, "c", "c"));
   ASSERT_OK(Put(1, "d", "d"));
-  // set tmp schema
-//  set_tmp_schema(1);
   record_trace_count();
   ASSERT_OK(Flush(1));
   dbfull()->TEST_WaitForCompact(); // wait flush
@@ -185,11 +168,13 @@ TEST_F(RowCacheTest, lru_cache_test) {
   ASSERT_EQ("d1", Get(1, "d", nullptr));
   ASSERT_EQ("c1", Get(1, "c", nullptr));
 }
-}
-}
+
+} // namespace cache
+} // namespace smartengine
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  std::string log_path = test::TmpDir() + "/row_cache_test.log";
+  std::string log_path = smartengine::test::TmpDir() + "/row_cache_test.log";
   smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::WARN_LEVEL);
   return RUN_ALL_TESTS();
 }

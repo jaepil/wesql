@@ -19,12 +19,19 @@
 #include "memory/allocator.h"
 #include "db/dbformat.h"
 #include "db/recovery_point.h"
+#include "table/block_struct.h"
+#include <cstdint>
 
 namespace smartengine
 {
 namespace db
 {
   struct FileMetaData;
+}
+
+namespace table
+{
+  struct ExtentInfo;
 }
 namespace storage
 {
@@ -70,24 +77,20 @@ public:
   common::SequenceNumber largest_seqno_;
   int32_t refs_;
   int32_t data_size_;
-  int32_t index_size_;
   int32_t num_data_blocks_;
   int32_t num_entries_;
   int32_t num_deletes_;
   int64_t table_space_id_;
   int32_t extent_space_type_;
+  table::BlockHandle index_block_handle_;
 
   ExtentMeta();
-  ExtentMeta(uint8_t attr,
-             ExtentId extent_id,
-             const db::FileMetaData &file_meta,
-             const table::TableProperties &table_properties,
-             int64_t table_space_id,
-             int32_t extent_space_type);
+  ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info);
   ExtentMeta(const ExtentMeta &extent_meta);
   ~ExtentMeta();
 
   ExtentMeta& operator=(const ExtentMeta &extent_meta);
+  void reset();
   int deep_copy(ExtentMeta *&extent_meta) const;
   int deep_copy(memory::SimpleAllocator &allocator, ExtentMeta *&extent_meta) const;
   int64_t get_deep_copy_size() const;

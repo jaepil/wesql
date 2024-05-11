@@ -90,10 +90,9 @@ Status CheckCompressionSupported(const ColumnFamilyOptions& cf_options) {
     for (size_t level = 0; level < cf_options.compression_per_level.size();
          ++level) {
       if (!CompressionTypeSupported(cf_options.compression_per_level[level])) {
-        return Status::InvalidArgument(
-            "Compression type " +
-            CompressionTypeToString(cf_options.compression_per_level[level]) +
-            " is not linked with the binary.");
+        SE_LOG(WARN, "the compression type is not supported",
+            "compression_type", CompressionTypeToString(cf_options.compression_per_level[level]));
+        return Status::InvalidArgument();
       }
     }
   }
@@ -271,7 +270,7 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
     SE_LOG(WARN, "ColumnFamilyData has been inited", K(ret));
   } else if (UNLIKELY(!args.is_valid()) || IS_NULL(global_ctx) || UNLIKELY(!global_ctx->is_valid()) || IS_NULL(column_family_set)) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(global_ctx), KP(column_family_set));
+    SE_LOG(WARN, "invalid argument", K(ret), K(args), KP(global_ctx), KP(column_family_set));
   } else if (IS_NULL(internal_stats = MOD_NEW_OBJECT(memory::ModId::kSubTable, InternalStats,
           global_ctx->env_, this))) {
     ret = Status::kMemoryLimit;
@@ -661,9 +660,8 @@ int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_o
                                          &get_context);
         SE_LOG(DEBUG, "get from extent", "index_id", sub_table_meta_.index_id_, K(extent_meta));
         if (Status::kOk != func_ret) {
-          SE_LOG(WARN, "fail to get from table cache", K(func_ret));
+          SE_LOG(WARN, "fail to get from table cache", K(func_ret), K(*extent_meta));
         } else {
-          //ExtentMeta *extent_meta = nullptr;
           switch (get_context.State()) {
             case GetContext::kNotFound:
               // keep searching in other files

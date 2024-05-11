@@ -59,7 +59,6 @@
 #include "table/extent_table_factory.h"
 #include "table/filter_manager.h"
 #include "table/merging_iterator.h"
-#include "table/table_builder.h"
 #include "table/two_level_iterator.h"
 #include "memory/alloc_mgr.h"
 #include "util/autovector.h"
@@ -1100,6 +1099,7 @@ InternalIterator* DBImpl::NewInternalIterator(const ReadOptions& read_options,
     QUERY_TRACE_SCOPE(TracePoint::DB_ITER_ADD_STORAGE);
     // Collect iterators for files in L0 - Ln
     if (read_options.read_tier != kMemtableTier) {
+      // TODO(Zhao Dongsheng): storge manager should not export.
       cfd->get_storage_manager()->add_iterators(cfd->table_cache(), 
                                                 cfd->internal_stats(),
                                                 read_options,

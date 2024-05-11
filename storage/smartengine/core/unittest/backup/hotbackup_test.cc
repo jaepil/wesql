@@ -20,6 +20,7 @@
 #include "util/testharness.h"
 #include "port/stack_trace.h"
 #include "storage/io_extent.h"
+#include "util/file_reader_writer.h"
 #define private public
 #define protected public
 #include "db/db_test_util.h"

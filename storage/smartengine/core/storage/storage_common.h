@@ -35,11 +35,11 @@ namespace smartengine
 {
 namespace storage
 {
-struct ExtentInfo;
+struct ExtentPosition;
 
 // hash table of extent id to meta
-typedef std::unordered_map<int64_t, ExtentInfo, std::hash<int64_t>, std::equal_to<int64_t>,
-      memory::stl_adapt_allocator<std::pair<const int64_t, ExtentInfo>, memory::ModId::kStorageMgr>> ExtentIdInfoMap;
+typedef std::unordered_map<int64_t, ExtentPosition, std::hash<int64_t>, std::equal_to<int64_t>,
+      memory::stl_adapt_allocator<std::pair<const int64_t, ExtentPosition>, memory::ModId::kStorageMgr>> ExtentPositionMap;
 
 // hash table of sst file number to used extent ids
 typedef std::unordered_map<int32_t, util::autovector<int32_t>, std::hash<int32_t>, std::equal_to<int32_t>,
@@ -152,20 +152,20 @@ public:
   DECLARE_COMPACTIPLE_SERIALIZATION(LAYER_POSITION_VERSION)
 };
 
-struct ExtentInfo
+struct ExtentPosition
 {
   int64_t index_id_;
   LayerPosition layer_position_;
   ExtentId extent_id_;
 
-  ExtentInfo() : index_id_(0), layer_position_(), extent_id_() {}
-  ExtentInfo(const int64_t index_id, const LayerPosition &layer_position, const ExtentId &extent_id)
+  ExtentPosition() : index_id_(0), layer_position_(), extent_id_() {}
+  ExtentPosition(const int64_t index_id, const LayerPosition &layer_position, const ExtentId &extent_id)
       : index_id_(index_id),
         layer_position_(layer_position),
         extent_id_(extent_id)
   {}
-  ExtentInfo(const ExtentInfo &) = default;
-  ~ExtentInfo() {}
+  ExtentPosition(const ExtentPosition &) = default;
+  ~ExtentPosition() {}
   void set(const int64_t index_id, const LayerPosition &layer_position, const ExtentId &extent_id)
   {
     index_id_ = index_id;
@@ -662,7 +662,7 @@ inline uint64_t assemble_objid_by_fdfn(int32_t fdfn, int32_t offset_id) {
   return assemble_objid(convert_fdfn_to_table_spaceid(fdfn), offset_id);
 }
 
-} //namespace smartengine
-} //namespace smartengine
+}  // namespace storage
+}  //namespace smartengine
 
 #endif

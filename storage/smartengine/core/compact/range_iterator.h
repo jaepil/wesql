@@ -22,14 +22,22 @@
 #include "memory/stl_adapt_allocator.h"
 #include "memory/mod_info.h"
 #include "db/dbformat.h"
+#include "table/extent_reader.h"
 #include "table/internal_iterator.h"
+#include "table/row_block.h"
+#include "table/row_block_iterator.h"
+#include "table/sstable_scan_struct.h"
 #include "util/to_string.h"
 #include "storage/storage_common.h"
 #include "util/heap.h"
-#include "table/block.h"
 
 namespace smartengine
 {
+namespace table
+{
+  struct RowBlock;
+} // namespace table
+
 namespace storage
 {
 
@@ -42,15 +50,18 @@ struct CompactionContext;
 struct ExtentMeta;
 class GeneralCompaction;
 
-struct Range {
+struct Range
+{
   common::Slice start_key_;
   common::Slice end_key_;
+
   Range deep_copy(memory::Allocator &allocator) const;
   Range deep_copy(memory::SimpleAllocator &allocator) const;
   DECLARE_TO_STRING()
 };
 
-struct MetaType {
+struct MetaType
+{
   enum StoreType {
     SSTable = 0,
     MemTable = 1,
@@ -76,7 +87,9 @@ struct MetaType {
   DECLARE_TO_STRING()
 };
 
-struct MetaDescriptor {
+//TODO(Zhao Dongsheng) : This structure is used to describe both extents and blocks, but its meaning is not very clear.
+struct MetaDescriptor
+{
   storage::MetaType type_;
   storage::Range range_;
   storage::BlockPosition block_position_;
@@ -85,6 +98,7 @@ struct MetaDescriptor {
   common::Slice key_;    // copy iterator's key
   common::Slice value_;  // copy iterator's value
   int64_t delete_percent_;
+  table::BlockInfo block_info_;
   MetaDescriptor();
   MetaDescriptor deep_copy(memory::Allocator &allocator) const;
   MetaDescriptor deep_copy(memory::SimpleAllocator &allocator) const;
@@ -113,7 +127,8 @@ using MetaDescriptorList = std::vector<MetaDescriptor,
 using BlockPositionList = std::vector<BlockPosition,
   memory::stl_adapt_allocator<BlockPosition, memory::ModId::kCompaction>>;
 
-class RangeIterator {
+class RangeIterator
+{
  public:
   virtual ~RangeIterator() {}
 
@@ -138,7 +153,8 @@ class RangeIterator {
  * just forward, Do not iterate backward direction
  */
 template <typename IterType>
-class RangeAdaptorIterator : public RangeIterator {
+class RangeAdaptorIterator : public RangeIterator
+{
  public:
   RangeAdaptorIterator()
       : valid_(false), start_(false), status_(0), iter_(nullptr), extent_meta_(nullptr) {}
@@ -239,207 +255,23 @@ class RangeAdaptorIterator : public RangeIterator {
   storage::ExtentMeta* extent_meta_;
 };
 
-class SequentialRangeIterator : public RangeIterator {
+class DataBlockIterator
+{
  public:
-  SequentialRangeIterator() : index_(0) {}
-  virtual ~SequentialRangeIterator() override {}
+  explicit DataBlockIterator(const MetaType type, table::RowBlockIterator *index_iterator);
+  virtual ~DataBlockIterator();
 
-  int add_iterator(RangeIterator *iter) {
-    list_iters_.push_back(iter);
-    return common::Status::kOk;
-  }
-  void clear() {
-    list_iters_.clear();
-    index_ = 0;
-  }
-  int64_t size() const { return (int64_t)list_iters_.size(); }
-  int64_t current() const { return index_; }
-
-  virtual bool middle() const override {
-    assert(index_ < (int64_t)list_iters_.size());
-    return list_iters_[index_]->middle();
-  }
-
-  virtual bool valid() const override {
-    return (index_ < (int64_t)list_iters_.size() &&
-            list_iters_[index_]->valid());
-  }
-
-  virtual common::Status status() const override {
-    if (index_ < (int64_t)list_iters_.size()) {
-      return list_iters_[index_]->status();
-    }
-    return common::Status(common::Status::kCorruption);
-  }
-
-  virtual common::Slice user_key() const override {
-    assert(index_ < (int64_t)list_iters_.size());
-    return list_iters_[index_]->user_key();
-  }
-
-  virtual common::Slice key() const override {
-    assert(index_ < (int64_t)list_iters_.size());
-    return list_iters_[index_]->key();
-  }
-
-  virtual common::Slice value() const override {
-    assert(index_ < (int64_t)list_iters_.size());
-    return list_iters_[index_]->value();
-  }
-
-  virtual void seek(const common::Slice &lookup_key) override {
-    while (index_ < (int64_t)list_iters_.size()) {
-      list_iters_[index_]->seek(lookup_key);
-      if (list_iters_[index_]->valid()) {
-        break;
-      }
-      ++index_;
-    }
-  }
-
-  virtual void seek_to_first() override {
-    index_ = 0;
-    if (index_ < (int64_t)list_iters_.size()) {
-      list_iters_[index_]->seek_to_first();
-    }
-  }
-
-  virtual void next() override {
-    if (index_ < (int64_t)list_iters_.size()) {
-      list_iters_[index_]->next();
-      if (!list_iters_[index_]->valid()) {
-        ++index_;
-        if (index_ < (int64_t)list_iters_.size()) {
-          list_iters_[index_]->seek_to_first();
-        }
-      }
-    }
-  }
-
-  virtual const MetaDescriptor &get_meta_descriptor() const override {
-    assert(index_ < (int64_t)list_iters_.size());
-    return list_iters_[index_]->get_meta_descriptor();
-  }
-
- private:
-  util::autovector<RangeIterator *> list_iters_;
-  int64_t index_;
-};
-
-class SequentialDataBlockIterator : public table::InternalIterator {
- public:
-  struct Handle {
-    storage::BlockPosition data_block_;
-    int64_t extent_sequence_;
-    Handle() : data_block_(0, 0), extent_sequence_(0) {}
-    Handle(const storage::BlockPosition &bp, int64_t seq)
-        : data_block_(bp), extent_sequence_(seq) {}
-  };
-  SequentialDataBlockIterator() : index_(0) {}
-  int add_data_block(const Handle &block) {
-    data_blocks_.push_back(block);
-    return common::Status::kOk;
-  }
-  void clear() {
-    data_blocks_.clear();
-    index_ = 0;
-  }
-  int64_t size() const { return (int64_t)data_blocks_.size(); }
-  int64_t current() const { return index_; }
-
-  virtual bool Valid() const override {
-    return index_ < (int64_t)data_blocks_.size();
-  }
-  virtual void Seek(const common::Slice &target) override {
-    // not implements;
-  }
-  virtual void SeekForPrev(const common::Slice &target) override {
-    // not implements;
-  }
-
-  virtual void SeekToFirst() override { index_ = 0; }
-  virtual void SeekToLast() override {
-    index_ = (data_blocks_.size() == 0)
-                 ? 0
-                 : static_cast<int64_t>(data_blocks_.size()) - 1;
-  }
-  virtual void Next() override {
-    assert(Valid());
-    index_++;
-  }
-  virtual void Prev() override {
-    assert(Valid());
-    if (index_ == 0) {
-      index_ = static_cast<int64_t>(data_blocks_.size());  // Marks as invalid
-    } else {
-      index_--;
-    }
-  }
-  common::Slice key() const override {
-    assert(Valid());
-    return value();
-  }
-  common::Slice value() const override {
-    assert(Valid());
-    return common::Slice(reinterpret_cast<const char *>(&data_blocks_[index_]),
-                         sizeof(Handle));
-  }
-  virtual common::Status status() const override {
-    return common::Status::OK();
-  }
-
- private:
-  util::autovector<Handle> data_blocks_;
-  int64_t index_;
-};
-
-
-class DataBlockIterator {
- public:
-  explicit DataBlockIterator(const MetaType type, table::BlockIter *iter)
-      : block_iter_(iter) {
-    meta_descriptor_.type_ = type;
-  }
-  virtual ~DataBlockIterator() {
-    block_iter_->~BlockIter();
-  }
-  void seek_to_first() {
-    assert(block_iter_);
-    block_iter_->SeekToFirst();
-    if (block_iter_->Valid()) {
-      update(block_iter_->key(), block_iter_->value());
-    }
-  }
-  void next() {
-    assert(block_iter_);
-    block_iter_->Next();
-    if (block_iter_->Valid()) {
-      update(block_iter_->key(), block_iter_->value());
-    }
-  }
-  int update(const common::Slice &start, const common::Slice &end) {
-    int ret = 0;
-    meta_descriptor_.range_.end_key_ = start;
-    common::Slice block_index_content = end;
-    table::BlockHandle handle;
-    handle.DecodeFrom(const_cast<common::Slice *>(&block_index_content));
-    meta_descriptor_.block_position_.first = handle.offset();
-    meta_descriptor_.block_position_.second = handle.size();
-    meta_descriptor_.value_ = block_index_content;
-    int64_t delete_percent = 0;
-    FAIL_RETURN(db::BlockStats::decode(block_index_content,
-                                       meta_descriptor_.range_.start_key_,
-                                       delete_percent));
-    meta_descriptor_.delete_percent_ = delete_percent;
-    return ret;
-  }
-  bool valid() { return nullptr != block_iter_ && block_iter_->Valid(); }
+  void seek_to_first();
+  void next();
+  int update(const common::Slice &start, const common::Slice &end);
+  bool valid() const { return IS_NOTNULL(index_iterator_) && index_iterator_->Valid(); }
   const MetaDescriptor &get_meta_descriptor() const { return meta_descriptor_; }
 
  private:
   MetaDescriptor meta_descriptor_;
-  table::BlockIter *block_iter_;
+  table::RowBlockIterator *index_iterator_;
 };
+
 class SEIterator {
  public:
   enum IterLevel { kExtentLevel, kBlockLevel, kKVLevel, kDataEnd };
@@ -544,13 +376,13 @@ class ExtSEIterator : public SEIterator{
   struct ReaderRep {
     ReaderRep()
         : extent_id_(0),
-          table_reader_(nullptr),
+          extent_reader_(nullptr),
           index_iterator_(nullptr),
           block_iter_(nullptr)
     {}
     int64_t extent_id_;
-    table::TableReader *table_reader_;
-    table::BlockIter *index_iterator_;
+    table::ExtentReader *extent_reader_;
+    table::RowBlockIterator *index_iterator_;
     DataBlockIterator *block_iter_;
   };
 
@@ -631,10 +463,11 @@ class ExtSEIterator : public SEIterator{
 
  private:
   DataBlockIterator *current_iterator_;
-  table::BlockIter *current_block_iter_;
+  table::RowBlockIterator *current_block_iter_;
+  table::BlockDataHandle<table::RowBlock> current_data_block_handle_;
   const util::Comparator *cmp_;
   const util::Comparator *internal_cmp_;
-  size_t iterator_index_;
+  int64_t iterator_index_;
   size_t extent_index_;
   bool reuse_;
   bool at_next_; // at next block or extent

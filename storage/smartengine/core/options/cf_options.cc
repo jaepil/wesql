@@ -9,6 +9,7 @@
 
 #include "options/cf_options.h"
 #include "table/filter_manager.h"
+#include "table/table.h"
 #include "util/compression.h"
 
 #ifndef __STDC_FORMAT_MACROS

@@ -100,7 +100,7 @@ bool GetVectorCompressionType(const std::string& value,
 // A helper function to parse CompressionOptions from string
 bool GetCompressionOptions(const std::string& value, CompressionOptions* out);
 
-CompressionType get_compression_type(const ImmutableCFOptions &ioptions, const int level);
+extern CompressionType get_compression_type(const ImmutableCFOptions &ioptions, const int level);
 
 static std::unordered_map<std::string, OptionTypeInfo> db_options_type_info = {
     /*

@@ -25,9 +25,10 @@
 #include <stdint.h>
 #include <memory>
 #include <string>
-#include "format.h"
 #include "memory/base_malloc.h"
 #include "options/options.h"
+#include "table/block_struct.h"
+#include "table/iterator.h"
 
 namespace smartengine {
 namespace table {

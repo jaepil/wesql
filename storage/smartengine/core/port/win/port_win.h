@@ -74,8 +74,6 @@ namespace port {
 // VS 15
 #if (defined _MSC_VER) && (_MSC_VER >= 1900)
 
-#define ROCKSDB_NOEXCEPT noexcept
-
 // For use at db/file_indexer.h kLevelMaxIndex
 const int kMaxInt32 = std::numeric_limits<int>::max();
 const uint64_t kMaxUint64 = std::numeric_limits<uint64_t>::max();
@@ -88,7 +86,6 @@ const size_t kMaxSizet = std::numeric_limits<size_t>::max();
 // VS 15 has snprintf
 #define snprintf _snprintf
 
-#define ROCKSDB_NOEXCEPT
 // std::numeric_limits<size_t>::max() is not constexpr just yet
 // therefore, use the same limits
 

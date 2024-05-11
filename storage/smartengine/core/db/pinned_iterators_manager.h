@@ -75,7 +75,6 @@ class PinnedIteratorsManager : public common::Cleanable {
 
  private:
   static void ReleaseInternalIterator(void* ptr) {
-//    delete reinterpret_cast<table::InternalIterator*>(ptr);
     auto del_ptr = reinterpret_cast<table::InternalIterator*>(ptr);
     MOD_DELETE_OBJECT(InternalIterator, del_ptr);
   }

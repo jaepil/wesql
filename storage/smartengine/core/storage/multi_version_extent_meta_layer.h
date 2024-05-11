@@ -158,7 +158,7 @@ public:
   int64_t get_total_extent_size() const ;
   int64_t get_layers_extent_size(const int64_t layer_num) const ;
   int get_all_extent_ids(util::autovector<ExtentId> &extent_ids) const;
-  int get_all_extent_infos(const int64_t index_id, ExtentIdInfoMap &extent_infos) const;
+  int get_extent_positions(const int64_t index_id, ExtentPositionMap &extent_positions) const;
   int64_t get_largest_sequence_number() const;
   ExtentLayer *get_extent_layer(int64_t index);
   int get(const common::Slice &key, std::function<int(const ExtentMeta *extent_meta, int32_t level, bool &found)>, bool &found) const;

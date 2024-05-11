@@ -386,7 +386,7 @@ TEST(AIO, DISABLED_extent) {
   FileNumber file_number(2000);
 
   AsyncWritableExtent we;
-  Status s = ExtentSpaceManager::get_instance().allocate(0, storage::HOT_EXTENT_SPACE, &we);
+  Status s = ExtentSpaceManager::get_instance().allocate(0, storage::FILE_EXTENT_SPACE, &we);
   EXPECT_TRUE(s.ok()) << s.ToString();
 
   const int size = MAX_EXTENT_SIZE;

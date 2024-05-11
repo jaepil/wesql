@@ -19,6 +19,7 @@
 #include "db/db_test_util.h"
 #include "env/mock_env.h"
 #include "port/port.h"
+#include "port/stack_trace.h"
 #include "util/sync_point.h"
 #include "util/testutil.h"
 #include "transactions/transaction.h"
@@ -45,6 +46,7 @@ public:
     db_name_ = test::TmpDir() + "/recover_test";
     options_.wal_recovery_mode = WALRecoveryMode::kAbsoluteConsistency;
     options_.parallel_wal_recovery = false;
+    options_.allow_2pc = true;
 
     use_obj_ = GetParam();
     if (use_obj_) {
@@ -115,7 +117,7 @@ TEST_P(RecoveryTest, simple_put_then_restart) {
 } // namespace smartengine
 
 int main(int argc, char **argv) {
-  port::InstallStackTraceHandler();
+  smartengine::port::InstallStackTraceHandler();
   std::string log_path =
       smartengine::util::test::TmpDir() + "/db_recover_test.log";
   smartengine::logger::Logger::get_log().init(log_path.c_str(),

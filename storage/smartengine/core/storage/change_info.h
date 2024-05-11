@@ -33,14 +33,12 @@ struct ExtentChange
 	ExtentId extent_id_;
 	uint8_t flag_;
 
-  ExtentChange() : layer_position_(), extent_id_(), flag_(F_INIT) {}
-	explicit ExtentChange(const LayerPosition &layer_position, const ExtentId &extent_id, uint8_t flag)
-      : layer_position_(layer_position),
-        extent_id_(extent_id),
-        flag_(flag)
-  {}
-  ExtentChange(const ExtentChange &) = default;
-  ~ExtentChange() = default;
+  ExtentChange();
+  explicit ExtentChange(const LayerPosition &layer_position, const ExtentId &extent_id, uint8_t flag);
+  ExtentChange(const ExtentChange &extent_change);
+  ~ExtentChange();
+  ExtentChange &operator=(const ExtentChange &extent_change);
+
   bool is_add() const { return flag_ & F_ADD; }
   bool is_delete() const { return flag_ & F_DEL; }
 

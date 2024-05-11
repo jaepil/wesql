@@ -6,7 +6,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "table/table_properties.h"
-#include "table/format.h"
 #include "table/internal_iterator.h"
 #include "util/string_util.h"
 
@@ -36,28 +35,28 @@ void AppendProperty(std::string& props, const std::string& key,
 
 // Seek to the specified meta block.
 // Return true if it successfully seeks to that block.
-Status SeekToMetaBlock(InternalIterator* meta_iter,
-                       const std::string& block_name, bool* is_found,
-                       BlockHandle* block_handle = nullptr) {
-  if (block_handle != nullptr) {
-    *block_handle = BlockHandle::NullBlockHandle();
-  }
-  *is_found = true;
-  meta_iter->Seek(block_name);
-  if (meta_iter->status().ok()) {
-    if (meta_iter->Valid() && meta_iter->key() == block_name) {
-      *is_found = true;
-      if (block_handle) {
-        Slice v = meta_iter->value();
-        return block_handle->DecodeFrom(&v);
-      }
-    } else {
-      *is_found = false;
-      return Status::OK();
-    }
-  }
-  return meta_iter->status();
-}
+//Status SeekToMetaBlock(InternalIterator* meta_iter,
+//                       const std::string& block_name, bool* is_found,
+//                       BlockHandle* block_handle = nullptr) {
+//  if (block_handle != nullptr) {
+//    *block_handle = BlockHandle::NullBlockHandle();
+//  }
+//  *is_found = true;
+//  meta_iter->Seek(block_name);
+//  if (meta_iter->status().ok()) {
+//    if (meta_iter->Valid() && meta_iter->key() == block_name) {
+//      *is_found = true;
+//      if (block_handle) {
+//        Slice v = meta_iter->value();
+//        return block_handle->DecodeFrom(&v);
+//      }
+//    } else {
+//      *is_found = false;
+//      return Status::OK();
+//    }
+//  }
+//  return meta_iter->status();
+//}
 }
 
 std::string TableProperties::ToString(const std::string& prop_delim,
@@ -169,19 +168,19 @@ extern const std::string kCompressionDictBlock = "rocksdb.compression_dict";
 
 // Seek to the properties block.
 // Return true if it successfully seeks to the properties block.
-Status SeekToPropertiesBlock(InternalIterator* meta_iter, bool* is_found) {
-  Status status = SeekToMetaBlock(meta_iter, kPropertiesBlock, is_found);
-  if (!*is_found && status.ok()) {
-    status = SeekToMetaBlock(meta_iter, kPropertiesBlockOldName, is_found);
-  }
-  return status;
-}
-
-// Seek to the compression dictionary block.
-// Return true if it successfully seeks to that block.
-Status SeekToCompressionDictBlock(InternalIterator* meta_iter, bool* is_found) {
-  return SeekToMetaBlock(meta_iter, kCompressionDictBlock, is_found);
-}
+//Status SeekToPropertiesBlock(InternalIterator* meta_iter, bool* is_found) {
+//  Status status = SeekToMetaBlock(meta_iter, kPropertiesBlock, is_found);
+//  if (!*is_found && status.ok()) {
+//    status = SeekToMetaBlock(meta_iter, kPropertiesBlockOldName, is_found);
+//  }
+//  return status;
+//}
+//
+//// Seek to the compression dictionary block.
+//// Return true if it successfully seeks to that block.
+//Status SeekToCompressionDictBlock(InternalIterator* meta_iter, bool* is_found) {
+//  return SeekToMetaBlock(meta_iter, kCompressionDictBlock, is_found);
+//}
 
 }  // namespace table
 }  // namespace smartengine

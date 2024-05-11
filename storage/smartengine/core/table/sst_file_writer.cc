@@ -11,7 +11,8 @@
 #include "storage/storage_common.h"
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
-#include "table/table_builder.h"
+#include "table/extent_table_factory.h"
+#include "table/extent_writer.h"
 
 namespace smartengine {
 using namespace common;
@@ -22,10 +23,14 @@ namespace table {
 const size_t kFadviseTrigger = 1024 * 1024;  // 1MB
 
 struct SstFileWriter::Rep {
-  Rep(const EnvOptions& _env_options, const Options& options,
-      const Comparator* _user_comparator, ColumnFamilyHandle* _cfh,
+  Rep(const EnvOptions& _env_options,
+      const Options& options,
+      const Comparator* _user_comparator,
+      ColumnFamilyHandle* _cfh,
       bool _invalidate_page_cache)
-      : env_options(_env_options),
+      : file_writer(),
+        extent_writer(),
+        env_options(_env_options),
         ioptions(options),
         mutable_cf_options(options),
         internal_comparator(_user_comparator),
@@ -33,8 +38,9 @@ struct SstFileWriter::Rep {
         invalidate_page_cache(_invalidate_page_cache),
         last_fadvise_size(0) {}
 
+  // TODO(Zhao Dongsheng) : the file_writer is useless?
   std::unique_ptr<WritableFileWriter, memory::ptr_destruct<WritableFileWriter>> file_writer;
-  std::unique_ptr<TableBuilder> builder;
+  std::unique_ptr<ExtentWriter> extent_writer;
   EnvOptions env_options;
   ImmutableCFOptions ioptions;
   MutableCFOptions mutable_cf_options;
@@ -58,8 +64,13 @@ SstFileWriter::SstFileWriter(const EnvOptions& env_options,
                              bool invalidate_page_cache,
                              db::MiniTables* mtables,
                              memory::SimpleAllocator *alloc)
-    : rep_(MOD_NEW_OBJECT(memory::ModId::kRep, Rep, env_options, options, user_comparator,
-        column_family, invalidate_page_cache)),
+    : rep_(MOD_NEW_OBJECT(memory::ModId::kRep,
+                          Rep,
+                          env_options,
+                          options,
+                          user_comparator,
+                          column_family,
+                          invalidate_page_cache)),
       internal_alloc_(false) {
 
   rep_->file_info.file_size = 0;
@@ -70,14 +81,12 @@ SstFileWriter::SstFileWriter(const EnvOptions& env_options,
   }
 }
 
-SstFileWriter::~SstFileWriter() {
-  if (rep_->builder) {
-    // User did not call Finish() or Finish() failed, we need to
-    // abandon the builder.
-    rep_->builder->Abandon();
+SstFileWriter::~SstFileWriter()
+{
+  if (rep_->extent_writer) {
+    rep_->extent_writer->rollback();
   }
 
-//  delete rep_;
   MOD_DELETE_OBJECT(Rep, rep_);
   if (internal_alloc_) {
     MOD_DELETE_OBJECT(SimpleAllocator, alloc_);
@@ -121,25 +130,26 @@ Status SstFileWriter::Open(const std::string& file_path) {
   storage::LayerPosition output_layer_position = (0 == mtables_->level)
                                                  ? (storage::LayerPosition(0, storage::LayerPosition::NEW_GENERATE_LAYER_INDEX))
                                                  : (storage::LayerPosition(mtables_->level, 0));
-  TableBuilderOptions table_builder_options(
-      r->ioptions,
-      r->internal_comparator,
-      compression_type,
-      r->ioptions.compression_opts,
-      nullptr /* compression_dict */,
-      false /* skip_filters */,
-      r->column_family_name,
-      output_layer_position,
-      false /**is_flush*/);
   r->file_writer.reset(ALLOC_OBJECT(WritableFileWriter, *alloc_, sst_file, r->env_options, nullptr, false/*sst_file use allocator*/));
 
   //TODO(tec) : If table_factory is using compressed block cache, we will
   // be adding the external sst file blocks into it, which is wasteful.
-  // r->builder.reset(r->ioptions.table_factory->NewTableBuilder(
-  //    table_builder_options, cf_id, r->file_writer.get()));
-  // todo use arena
-  r->builder.reset(r->ioptions.table_factory->NewTableBuilderExt(
-      table_builder_options, cf_id, mtables_));
+  /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
+  table::ExtentBasedTableFactory *tmp_factory = reinterpret_cast<table::ExtentBasedTableFactory *>(
+      r->ioptions.table_factory);
+  ExtentWriterArgs writer_args(cf_id,
+                               cfd->get_table_space_id(),
+                               tmp_factory->table_options().block_size,
+                               tmp_factory->table_options().block_restart_interval,
+                               r->ioptions.env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                               &(r->internal_comparator),
+                               output_layer_position,
+                               tmp_factory->table_options().block_cache.get(),
+                               r->ioptions.row_cache.get(),
+                               compression_type,
+                               mtables_->change_info_);
+  r->extent_writer.reset(new ExtentWriter());
+  s = r->extent_writer->init(writer_args);
 
   r->file_info.file_path = file_path;
   r->file_info.file_size = 0;
@@ -151,8 +161,8 @@ Status SstFileWriter::Open(const std::string& file_path) {
 
 Status SstFileWriter::Add(const Slice& user_key, const Slice& value) {
   Rep* r = rep_;
-  if (!r->builder) {
-    return Status::InvalidArgument("File is not opened");
+  if (!r->extent_writer) {
+    return Status::InvalidArgument("File is not opened"); 
   }
 
   if (r->file_info.num_entries == 0) {
@@ -168,14 +178,14 @@ Status SstFileWriter::Add(const Slice& user_key, const Slice& value) {
   // TODO(tec) : For external SST files we could omit the seqno and type.
   r->ikey.Set(user_key, 0 /* Sequence Number */,
               ValueType::kTypeValue /* Put */);
-  if(Status::kOk != r->builder->Add(r->ikey.Encode(), value)){
+  if(Status::kOk != r->extent_writer->append_row(r->ikey.Encode(), value)){
     return Status(Status::kErrorUnexpected, "SstFileWriter add fail", "");
   }
 
   // update file info
   r->file_info.num_entries++;
   r->file_info.largest_key.assign(user_key.data(), user_key.size());
-  r->file_info.file_size = r->builder->FileSize();
+  //r->file_info.file_size = r->extent_writer->FileSize();
 
   InvalidatePageCache(false /* closing */);
 
@@ -184,15 +194,15 @@ Status SstFileWriter::Add(const Slice& user_key, const Slice& value) {
 
 Status SstFileWriter::Finish(ExternalSstFileInfo* file_info) {
   Rep* r = rep_;
-  if (!r->builder) {
+  if (!r->extent_writer) {
     return Status::InvalidArgument("File is not opened");
   }
   if (r->file_info.num_entries == 0) {
     return Status::InvalidArgument("Cannot create sst file with no entries");
   }
 
-  Status s = r->builder->Finish();
-  r->file_info.file_size = r->builder->FileSize();
+  Status s = r->extent_writer->finish(nullptr /*extent_infos*/);
+  //r->file_info.file_size = r->extent_writer->FileSize();
 
   if (s.ok()) {
     s = r->file_writer->Sync(false /**use_fsync*/);
@@ -209,7 +219,7 @@ Status SstFileWriter::Finish(ExternalSstFileInfo* file_info) {
     *file_info = r->file_info;
   }
 
-  r->builder.reset();
+  r->extent_writer.reset();
   return s;
 }
 
@@ -220,15 +230,15 @@ void SstFileWriter::InvalidatePageCache(bool closing) {
     return;
   }
 
-  uint64_t bytes_since_last_fadvise =
-      r->builder->FileSize() - r->last_fadvise_size;
-  if (bytes_since_last_fadvise > kFadviseTrigger || closing) {
-    TEST_SYNC_POINT_CALLBACK("SstFileWriter::InvalidatePageCache",
-                             &(bytes_since_last_fadvise));
-    // Tell the OS that we dont need this file in page cache
-    r->file_writer->InvalidateCache(0, 0);
-    r->last_fadvise_size = r->builder->FileSize();
-  }
+  //uint64_t bytes_since_last_fadvise =
+  //    r->builder->FileSize() - r->last_fadvise_size;
+  //if (bytes_since_last_fadvise > kFadviseTrigger || closing) {
+  //  TEST_SYNC_POINT_CALLBACK("SstFileWriter::InvalidatePageCache",
+  //                           &(bytes_since_last_fadvise));
+  //  // Tell the OS that we dont need this file in page cache
+  //  r->file_writer->InvalidateCache(0, 0);
+  //  r->last_fadvise_size = r->builder->FileSize();
+  //}
 }
 
 uint64_t SstFileWriter::FileSize() { return rep_->file_info.file_size; }

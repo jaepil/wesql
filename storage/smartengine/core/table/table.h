@@ -25,6 +25,7 @@
 #include "cache/cache.h"
 #include "env/env.h"
 #include "options/options.h"
+#include "table/block_struct.h"
 
 namespace smartengine
 {
@@ -61,12 +62,6 @@ class TableBuilder;
 class TableReader;
 class FlushBlockPolicyFactory;
 class FilterPolicy;
-
-enum ChecksumType : char {
-  kNoChecksum = 0x0,  // not yet supported. Will fail
-  kCRC32c = 0x1,
-  kxxHash = 0x2,
-};
 
 // For advanced user only
 struct BlockBasedTableOptions {
@@ -238,7 +233,11 @@ class TableFactory {
       uint64_t file_size,
       TableReader *&table_reader,
       bool prefetch_index_and_filter_in_cache = true,
-      memory::SimpleAllocator *arena = nullptr) const = 0;
+      memory::SimpleAllocator *arena = nullptr) const
+  {
+    abort();
+    return common::Status::kOk;
+  }
 
   virtual TableBuilder* NewTableBuilderExt(
       const TableBuilderOptions& table_builder_options,

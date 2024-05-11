@@ -28,7 +28,6 @@
 #include "memory/page_arena.h"
 #include "options/options.h"
 #include "storage/change_info.h"
-#include "table/block.h"
 #include "util/aligned_buffer.h"
 
 namespace smartengine
@@ -36,26 +35,26 @@ namespace smartengine
 namespace db
 {
 class InternalKeyComparator;
-}
+} // namespace db
 
 namespace util
 {
 struct EnvOptions;
 class Env;
 class Comparator;
-}
-
+} // namespace util
 namespace common
 {
 struct ImmutableCFOptions;
 struct MutableCFOptions;
-}
-
-namespace table {
+} // namespace common
+namespace table
+{
 class BlockIter;
-}
-
-namespace storage {
+class ExtentWriter;
+} // namespace table
+namespace storage
+{
 class NewCompactionIterator;
 
 struct CompactionContext
@@ -197,7 +196,7 @@ class GeneralCompaction : public Compaction {
   int copy_data_block(const MetaDescriptor &data_block
                       /*const common::SeSchema *schema*/);
   int create_extent_index_iterator(const MetaDescriptor &extent,
-                                   size_t &iterator_index,
+                                   int64_t &iterator_index,
                                    DataBlockIterator *&iterator,
                                    ExtSEIterator::ReaderRep &rep);
   int destroy_extent_index_iterator(const int64_t iterator_index);
@@ -221,27 +220,19 @@ class GeneralCompaction : public Compaction {
   int merge_extents(MultipleSEIterator *&merge_iterator,
       db::MiniTables *flush_tables = nullptr);
 
-  int prefetch_extent(int64_t extent_id);
+  int prefetch_extent(int64_t extent_id, table::ExtentReader *&extent_reader);
 
-  int get_table_reader(const MetaDescriptor &extent,
-                       table::TableReader *&reader);
-  int get_extent_index_iterator(const MetaDescriptor &extent,
-                                table::TableReader *&reader,
-                                table::BlockIter *&index_iterator);
-  int get_extent_index_iterator(table::TableReader *reader,
-                                table::BlockIter *&index_iterator);
+  int create_data_block_iterator(table::ExtentReader *extent_reader,
+                                 table::BlockDataHandle<table::RowBlock> &data_block_handle,
+                                 table::RowBlockIterator *&block_iterator);
 
-  int create_data_block_iterator(const storage::BlockPosition &data_block,
-                                 table::TableReader *reader,
-                                 table::BlockIter *&block_iterator);
-  int destroy_data_block_iterator(table::BlockIter *block_iterator);
+  int destroy_data_block_iterator(table::RowBlockIterator *block_iterator);
 
-  FullPrefetchExtent *get_prefetched_extent(int64_t extent_id) const;
-
-  void destroy_async_extent_reader(int64_t extent_id, bool is_reuse = false);
+  table::ExtentReader *get_prefetched_extent(int64_t extent_id) const;
 
   virtual void clear_current_readers();
 
+  //TODO(Zhao Dongsheng): the function name is confused.
   virtual void clear_current_writers();
 
   void record_compaction_iterator_stats(
@@ -249,11 +240,12 @@ class GeneralCompaction : public Compaction {
       CompactRecordStats &stats);
 
  protected:
-  using PrefetchExtentMap = std::unordered_map<int64_t, FullPrefetchExtent *,
+  using PrefetchExtentMap = std::unordered_map<int64_t, table::ExtentReader *,
   std::hash<int64_t>, std::equal_to<int64_t>,
   memory::stl_adapt_allocator<std::pair<const int64_t,
-  FullPrefetchExtent *>, memory::ModId::kCompaction>>;
+  table::ExtentReader *>, memory::ModId::kCompaction>>;
 
+  //TODO(Zhao Dongsheng): dummy dict?
   std::string compression_dict_;
   // options for create builder and reader;
   CompactionContext context_;
@@ -267,7 +259,7 @@ class GeneralCompaction : public Compaction {
 
   // compaction writer,
   bool write_extent_opened_;
-  std::unique_ptr<table::TableBuilder> extent_builder_;
+  table::ExtentWriter *extent_writer_;
   util::WritableBuffer block_buffer_;
   db::MiniTables mini_tables_;
   storage::ChangeInfo change_info_;

@@ -21,6 +21,8 @@ namespace smartengine
 {
 using namespace common;
 using namespace memory;
+using namespace monitor;
+
 namespace cache
 {
 static void delete_cache_entry(void *value, void* handler) {
@@ -300,6 +302,33 @@ int RowCache::insert_row(const common::Slice& key,
     SE_LOG(WARN, "fail to insert row into row cache shard", K(ret));
   } else {
     //succeed
+  }
+
+  return ret;
+}
+
+int RowCache::evict(const uint32_t index_id, const common::Slice &key)
+{
+  int ret = Status::kOk;
+  bool in_cache = false;
+  db::IterKey cache_key;
+  
+  // TODO(Zhao Dongsheng) : the user key alreay contains index_id, no need
+  // to construct row cache key with index_id.Or we could remove index id
+  // from user key to save storage space. 
+  // 1. Construct row cache key: {index_id:user_key}
+  char buf[10] = {0};
+  char *end = util::EncodeVarint32(buf, index_id);
+  cache_key.TrimAppend(cache_key.Size(), buf, end - buf);
+  Slice user_key = db::ExtractUserKey(key);
+  cache_key.TrimAppend(cache_key.Size(), user_key.data(), user_key.size());
+
+  // 2. Erase old version row from row cache
+  if (FAILED(check_in_cache(cache_key.GetUserKey(), in_cache))) {
+    SE_LOG(WARN, "fail to check key in cache", K(ret));
+  } else if (in_cache) {
+    erase(cache_key.GetUserKey());
+    QUERY_COUNT(CountPoint::ROW_CACHE_EVICT);
   }
 
   return ret;

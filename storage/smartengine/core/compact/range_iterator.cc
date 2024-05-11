@@ -16,30 +16,36 @@
 
 #include "compact/range_iterator.h"
 #include "compact/compaction.h"
+#include "table/extent_reader.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace common;
 using namespace db;
 using namespace util;
 using namespace memory;
 
-namespace storage {
+namespace storage
+{
 
-Range Range::deep_copy(Allocator &allocator) const {
+Range Range::deep_copy(Allocator &allocator) const
+{
   Range ret;
   ret.start_key_ = start_key_.deep_copy(allocator);
   ret.end_key_ = end_key_.deep_copy(allocator);
   return ret;
 }
 
-Range Range::deep_copy(memory::SimpleAllocator &allocator) const {
+Range Range::deep_copy(memory::SimpleAllocator &allocator) const
+{
   Range ret;
   ret.start_key_ = start_key_.deep_copy(allocator);
   ret.end_key_ = end_key_.deep_copy(allocator);
   return ret;
 }
 
-int64_t Range::to_string(char *buf, const int64_t buf_len) const {
+int64_t Range::to_string(char *buf, const int64_t buf_len) const
+{
   int64_t pos = 0;
   databuff_printf(buf, buf_len, pos, "{start_key:");
   pos += db::internal_key_to_string(start_key_, buf + pos, buf_len - pos);
@@ -58,8 +64,7 @@ MetaType::MetaType()
       way_(0),
       sequence_(0) {}
 
-MetaType::MetaType(int8_t st, int8_t dt, int8_t kt, int8_t lv, int16_t w,
-                   int64_t seq)
+MetaType::MetaType(int8_t st, int8_t dt, int8_t kt, int8_t lv, int16_t w, int64_t seq)
     : store_type_(st),
       data_type_(dt),
       key_type_(kt),
@@ -78,11 +83,13 @@ MetaDescriptor::MetaDescriptor()
       extent_id_(),
       key_(),
       value_() ,
-      delete_percent_(0)
+      delete_percent_(0),
+      block_info_()
 {
 }
 
-MetaDescriptor MetaDescriptor::deep_copy(Allocator &allocator) const {
+MetaDescriptor MetaDescriptor::deep_copy(Allocator &allocator) const
+{
   MetaDescriptor ret;
   ret.type_ = type_;
   ret.range_ = range_.deep_copy(allocator);
@@ -92,10 +99,12 @@ MetaDescriptor MetaDescriptor::deep_copy(Allocator &allocator) const {
   ret.key_ = key_.deep_copy(allocator);
   ret.value_ = value_.deep_copy(allocator);
   ret.delete_percent_ = delete_percent_;
+  ret.block_info_ = block_info_;
   return ret;
 }
 
-MetaDescriptor MetaDescriptor::deep_copy(memory::SimpleAllocator &allocator) const {
+MetaDescriptor MetaDescriptor::deep_copy(memory::SimpleAllocator &allocator) const
+{
   MetaDescriptor ret;
   ret.type_ = type_;
   ret.range_ = range_.deep_copy(allocator);
@@ -105,12 +114,61 @@ MetaDescriptor MetaDescriptor::deep_copy(memory::SimpleAllocator &allocator) con
   ret.key_ = key_.deep_copy(allocator);
   ret.value_ = value_.deep_copy(allocator);
   ret.delete_percent_ = delete_percent_;
+  ret.block_info_ = block_info_;
   return ret;
 }
 
 DEFINE_TO_STRING(MetaDescriptor, KV_(type), KV_(range), "bp1",
                  block_position_.first, "bp2", block_position_.second,
-                 KV_(layer_position), KV_(extent_id), KV_(delete_percent))
+                 KV_(layer_position), KV_(extent_id), KV_(delete_percent),
+                 KV_(block_info))
+
+DataBlockIterator::DataBlockIterator(const MetaType type, table::RowBlockIterator *index_iterator)
+    : index_iterator_(index_iterator)
+{
+  meta_descriptor_.type_ = type;
+}
+
+DataBlockIterator::~DataBlockIterator()
+{}
+
+void DataBlockIterator::seek_to_first()
+{
+  assert(index_iterator_);
+  index_iterator_->SeekToFirst();
+  if (index_iterator_->Valid()) {
+    update(index_iterator_->key(), index_iterator_->value());
+  }
+}
+
+void DataBlockIterator::next()
+{
+  assert(index_iterator_);
+  index_iterator_->Next();
+  if (index_iterator_->Valid()) {
+    update(index_iterator_->key(), index_iterator_->value());
+  }
+}
+
+int DataBlockIterator::update(const Slice &start, const Slice &end)
+{
+  int ret = Status::kOk;
+  int64_t pos = 0;
+
+  if (FAILED(meta_descriptor_.block_info_.deserialize(end.data(), end.size(), pos))) {
+    COMPACTION_LOG(WARN, "fail to deserialize block info", K(ret));
+  } else {
+    meta_descriptor_.range_.start_key_ = meta_descriptor_.block_info_.first_key_;
+    meta_descriptor_.range_.end_key_ = start;
+    meta_descriptor_.block_position_.first = meta_descriptor_.block_info_.get_offset();
+    meta_descriptor_.block_position_.second = meta_descriptor_.block_info_.get_size();
+    meta_descriptor_.delete_percent_ = meta_descriptor_.block_info_.get_delete_percent();
+    meta_descriptor_.value_ = end;
+  }
+
+  return ret;
+}
+
 /*
   SEIterator => the single way iterator which provide reuse blocks/extents func.
 
@@ -217,6 +275,7 @@ ExtSEIterator::ExtSEIterator(const Comparator *cmp,
     : SEIterator(),
       current_iterator_(nullptr),
       current_block_iter_(nullptr),
+      current_data_block_handle_(),
       cmp_(cmp),
       internal_cmp_(internal_cmp),
       iterator_index_(0),
@@ -237,6 +296,7 @@ void ExtSEIterator::reset() {
   if (nullptr != current_block_iter_) {
     compaction_->destroy_data_block_iterator(current_block_iter_);
   }
+  current_data_block_handle_.reset();
   compaction_ = nullptr;
   current_iterator_ = nullptr;
   current_block_iter_ = nullptr;
@@ -287,10 +347,10 @@ int ExtSEIterator::create_current_iterator() {
 }
 
 void ExtSEIterator::prefetch_next_extent() {
+  table::ExtentReader *extent_reader = nullptr;
   if (extent_index_ + 1 < extent_list_.size()) {
-    int64_t next_extent_id =
-        extent_list_.at(extent_index_ + 1).block_position_.first;
-    compaction_->prefetch_extent(next_extent_id);
+    int64_t next_extent_id = extent_list_.at(extent_index_ + 1).block_position_.first;
+    compaction_->prefetch_extent(next_extent_id, extent_reader);
   }
 }
 
@@ -304,15 +364,21 @@ int ExtSEIterator::create_block_iter(const MetaDescriptor &meta) {
     if (nullptr != current_block_iter_) {
       compaction_->destroy_data_block_iterator(current_block_iter_);
     }
-    ret = compaction_->create_data_block_iterator(
-        meta.block_position_,
-        cur_rep_.table_reader_, current_block_iter_);
+    current_data_block_handle_.reset();
+    current_data_block_handle_.extent_id_ = cur_rep_.extent_id_;
+    current_data_block_handle_.block_info_ = meta.block_info_;
+
+    ret = compaction_->create_data_block_iterator(cur_rep_.extent_reader_,
+                                                  current_data_block_handle_,
+                                                  current_block_iter_);
     if (SUCCED(ret)) {
       current_block_iter_->SeekToFirst();
       if (current_block_iter_->Valid()) {  // update startkey,endkey
         startkey_ = current_block_iter_->key();
         endkey_ = startkey_;
         iter_level_ = kKVLevel;
+      } else {
+        COMPACTION_LOG(WARN, "the block iter is invalid");
       }
     } else {
       COMPACTION_LOG(WARN, "create data block iterator failed", K(ret), K(meta));

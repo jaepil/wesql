@@ -24,50 +24,54 @@
 #include "storage/extent_space_manager.h"
 #include "storage/storage_logger.h"
 #include "storage/storage_manager.h"
-#include "table/flush_block_policy.h"
+#include "table/extent_writer.h"
+#include "table/extent_table_factory.h"
+#include "util/file_reader_writer.h"
 #include "util/testharness.h"
+#include <cstddef>
 #define private public
 #define protected public
-#include "table/extent_table_builder.h"
 
 namespace smartengine
 {
+using namespace cache;
 using namespace storage;
+using namespace table;
 
 namespace table
 {
 
-class TESTFlushBlockPolicy : public FlushBlockPolicy
-{
-public:
-  TESTFlushBlockPolicy() : need_flush_(false)
-  {}
-  virtual bool Update(const common::Slice& key, const common::Slice& value) override
-  {
-    bool need_flush = need_flush_;
-    need_flush_ = false;
-    return need_flush;
-  }
-  void set_need_flush()
-  {
-    need_flush_ = true;
-  }
-private:
-  bool need_flush_;
-};
-
-class TESTFlushBlockPolicyFactory : public FlushBlockPolicyFactory
-{
-public:
-  TESTFlushBlockPolicyFactory() {}
-  const char* Name() const override {
-    return "TESTFlushBlockPolicyFactory";
-  }
-  FlushBlockPolicy* NewFlushBlockPolicy(const BlockBasedTableOptions& table_options,
-                                        const BlockBuilder& data_block_builder) const override {
-    return new TESTFlushBlockPolicy;
-  }
-};
+//class TESTFlushBlockPolicy : public FlushBlockPolicy
+//{
+//public:
+//  TESTFlushBlockPolicy() : need_flush_(false)
+//  {}
+//  virtual bool Update(const common::Slice& key, const common::Slice& value) override
+//  {
+//    bool need_flush = need_flush_;
+//    need_flush_ = false;
+//    return need_flush;
+//  }
+//  void set_need_flush()
+//  {
+//    need_flush_ = true;
+//  }
+//private:
+//  bool need_flush_;
+//};
+//
+//class TESTFlushBlockPolicyFactory : public FlushBlockPolicyFactory
+//{
+//public:
+//  TESTFlushBlockPolicyFactory() {}
+//  const char* Name() const override {
+//    return "TESTFlushBlockPolicyFactory";
+//  }
+//  FlushBlockPolicy* NewFlushBlockPolicy(const BlockBasedTableOptions& table_options,
+//                                        const BlockBuilder& data_block_builder) const override {
+//    return new TESTFlushBlockPolicy;
+//  }
+//};
 
 struct TestArgs {
   common::CompressionType compression_;
@@ -93,7 +97,7 @@ struct TestArgs {
     options_ = new common::Options();
     int block_size = 16 * 1024;
     table_options_.block_size = block_size;
-    table_options_.flush_block_policy_factory.reset(new TESTFlushBlockPolicyFactory());
+    //table_options_.flush_block_policy_factory.reset(new TESTFlushBlockPolicyFactory());
     table_options_.block_cache = cache::NewLRUCache(block_cache_size_ == 0 ? 50000 : block_cache_size_, 1);
     options_->table_factory.reset(NewExtentBasedTableFactory(table_options_));
     options_->disable_auto_compactions = true;
@@ -145,7 +149,7 @@ public:
                                version_set_(nullptr),
                                descriptor_log_(nullptr),
                                internal_comparator_(util::BytewiseComparator()),
-                               extent_builder_(nullptr),
+                               extent_writer_(nullptr),
                                //block_cache_(nullptr),
                                table_cache_(nullptr),
                                row_size_(0),
@@ -162,7 +166,7 @@ public:
   void init(const TestArgs &args);
   void reset();
   void destroy();
-  void open_extent_builder();
+  void open_extent_writer();
   void append_block(const int64_t start_key,
                     const int64_t end_key,
                     const bool flush_block);
@@ -200,7 +204,7 @@ protected:
   std::string compression_dict_;
   storage::ColumnFamilyDesc cf_desc_;
   db::MiniTables mini_tables_;
-  std::unique_ptr<table::TableBuilder> extent_builder_;
+  std::unique_ptr<table::ExtentWriter> extent_writer_;
   // scan
   //std::shared_ptr<cache::Cache> block_cache_;
   std::unique_ptr<db::TableCache> table_cache_;
@@ -225,10 +229,7 @@ void InternalIteratorTestBase::reset()
   db_dir_.reset();
   mini_tables_.metas.clear();
   mini_tables_.props.clear();
-  //if (mini_tables_.schema == nullptr) {
-    //mini_tables_.schema = new common::SeSchema;
-  //}
-  extent_builder_.reset();
+  extent_writer_.reset();
   StorageLogger::get_instance().destroy();
   descriptor_log_ = nullptr;
   storage_manager_.reset();
@@ -329,8 +330,9 @@ void InternalIteratorTestBase::init(const TestArgs &args)
   level_ = 1;
 }
 
-void InternalIteratorTestBase::open_extent_builder()
+void InternalIteratorTestBase::open_extent_writer()
 {
+  int ret = common::Status::kOk;
   mini_tables_.change_info_ = &change_info_;
   ASSERT_EQ(StorageLogger::get_instance().begin(storage::MINOR_COMPACTION), common::Status::kOk);
   //mini_tables_.change_info_->task_type_ = db::TaskType::SPLIT_TASK;
@@ -338,17 +340,25 @@ void InternalIteratorTestBase::open_extent_builder()
   cf_desc_.column_family_id_ = 1;
   storage::LayerPosition output_layer_position(level_, 0);
   common::CompressionType compression_type = get_compression_type(context_->icf_options_, level_);
-  TableBuilderOptions table_builder_opts(context_->icf_options_,
-                                         internal_comparator_,
-                                         compression_type,
-                                         context_->icf_options_.compression_opts,
-                                         &compression_dict_,
-                                         true /**skip_filter*/,
-                                         cf_desc_.column_family_name_,
-                                         output_layer_position,
-                                         false /**is_flush*/);
-  extent_builder_.reset(context_->icf_options_.table_factory->NewTableBuilderExt(
-        table_builder_opts, cf_desc_.column_family_id_, &mini_tables_));
+  /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
+  ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
+      context_->icf_options_.table_factory);
+  ExtentWriterArgs args(cf_desc_.column_family_id_,
+                        mini_tables_.table_space_id_,
+                        tmp_factory->table_options().block_size,
+                        tmp_factory->table_options().block_restart_interval,
+                        context_->icf_options_.env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                        &internal_comparator_,
+                        output_layer_position,
+                        tmp_factory->table_options().block_cache.get(),
+                        context_->icf_options_.row_cache.get(),
+                        compression_type,
+                        &change_info_);
+  ExtentWriter *extent_writer_ptr = new ExtentWriter();
+  se_assert(extent_writer_ptr);
+  ret = extent_writer_ptr->init(args);
+  ASSERT_EQ(common::Status::kOk, ret);
+  extent_writer_.reset(extent_writer_ptr);
 }
 
 // NOTICE! the end_key will in the next block/extent
@@ -379,7 +389,8 @@ void InternalIteratorTestBase::append_rows(const int64_t start_key,
                                            const int64_t end_key,
                                            bool flush_block)
 {
-  ASSERT_TRUE(nullptr != extent_builder_.get());
+  int ret = common::Status::kOk;
+  ASSERT_TRUE(nullptr != extent_writer_.get());
   int64_t commit_log_seq = 0;
   char key_buf[key_size_];
   char row_buf[row_size_];
@@ -390,29 +401,30 @@ void InternalIteratorTestBase::append_rows(const int64_t start_key,
     make_key(key_buf, key_size_, key);
     if (key == end_key) {
       if (flush_block) {
-        reinterpret_cast<TESTFlushBlockPolicy *>(
-            reinterpret_cast<ExtentBasedTableBuilder *>(
-            extent_builder_.get())->rep_->flush_block_policy.get())->set_need_flush();
+        extent_writer_->test_force_flush_data_block();
+        //reinterpret_cast<TESTFlushBlockPolicy *>(
+        //    reinterpret_cast<ExtentBasedTableBuilder *>(
+        //    extent_builder_.get())->rep_->flush_block_policy.get())->set_need_flush();
       }
     }
     db::InternalKey ikey(common::Slice(key_buf, strlen(key_buf)), 10 /*sequence*/, db::kTypeValue);
     make_value(row_buf, row_size_, key);
-    extent_builder_->Add(ikey.Encode(), common::Slice(row_buf, row_size_));
-    ASSERT_TRUE(extent_builder_->status().ok());
+    ret = extent_writer_->append_row(ikey.Encode(), common::Slice(row_buf, row_size_));
+    se_assert(common::Status::kOk == ret);
   }
 }
 
 void InternalIteratorTestBase::close_extent_builder()
 {
+  int ret = common::Status::kOk;
   int64_t commit_seq = 0;
-  extent_builder_->Finish();
-  ASSERT_TRUE(extent_builder_->status().ok());
+  ret = extent_writer_->finish(nullptr /*extent_infos*/);
+  se_assert(common::Status::kOk == ret);
   ASSERT_EQ(StorageLogger::get_instance().commit(commit_seq), common::Status::kOk);
   ASSERT_EQ(storage_manager_->apply(*(mini_tables_.change_info_), false), common::Status::kOk);
   mini_tables_.metas.clear();
   mini_tables_.props.clear();
   mini_tables_.change_info_->clear();
 }
-
 } // namespace table
 } // namespace smartengine

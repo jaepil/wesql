@@ -61,6 +61,7 @@ class Status {
     kOverLimit = 28,
     kRecoverCommitLater = 29,
     kObjStoreError = 30,
+    kNotCompress = 31,
   };
 
   enum SubCode { kNone = 0, kMaxSubCode };

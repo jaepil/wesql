@@ -47,7 +47,7 @@ private:
   int before_shrink(bool &can_shrink);
   int do_shrink();
   int after_shrink();
-  int get_extent_infos();
+  int get_extent_positions();
   int move_extent();
   int install_shrink_result();
   int write_extent_metas();
@@ -65,7 +65,7 @@ private:
   db::GlobalContext *global_ctx_;
   ShrinkInfo shrink_info_;
   std::unordered_map<int64_t, db::SubTable *> subtable_map_;
-  ExtentIdInfoMap extent_info_map_;
+  ExtentPositionMap extent_positions_;
   ExtentReplaceMap extent_replace_map_;
   ChangeInfoMap change_info_map_;
 };

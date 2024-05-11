@@ -28,8 +28,6 @@
 #include "storage/io_extent.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_manager_mock.h"
-#include "table/block.h"
-#include "table/block_builder.h"
 #include "table/extent_table_factory.h"
 #include "table/merging_iterator.h"
 #include "table/table_reader.h"

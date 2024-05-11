@@ -7,20 +7,22 @@
 // LICENSE file in the root directory of this source tree. An additional grant
 // of patent rights can be found in the PATENTS file in the same directory.
 
-#ifndef STORAGE_ROCKSDB_INCLUDE_TYPES_H_
-#define STORAGE_ROCKSDB_INCLUDE_TYPES_H_
+#pragma once
 
 #include <stdint.h>
+#include "port/port_posix.h"
 
-namespace smartengine {
-namespace common {
-
-// Define all public custom types here.
+namespace smartengine
+{
+namespace common
+{
 
 // Represents a sequence number in a WAL file.
 typedef uint64_t SequenceNumber;
 
+static const common::SequenceNumber kMaxSequenceNumber = ((0x1ull << 56) - 1);
+
+static const common::SequenceNumber kDisableGlobalSequenceNumber = port::kMaxUint64;
+
 }  // namespace common
 }  // namespace smartengine
-
-#endif  //  STORAGE_ROCKSDB_INCLUDE_TYPES_H_
