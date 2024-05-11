@@ -36,7 +36,11 @@ int consensus_replication_trans_before_dml(Trans_param *param, int &out) {
     - The table must be from a transactional engine
    */
   for (uint table = 0; out == 0 && table < param->number_of_tables; table++) {
-    if (param->tables_info[table].db_type != DB_TYPE_INNODB) {
+    if (param->tables_info[table].db_type != DB_TYPE_INNODB
+#ifdef WITH_SMARTENGINE
+        && param->tables_info[table].db_type != DB_TYPE_SMARTENGINE
+#endif
+    ) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_RPL_NEEDS_TRANSACTIONAL_TABLE,
                    param->tables_info[table].table_name);
       out++;
