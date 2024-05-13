@@ -2,10 +2,8 @@
 # Create binlog local archive tmp path
 # Create object store
 # Create object store bucket
-# Create binlog path
-# Create binlog index path
 # Server restart with --binlog-archive=true
-# restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=binlog_base_name --log-bin-index=binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
+# restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --mysql-archive-dir=archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1);
@@ -43,20 +41,13 @@ binlog.000001
 binlog.000002
 binlog.000003
 #
-# Mysql Sever binlog
-#
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-#
 # Object store archive binlog
 #
 binlog.000001
 binlog.000002
 binlog.000003
-# Change binlog archive path and restart server
-# restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=binlog_base_name --log-bin-index=binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
+# Binlog local archive, not persist object store
+# restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --mysql-archive-dir=archive_dir
 FLUSH logs;
 FLUSH logs;
 show binary logs;
@@ -67,7 +58,6 @@ binlog.000003	#	#
 binlog.000004	#	#
 binlog.000005	#	#
 binlog.000006	#	#
-binlog.000007	#	#
 SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 Log_name
 binlog.000001
@@ -75,135 +65,12 @@ binlog.000002
 binlog.000003
 binlog.000004
 binlog.000005
-binlog.000006
-SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
-log
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-#
-# Mysql Sever binlog
-#
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-#
-# Object store archive binlog
-#
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-# Change mysql binlog path to relative path
-# Change mysql binlog index path to relative path
-# Server restart with --binlog-archive=true
-# restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=binlog_base_name --log-bin-index=binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
-FLUSH logs;
-FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-my-binlog.000001	#	#
-my-binlog.000002	#	#
-my-binlog.000003	#	#
-SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-my-binlog.000001
-my-binlog.000002
-SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
-log
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-my-binlog.000001
-my-binlog.000002
-#
-# Mysql Sever binlog
-#
-my-binlog.000001
-my-binlog.000002
-my-binlog.000003
-#
-# Object store archive binlog
-#
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-my-binlog.000001
-my-binlog.000002
-include/assert.inc [Purge binlog persistent files.]
-SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
-Log_name
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-my-binlog.000001
-my-binlog.000002
-SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
-log
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-my-binlog.000001
-my-binlog.000002
-# Binlog local archive, not persist object store
-# restart: --smartengine=1 --default-storage-engine=smartengine  --log-bin=binlog_base_name --log-bin-index=binlog_index --binlog-archive=true --gtid-mode=on --enforce_gtid_consistency=on --mysql-archive-dir=archive_dir
-FLUSH logs;
-FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-my-binlog.000001	#	#
-my-binlog.000002	#	#
-my-binlog.000003	#	#
-my-binlog.000004	#	#
-my-binlog.000005	#	#
-my-binlog.000006	#	#
-SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
-Log_name
-my-binlog.000001
-my-binlog.000002
-my-binlog.000003
-my-binlog.000004
-my-binlog.000005
-#
-# Mysql Sever binlog
-#
-my-binlog.000001
-my-binlog.000002
-my-binlog.000003
-my-binlog.000004
-my-binlog.000005
-my-binlog.000006
 #
 # Local archive binlog
 #
-my-binlog.000001
-my-binlog.000002
-my-binlog.000003
-my-binlog.000004
-my-binlog.000005
+binlog.000001
+binlog.000002
+binlog.000003
+binlog.000004
+binlog.000005
 DROP DATABASE db1;

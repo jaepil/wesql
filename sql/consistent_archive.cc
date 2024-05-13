@@ -901,6 +901,7 @@ bool Consistent_archive::achive_mysql_innodb() {
 
   // force rotate binlog, wait for binlog rotate complete
   if (mysql_bin_log.is_open() && m_binlog_file[0] != '\0') {
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, m_binlog_file);
     DBUG_EXECUTE_IF("fault_injection_persistent_innodb_archive_rotate_binlog",
                     { return true; });
     mysql_mutex_lock(mysql_bin_log.get_log_lock());
@@ -918,6 +919,14 @@ bool Consistent_archive::achive_mysql_innodb() {
              "binlog archive wait for update failed");
       return true;
     }
+  }
+  else {
+    std::string err_msg;
+    err_msg.assign("no persistent binlog: ");
+    if (m_binlog_file[0] != '\0') {
+      err_msg.append(m_binlog_file);
+    }
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
   }
 
   return false;

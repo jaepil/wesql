@@ -35,6 +35,7 @@
 #include "sql/mdl.h"
 #include "sql/mysqld.h"
 #include "sql/mysqld_thd_manager.h"
+#include "sql/protocol_classic.h"
 #include "sql/rpl_io_monitor.h"
 #include "sql/rpl_source.h"
 #include "sql/sql_parse.h"
@@ -107,13 +108,6 @@ int start_binlog_archive() {
   if (opt_mysql_archive_dir == nullptr) {
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
            "Mysql archive path no set, please set --mysql-archive-dir.");
-    return 1;
-  }
-  // Check if gtid_mode is enabled.
-  auto gtid_mode = global_gtid_mode.get();
-  if (gtid_mode != Gtid_mode::ON) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "The binlog archive thread start need in GTID_MODE = ON.");
     return 1;
   }
 
@@ -346,6 +340,7 @@ void Binlog_archive::set_thread_context() {
   thd->set_new_thread_id();
   thd->thread_stack = (char *)&thd;
   thd->store_globals();
+  thd->get_protocol_classic()->init_net(nullptr);
   thd->thread_stack = (char *)&thd;
   thd->system_thread = SYSTEM_THREAD_BACKGROUND;
   /* No privilege check needed */

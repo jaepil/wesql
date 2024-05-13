@@ -47,7 +47,7 @@ class Consistent_recovery {
   // recovery smartengine
   bool recovery_smartengine();
   // recovery binlog
-  bool recovery_binlog();
+  bool recovery_binlog(const char *index_file_name_arg, const char *log_name);
   bool binlog_recovery_path_is_validation();
   bool need_recovery_binlog();
 

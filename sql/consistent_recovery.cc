@@ -160,7 +160,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
     if (recovery_smartengine()) return 1;
   // recovery binlog to mysql
   if (flags & CONSISTENT_RECOVERY_BINLOG)
-    if (recovery_binlog()) return 1;
+    if (recovery_binlog(opt_binlog_index_name, nullptr)) return 1;
   return 0;
 }
 
@@ -494,7 +494,8 @@ bool Consistent_recovery::recovery_smartengine() {
  * @return true
  * @return false
  */
-bool Consistent_recovery::recovery_binlog() {
+bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg,
+                                    const char *log_name) {
   // if not need recovery binlog, return false
   if (m_state == CONSISTENT_RECOVERY_STATE_NONE) return false;
 
@@ -593,12 +594,20 @@ bool Consistent_recovery::recovery_binlog() {
   }
 
   // recovery mysql binlog index file
+  myf opt = MY_UNPACK_FILENAME;
+  char index_file_name[FN_REFLEN];
+  if (!index_file_name_arg) {
+    index_file_name_arg = log_name;  // Use same basename for index file
+    opt = MY_UNPACK_FILENAME | MY_REPLACE_EXT;
+  }
+  fn_format(index_file_name, index_file_name_arg, mysql_data_home, ".index",
+            opt);
   std::string binlog_index_real_file;
-  if (opt_binlog_index_name[0] != FN_LIBCHAR) {
+  if (index_file_name[0] != FN_LIBCHAR) {
     binlog_index_real_file.assign(mysql_real_data_home);
-    binlog_index_real_file.append(opt_binlog_index_name);
+    binlog_index_real_file.append(index_file_name);
   } else {
-    binlog_index_real_file.assign(opt_binlog_index_name);
+    binlog_index_real_file.assign(index_file_name);
   }
 
   strmake(binlog_index_file_name, binlog_index_real_file.c_str(),
@@ -643,23 +652,6 @@ bool Consistent_recovery::binlog_recovery_path_is_validation() {
   }
   assert(is_recovery_binlog);
 
-  // Check if archived binlog file path matches the mysql binlog file path
-  std::string binlog_file_name;
-  std::string binlog_file_basename;
-  binlog_file_name.assign(m_binlog_file);
-  binlog_file_basename.assign(
-      binlog_file_name.substr(0, binlog_file_name.rfind(".")));
-  if (log_bin_basename &&
-      strcmp(binlog_file_basename.c_str(), log_bin_basename) != 0) {
-    std::string err_msg;
-    err_msg.assign("Binlog file name does not match: ");
-    err_msg.append(" binlog_file_name=");
-    err_msg.append(binlog_file_name);
-    err_msg.append(" log_bin_basename=");
-    err_msg.append(log_bin_basename);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    return true;
-  }
   return false;
 }
 
