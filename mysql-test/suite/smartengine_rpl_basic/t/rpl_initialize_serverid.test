@@ -145,7 +145,7 @@ mkdir $NEWDATADIR_3;
 --let $rpl_omit_print_server_parameters= 1
 --source include/rpl_start_server.inc
 --replace_result $MASTER_MYPORT MASTER_PORT
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 --eval CHANGE MASTER TO MASTER_USER='root', MASTER_PORT=$MASTER_MYPORT, MASTER_HOST='localhost'
 
 # 8. Stop server-2 and initialize server-2 by specifying server-id=1 to
@@ -168,7 +168,7 @@ mkdir $NEWDATADIR_4;
 --eval CHANGE MASTER TO MASTER_USER='root', MASTER_PORT=$MASTER_MYPORT, MASTER_HOST='localhost'
 START SLAVE;
 # Verify that slave IO error occurs on START SLAVE
-# 13117 is the code for ER_SLAVE_FATAL_ERROR
+# 13117 is the code for ER_REPLICA_FATAL_ERROR
 --let $slave_io_errno= 13117
 --source include/wait_for_slave_io_error.inc
 

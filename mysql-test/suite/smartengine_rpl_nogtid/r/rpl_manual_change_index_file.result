@@ -1,7 +1,7 @@
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
 CALL mtr.add_suppression("Failed to open log");
 FLUSH LOGS;
@@ -10,7 +10,7 @@ include/sync_slave_sql_with_master.inc
 FLUSH LOGS;
 call mtr.add_suppression('Got fatal error 1236 from master when reading data from binary log: .*could not find next log');
 include/wait_for_slave_io_error.inc [errno=13114]
-Last_IO_Error = 'Got fatal error 1236 from master when reading data from binary log: 'could not find next log; the first event '' at XXX, the last event read from './master-bin.000002' at XXX, the last byte read from './master-bin.000002' at XXX.''
+Last_IO_Error = 'Got fatal error 1236 from source when reading data from binary log: 'could not find next log; the first event '' at XXX, the last event read from './master-bin.000002' at XXX, the last byte read from './master-bin.000002' at XXX.''
 CREATE TABLE t2(c1 INT);
 FLUSH LOGS;
 CREATE TABLE t3(c1 INT);
@@ -55,14 +55,14 @@ Warnings:
 Warning	1287	'CHANGE MASTER' is deprecated and will be removed in a future release. Please use CHANGE REPLICATION SOURCE instead
 Warning	1287	'MASTER_HOST' is deprecated and will be removed in a future release. Please use SOURCE_HOST instead
 Warning	1287	'MASTER_LOG_FILE' is deprecated and will be removed in a future release. Please use SOURCE_LOG_FILE instead
-Warning	3023	CHANGE MASTER TO with a MASTER_LOG_FILE clause but no MASTER_LOG_POS clause may not be safe. The old position value may not be valid for the new binary log file.
+Warning	3023	CHANGE REPLICATION SOURCE TO with a SOURCE_LOG_FILE clause but no SOURCE_LOG_POS clause may not be safe. The old position value may not be valid for the new binary log file.
 START SLAVE IO_THREAD;
 Warnings:
 Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
-# Instead of EE_FILENOTFOUND, ER_SERVER_MASTER_FATAL_ERROR_READING_BINLOG
+# Instead of EE_FILENOTFOUND, ER_SERVER_SOURCE_FATAL_ERROR_READING_BINLOG
 # and the specific information are sent to slave.
 include/wait_for_slave_io_error.inc [errno=13114]
-Last_IO_Error = 'Got fatal error 1236 from master when reading data from binary log: 'Could not open log file''
+Last_IO_Error = 'Got fatal error 1236 from source when reading data from binary log: 'Could not open log file''
 [ on master ]
 # Restore master-bin.000001 file
 [ on slave ]
@@ -71,7 +71,7 @@ Warnings:
 Warning	1287	'CHANGE MASTER' is deprecated and will be removed in a future release. Please use CHANGE REPLICATION SOURCE instead
 Warning	1287	'MASTER_HOST' is deprecated and will be removed in a future release. Please use SOURCE_HOST instead
 Warning	1287	'MASTER_LOG_FILE' is deprecated and will be removed in a future release. Please use SOURCE_LOG_FILE instead
-Warning	3023	CHANGE MASTER TO with a MASTER_LOG_FILE clause but no MASTER_LOG_POS clause may not be safe. The old position value may not be valid for the new binary log file.
+Warning	3023	CHANGE REPLICATION SOURCE TO with a SOURCE_LOG_FILE clause but no SOURCE_LOG_POS clause may not be safe. The old position value may not be valid for the new binary log file.
 include/start_slave.inc
 [ on master ]
 CREATE TABLE t1(c1 INT);

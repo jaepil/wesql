@@ -29,7 +29,7 @@
 # -----------------------------------------
 # 3.1 Restart the server against non-existing DDIR - should fail.
 # 3.2 Look for error.
-#     Datadir error found 1 times.
+#     Datadir error found 0 times.
 # 3.3 Delete log file but datadir does not need cleanup
 # since it is non-existent.
 #

@@ -13201,7 +13201,7 @@ test.t1	analyze	status	OK
 test.t2	analyze	status	OK
 EXPLAIN FORMAT=tree SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
 EXPLAIN
--> Inner hash join (no condition)  (cost=14.61 rows=54)
+-> Inner hash join (no condition)  (cost=14.6 rows=54)
     -> Table scan on t1  (cost=2.84 rows=3)
     -> Hash
         -> Constant row from <subquery2>  (cost=6.68..6.68 rows=1)
@@ -13212,7 +13212,7 @@ EXPLAIN
                         -> Hash
                             -> Table scan on t1  (cost=1.42 rows=3)
                     -> Hash
-                        -> Table scan on alias1  (cost=0.47 rows=3)
+                        -> Table scan on alias1  (cost=0.473 rows=3)
 
 SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
 f1	f2

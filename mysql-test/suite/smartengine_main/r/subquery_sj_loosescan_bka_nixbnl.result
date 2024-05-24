@@ -12846,13 +12846,13 @@ test.t1	analyze	status	OK
 test.t2	analyze	status	OK
 EXPLAIN FORMAT=tree SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
 EXPLAIN
--> Nested loop inner join  (cost=33.36 rows=54)
-    -> Limit: 1 row(s)  (cost=25.43 rows=18)
-        -> Nested loop left join  (cost=25.43 rows=18)
-            -> Nested loop left join  (cost=8.40 rows=6)
+-> Nested loop inner join  (cost=33.4 rows=54)
+    -> Limit: 1 row(s)  (cost=25.4 rows=18)
+        -> Nested loop left join  (cost=25.4 rows=18)
+            -> Nested loop left join  (cost=8.4 rows=6)
                 -> Table scan on t2  (cost=2.73 rows=2)
                 -> Table scan on t1  (cost=2.69 rows=3)
-            -> Table scan on alias1  (cost=46.58 rows=3)
+            -> Table scan on alias1  (cost=46.6 rows=3)
     -> Table scan on t1  (cost=2.84 rows=3)
 
 SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );

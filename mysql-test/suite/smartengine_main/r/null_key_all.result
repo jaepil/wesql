@@ -647,8 +647,8 @@ Table	Op	Msg_type	Msg_text
 test.t1	analyze	status	OK
 explain format=tree select * from t1 where (a is null or a = 7) and b=7;
 EXPLAIN
--> Filter: ((t1.a is null) or (t1.a = 7))  (cost=0.27 rows=0.2)
-    -> Index lookup on t1 using b_2 (b=7)  (cost=0.27 rows=1)
+-> Filter: ((t1.a is null) or (t1.a = 7))  (cost=0.269 rows=0.19)
+    -> Index lookup on t1 using b_2 (b=7)  (cost=0.269 rows=1)
 
 drop table t1;
 set optimizer_switch=default;

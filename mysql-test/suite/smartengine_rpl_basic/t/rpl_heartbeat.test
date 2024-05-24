@@ -42,7 +42,7 @@ eval change master to master_host='127.0.0.1',master_port=$MASTER_MYPORT, master
 #
 --replace_result $MASTER_MYPORT MASTER_PORT
 --replace_column 2 ####
---error ER_SLAVE_HEARTBEAT_VALUE_OUT_OF_RANGE
+--error ER_REPLICA_HEARTBEAT_VALUE_OUT_OF_RANGE
 eval change master to master_host='127.0.0.1',master_port=$MASTER_MYPORT, master_user='root', master_heartbeat_period= 4294968;
 --query_vertical SELECT HEARTBEAT_INTERVAL FROM performance_schema.replication_connection_configuration
 
@@ -55,7 +55,7 @@ eval change master to master_host='127.0.0.1',master_port=$MASTER_MYPORT, master
 
 --replace_result $MASTER_MYPORT MASTER_PORT
 --replace_column 2 ####
-### 5.1 mtr does not have --warning ER_SLAVE_HEARTBEAT_VALUE_OUT_OF_RANGE
+### 5.1 mtr does not have --warning ER_REPLICA_HEARTBEAT_VALUE_OUT_OF_RANGE
 eval change master to master_host='127.0.0.1',master_port=$MASTER_MYPORT, master_user='root', master_heartbeat_period= 0.0009999;
 --query_vertical SELECT HEARTBEAT_INTERVAL FROM performance_schema.replication_connection_configuration
 

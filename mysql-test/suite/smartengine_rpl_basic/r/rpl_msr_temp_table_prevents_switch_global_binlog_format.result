@@ -5,10 +5,10 @@
 include/rpl_init.inc [topology=1->2,3->2]
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection server_2]
 include/stop_slave_sql.inc [FOR CHANNEL 'channel_1']
 include/stop_slave_sql.inc [FOR CHANNEL 'channel_3']
@@ -17,11 +17,15 @@ include/stop_slave_sql.inc [FOR CHANNEL 'channel_3']
 # of all replication channels have open temporary table(s).
 #
 SET @@global.binlog_format=ROW;
+Warnings:
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 #
 # Set binlog format to statement for replicating
 # CREATE TEMPORARY TABLE temp1 on server_1
 #
 SET @@global.binlog_format=STATEMENT;
+Warnings:
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 #
 # Start slave applier on channel_1, so that
 # SET @@global.binlog_format=STATEMENT takes
@@ -38,7 +42,7 @@ include/sync_slave_sql_with_master.inc [FOR CHANNEL 'channel_1']
 [connection server_2]
 include/stop_slave.inc [FOR CHANNEL 'channel_1']
 Warnings:
-Warning	3022	This operation may not be safe when the slave has temporary tables. The tables will be kept open until the server restarts or until the tables are deleted by any replicated DROP statement. Suggest to wait until replica_open_temp_tables = 0.
+Warning	3022	This operation may not be safe when the replica has temporary tables. The tables will be kept open until the server restarts or until the tables are deleted by any replicated DROP statement. Suggest to wait until replica_open_temp_tables = 0.
 #
 # Verify that SET @@global.binlog_format must be disallowed if
 # any replication channel has open temporary table(s).

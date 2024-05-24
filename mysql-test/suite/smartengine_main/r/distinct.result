@@ -1161,9 +1161,9 @@ LEFT JOIN t2 ON false
 LEFT JOIN t3 ON t2.b = t3.b
 LIMIT 1;
 id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t2	NULL	const	NULL	NULL	NULL	NULL	1	100.00	Impossible ON condition
 1	SIMPLE	t1	NULL	ALL	NULL	NULL	NULL	NULL	2	100.00	Using temporary
-1	SIMPLE	t2	NULL	ALL	NULL	NULL	NULL	NULL	1	100.00	Using where; Using join buffer (hash join)
-1	SIMPLE	t3	NULL	eq_ref	PRIMARY	PRIMARY	4	test.t2.b	1	100.00	NULL
+1	SIMPLE	t3	NULL	eq_ref	PRIMARY	PRIMARY	4	const	1	100.00	NULL
 Warnings:
 Note	1003	/* select#1 */ select distinct `test`.`t3`.`a` AS `t3_date` from `test`.`t1` left join `test`.`t2` on(false) left join `test`.`t3` on((`test`.`t3`.`b` = `test`.`t2`.`b`)) where true limit 1
 SELECT DISTINCT t3.a AS t3_date
@@ -2178,10 +2178,10 @@ pk
 23
 EXPLAIN FORMAT=tree SELECT DISTINCT table1.pk FROM t1 AS table1 LEFT JOIN t1 AS table2 ON table1.f2=table2.f3 WHERE table2.f1 IS NULL;
 EXPLAIN
--> Table scan on <temporary>  (cost=13.10..14.79 rows=3)
-    -> Temporary table with deduplication  (cost=12.25..12.25 rows=3)
-        -> Filter: (table2.f1 is null)  (cost=11.95 rows=3)
-            -> Nested loop left join  (cost=11.95 rows=3)
+-> Table scan on <temporary>  (cost=13.1..14.8 rows=3)
+    -> Temporary table with deduplication  (cost=12.2..12.2 rows=3)
+        -> Filter: (table2.f1 is null)  (cost=11.9 rows=3)
+            -> Nested loop left join  (cost=11.9 rows=3)
                 -> Table scan on table1  (cost=2.84 rows=3)
                 -> Filter: (table1.f2 = table2.f3)  (cost=2.77 rows=1)
                     -> Table scan on table2  (cost=2.77 rows=3)
@@ -2213,7 +2213,7 @@ pk
 12
 EXPLAIN FORMAT=tree SELECT /*+JOIN_ORDER(t2,t3,t1) */ DISTINCT t2.pk FROM t1 LEFT JOIN t2 RIGHT OUTER JOIN t3 ON t2.f1 = t3.f3 ON t1.pk = t3.f2 WHERE t3.pk <> t2.pk;
 EXPLAIN
--> Table scan on <temporary>  (cost=10.56..10.56 rows=1)
+-> Table scan on <temporary>  (cost=10.6..10.6 rows=1)
     -> Temporary table with deduplication  (cost=8.05..8.05 rows=1)
         -> Nested loop inner join  (cost=7.95 rows=1)
             -> Nested loop inner join  (cost=5.34 rows=1)

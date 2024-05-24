@@ -1,38 +1,54 @@
 include/rpl_init.inc [topology=1->2->3->4->5->6]
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 include/rpl_default_connections.inc
 include/rpl_stop_slaves.inc
 include/begin_replace_combination.inc [BOTH.BINLOG_FORMAT=ROW,MIXED,STATEMENT -> GLOBAL.SLAVE_ROWS_SEARCH_ALGORITHMS=INDEX_SCAN,HASH_SCAN,TABLE_SCAN]
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 include/rpl_start_slaves.inc
 ######## INITIALIZE ########
 include/rpl_for_each_server_stmt.inc [SET @@SESSION.BINLOG_ROW_IMAGE = MINIMAL;
@@ -780,19 +796,35 @@ include/rpl_stop_slaves.inc
 include/end_replace_combination.inc [BOTH.BINLOG_FORMAT=ROW,MIXED,STATEMENT -> GLOBAL.SLAVE_ROWS_SEARCH_ALGORITHMS=INDEX_SCAN,HASH_SCAN,TABLE_SCAN]
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 Warnings:
 Warning	1287	'@@slave_rows_search_algorithms' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 include/rpl_start_slaves.inc
 include/rpl_end.inc

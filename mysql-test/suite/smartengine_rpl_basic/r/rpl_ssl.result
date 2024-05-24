@@ -1,7 +1,7 @@
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
 include/assert.inc [Master_SSL_Allowed should be NO by default]
 include/assert.inc [Without MASTER_SSL, the slave should be connected to the master without SSL/TLS]
@@ -28,7 +28,7 @@ Warning	####	'MASTER_SSL_CA' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_SSL_CERT' is deprecated and will be removed in a future release. Please use SOURCE_SSL_CERT instead
 Warning	####	'MASTER_SSL_KEY' is deprecated and will be removed in a future release. Please use SOURCE_SSL_KEY instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 start slave;
 Warnings:
 Warning	1287	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -80,7 +80,7 @@ Warning	####	'MASTER_SSL_KEY' is deprecated and will be removed in a future rele
 Warning	####	'MASTER_SSL_CRL' is deprecated and will be removed in a future release. Please use SOURCE_SSL_CRL instead
 Warning	####	'MASTER_SSL_CRLPATH' is deprecated and will be removed in a future release. Please use SOURCE_SSL_CRLPATH instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 CHANGE MASTER TO MASTER_SSL= 1, MASTER_SSL_CRL='MYSQL_TEST_DIR/std_data/crl-client-revoked.crl', MASTER_SSL_CRLPATH='MYSQL_TEST_DIR/std_data/crldir';
 Warnings:
 Warning	1287	'CHANGE MASTER' is deprecated and will be removed in a future release. Please use CHANGE REPLICATION SOURCE instead
@@ -107,6 +107,6 @@ Warning	####	'MASTER_SSL_KEY' is deprecated and will be removed in a future rele
 Warning	####	'MASTER_SSL_CRL' is deprecated and will be removed in a future release. Please use SOURCE_SSL_CRL instead
 Warning	####	'MASTER_SSL_CRLPATH' is deprecated and will be removed in a future release. Please use SOURCE_SSL_CRLPATH instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 End of 5.0 tests
 include/rpl_end.inc

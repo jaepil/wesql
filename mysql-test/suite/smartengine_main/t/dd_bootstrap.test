@@ -112,6 +112,7 @@ remove_file $MYSQLD_LOG;
 --echo # 4. Try restart on an empty datadir (non-existing mysql dir).
 --echo # ------------------------------------------------------------
 
+--force-rmdir $DDIR
 --mkdir $DDIR
 
 --echo # 4.1 Restart the server against existing but empty DDIR - should fail.

@@ -21,10 +21,18 @@ BEGIN
 SET @var1=20;
 SELECT * FROM t1 ORDER BY 1;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4955
+
 CALL t1_sel();
 a
 1
 2
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4958
+
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
@@ -35,12 +43,20 @@ INSERT INTO t1 VALUES (3),(4);
 SELECT * FROM t1 ORDER BY 1;
 SELECT "session state sent as part of above SELECT" AS col_heading;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4959
+
 CALL t1_inssel();
 a
 1
 2
 3
 4
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4963
+
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
@@ -52,12 +68,20 @@ SELECT * FROM t1 ORDER BY 1;
 INSERT INTO t1 VALUES (5),(6);
 SELECT "no session state exists" AS col_heading;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4965
+
 CALL t1_selins();
 a
 1
 2
 3
 4
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4967
+
 col_heading
 no session state exists
 CREATE PROCEDURE t2t1_sel()
@@ -67,10 +91,18 @@ SELECT MIN(a) FROM t2;
 SET @@session.sql_mode='traditional';
 SELECT MAX(2) FROM t1;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4970
+
 session state sent for both SELECT statement
 CALL t2t1_sel();
 MIN(a)
 1
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4973
+
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
@@ -89,6 +121,10 @@ SET @a=20;
 CALL t1_sel();
 SELECT "session state sent for SELECT inside t1_sel()" AS col_heading;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4976
+
 CALL t1_call();
 a
 1
@@ -97,6 +133,10 @@ a
 4
 5
 6
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4981
+
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
@@ -129,6 +169,10 @@ SELECT * FROM t1;
 SET @@session.TIMESTAMP=200;
 SELECT * FROM t2;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4983
+
 Warnings:
 Warning	1681	Specifying number of digits for floating point data types is deprecated and will be removed in a future release.
 Warning	1681	Specifying number of digits for floating point data types is deprecated and will be removed in a future release.
@@ -141,6 +185,8 @@ a
 5
 6
 -- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 4997
 -- time_zone
 -- Europe/Moscow
 
@@ -160,6 +206,10 @@ a
 SELECT @a,@b,@c,@d,@e,@f,@g,@h,@i,@j;
 @a	@b	@c	@d	@e	@f	@g	@h	@i	@j
 20	test_1	12.34	567.891	2345	NULL	test_2	67.891	234.6789	6789
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5000
+
 
 #CASE2: SELECT FUNCTIONs
 
@@ -168,6 +218,10 @@ BEGIN
 SET NAMES 'big5';
 RETURN (SELECT COUNT(*) FROM t1);
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5001
+
 SELECT f1();
 f1()
 6
@@ -178,11 +232,17 @@ f1()
 -- utf8mb4
 -- character_set_results
 -- big5
+-- statement_id
+-- 5002
 
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
 CREATE VIEW v1 AS SELECT f1();
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5005
+
 SELECT * FROM v1;
 f1()
 6
@@ -193,6 +253,8 @@ f1()
 -- utf8mb4
 -- character_set_results
 -- big5
+-- statement_id
+-- 5006
 
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
@@ -201,6 +263,10 @@ CREATE PROCEDURE sp1(OUT x INT)
 BEGIN
 SELECT MIN(a) INTO x FROM t1;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5009
+
 CREATE FUNCTION f2() RETURNS int
 BEGIN
 DECLARE a int;
@@ -208,9 +274,17 @@ SET @a=20;
 CALL sp1(a);
 RETURN a;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5010
+
 SELECT f2();
 f2()
 1
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5011
+
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
@@ -224,9 +298,17 @@ SET a:= (SELECT COUNT(*) FROM t3);
 SET b:= (SELECT COUNT(*) FROM t3 t3_alias);
 RETURN a + b;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5017
+
 SELECT f3();
 f3()
 6
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5018
+
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
@@ -241,6 +323,10 @@ FETCH c INTO x;
 CLOSE c;
 RETURN x;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5027
+
 Warnings:
 Warning	3719	'utf8' is currently an alias for the character set UTF8MB3, but will be an alias for UTF8MB4 in a future release. Please consider using UTF8MB4 in order to be unambiguous.
 SELECT f4();
@@ -253,6 +339,8 @@ f4()
 -- utf8mb4
 -- character_set_results
 -- utf8mb3
+-- statement_id
+-- 5029
 
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
@@ -279,10 +367,16 @@ END LOOP;
 SELECT v1;
 CLOSE cur1;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5036
+
 CALL cursor1();
 v1
 6
 -- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5050
 -- transaction_isolation
 -- READ-COMMITTED
 
@@ -305,10 +399,16 @@ SELECT "session state sent as part of above SELECT" AS col_heading;
 CLOSE c1;
 CLOSE c2;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5051
+
 CALL cursor2();
 (x+y)
 2
 -- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5058
 -- transaction_isolation
 -- READ-COMMITTED
 
@@ -318,6 +418,10 @@ CALL cursor2();
 col_heading
 session state sent as part of above SELECT
 DROP DATABASE wl7766;
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5060
+
 -- Tracker : SESSION_TRACK_SCHEMA
 -- 
 
@@ -329,9 +433,19 @@ SET @@session.session_track_state_change=ON;
 -- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
 -- session_track_state_change
 -- ON
+-- statement_id
+-- 5061
 
 CREATE DATABASE bug19550875;
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5062
+
 USE bug19550875;
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5063
+
 -- Tracker : SESSION_TRACK_SCHEMA
 -- bug19550875
 
@@ -339,7 +453,15 @@ USE bug19550875;
 -- 1
 
 CREATE TABLE t1 (a int);
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5064
+
 INSERT INTO t1 VALUES (1), (2);
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5065
+
 CREATE PROCEDURE t_cache()
 BEGIN
 SET @A= 20;
@@ -349,10 +471,18 @@ PREPARE x FROM 'SELECT 1';
 SELECT * FROM t1;
 SELECT * FROM t1;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5066
+
 CALL t_cache();
 a
 1
 2
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5069
+
 -- Tracker : SESSION_TRACK_STATE_CHANGE
 -- 1
 
@@ -373,12 +503,24 @@ BEGIN
 SET @var1=20;
 SELECT * FROM t1 ORDER BY 1;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5074
+
 CREATE PROCEDURE sel_with_no_session()
 BEGIN
 SELECT * FROM t1 ORDER BY 1;
 END |
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5075
+
 #cleanup
 DROP DATABASE bug19550875;
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- statement_id
+-- 5076
+
 -- Tracker : SESSION_TRACK_SCHEMA
 -- 
 

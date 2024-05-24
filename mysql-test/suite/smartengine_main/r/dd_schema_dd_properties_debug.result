@@ -8,6 +8,9 @@
 set debug='+d,skip_dd_table_access_check';
 SELECT * FROM mysql.dd_properties INTO OUTFILE 'MYSQL_TMP_DIR/dd_properties.txt';
 set debug='-d,skip_dd_table_access_check';
+MYSQL_VERSION_STABILITY=LTS
+SERVER_DOWNGRADE_THRESHOLD=0
+SERVER_UPGRADE_THRESHOLD=0
 SYSTEM_TABLES=
 catalogs=
   col0=table_id=6

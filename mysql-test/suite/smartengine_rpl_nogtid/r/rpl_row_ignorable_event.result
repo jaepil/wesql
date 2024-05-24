@@ -1,7 +1,7 @@
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
 # Test non-transaction
 create table t1(a int, b int) engine= myisam;
@@ -1091,6 +1091,8 @@ create table t7(a bigint) engine= myisam;
 insert into t7(a) values(1),(2);
 delete from t7 where a = 1;
 set session binlog_format=mixed;
+Warnings:
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 set @@session.binlog_rows_query_log_events= on;
 # Test the comment event is sent in mixed mode for special
 # functions when setting binlog_rows_query_log_events= on

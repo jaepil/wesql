@@ -12852,11 +12852,11 @@ test.t1	analyze	status	OK
 test.t2	analyze	status	OK
 EXPLAIN FORMAT=tree SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
 EXPLAIN
--> Inner hash join (no condition)  (cost=20.79 rows=54)
+-> Inner hash join (no condition)  (cost=20.8 rows=54)
     -> Table scan on t1  (cost=2.84 rows=3)
     -> Hash
-        -> Limit: 1 row(s)  (cost=12.85 rows=18)
-            -> Left hash join (no condition)  (cost=12.85 rows=18)
+        -> Limit: 1 row(s)  (cost=12.9 rows=18)
+            -> Left hash join (no condition)  (cost=12.9 rows=18)
                 -> Left hash join (no condition)  (cost=4.56 rows=6)
                     -> Table scan on t2  (cost=2.73 rows=2)
                     -> Hash

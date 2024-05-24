@@ -1,7 +1,7 @@
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
 SET SQL_LOG_BIN=0;
 SELECT user, plugin FROM mysql.user WHERE user NOT IN ('root', 'mysql.sys','mysql.session', 'mysql.infoschema');
@@ -35,13 +35,13 @@ Warning	####	'MASTER_USER' is deprecated and will be removed in a future release
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Warning	####	'MASTER_SSL' is deprecated and will be removed in a future release. Please use SOURCE_SSL instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE SQL_THREAD USER= 'regular_user_p' PASSWORD= 'password';
-ERROR HY000: Setting authentication options is not possible when only the Slave SQL Thread is being started.
+ERROR HY000: Setting authentication options is not possible when only the Replica SQL Thread is being started.
 START SLAVE SQL_THREAD USER= 'regular_user_p' PASSWORD= 'password' DEFAULT_AUTH= 'auth_test_plugin';
-ERROR HY000: Setting authentication options is not possible when only the Slave SQL Thread is being started.
+ERROR HY000: Setting authentication options is not possible when only the Replica SQL Thread is being started.
 START SLAVE SQL_THREAD USER= 'regular_user_p' PASSWORD= 'password' DEFAULT_AUTH= 'auth_test_plugin' PLUGIN_DIR= 'PLUGIN_AUTH_DIR';
-ERROR HY000: Setting authentication options is not possible when only the Slave SQL Thread is being started.
+ERROR HY000: Setting authentication options is not possible when only the Replica SQL Thread is being started.
 START SLAVE IO_THREAD USER= 'regular_user_p' PASSWORD= 'password';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -85,7 +85,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'regular_user_p' PASSWORD= 'password';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -99,7 +99,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'regular_user_wp' PASSWORD= '';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -113,7 +113,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'regular_user_p' PASSWORD= 'password';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -127,7 +127,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'regular_user_wp' PASSWORD= '';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -141,7 +141,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'regular_user_wp';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -155,7 +155,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_p' PASSWORD= 'proxy_user_p';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -169,7 +169,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_wp' PASSWORD= 'proxy_user_wp';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -183,7 +183,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_p' PASSWORD= 'proxy_user_p' PLUGIN_DIR= 'PLUGIN_AUTH_DIR';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -197,7 +197,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_wp' PASSWORD= 'proxy_user_wp' PLUGIN_DIR= 'PLUGIN_AUTH_DIR';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -211,7 +211,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_p' PASSWORD= 'proxy_user_p' DEFAULT_AUTH= 'auth_test_plugin';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -225,7 +225,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_wp' PASSWORD= 'proxy_user_wp' DEFAULT_AUTH= 'auth_test_plugin';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -239,7 +239,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_p' PASSWORD= 'proxy_user_p' DEFAULT_AUTH= 'auth_test_plugin' PLUGIN_DIR= 'PLUGIN_AUTH_DIR';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -253,7 +253,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 START SLAVE USER= 'plug_user_wp' PASSWORD= 'proxy_user_wp' DEFAULT_AUTH= 'auth_test_plugin' PLUGIN_DIR= 'PLUGIN_AUTH_DIR';
 Warnings:
 Warning	####	'START SLAVE' is deprecated and will be removed in a future release. Please use START REPLICA instead
@@ -268,7 +268,7 @@ Warning	####	'MASTER_USER' is deprecated and will be removed in a future release
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Warning	####	'MASTER_SSL' is deprecated and will be removed in a future release. Please use SOURCE_SSL instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 include/start_slave.inc
 include/check_slave_is_running.inc
 include/stop_slave.inc
@@ -278,7 +278,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 include/start_slave.inc
 include/check_slave_is_running.inc
 CREATE USER 'ssl_user' IDENTIFIED BY '' REQUIRE SSL;
@@ -290,7 +290,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Warning	####	'MASTER_SSL' is deprecated and will be removed in a future release. Please use SOURCE_SSL instead
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 include/start_slave.inc
 include/stop_slave.inc
 START SLAVE USER= 'root' PASSWORD= '';

@@ -71,8 +71,8 @@ START SLAVE;
 --let $wait_condition=SELECT COUNT(*)=1 FROM performance_schema.replication_connection_status WHERE service_state='OFF'
 --source include/wait_condition_or_abort.inc
 
-# Error ER_SLAVE_MASTER_COM_FAILURE as user 'u1' doesn't have REPLICATION SLAVE privilege
---let $slave_io_errno=convert_error(ER_SLAVE_MASTER_COM_FAILURE)
+# Error ER_REPLICA_SOURCE_COM_FAILURE as user 'u1' doesn't have REPLICATION SLAVE privilege
+--let $slave_io_errno=convert_error(ER_REPLICA_SOURCE_COM_FAILURE)
 --source include/wait_for_slave_io_error.inc
 
 # Enable role 'r4' for user 'u1'

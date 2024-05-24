@@ -12846,14 +12846,14 @@ test.t1	analyze	status	OK
 test.t2	analyze	status	OK
 EXPLAIN FORMAT=tree SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
 EXPLAIN
--> Remove duplicate t1 rows using temporary table (weedout)  (cost=76.50 rows=54)
-    -> Nested loop left join  (cost=76.50 rows=54)
-        -> Nested loop left join  (cost=25.43 rows=18)
-            -> Nested loop inner join  (cost=8.40 rows=6)
+-> Remove duplicate t1 rows using temporary table (weedout)  (cost=76.5 rows=54)
+    -> Nested loop left join  (cost=76.5 rows=54)
+        -> Nested loop left join  (cost=25.4 rows=18)
+            -> Nested loop inner join  (cost=8.4 rows=6)
                 -> Table scan on t2  (cost=2.73 rows=2)
                 -> Table scan on t1  (cost=2.69 rows=3)
             -> Table scan on t1  (cost=2.59 rows=3)
-        -> Table scan on alias1  (cost=45.98 rows=3)
+        -> Table scan on alias1  (cost=46 rows=3)
 
 SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
 f1	f2

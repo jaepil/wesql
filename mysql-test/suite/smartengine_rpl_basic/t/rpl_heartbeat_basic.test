@@ -251,21 +251,21 @@ RESET SLAVE;
 RESET MASTER;
 --replace_result $MASTER_MYPORT MASTER_PORT
 --replace_column 2 ####
---error ER_SLAVE_HEARTBEAT_VALUE_OUT_OF_RANGE 
+--error ER_REPLICA_HEARTBEAT_VALUE_OUT_OF_RANGE 
 eval CHANGE MASTER TO MASTER_HOST='127.0.0.1', MASTER_PORT=$MASTER_MYPORT, MASTER_USER='root', MASTER_CONNECT_RETRY=$connect_retry, MASTER_HEARTBEAT_PERIOD=4294968;
 RESET SLAVE;
 RESET MASTER;
 # Check double size of max allowed value for master_heartbeat_period
 --replace_result $MASTER_MYPORT MASTER_PORT
 --replace_column 2 ####
---error ER_SLAVE_HEARTBEAT_VALUE_OUT_OF_RANGE 
+--error ER_REPLICA_HEARTBEAT_VALUE_OUT_OF_RANGE 
 eval CHANGE MASTER TO MASTER_HOST='127.0.0.1', MASTER_PORT=$MASTER_MYPORT, MASTER_USER='root', MASTER_CONNECT_RETRY=$connect_retry, MASTER_HEARTBEAT_PERIOD=8589935;
 RESET SLAVE;
 RESET MASTER;
 # Check 2^32
 --replace_result $MASTER_MYPORT MASTER_PORT
 --replace_column 2 ####
---error ER_SLAVE_HEARTBEAT_VALUE_OUT_OF_RANGE 
+--error ER_REPLICA_HEARTBEAT_VALUE_OUT_OF_RANGE 
 eval CHANGE MASTER TO MASTER_HOST='127.0.0.1', MASTER_PORT=$MASTER_MYPORT, MASTER_USER='root', MASTER_CONNECT_RETRY=$connect_retry, MASTER_HEARTBEAT_PERIOD=4294967296;
 RESET SLAVE;
 RESET MASTER;
@@ -391,8 +391,8 @@ INSERT INTO t1 VALUES (1, 'on slave', NULL);
 --connection master
 INSERT INTO t1 VALUES (1, 'on master', NULL);
 --connection slave
-call mtr.add_suppression("Slave SQL.*Duplicate entry .1. for key .PRIMARY.. on query.* Error_code: MY-001062");
-call mtr.add_suppression("Slave SQL.*Request to stop slave SQL Thread received while applying a group that has non-transactional changes; waiting for completion of the group");
+call mtr.add_suppression("Replica SQL.*Duplicate entry .1. for key .PRIMARY.. on query.* Error_code: MY-001062");
+call mtr.add_suppression("Replica SQL.*Request to stop slave SQL Thread received while applying a group that has non-transactional changes; waiting for completion of the group");
 let $slave_errno= ER_DUP_ENTRY
 --source include/wait_for_slave_sql_error.inc
 let $rcvd_heartbeats_before= query_get_value(select count_received_heartbeats from performance_schema.replication_connection_status, count_received_heartbeats, 1);

@@ -118,12 +118,12 @@ reap;
 connection slave;
 # The SQL slave thread should now have stopped because the query was killed on
 # the master (so it has a non-zero error code in the binlog).
-# The slave should report ER_ERROR_ON_MASTER and the error message should 
+# The slave should report ER_ERROR_ON_SOURCE and the error message should 
 # contain the actual error code received from master 1053 = ER_SERVER_SHUTDOWN
---let $slave_sql_errno= convert_error(ER_ERROR_ON_MASTER)
+--let $slave_sql_errno= convert_error(ER_ERROR_ON_SOURCE)
 ###--source include/wait_for_slave_sql_error_and_skip.inc
 --source include/wait_for_slave_sql_error.inc
-SET GLOBAL SQL_SLAVE_SKIP_COUNTER=1;
+SET GLOBAL SQL_REPLICA_SKIP_COUNTER=1;
 source include/start_slave.inc;
 
 select count(*) from t1;

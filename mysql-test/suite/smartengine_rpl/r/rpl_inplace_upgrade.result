@@ -1,7 +1,7 @@
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
 CREATE TABLE `t1` (
 `a` int(10) unsigned NOT NULL DEFAULT '0',
@@ -243,7 +243,7 @@ include/rpl_end.inc
 include/rpl_init.inc [topology=2->1]
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 INSERT INTO t1 VALUES(678, 1234590, 1234590, 1234590, 'abcdewfreiuwrg13648', 123, 456, 789, NULL);
 INSERT INTO t2 VALUES(678, 1234590, 1234590, 1234590, 'abcdewfreiuwrg13648', 123, 456, 789, NULL);
 SHOW CREATE TABLE t1;

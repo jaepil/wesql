@@ -2051,8 +2051,8 @@ EXPLAIN
 -> Nested loop inner join  (cost=3.89 rows=3)
     -> Filter: (t1.i4 is not null)  (cost=2.84 rows=3)
         -> Index scan on t1 using i4_uq  (cost=2.84 rows=3)
-    -> Filter: (t2.pk between t1.i4 and t1.i4)  (cost=0.28 rows=1)
-        -> Single-row index lookup on t2 using PRIMARY (pk=t1.i4)  (cost=0.28 rows=1)
+    -> Filter: (t2.pk between t1.i4 and t1.i4)  (cost=0.283 rows=1)
+        -> Single-row index lookup on t2 using PRIMARY (pk=t1.i4)  (cost=0.283 rows=1)
 
 EXPLAIN
 SELECT * FROM t1, t1 as t2 WHERE t2.pk BETWEEN t1.i4 AND t1.i4;

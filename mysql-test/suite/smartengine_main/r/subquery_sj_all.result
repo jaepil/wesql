@@ -12953,15 +12953,15 @@ test.t1	analyze	status	OK
 test.t2	analyze	status	OK
 EXPLAIN FORMAT=tree SELECT * FROM t1 WHERE EXISTS ( SELECT alias1.f2 FROM t2 LEFT JOIN t1 ON 1 LEFT JOIN t1 AS alias1 ON 1 );
 EXPLAIN
--> Remove duplicate t1 rows using temporary table (weedout)  (cost=10.78 rows=54)
-    -> Left hash join (no condition)  (cost=10.78 rows=54)
+-> Remove duplicate t1 rows using temporary table (weedout)  (cost=10.8 rows=54)
+    -> Left hash join (no condition)  (cost=10.8 rows=54)
         -> Left hash join (no condition)  (cost=4.81 rows=18)
             -> Inner hash join (no condition)  (cost=5.86 rows=6)
                 -> Table scan on t1  (cost=1.42 rows=3)
                 -> Hash
                     -> Table scan on t2  (cost=2.73 rows=2)
             -> Hash
-                -> Table scan on t1  (cost=0.47 rows=3)
+                -> Table scan on t1  (cost=0.473 rows=3)
         -> Hash
             -> Table scan on alias1  (cost=2.84 rows=3)
 

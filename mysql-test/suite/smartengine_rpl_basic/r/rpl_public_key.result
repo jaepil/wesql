@@ -5,7 +5,7 @@
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
 ==== Create new replication user ====
 [connection master]
@@ -22,7 +22,7 @@ Warning	###	'MASTER_USER' is deprecated and will be removed in a future release.
 Warning	###	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Warning	###	'MASTER_PUBLIC_KEY_PATH' is deprecated and will be removed in a future release. Please use SOURCE_PUBLIC_KEY_PATH instead
 Note	###	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	###	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	###	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 include/start_slave.inc
 ==== Make sure that replication works ====
 [connection master]
@@ -43,7 +43,7 @@ Warning	###	'MASTER_USER' is deprecated and will be removed in a future release.
 Warning	###	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Warning	###	'MASTER_PUBLIC_KEY_PATH' is deprecated and will be removed in a future release. Please use SOURCE_PUBLIC_KEY_PATH instead
 Note	###	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	###	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	###	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 ==== Remove cached password from master ====
 [connection master]
 FLUSH PRIVILEGES;
@@ -64,7 +64,7 @@ Warning	###	'MASTER_USER' is deprecated and will be removed in a future release.
 Warning	###	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Warning	###	'MASTER_PUBLIC_KEY_PATH' is deprecated and will be removed in a future release. Please use SOURCE_PUBLIC_KEY_PATH instead
 Note	###	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	###	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	###	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 include/start_slave.inc
 ==== Try setting master_public_key_path to '' ====
 [connection slave]
@@ -76,7 +76,7 @@ Warning	###	'MASTER_USER' is deprecated and will be removed in a future release.
 Warning	###	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Warning	###	'MASTER_PUBLIC_KEY_PATH' is deprecated and will be removed in a future release. Please use SOURCE_PUBLIC_KEY_PATH instead
 Note	###	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	###	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	###	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 ==== IO thread should start without issues because password is still cached ====
 include/start_slave.inc
 [connection master]
@@ -94,7 +94,7 @@ Warning	####	'CHANGE MASTER' is deprecated and will be removed in a future relea
 Warning	####	'MASTER_USER' is deprecated and will be removed in a future release. Please use SOURCE_USER instead
 Warning	####	'MASTER_PASSWORD' is deprecated and will be removed in a future release. Please use SOURCE_PASSWORD instead
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 include/rpl_reset.inc
 [connection master]
 DROP TABLE t1;

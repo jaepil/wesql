@@ -62,6 +62,8 @@ select * from v1;
 c
 ADMINISTRABLE_ROLE_AUTHORIZATIONS
 APPLICABLE_ROLES
+BINLOG_PERSISTENT_FILES
+BINLOG_PERSISTENT_FILE_INDEX
 CHARACTER_SETS
 CHECK_CONSTRAINTS
 COLLATIONS
@@ -70,6 +72,11 @@ COLUMNS
 COLUMNS_EXTENSIONS
 COLUMN_PRIVILEGES
 COLUMN_STATISTICS
+CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT
+CONSISTENT_PERSISTENT_INNODB_SNAPSHOT
+CONSISTENT_PERSISTENT_INNODB_SNAPSHOT_INDEX
+CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT
+CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT_INDEX
 ENABLED_ROLES
 ENGINES
 EVENTS
@@ -905,7 +912,7 @@ table_schema IN ('mysql', 'information_schema', 'test', 'mysqltest')
 AND table_name not like 'ndb%' AND table_name COLLATE utf8_general_ci not like 'innodb_%'
 GROUP BY TABLE_SCHEMA;
 TABLE_SCHEMA	count(*)
-information_schema	66
+information_schema	73
 mysql	35
 create table t1 (i int, j int);
 create trigger trg1 before insert on t1 for each row
@@ -1355,6 +1362,7 @@ group by t.table_name order by num1, t.table_name COLLATE utf8_general_ci;
 TABLE_NAME	group_concat(t.table_schema, '.', t.table_name)	num1
 ADMINISTRABLE_ROLE_AUTHORIZATIONS	information_schema.ADMINISTRABLE_ROLE_AUTHORIZATIONS	1
 APPLICABLE_ROLES	information_schema.APPLICABLE_ROLES	1
+BINLOG_PERSISTENT_FILES	information_schema.BINLOG_PERSISTENT_FILES	1
 CHARACTER_SETS	information_schema.CHARACTER_SETS	1
 CHECK_CONSTRAINTS	information_schema.CHECK_CONSTRAINTS	1
 COLLATIONS	information_schema.COLLATIONS	1
@@ -1362,6 +1370,9 @@ COLUMNS	information_schema.COLUMNS	1
 COLUMNS_EXTENSIONS	information_schema.COLUMNS_EXTENSIONS	1
 COLUMN_PRIVILEGES	information_schema.COLUMN_PRIVILEGES	1
 COLUMN_STATISTICS	information_schema.COLUMN_STATISTICS	1
+CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	information_schema.CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	1
+CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	information_schema.CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	1
+CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	information_schema.CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	1
 ENABLED_ROLES	information_schema.ENABLED_ROLES	1
 ENGINES	information_schema.ENGINES	1
 EVENTS	information_schema.EVENTS	1
@@ -1513,6 +1524,8 @@ grant select on *.* to user3148@localhost;
 select user,db from information_schema.processlist;
 user	db
 user3148	test
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 drop user user3148@localhost;
 DROP TABLE IF EXISTS server_status;
 DROP EVENT IF EXISTS event_status;
@@ -1520,6 +1533,8 @@ SELECT COUNT(*) = 1 FROM information_schema.processlist
 WHERE user = 'event_scheduler' AND command = 'Daemon';
 COUNT(*) = 1
 1
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 CREATE EVENT event_status
 ON SCHEDULE AT NOW()
 ON COMPLETION NOT PRESERVE
@@ -1701,6 +1716,8 @@ SET TIMESTAMP=@@TIMESTAMP + 10000000;
 SELECT 'OK' AS TEST_RESULT FROM INFORMATION_SCHEMA.PROCESSLIST WHERE time < 0;
 TEST_RESULT
 OK
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 SET TIMESTAMP=DEFAULT;
 #
 # Bug #50276: Security flaw in INFORMATION_SCHEMA.TABLES
@@ -2162,11 +2179,15 @@ GRANT SELECT ON *.* TO user_name_len_22_01234@localhost;
 SELECT user,db FROM information_schema.processlist;
 user	db
 user_name_len_22_01234	test
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 CREATE USER очень_очень_очень_длинный_юзер__@localhost;
 GRANT SELECT ON *.* TO очень_очень_очень_длинный_юзер__@localhost;
 SELECT user,db FROM information_schema.processlist;
 user	db
 очень_очень_очень_длинный_юзер__	test
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 DROP USER user_name_len_22_01234@localhost;
 DROP USER очень_очень_очень_длинный_юзер__@localhost;
 set names default;
@@ -2456,6 +2477,8 @@ c1.column_name COLLATE utf8_general_ci;
 TABLE_NAME	COLUMN_NAME
 ADMINISTRABLE_ROLE_AUTHORIZATIONS	USER
 APPLICABLE_ROLES	USER
+BINLOG_PERSISTENT_FILES	Log_name
+BINLOG_PERSISTENT_FILE_INDEX	Log_name
 CHARACTER_SETS	CHARACTER_SET_NAME
 CHECK_CONSTRAINTS	CONSTRAINT_SCHEMA
 COLLATIONS	COLLATION_NAME
@@ -2464,6 +2487,11 @@ COLUMNS	TABLE_SCHEMA
 COLUMNS_EXTENSIONS	TABLE_SCHEMA
 COLUMN_PRIVILEGES	TABLE_SCHEMA
 COLUMN_STATISTICS	SCHEMA_NAME
+CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	mysql_innodb_archive_name
+CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	archive_name
+CONSISTENT_PERSISTENT_INNODB_SNAPSHOT_INDEX	archive_name
+CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	archive_name
+CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT_INDEX	archive_name
 ENABLED_ROLES	ROLE_NAME
 ENGINES	ENGINE
 EVENTS	EVENT_SCHEMA
@@ -2541,6 +2569,8 @@ c1.column_name COLLATE utf8_general_ci;
 TABLE_NAME	COLUMN_NAME
 ADMINISTRABLE_ROLE_AUTHORIZATIONS	USER
 APPLICABLE_ROLES	USER
+BINLOG_PERSISTENT_FILES	Log_name
+BINLOG_PERSISTENT_FILE_INDEX	Log_name
 CHARACTER_SETS	CHARACTER_SET_NAME
 CHECK_CONSTRAINTS	CONSTRAINT_SCHEMA
 COLLATIONS	COLLATION_NAME
@@ -2549,6 +2579,11 @@ COLUMNS	TABLE_SCHEMA
 COLUMNS_EXTENSIONS	TABLE_SCHEMA
 COLUMN_PRIVILEGES	TABLE_SCHEMA
 COLUMN_STATISTICS	SCHEMA_NAME
+CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	mysql_innodb_archive_name
+CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	archive_name
+CONSISTENT_PERSISTENT_INNODB_SNAPSHOT_INDEX	archive_name
+CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	archive_name
+CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT_INDEX	archive_name
 ENABLED_ROLES	ROLE_NAME
 ENGINES	ENGINE
 EVENTS	EVENT_SCHEMA

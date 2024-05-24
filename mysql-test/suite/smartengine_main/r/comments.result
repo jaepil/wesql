@@ -13,6 +13,8 @@ select 1 /*!32301 +1 */;
 select 1 /*!999999 +1 */;
 1
 1
+Warnings:
+Warning	4164	Immediately starting the version comment after the version number is deprecated and may change behavior in a future release. Please insert a white-space character after the version number.
 select 1--1;
 1--1
 2
@@ -33,6 +35,8 @@ ERROR 42000: You have an error in your SQL syntax; check the manual that corresp
 select 1/*!999992*/;
 1
 1
+Warnings:
+Warning	4164	Immediately starting the version comment after the version number is deprecated and may change behavior in a future release. Please insert a white-space character after the version number.
 select 1 + /*!00000 2 */ + 3 /*!99999 noise*/ + 4;
 1 +  2  + 3  + 4
 10

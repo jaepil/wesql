@@ -1,3 +1,4 @@
+
 # Not GTIDs because it sets slave_sql_skip_counter
 # When log-bin, skip-log-bin and binlog-format options are specified, mask the warning.
 --disable_query_log
@@ -12,36 +13,36 @@ call mtr.add_suppression("\\[Warning\\] \\[[^]]*\\] \\[[^]]*\\] You need to use 
 # Commands associated with the SLAVE.
 #
 SHOW SLAVE STATUS;
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 RESET SLAVE;
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 SHOW RELAYLOG EVENTS;
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 STOP SLAVE;
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 START SLAVE;
-SELECT MASTER_POS_WAIT('non-existent', 0);
---error ER_SLAVE_CONFIGURATION
-CHANGE MASTER TO MASTER_CONNECT_RETRY = 1, MASTER_HEARTBEAT_PERIOD = 1.01;
+SELECT SOURCE_POS_WAIT('non-existent', 0);
+--error ER_REPLICA_CONFIGURATION
+CHANGE REPLICATION SOURCE TO SOURCE_CONNECT_RETRY = 1, SOURCE_HEARTBEAT_PERIOD = 1.01;
 --error 2
---exec $MYSQL_DUMP --compact --master-data=2 test
+--exec $MYSQL_DUMP --compact --source-data=2 test
 FLUSH LOGS;
 FLUSH RELAY LOGS;
 
 # Commands associated with replication filters
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 CHANGE REPLICATION FILTER REPLICATE_DO_DB=(db1);
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 CHANGE REPLICATION FILTER REPLICATE_IGNORE_DB=(db1);
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 CHANGE REPLICATION FILTER REPLICATE_DO_TABLE=(db1.t1);
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 CHANGE REPLICATION FILTER REPLICATE_IGNORE_TABLE=(db1.t1);
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 CHANGE REPLICATION FILTER REPLICATE_WILD_DO_TABLE=('db1.t%');
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 CHANGE REPLICATION FILTER REPLICATE_WILD_IGNORE_TABLE=('db1.t%');
---error ER_SLAVE_CONFIGURATION
+--error ER_REPLICA_CONFIGURATION
 CHANGE REPLICATION FILTER REPLICATE_REWRITE_DB=((db1,db2));
 
 #
@@ -62,12 +63,12 @@ SET @@GLOBAL.relay_log_info_repository= "TABLE";
 --let $saved= `SELECT @@GLOBAL.max_relay_log_size`
 SET @@GLOBAL.max_relay_log_size= 536870912;
 --eval SET @@GLOBAL.max_relay_log_size= $saved
---let $saved= `SELECT @@GLOBAL.slave_net_timeout`
-SET @@GLOBAL.slave_net_timeout= 10;
---eval SET @@GLOBAL.slave_net_timeout= $saved
---let $saved= `SELECT @@GLOBAL.sql_slave_skip_counter`
-SET @@GLOBAL.sql_slave_skip_counter= 10;
---eval SET @@GLOBAL.sql_slave_skip_counter= $saved
+--let $saved= `SELECT @@GLOBAL.replica_net_timeout`
+SET @@GLOBAL.replica_net_timeout= 10;
+--eval SET @@GLOBAL.replica_net_timeout= $saved
+--let $saved= `SELECT @@GLOBAL.sql_replica_skip_counter`
+SET @@GLOBAL.sql_replica_skip_counter= 10;
+--eval SET @@GLOBAL.sql_replica_skip_counter= $saved
 --let $saved= `SELECT @@SESSION.sql_log_bin`
 SET @@SESSION.sql_log_bin= 0;
 --eval SET @@SESSION.sql_log_bin= $saved
@@ -82,7 +83,7 @@ SHOW SLAVE HOSTS;
 RESET MASTER;
 SHOW BINLOG EVENTS;
 --error 2
---exec $MYSQL_DUMP --compact --master-data=2 test
+--exec $MYSQL_DUMP --compact --source-data=2 test
 FLUSH LOGS;
 FLUSH BINARY LOGS;
 
@@ -93,5 +94,3 @@ FLUSH BINARY LOGS;
 --let $saved= `SELECT @@GLOBAL.max_binlog_size`
 SET @@GLOBAL.max_binlog_size= 536870912;
 --eval SET @@GLOBAL.max_binlog_size= $saved
-
---source suite/smartengine/include/check_smartengine_log_error.inc

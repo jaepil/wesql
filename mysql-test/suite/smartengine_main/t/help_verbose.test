@@ -72,7 +72,7 @@
 
 # Cleanup
 --remove_files_wildcard $BUGDIR *
---rmdir $BUGDIR
+--force-rmdir $BUGDIR
 
 ###########################################################################
 # 4. Run --help --verbose and --log-bin on an existing but empty datadir.

@@ -1,7 +1,7 @@
 include/master-slave.inc
 Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
-Note	####	Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
 call mtr.add_suppression("Slave: Can\'t find record in \'user\' Error_code: 1032");
 reset master;
@@ -133,6 +133,8 @@ CREATE USER user43748@127.0.0.1 IDENTIFIED BY 'meow';
 GRANT PROCESS ON *.* TO user43748@127.0.0.1;
 -- try to KILL system-thread as that non-privileged user (on slave).
 SELECT id INTO @id FROM information_schema.processlist WHERE user='system user' LIMIT 1;
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 KILL @id;
 Got one of the listed errors
 -- throw out test-user on slave.
