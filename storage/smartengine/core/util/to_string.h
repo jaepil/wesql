@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <vector>
 #ifndef IS_PRINT_UTIL_H_
 #define IS_PRINT_UTIL_H_ 1
 #include <stdint.h>
@@ -165,6 +166,15 @@ inline void databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos,
   databuff_printf(buf, buf_len, pos, "\"%s\"", obj.c_str());
 }
 
+template <class T>
+void databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const std::vector<T> &obj_vec)
+{
+  for (uint32_t i = 0; i < obj_vec.size(); ++i) {
+    databuff_printf(buf, buf_len, pos, "[%u]", i);
+    databuff_print_obj(buf, buf_len, pos, obj_vec[i]);
+    databuff_printf(buf, buf_len, pos, ",");
+  }
+}
 /*
 template <>
 inline void databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos,
@@ -272,6 +282,10 @@ public: \
 #define DECLARE_VIRTUAL_TO_STRING() \
 public: \
   virtual int64_t to_string(char *buf, const int64_t buf_len) const;
+
+#define DECLARE_OVERRIDE_TO_STRING() \
+public: \
+  virtual int64_t to_string(char *buf, const int64_t buf_len) const override;
 
 #define DEFINE_TO_STRING(clz, args...) \
   int64_t clz::to_string(char *buf, const int64_t buf_len) const { \

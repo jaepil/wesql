@@ -30,7 +30,8 @@ bool is_partition_log(int64_t log_type)
 {
   return REDO_LOG_ADD_SSTABLE == log_type
          || REDO_LOG_REMOVE_SSTABLE == log_type
-         || REDO_LOG_MODIFY_SSTABLE == log_type;
+         || REDO_LOG_MODIFY_SSTABLE == log_type
+         || REDO_LOG_MODIFY_TABLE_SCHEMA == log_type;;
 }
 
 bool is_extent_log(int64_t log_type)
@@ -113,6 +114,24 @@ DEFINE_COMPACTIPLE_SERIALIZATION(ModifySubTableLogEntry, index_id_, change_info_
 
 DEFINE_TO_STRING(ModifySubTableLogEntry, KV_(index_id), KV_(recovery_point), KV_(change_info))
 
+ModifyTableSchemaLogEntry::ModifyTableSchemaLogEntry()
+    : index_id_(-1),
+      table_schema_()
+{}
+
+ModifyTableSchemaLogEntry::ModifyTableSchemaLogEntry(
+    const int64_t index_id,
+    const table::TableSchema &table_schema)
+    : index_id_(index_id),
+      table_schema_(table_schema)
+{}
+
+ModifyTableSchemaLogEntry::~ModifyTableSchemaLogEntry()
+{}
+
+DEFINE_COMPACTIPLE_SERIALIZATION(ModifyTableSchemaLogEntry, index_id_, table_schema_)
+
+DEFINE_TO_STRING(ModifyTableSchemaLogEntry, KV_(index_id), KV_(table_schema))
 
 ModifyExtentMetaLogEntry::ModifyExtentMetaLogEntry()
     : extent_meta_()

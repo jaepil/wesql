@@ -47,6 +47,7 @@
 #include "./se_utils.h"
 #include "plugin/se_status_vars.h"
 #include "util/se_buff.h"
+#include "table/schema_struct.h"
 
 namespace smartengine
 {
@@ -498,8 +499,9 @@ private:
 
   int setup_read_decoders(const TABLE *table,
                           SeFieldEncoder *encoder_arr,
-                          std::vector<READ_FIELD> &decoders_vect,
-                          bool force_decode_all_fields = false);
+                          InstantDDLInfo &instant_ddl_info,
+                          bool force_decode_all_fields,
+                          std::vector<READ_FIELD> &decoders_vect);
 
   void get_storage_type(SeFieldEncoder *const encoder,
                         std::shared_ptr<SeKeyDef> pk_descr,
@@ -529,7 +531,7 @@ private:
   */
   void update_stats(void);
 
-  void get_instant_ddl_info_if_needed(const dd::Table *table_def);
+  void get_instant_ddl_info_if_needed(const TABLE *curr_table, const dd::Table *curr_dd_table, InstantDDLInfo &instant_ddl_info);
 
   bool init_with_fields() ;
  
@@ -939,19 +941,19 @@ private:
       std::shared_ptr<SeKeyDef> *const new_key_descr,
       uint new_n_keys);
 
-  void dd_commit_instant_table(const TABLE *old_table,
-                               const TABLE *altered_table,
-                               const dd::Table *old_dd_tab,
-                               dd::Table *new_dd_tab);
+  int dd_commit_instant_table(const TABLE *old_table,
+                              const TABLE *new_table,
+                              const dd::Table *old_dd_table,
+                              dd::Table *new_dd_table);
 
   void dd_commit_inplace_no_change(const dd::Table *old_dd_tab,
                                    dd::Table *new_dd_tab);
 
-  void dd_commit_inplace_instant(Alter_inplace_info *ha_alter_info,
-                                 const TABLE *old_table,
-                                 const TABLE *altered_table,
-                                 const dd::Table *old_dd_tab,
-                                 dd::Table *new_dd_tab);
+  int dd_commit_inplace_instant(Alter_inplace_info *ha_alter_info,
+                                const TABLE *old_table,
+                                const TABLE *new_table,
+                                const dd::Table *old_dd_table,
+                                dd::Table *new_dd_table);
 
   bool commit_inplace_alter_table_norebuild(
       TABLE *const altered_table,
@@ -967,11 +969,10 @@ private:
       const dd::Table *old_dd_tab,
       dd::Table *new_dd_tab);
 
-  int commit_inplace_alter_table_common(
-      my_core::TABLE *const altered_table,
-      my_core::Alter_inplace_info *const ha_alters_info,
-      bool commit,
-      const std::unordered_set<std::shared_ptr<SeKeyDef>> &new_added_indexes);
+  int commit_inplace_alter_table_common(my_core::TABLE *const altered_table,
+                                        my_core::Alter_inplace_info *const ha_alters_info,
+                                        const dd::Table *new_dd_table, 
+                                        const std::unordered_set<std::shared_ptr<SeKeyDef>> &new_added_indexes);
 
   int commit_inplace_alter_get_autoinc(
       Alter_inplace_info *ha_alter_info,
@@ -1002,6 +1003,19 @@ private:
       enum ha_rkey_function find_flag);
 
   bool is_using_prohibited_gap_locks(TABLE *table, bool using_full_unique_key);
+
+  int build_table_schema(const TABLE *table,
+                         const dd::Table *dd_table,
+                         const SeTableDef *table_def,
+                         table::TableSchema &table_schema);
+
+  int build_column_schemas(const TABLE *table,
+                           const std::vector<READ_FIELD> &field_decoders,
+                           std::vector<table::ColumnSchema> &col_schemas);
+
+  int pushdown_table_schema(const TABLE *table,
+                            const dd::Table *dd_table,
+                            const SeTableDef *table_def);
 
 private:
   typedef struct System_status_var SSV; 

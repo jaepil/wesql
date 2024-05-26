@@ -42,19 +42,7 @@ class RowBlockIterator : public InternalIterator
 
   int setup(const util::Comparator *comparator, const RowBlock *block, const bool is_index_block);
 
-  void reset() {
-    comparator_ = nullptr;
-    block_ = nullptr;
-    restarts_count_ = 0;
-    restarts_offset_ = 0;
-    current_ = 0;
-    restart_index_ = 0;
-    status_ = 0;
-    last_ = 0;
-    is_index_block_ = false;
-    prev_entries_idx_ = -1;
-    InternalIterator::reset();
-  }
+  void reset();
 
   void SetStatus(common::Status s) { status_ = s; }
 

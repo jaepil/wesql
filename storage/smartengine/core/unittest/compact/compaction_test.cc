@@ -548,6 +548,8 @@ class CompactionTest : public testing::Test {
                                  tmp_factory->table_options().block_size,
                                  tmp_factory->table_options().block_restart_interval,
                                  env_->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                                 false /*use_column_format*/,
+                                 table::TableSchema(),
                                  &internal_comparator_,
                                  output_layer_position,
                                  tmp_factory->table_options().block_cache.get(),
@@ -2135,7 +2137,7 @@ TEST_F(CompactionTest, test_single_del) {
   run_major_compact();
   print_raw_meta();
 
-  IntRange r[2] = {{40001, 49643, 2}, {49645, 49999, 2}};
+  IntRange r[2] = {{40001, 49637, 2}, {49639, 49999, 2}};
   check_result(2, r, 2);
   auto check_func = [&r](int64_t row, const Slice &key,
       const Slice &value) -> bool {

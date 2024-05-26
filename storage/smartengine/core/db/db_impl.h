@@ -197,6 +197,8 @@ class DBImpl : public DB {
 
   virtual common::Status DropColumnFamily(ColumnFamilyHandle *column_family) override;
 
+  virtual int modify_table_schema(ColumnFamilyHandle *index_handle, const table::TableSchema &table_schema) override;  
+
   virtual Iterator* NewIterator(const common::ReadOptions& options,
                                 ColumnFamilyHandle* column_family) override;
   virtual const Snapshot* GetSnapshot() override;
@@ -426,6 +428,7 @@ class DBImpl : public DB {
   int TEST_create_subtable(const ColumnFamilyDescriptor& cf,
                            int32_t tid,
                            ColumnFamilyHandle*& handle);
+  int TEST_modify_table_schema(ColumnFamilyHandle *handle);
 
   //inject error in transaction pipline
   //pipline should exit 

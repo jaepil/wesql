@@ -32,21 +32,11 @@ namespace dd
 namespace cache
 {
   class Dictionary_client;
-}
-}
+} // namespace cache
+} // namespace dd
 
 namespace smartengine
 {
-/*
-  const for pack/unpack record
-*/
-extern const size_t SE_RECORD_HEADER_LENGTH;
-
-extern const size_t SE_RECORD_FIELD_NUMBER_LENGTH;
-
-extern const size_t SE_RECORD_NULLABLE_BYTES;
-
-extern const char INSTANT_DDL_FLAG;
 
 /*
   This is
@@ -150,6 +140,8 @@ struct SeDdHelper {
   static bool get_se_subtable_ids(THD* thd, ulong lock_timeout,
       std::set<uint32_t>& subtable_ids);
 };
+
+bool se_parse_column_format_from_comment(const char *str);
 
 } // namespace smartengine
 

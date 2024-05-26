@@ -88,7 +88,10 @@ BlockInfo::BlockInfo()
       delete_row_count_(0),
       single_delete_row_count_(0),
       smallest_seq_(common::kMaxSequenceNumber),
-      largest_seq_(0)
+      largest_seq_(0),
+      column_block_(0),
+      max_column_count_(0),
+      unit_infos_()
 {}
 
 BlockInfo::BlockInfo(const BlockInfo &block_info)
@@ -98,7 +101,10 @@ BlockInfo::BlockInfo(const BlockInfo &block_info)
       delete_row_count_(block_info.delete_row_count_),
       single_delete_row_count_(block_info.single_delete_row_count_),
       smallest_seq_(block_info.smallest_seq_),
-      largest_seq_(block_info.largest_seq_)
+      largest_seq_(block_info.largest_seq_),
+      column_block_(block_info.column_block_),
+      max_column_count_(block_info.max_column_count_),
+      unit_infos_(block_info.unit_infos_)
 {}
 
 BlockInfo::~BlockInfo() {}
@@ -112,6 +118,9 @@ BlockInfo &BlockInfo::operator=(const BlockInfo &block_info)
   single_delete_row_count_ = block_info.single_delete_row_count_;
   smallest_seq_ = block_info.smallest_seq_;
   largest_seq_ = block_info.largest_seq_;
+  column_block_ = block_info.column_block_;
+  max_column_count_ = block_info.max_column_count_;
+  unit_infos_ = block_info.unit_infos_;
 
   return *this;
 }
@@ -125,24 +134,32 @@ void BlockInfo::reset()
   single_delete_row_count_ = 0;
   smallest_seq_ = common::kMaxSequenceNumber;
   largest_seq_ = 0;
+  column_block_ = 0;
+  max_column_count_ = 0;
+  unit_infos_.clear();
 }
 
 bool BlockInfo::is_valid() const
 {
-  return handle_.is_valid() && !first_key_.empty() && row_count_ > 0;
+  return handle_.is_valid() && !first_key_.empty() && row_count_ > 0 && max_column_count_ >= 0;
 }
 
 int64_t BlockInfo::get_max_serialize_size() const
 {
-  return get_serialize_size() + sizeof(BlockInfo);
+  // current_serialize_size + max serialize size of ColumnUnitInfo Array + size of BlockInfo(reserve)
+  int64_t size = get_serialize_size() +
+                 sizeof(int64_t) + max_column_count_ * ColumnUnitInfo::get_max_serialize_size() +
+                 sizeof(BlockInfo);
+  return size;
 }
 
 DEFINE_TO_STRING(BlockInfo, KV_(handle), KV_(first_key), KV_(handle), KV_(row_count),
     KV_(delete_row_count), KV_(single_delete_row_count), KV_(smallest_seq),
-    KV_(largest_seq))
+    KV_(largest_seq), K_(column_block)/*, K_(unit_infos)*/)
 
 DEFINE_COMPACTIPLE_SERIALIZATION(BlockInfo, handle_, first_key_, row_count_,
-    delete_row_count_, single_delete_row_count_, smallest_seq_, largest_seq_)
+    delete_row_count_, single_delete_row_count_, smallest_seq_, largest_seq_, column_block_,
+    max_column_count_, unit_infos_)
 
 int BlockIOHelper::read_block(IOExtent *extent,
                               const BlockHandle &handle,
@@ -188,6 +205,47 @@ int BlockIOHelper::read_block(IOExtent *extent,
       buf = nullptr;
     }
   }
+  return ret;
+}
+
+int BlockIOHelper::read_and_uncompress_block(storage::IOExtent *extent,
+                                             const BlockHandle &handle,
+                                             const int64_t mod_id,
+                                             util::AIOHandle *aio_handle,
+                                             Slice &block)
+{
+  int ret = Status::kOk;
+  Slice compressed_block;
+  Slice raw_block;
+
+  if (IS_NULL(extent) || UNLIKELY(!handle.is_valid())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(extent), K(handle));
+  } else if (FAILED(read_block(extent, handle, aio_handle, compressed_block))) {
+    SE_LOG(WARN, "fail to read block", K(ret));
+  } else {
+    // 1. Prepare raw block
+    if (kNoCompression == handle.compress_type_) {
+      // Use the read result as result block directly.
+      block.assign(compressed_block.data(), compressed_block.size());
+    } else {
+      if (FAILED(UncompressHelper::uncompress(compressed_block,
+                                              static_cast<CompressionType>(handle.compress_type_),
+                                              mod_id, 
+                                              handle.raw_size_, 
+                                              block))) {
+        SE_LOG(WARN, "fail to uncompress block", K(ret));
+      }
+
+      assert(nullptr != compressed_block.data());
+      // If the block is actually compressed, the result block is uncompressed.
+      // So the original compressed block should be released.
+      if (IS_NOTNULL(compressed_block.data())) {
+        base_free(const_cast<char *>(compressed_block.data()));
+      }
+    }
+  }
+
   return ret;
 }
 

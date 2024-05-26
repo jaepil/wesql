@@ -95,6 +95,10 @@ LIB_SOURCES =                                                   \
   storage/table_space.cc                                        \
   storage/multi_version_extent_meta_layer.cc                    \
   table/block_struct.cc                                         \
+  table/column_block_iterator.cc                                \
+  table/column_block_writer.cc                                  \
+  table/column_struct.cc                                        \
+  table/column_unit.cc                                          \
   table/extent_table_factory.cc                                 \
   table/bloom_block.cc                                          \
   table/extent_reader.cc                                        \
@@ -115,6 +119,7 @@ LIB_SOURCES =                                                   \
   table/sst_file_writer.cc                                      \
   table/table_properties.cc                                     \
   table/two_level_iterator.cc                                   \
+  table/schema_struct.cc                                        \
   table/sstable_scan_iterator.cc                                \
   util/aio_wrapper.cc                                           \
   util/arena.cc                                                 \

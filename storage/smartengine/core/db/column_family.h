@@ -33,7 +33,12 @@ namespace smartengine
 namespace monitor
 {
 class InstrumentedMutex;
-}
+} // namespace monitor
+
+namespace table
+{
+struct TableSchema;
+} // namespace table
 
 namespace db
 {
@@ -172,6 +177,7 @@ public:
 
   int64_t GetID() const { return sub_table_meta_.index_id_; }
   int64_t get_table_space_id() const { return sub_table_meta_.table_space_id_; }
+  table::TableSchema get_table_schema() const;
   // thread-safe
   // TODO(Zhao Dongsheng), deprecated?
   const std::string& GetName() const { return name_; }
@@ -407,58 +413,50 @@ public:
                         db::RecoveryPoint *recovery_point = nullptr,
                         const util::autovector<MemTable *> *flushed_memtables = nullptr,
                         util::autovector<MemTable *> *to_delete = nullptr);
+
+  int modify_table_schema(const table::TableSchema &table_schema);
+
+  bool use_column_format() const;
+
   int recover_extent_space();
 
-  int64_t get_table_id() { return sub_table_meta_.index_id_; }
-  void set_manual_compaction_type(const db::TaskType type) {
-    task_picker_.set_mc_task_type(type);
-  }
+  void set_manual_compaction_type(const db::TaskType type) { task_picker_.set_mc_task_type(type); }
 
-  const CompactionTasksPicker &get_task_picker() const {
-    return task_picker_;
-  }
+  const CompactionTasksPicker &get_task_picker() const { return task_picker_; }
 
-  void set_recovery_point(const RecoveryPoint &recovery_point)
-  {
-    sub_table_meta_.recovery_point_ = recovery_point;
-  }
-  const RecoveryPoint get_recovery_point()
-  {
-    return sub_table_meta_.recovery_point_;
-  }
+  void set_recovery_point(const RecoveryPoint &recovery_point) { sub_table_meta_.recovery_point_ = recovery_point; }
+
+  const RecoveryPoint get_recovery_point() { return sub_table_meta_.recovery_point_; }
+
   int release_resource(bool for_recovery);
 
-  int64_t get_current_total_extent_count() const
-  {
-    return storage_manager_.get_current_total_extent_count();
-  }
+  int64_t get_current_total_extent_count() const { return storage_manager_.get_current_total_extent_count(); }
 
-  DumpCfd *get_dump_cfd() const {
-    return dcfd_;
-  }
-  void set_dump_cfd(DumpCfd *dcfd) {
-    dcfd_ = dcfd;
-  }
-  common::SequenceNumber get_range_start() const {
-    return range_start_.load(std::memory_order_relaxed);
-  }
-  common::SequenceNumber get_range_end() const {
-    return range_end_.load(std::memory_order_relaxed);
-  }
+  DumpCfd *get_dump_cfd() const { return dcfd_; }
+
+  void set_dump_cfd(DumpCfd *dcfd) { dcfd_ = dcfd; }
+
+  common::SequenceNumber get_range_start() const { return range_start_.load(std::memory_order_relaxed); }
+
+  common::SequenceNumber get_range_end() const { return range_end_.load(std::memory_order_relaxed); }
+
   int get_extent_positions(storage::ExtentPositionMap &extent_positions)
   {
     return storage_manager_.get_extent_positions(sub_table_meta_.index_id_, extent_positions);
   }
+
   void set_autocheck_info(const int64_t delete_extents_size,
                            const int64_t l1_usage_percent,
                            const int64_t l2_usage_percent) {
     task_picker_.set_autocheck_info(delete_extents_size, l1_usage_percent, l2_usage_percent);
   }
+
   void set_level_info(const int64_t l0_num_val,
                       const int64_t l1_num_val,
                       const int64_t l2_num_val) {
     task_picker_.set_level_info(l0_num_val, l1_num_val, l2_num_val);
   }
+
   int set_compaction_check_info(monitor::InstrumentedMutex *mutex);
   int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
   int deserialize(const char *buf, int64_t buf_len, int64_t &pos);

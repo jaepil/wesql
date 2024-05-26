@@ -65,6 +65,7 @@ int IndexBlockWriter::append(const common::Slice &key, const BlockInfo &block_in
     ret = Status::kNotInit;
     SE_LOG(WARN, "IndexBlockWriter should be inited", K(ret));
   } else if (UNLIKELY(key.empty()) || UNLIKELY(!block_info.is_valid())) {
+    ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(key), K(block_info));
   } else if (FAILED(serialize_block_stats(block_info, serialized_value)))  {
     SE_LOG(WARN, "fail to serialize block index value", K(ret));
@@ -80,11 +81,12 @@ int IndexBlockWriter::append(const common::Slice &key, const BlockInfo &block_in
 int IndexBlockWriter::build(Slice &block)
 {
   int ret = Status::kOk;
+  BlockInfo dummy_block_info;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "IndexBlockWriter should be inited", K(ret));
-  } else if (FAILED(block_writer_.build(block))) {
+  } else if (FAILED(block_writer_.build(block, dummy_block_info))) {
     SE_LOG(WARN, "fail to build block", K(ret));
   } else {
     // succeed

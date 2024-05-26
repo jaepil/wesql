@@ -19,6 +19,7 @@
 #include "table/extent_struct.h"
 #include "table/index_block_writer.h"
 #include "table/row_block_writer.h"
+#include "table/schema_struct.h"
 #include "util/compress/compressor_helper.h"
 #include "util/data_buffer.h"
 
@@ -48,6 +49,8 @@ public:
   int64_t block_size_;
   int64_t block_restart_interval_;
   int32_t extent_space_type_;
+  bool use_column_format_;
+  TableSchema table_schema_;
   const db::InternalKeyComparator *internal_key_comparator_;
   storage::LayerPosition output_position_;
   cache::Cache *block_cache_;
@@ -61,6 +64,8 @@ public:
                    const int64_t block_size,
                    const int64_t block_restart_interval,
                    const int32_t extent_space_type_,
+                   const bool use_column_format,
+                   const TableSchema &table_schema,
                    const db::InternalKeyComparator *internal_key_comparator,
                    const storage::LayerPosition &output_position,
                    cache::Cache *block_cache,
@@ -92,6 +97,7 @@ public:
   int test_force_flush_data_block();
 #endif
 private:
+  int init_data_block_writer(const ExtentWriterArgs &args);
   int append_normal_row(const common::Slice &key, const common::Slice &value);
   int append_large_row(const common::Slice &key, const common::Slice &value);
   int prepare_append_row(const common::Slice &key, const common::Slice &value);
@@ -140,6 +146,8 @@ private:
   int64_t table_space_id_;
   int64_t block_size_;
   int32_t extent_space_type_;
+  bool use_column_format_;
+  TableSchema table_schema_;
   common::CompressionType compress_type_;
   storage::LayerPosition layer_position_;
   const db::InternalKeyComparator *internal_key_comparator_;
@@ -153,7 +161,7 @@ private:
   util::BufferWriter buf_;
   Footer footer_;
   IndexBlockWriter index_block_writer_;
-  RowBlockWriter data_block_writer_;
+  BlockWriter *data_block_writer_;
   storage::ChangeInfo *change_info_;
   bool migrate_flag_;
   std::unordered_map<uint32_t, RowBlock *> migrating_blocks_;

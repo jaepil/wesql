@@ -454,6 +454,10 @@ set(SOURCES
         storage/storage_logger.cc
         storage/table_space.cc
         table/block_struct.cc
+        table/column_block_iterator.cc
+        table/column_block_writer.cc
+        table/column_struct.cc
+        table/column_unit.cc
         table/extent_reader.cc
         table/extent_struct.cc
         table/extent_table_factory.cc
@@ -471,6 +475,7 @@ set(SOURCES
         table/row_block.cc
         table/row_block_iterator.cc
         table/row_block_writer.cc
+        table/schema_struct.cc
         table/sst_file_writer.cc
         table/table_properties.cc
         table/two_level_iterator.cc

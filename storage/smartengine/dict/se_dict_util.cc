@@ -25,6 +25,7 @@
 #include "dict/se_index.h"
 #include "dict/se_dd_operations.h"
 #include "logger/log_module.h"
+#include "util/se_constants.h"
 
 extern CHARSET_INFO my_charset_gbk_bin;
 extern CHARSET_INFO my_charset_gbk_chinese_ci;
@@ -32,17 +33,6 @@ extern CHARSET_INFO my_charset_gbk_chinese_ci;
 namespace smartengine
 {
 extern const char *const se_hton_name;
-
-/*
-  const for pack/unpack record
-*/
-const size_t SE_RECORD_HEADER_LENGTH = 1;
-
-const size_t SE_RECORD_FIELD_NUMBER_LENGTH = 2;
-
-const size_t SE_RECORD_NULLABLE_BYTES = 2;
-
-const char INSTANT_DDL_FLAG = 0x80;
 
 /*
   This is
@@ -554,6 +544,25 @@ bool SeDdHelper::get_se_subtable_ids(THD* thd, ulong lock_timeout,
   }
 
   return error;
+}
+
+bool se_parse_column_format_from_comment(const char *comment_str)
+{
+  const char *label = "SMARTENGINE_COLUMN_FORMAT=";
+  const int64_t label_size = strlen(label);
+  const char *pos = nullptr;
+  int64_t value = 0;
+
+  if (nullptr != comment_str) {
+    if (IS_NULL(pos = strcasestr(comment_str, label))) {
+      //The label isn't exist
+    } else {
+      value = atoi(pos + label_size);   
+      value = (value > 0) ? 1 : 0;
+    }
+  }
+
+  return (1 == value) ? true : false;
 }
 
 } // namespace smartengine

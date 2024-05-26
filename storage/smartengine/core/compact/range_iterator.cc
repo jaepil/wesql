@@ -154,6 +154,10 @@ int DataBlockIterator::update(const Slice &start, const Slice &end)
 {
   int ret = Status::kOk;
   int64_t pos = 0;
+  // TODO(Zhao Dongsheng): A strict implementation should have 'MetaDescriptor' provide
+  // a 'reset' or 'reuse' function.It's important to note whether the 'type_' field can
+  // be reset.
+  meta_descriptor_.block_info_.reset();
 
   if (FAILED(meta_descriptor_.block_info_.deserialize(end.data(), end.size(), pos))) {
     COMPACTION_LOG(WARN, "fail to deserialize block info", K(ret));
@@ -378,6 +382,7 @@ int ExtSEIterator::create_block_iter(const MetaDescriptor &meta) {
         endkey_ = startkey_;
         iter_level_ = kKVLevel;
       } else {
+        se_assert(false);
         COMPACTION_LOG(WARN, "the block iter is invalid");
       }
     } else {

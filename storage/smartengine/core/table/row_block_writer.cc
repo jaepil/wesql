@@ -36,6 +36,7 @@
 #include "table/row_block_writer.h"
 
 #include <assert.h>
+#include "table/block_struct.h"
 #include "util/coding.h"
 #include "util/serialization.h"
 
@@ -137,7 +138,7 @@ int RowBlockWriter::append(const Slice &key, const Slice &value)
   return ret;
 }
 
-int RowBlockWriter::build(Slice &block)
+int RowBlockWriter::build(Slice &block, BlockInfo &block_info)
 {
   int ret = Status::kOk;
 
@@ -151,6 +152,7 @@ int RowBlockWriter::build(Slice &block)
     SE_LOG(WARN, "fail to append restarts", K(ret));
   } else {
     block.assign(buf_.data(), buf_.size());
+    block_info.column_block_ = 0;
   }
 
   return ret;
@@ -196,6 +198,7 @@ int RowBlockWriter::append_restarts()
     }
     EncodeFixed32(buf_.current(), item_count);
     buf_.advance(sizeof(item_count));
+    se_assert(item_count > 0);
   }
 
   return ret;

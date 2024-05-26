@@ -34,7 +34,8 @@ SubTableMeta::SubTableMeta()
       row_count_(0),
       data_size_(0),
       recovery_point_(),
-      table_space_id_(0)
+      table_space_id_(0),
+      table_schema_()
 {
 }
 
@@ -50,17 +51,27 @@ void SubTableMeta::reset()
   data_size_ = 0;
   recovery_point_.reset();
   table_space_id_ = 0;
+  table_schema_.reset();
 }
 
-bool SubTableMeta::is_valid()
+bool SubTableMeta::is_valid() const
 {
-  return index_id_ >= 0 && index_no_ >= 0 && index_type_ >= 0 && row_count_ >= 0 && data_size_ >= 0 && recovery_point_.is_valid() && table_space_id_ >= 0;
+  return index_id_ >= 0 &&
+         index_no_ >= 0 &&
+         index_type_ >= 0 &&
+         row_count_ >= 0 &&
+         data_size_ >= 0 &&
+         recovery_point_.is_valid() &&
+         table_space_id_ >= 0 &&
+         table_schema_.is_valid();
 }
 
 
-DEFINE_COMPACTIPLE_SERIALIZATION(SubTableMeta, index_id_, index_no_, index_type_, row_count_, data_size_, recovery_point_, table_space_id_)
+DEFINE_COMPACTIPLE_SERIALIZATION(SubTableMeta, index_id_, index_no_, index_type_,
+    row_count_, data_size_, recovery_point_, table_space_id_, table_schema_)
 
-DEFINE_TO_STRING(SubTableMeta, KV_(index_id), KV_(index_no), KV_(index_type), KV_(row_count), KV_(data_size), KV_(recovery_point), KV_(table_space_id))
+DEFINE_TO_STRING(SubTableMeta, KV_(index_id), KV_(index_no), KV_(index_type), KV_(row_count),
+    KV_(data_size), KV_(recovery_point), KV_(table_space_id), KV_(table_schema))
 
 ExtentMeta::ExtentMeta()
     : attr_(0),
@@ -75,11 +86,12 @@ ExtentMeta::ExtentMeta()
       num_entries_(0),
       table_space_id_(0),
       extent_space_type_(FILE_EXTENT_SPACE),
-      index_block_handle_()
+      index_block_handle_(),
+      table_schema_()
 {
 }
 
-ExtentMeta::ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info)
+ExtentMeta::ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info, const table::TableSchema &table_schema)
     : attr_(attr),
       smallest_key_(extent_info.smallest_key_),
       largest_key_(extent_info.largest_key_),
@@ -93,7 +105,8 @@ ExtentMeta::ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info)
       num_deletes_(extent_info.delete_row_count_),
       table_space_id_(extent_info.table_space_id_),
       extent_space_type_(extent_info.extent_space_type_),
-      index_block_handle_(extent_info.index_block_handle_)
+      index_block_handle_(extent_info.index_block_handle_),
+      table_schema_(table_schema)
 {}
 
 ExtentMeta::ExtentMeta(const ExtentMeta &extent_meta)
@@ -110,7 +123,8 @@ ExtentMeta::ExtentMeta(const ExtentMeta &extent_meta)
       num_deletes_(extent_meta.num_deletes_),
       table_space_id_(extent_meta.table_space_id_),
       extent_space_type_(extent_meta.extent_space_type_),
-      index_block_handle_(extent_meta.index_block_handle_)
+      index_block_handle_(extent_meta.index_block_handle_),
+      table_schema_(extent_meta.table_schema_)
 {
 }
 
@@ -133,6 +147,7 @@ ExtentMeta& ExtentMeta::operator=(const ExtentMeta &extent_meta)
   table_space_id_ = extent_meta.table_space_id_;
   extent_space_type_ = extent_meta.extent_space_type_;
   index_block_handle_ = extent_meta.index_block_handle_;
+  table_schema_ = extent_meta.table_schema_;
 
   return *this;
 }
@@ -152,6 +167,7 @@ void ExtentMeta::reset()
   table_space_id_ = 0;
   extent_space_type_ = FILE_EXTENT_SPACE;
   index_block_handle_.reset();
+  table_schema_.reset();
 }
 
 int ExtentMeta::deep_copy(ExtentMeta *&extent_meta) const
@@ -183,6 +199,7 @@ int ExtentMeta::deep_copy(ExtentMeta *&extent_meta) const
     extent_meta->table_space_id_ = table_space_id_;
     extent_meta->extent_space_type_ = extent_space_type_;
     extent_meta->index_block_handle_ = index_block_handle_;
+    extent_meta->table_schema_ = table_schema_;
   }
 
   return ret;
@@ -217,6 +234,7 @@ int ExtentMeta::deep_copy(memory::SimpleAllocator &allocator, ExtentMeta *&exten
     extent_meta->table_space_id_ = table_space_id_;
     extent_meta->extent_space_type_ = extent_space_type_;
     extent_meta->index_block_handle_ = index_block_handle_;
+    extent_meta->table_schema_ = table_schema_;
   }
   return ret;
 }
@@ -227,12 +245,13 @@ int64_t ExtentMeta::get_deep_copy_size() const
 }
 DEFINE_COMPACTIPLE_SERIALIZATION(ExtentMeta, attr_, smallest_key_, largest_key_,
     extent_id_, smallest_seqno_, largest_seqno_, data_size_, num_data_blocks_,
-    num_entries_, num_deletes_, table_space_id_, extent_space_type_, index_block_handle_)
+    num_entries_, num_deletes_, table_space_id_, extent_space_type_, index_block_handle_,
+    table_schema_)
 
 DEFINE_TO_STRING(ExtentMeta, KV_(attr), KV_(smallest_key), KV_(largest_key), KV_(extent_id),
     KV_(smallest_seqno), KV_(largest_seqno), KV_(refs), KV_(data_size), KV_(num_data_blocks),
     KV_(num_entries), KV_(num_deletes), KV_(table_space_id), KV_(extent_space_type),
-    KV_(index_block_handle))
+    KV_(index_block_handle), KV_(table_schema))
 
 } //namespace storage
 } //namespace smartengine

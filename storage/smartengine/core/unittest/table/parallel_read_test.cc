@@ -402,6 +402,8 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
                                tmp_factory->table_options().block_size,
                                tmp_factory->table_options().block_restart_interval,
                                context_->icf_options_.env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                               false /*use_column_format*/,
+                               table::TableSchema(),
                                &internal_comparator_,
                                output_layer_position,
                                tmp_factory->table_options().block_cache.get(),

@@ -81,6 +81,21 @@ int RowBlockIterator::setup(const util::Comparator *comparator,
   return ret;
 }
 
+void RowBlockIterator::reset()
+{
+  comparator_ = nullptr;
+  block_ = nullptr;
+  restarts_count_ = 0;
+  restarts_offset_ = 0;
+  current_ = 0;
+  restart_index_ = 0;
+  status_ = 0;
+  last_ = 0;
+  is_index_block_ = false;
+  prev_entries_idx_ = -1;
+  InternalIterator::reset();
+}
+
 void RowBlockIterator::Next() {
   assert(Valid());
   ParseNextKey();

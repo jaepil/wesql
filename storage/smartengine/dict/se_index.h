@@ -55,15 +55,6 @@ const size_t SE_CHECKSUM_CHUNK_SIZE = 2 * SE_CHECKSUM_SIZE + 1;
 const char SE_CHECKSUM_DATA_TAG = 0x01;
 
 /*
-  Unpack data is variable length. It is a 1 tag-byte plus a
-  two byte length field. The length field includes the header as well.
-*/
-const char SE_UNPACK_DATA_TAG = 0x02;
-const size_t SE_UNPACK_DATA_LEN_SIZE = sizeof(uint16_t);
-const size_t SE_UNPACK_HEADER_SIZE =
-    sizeof(SE_UNPACK_DATA_TAG) + SE_UNPACK_DATA_LEN_SIZE;
-
-/*
   An object of this class represents information about an index in an SQL
   table. It provides services to encode and decode index tuples.
 

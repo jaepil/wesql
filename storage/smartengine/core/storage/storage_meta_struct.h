@@ -20,6 +20,7 @@
 #include "db/dbformat.h"
 #include "db/recovery_point.h"
 #include "table/block_struct.h"
+#include "table/schema_struct.h"
 #include <cstdint>
 
 namespace smartengine
@@ -49,11 +50,12 @@ public:
   int64_t data_size_;
   db::RecoveryPoint recovery_point_;
   int64_t table_space_id_;
+  table::TableSchema table_schema_;
 
   SubTableMeta();
   ~SubTableMeta();
   void reset();
-  bool is_valid();
+  bool is_valid() const;
 
   DECLARE_COMPACTIPLE_SERIALIZATION(SSTABLE_META_VERSION)
   DECLARE_TO_STRING()
@@ -83,9 +85,10 @@ public:
   int64_t table_space_id_;
   int32_t extent_space_type_;
   table::BlockHandle index_block_handle_;
+  table::TableSchema table_schema_;
 
   ExtentMeta();
-  ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info);
+  ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info, const table::TableSchema &table_schema);
   ExtentMeta(const ExtentMeta &extent_meta);
   ~ExtentMeta();
 

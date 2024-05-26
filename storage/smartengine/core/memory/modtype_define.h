@@ -123,6 +123,11 @@ DEFINE_MOD_TYPE(kExtentWriter)
 DEFINE_MOD_TYPE(kIndexBlockReader)
 DEFINE_MOD_TYPE(kExtentReader)
 DEFINE_MOD_TYPE(kCompressor)
+DEFINE_MOD_TYPE(kColumn)
+DEFINE_MOD_TYPE(kColumnUnitWriter)
+DEFINE_MOD_TYPE(kColumnUnitReader)
+DEFINE_MOD_TYPE(kColumnBlockWriter)
+DEFINE_MOD_TYPE(kColumnBlockReader)
 
 DEFINE_MOD_TYPE(kMaxMod)
 #endif

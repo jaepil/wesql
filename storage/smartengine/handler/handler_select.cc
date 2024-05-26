@@ -27,6 +27,7 @@
 #include "index/se_parallel_ddl_ctx.h"
 #include "sql/system_variables.h"
 #include "plugin/se_system_vars.h"
+#include "table/schema_struct.h"
 #include "transaction/se_transaction_factory.h"
 #include "transaction/se_transaction_impl.h"
 #include "transactions/transaction_db_impl.h"
@@ -1154,7 +1155,7 @@ int ha_smartengine::setup_read_decoders()
   bool force_decode_all_fields =
       (m_lock_rows == SE_LOCK_WRITE || m_verify_row_debug_checksums || bitmap_is_clear_all(table->read_set));
 
-  return setup_read_decoders(this->table, m_encoder_arr, m_decoders_vect, force_decode_all_fields);
+  return setup_read_decoders(this->table, m_encoder_arr, m_instant_ddl_info, force_decode_all_fields, m_decoders_vect);
 }
 
 /*
@@ -1163,8 +1164,9 @@ int ha_smartengine::setup_read_decoders()
 */
 int ha_smartengine::setup_read_decoders(const TABLE *table,
                                         SeFieldEncoder *encoder_arr,
-                                        std::vector<READ_FIELD> &decoders_vect,
-                                        bool force_decode_all_fields)
+                                        InstantDDLInfo &instant_ddl_info,
+                                        bool force_decode_all_fields,
+                                        std::vector<READ_FIELD> &decoders_vect)
 {
   decoders_vect.clear();
 
@@ -1184,7 +1186,7 @@ int ha_smartengine::setup_read_decoders(const TABLE *table,
       last_useful = decoders_vect.size();
       skip_size = 0;
     } else {
-      if (m_instant_ddl_info.have_instantly_added_columns() ||
+      if (instant_ddl_info.have_instantly_added_columns() ||
           encoder_arr[i].uses_variable_len_encoding() ||
           encoder_arr[i].maybe_null()) {
         // For variable-length field, we need to read the data and skip it
@@ -1201,7 +1203,7 @@ int ha_smartengine::setup_read_decoders(const TABLE *table,
 
   // It could be that the last few elements are varchars that just do
   // skipping. Remove them.
-  if (!m_instant_ddl_info.have_instantly_added_columns()) {
+  if (!instant_ddl_info.have_instantly_added_columns()) {
     decoders_vect.erase(decoders_vect.begin() + last_useful,
                         decoders_vect.end());
   }
@@ -1391,16 +1393,16 @@ int ha_smartengine::convert_record_from_storage_format(
   uint16 unpack_info_len = 0;
   common::Slice unpack_slice;
 
-  const char *header = reader.read(SE_RECORD_HEADER_LENGTH);
+  const char *header = reader.read(table::RecordFormat::RECORD_HEADER_SIZE);
   // if column_number_need_supplement <= 0 , it means no instantly added columns should be extracted
   int column_number_need_supplement = 0;
   int offset_for_default_vect = 0;
   if (instant_ddl_info && instant_ddl_info->have_instantly_added_columns()) {
     // number of fields stored in a smartengine row
     uint16_t field_num = 0;
-    if (header[0] & INSTANT_DDL_FLAG) {
-      const char *field_num_str = reader.read(SE_RECORD_FIELD_NUMBER_LENGTH);
-      const char *nullable_bytes_str = reader.read(SE_RECORD_NULLABLE_BYTES);
+    if (header[0] & table::RecordFormat::RECORD_INSTANT_DDL_FLAG) {
+      const char *field_num_str = reader.read(table::RecordFormat::RECORD_FIELD_NUMBER_SIZE);
+      const char *nullable_bytes_str = reader.read(table::RecordFormat::RECORD_NULL_BITMAP_SIZE_BYTES);
       field_num = uint2korr(field_num_str);
       column_number_need_supplement = decoders_vect.size() - (field_num - m_fields_no_needed_to_decode);
       null_bytes_in_rec = uint2korr(nullable_bytes_str);
@@ -1424,9 +1426,9 @@ int ha_smartengine::convert_record_from_storage_format(
   }
 
   if (maybe_unpack_info) {
-    unpack_info = reader.read(SE_UNPACK_HEADER_SIZE);
+    unpack_info = reader.read(table::RecordFormat::RECORD_UNPACK_HEADER_SIZE);
 
-    if (!unpack_info || unpack_info[0] != SE_UNPACK_DATA_TAG) {
+    if (!unpack_info || unpack_info[0] != table::RecordFormat::RECORD_UNPACK_DATA_FLAG) {
       return HA_ERR_INTERNAL_ERROR;
     }
 
@@ -1434,7 +1436,7 @@ int ha_smartengine::convert_record_from_storage_format(
         se_netbuf_to_uint16(reinterpret_cast<const uchar *>(unpack_info + 1));
     unpack_slice = common::Slice(unpack_info, unpack_info_len);
 
-    reader.read(unpack_info_len - SE_UNPACK_HEADER_SIZE);
+    reader.read(unpack_info_len - table::RecordFormat::RECORD_UNPACK_HEADER_SIZE);
   }
 
   if (!unpack_info && !pk_descr->table_has_unpack_info(t)) {

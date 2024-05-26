@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "table/block_writer.h"
 #include <cstdint>
 #include <vector>
 #include "util/data_buffer.h"
@@ -20,20 +21,20 @@ namespace smartengine
 namespace table
 {
 
-class RowBlockWriter
+class RowBlockWriter : public BlockWriter
 {
 public:
   RowBlockWriter();
-  virtual ~RowBlockWriter();
+  virtual ~RowBlockWriter() override;
 
   int init(const int64_t restart_interval);
   void destroy();
-  void reuse();
-  int append(const common::Slice &key, const common::Slice &value);
-  int build(common::Slice &block);
-  int64_t current_size() const { return current_block_size_; }
-  int64_t future_size(const uint32_t key_size, const uint32_t value_size) const;
-  bool is_empty() const;
+  virtual void reuse() override;
+  virtual int append(const common::Slice &key, const common::Slice &value) override;
+  virtual int build(common::Slice &block, BlockInfo &block_info) override;
+  virtual int64_t current_size() const override { return current_block_size_; }
+  virtual int64_t future_size(const uint32_t key_size, const uint32_t value_size) const override;
+  virtual bool is_empty() const override;
 
 private:
   int append_restarts();

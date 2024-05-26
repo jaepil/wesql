@@ -17,6 +17,7 @@
 #pragma once
 
 #include "options/advanced_options.h"
+#include "table/column_unit.h"
 #include "util/serialization.h"
 #include "util/to_string.h"
 #include "util/types.h"
@@ -75,6 +76,9 @@ struct BlockInfo
   int32_t single_delete_row_count_;
   common::SequenceNumber smallest_seq_;
   common::SequenceNumber largest_seq_;
+  int8_t column_block_;
+  int32_t max_column_count_;
+  std::vector<ColumnUnitInfo> unit_infos_;
 
   BlockInfo();
   BlockInfo(const BlockInfo &block_info);
@@ -86,12 +90,12 @@ struct BlockInfo
   inline uint32_t get_offset() const { return handle_.offset_; }
   inline uint32_t get_size() const {return handle_.size_; }
   inline int64_t get_delete_percent() const { return ((delete_row_count_ + single_delete_row_count_) * 100) / row_count_; }
+  inline bool is_column_block() const {return (1 == column_block_); }
   int64_t get_max_serialize_size() const;
 
   DECLARE_TO_STRING()
   DECLARE_COMPACTIPLE_SERIALIZATION(BLOCK_INFO_VERSION)
 };
-
 
 class BlockIOHelper
 {
@@ -101,7 +105,13 @@ public:
                         const BlockHandle &handle,
                         util::AIOHandle *aio_handle,
                         common::Slice &block);
-  
+
+  static int read_and_uncompress_block(storage::IOExtent *extent,
+                                       const BlockHandle &handle,
+                                       const int64_t mod_id,
+                                       util::AIOHandle *aio_handle,
+                                       common::Slice &block);
+
   static int read_and_uncompress_block(storage::IOExtent *extent,
                                        const BlockHandle &handle,
                                        const int64_t mod_id,

@@ -174,6 +174,7 @@ public:
 
   int add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_replay, ColumnFamilyData *&sub_table);
   int remove_sub_table(ColumnFamilyData *sub_table, bool write_log, bool is_replay);
+  int modify_table_schema(ColumnFamilyData *sub_table, const table::TableSchema &table_schema);
   int do_checkpoint(util::WritableFile *checkpoint_writer, storage::CheckpointHeader *header);
   int load_checkpoint(util::RandomAccessFile *checkpoint_reader, storage::CheckpointHeader *header);
   int replay(int64_t log_type, char *log_data, int64_t log_len);
@@ -193,6 +194,7 @@ private:
   int replay_add_subtable_log(const char *log, int64_t log_len);
   int replay_remove_subtable_log(const char *log, int64_t log_len);
   int replay_modify_subtable_log(const char *log_data, int64_t log_len);
+  int replay_modify_table_schema_log(const char *log_data, int64_t log_len);
 
 private:
   static const int64_t DEFAULT_BUFFER_SIZE = 2 * 1024 * 1024; //2MB

@@ -20,9 +20,11 @@
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
+#include "table/column_block_iterator.h"
 #include "table/get_context.h"
 #include "table/index_block_reader.h"
 #include "table/large_object.h"
+#include "table/row_block_writer.h"
 
 namespace smartengine
 {
@@ -257,7 +259,9 @@ int ExtentReader::setup_index_block_iterator(RowBlockIterator *index_block_itera
 int ExtentReader::setup_data_block_iterator(BlockDataHandle<RowBlock> &data_block_handle, RowBlockIterator *data_block_iterator)
 {
   int ret = Status::kOk;
-  RowBlock *data_block = nullptr;
+  Slice data_block_content;
+  Slice row_block_content;
+  RowBlock *row_block = nullptr;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -269,15 +273,35 @@ int ExtentReader::setup_data_block_iterator(BlockDataHandle<RowBlock> &data_bloc
                                                              data_block_handle.block_info_.handle_,
                                                              ModId::kExtentReader,
                                                              nullptr /*aio_handle*/,
-                                                             data_block))) {
+                                                             data_block_content))) {
     SE_LOG(WARN, "fail to read data block", K(ret), K(data_block_handle.block_info_));
-  } else if (FAILED(data_block_iterator->setup(internal_key_comparator_,
-                                               data_block,
-                                               false /*is_index_block*/))) {
-    SE_LOG(WARN, "fail to setup block iterator", K(ret), K(data_block), K(data_block_handle.block_info_));
   } else {
-    data_block_handle.block_entry_.value_ = data_block;
-    data_block_handle.need_do_cleanup_ = true;
+    if (!data_block_handle.block_info_.is_column_block()) {
+      row_block_content = data_block_content;
+    } else if (FAILED(convert_to_row_block(data_block_content, data_block_handle.block_info_, row_block_content))) {
+      SE_LOG(WARN, "fail to convert to row block", K(ret));
+    } else {
+      // free the memory of column block
+      base_free(const_cast<char *>(data_block_content.data()));
+    }
+
+    if (SUCCED(ret)) {
+      if (IS_NULL(row_block = MOD_NEW_OBJECT(ModId::kBlock,
+                                             RowBlock,
+                                             row_block_content.data(),
+                                             row_block_content.size(),
+                                             common::kNoCompression))) {
+        ret = Status::kMemoryLimit;
+        SE_LOG(WARN, "fail to allocate memory for RowBlock", K(ret));
+      } else if (FAILED(data_block_iterator->setup(internal_key_comparator_,
+                                                   row_block,
+                                                   false /*is_index_block*/))) {
+        SE_LOG(WARN, "fail to setup block iterator", K(ret), K(row_block), K(data_block_handle.block_info_));
+      } else {
+        data_block_handle.block_entry_.value_ = row_block;
+        data_block_handle.need_do_cleanup_ = true;
+      }
+    }
   }
 
   return ret;
@@ -484,6 +508,8 @@ int ExtentReader::read_data_block(BlockDataHandle<RowBlock> &data_block_handle,
   int ret = Status::kOk;
   char cache_key_buf[CacheEntryKey::MAX_CACHE_KEY_SZIE] = {0};
   Slice cache_key;
+  Slice data_block;
+  Slice row_block;
 
   if (UNLIKELY(!data_block_handle.block_info_.is_valid())) {
     ret = Status::kInvalidArgument;
@@ -506,29 +532,49 @@ int ExtentReader::read_data_block(BlockDataHandle<RowBlock> &data_block_handle,
                                                         data_block_handle.block_info_.handle_,
                                                         ModId::kExtentReader,
                                                         data_block_handle.has_prefetched_ ? &(data_block_handle.aio_handle_) : nullptr,
-                                                        data_block_handle.block_entry_.value_))) {
+                                                        data_block))) {
       SE_LOG(WARN, "fail to read and uncompress data block", K(ret));
-    } else if (IS_NOTNULL(block_cache_) && added_blocks < scan_add_blocks_limit) {
-      // TODO(Zhao Dongsheng): this function really work?
-      update_mod_id(data_block_handle.block_entry_.value_->data_, ModId::kDataBlockCache);  
-      if (FAILED(block_cache_->Insert(cache_key,
-                                      data_block_handle.block_entry_.value_,
-                                      data_block_handle.block_entry_.value_->usable_size(),
-                                      &CacheEntryHelper::delete_entry<RowBlock>,
-                                      &(data_block_handle.block_entry_.handle_),
-                                      Cache::Priority::LOW).code())) {
-        SE_LOG(WARN, "fail to insert into block cache", K(ret));
-      } else {
-        // The data_block_handle should be responsible to release block cache handle.
-        ++added_blocks;
-        data_block_handle.cache_ = block_cache_;
-        data_block_handle.need_do_cleanup_ = true;
-        QUERY_COUNT(CountPoint::BLOCK_CACHE_ADD);
-        QUERY_COUNT(CountPoint::BLOCK_CACHE_DATA_ADD);
-      }
     } else {
-      // The data_block_handle should be responsible to release the memory of block.
-      data_block_handle.need_do_cleanup_ = true;
+      if (!data_block_handle.block_info_.is_column_block()) {
+        row_block = data_block;
+      } else if (FAILED(convert_to_row_block(data_block, data_block_handle.block_info_, row_block))) {
+        SE_LOG(WARN, "fail to covert column block to row block", K(ret));
+      } else {
+        // free the memory of column block
+        base_free(const_cast<char *>(data_block.data()));
+      }
+
+      if (SUCCED(ret)) {
+        if (IS_NULL(data_block_handle.block_entry_.value_ = MOD_NEW_OBJECT(ModId::kBlock,
+                                                                                           RowBlock, 
+                                                                                           row_block.data(),
+                                                                                           row_block.size(),
+                                                                                           kNoCompression))) {
+          ret = Status::kMemoryLimit;
+          SE_LOG(WARN, "fail to allocate memory for Block", K(ret));
+        } else if (IS_NOTNULL(block_cache_) && added_blocks < scan_add_blocks_limit) {
+          // TODO(Zhao Dongsheng): this function really work?
+          update_mod_id(data_block_handle.block_entry_.value_->data_, ModId::kDataBlockCache);  
+          if (FAILED(block_cache_->Insert(cache_key,
+                                          data_block_handle.block_entry_.value_,
+                                          data_block_handle.block_entry_.value_->usable_size(),
+                                          &CacheEntryHelper::delete_entry<RowBlock>,
+                                          &(data_block_handle.block_entry_.handle_),
+                                          Cache::Priority::LOW).code())) {
+            SE_LOG(WARN, "fail to insert into block cache", K(ret));
+          } else {
+            // The data_block_handle should be responsible to release block cache handle.
+            ++added_blocks;
+            data_block_handle.cache_ = block_cache_;
+            data_block_handle.need_do_cleanup_ = true;
+            QUERY_COUNT(CountPoint::BLOCK_CACHE_ADD);
+            QUERY_COUNT(CountPoint::BLOCK_CACHE_DATA_ADD);
+          }
+        } else {
+          // The data_block_handle should be responsible to release the memory of block.
+          data_block_handle.need_do_cleanup_ = true;
+        }
+      }
     }
   } else if (IS_NULL(data_block_handle.block_entry_.value_ = reinterpret_cast<RowBlock *>(
       block_cache_->Value(data_block_handle.block_entry_.handle_)))) {
@@ -543,6 +589,57 @@ int ExtentReader::read_data_block(BlockDataHandle<RowBlock> &data_block_handle,
   return ret;
 }
 
+int ExtentReader::convert_to_row_block(const Slice &column_block, const BlockInfo &block_info, Slice &row_block)
+{
+  int ret = Status::kOk;
+  RowBlockWriter row_block_writer;
+  ColumnBlockIterator column_block_iterator;
+  Slice key;
+  Slice value;
+  Slice tmp_row_block;
+  char *row_block_buf = nullptr;
+  BlockInfo dummy_block_info;
+
+  if (UNLIKELY(column_block.empty())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(column_block));
+  // TODO(Zhao Dongsheng): the restart_interval should use the configed value.
+  } else if (FAILED(row_block_writer.init(16 /*restart_interval*/))) {
+    SE_LOG(WARN, "fail to init RowBlockIterator", K(ret));
+  } else if (FAILED(column_block_iterator.init(column_block, block_info, extent_meta_->table_schema_))) {
+    SE_LOG(WARN, "fail to init ColumnBlockIterator", K(ret));
+  } else {
+    while (SUCCED(ret)) {
+      key.clear();
+      value.clear();
+      if (FAILED(column_block_iterator.get_next_row(key, value))) {
+        if (Status::kIterEnd != ret) {
+          SE_LOG(WARN, "fail to get next row", K(ret));
+        } else {
+          /**Overwrite the ret if reach to end of iterator.*/
+          ret = Status::kOk;
+          break;
+        }
+      } else if (FAILED(row_block_writer.append(key, value))) {
+        SE_LOG(WARN, "fail to append row to row block", K(ret));
+      }
+    }
+
+    if (SUCCED(ret)) {
+      if (FAILED(row_block_writer.build(tmp_row_block, dummy_block_info))) {
+        SE_LOG(WARN, "fail to build row block", K(ret));
+      } else if (IS_NULL(row_block_buf = reinterpret_cast<char *>(base_malloc(tmp_row_block.size(), ModId::kBlock)))) {
+        ret = Status::kMemoryLimit;
+        SE_LOG(WARN, "fail to allocate memory for row block buf", K(ret), "size", tmp_row_block.size());
+      } else {
+        memcpy(row_block_buf, tmp_row_block.data(), tmp_row_block.size());
+        row_block.assign(row_block_buf, tmp_row_block.size());
+      }
+    }
+  }
+  
+  return ret;
+}
 
 } // namespace table
 } // namespace smartengine

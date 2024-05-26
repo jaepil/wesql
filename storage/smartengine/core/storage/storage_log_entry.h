@@ -19,6 +19,7 @@
 
 #include "db/recovery_point.h"
 #include "storage/storage_meta_struct.h"
+#include "table/schema_struct.h"
 #include "util/serialization.h"
 #include "util/to_string.h"
 
@@ -50,6 +51,7 @@ enum ManifestRedoLogType
   REDO_LOG_REMOVE_SSTABLE = 3,
   REDO_LOG_MODIFY_SSTABLE = 4,
   REDO_LOG_MODIFY_EXTENT_META = 5,
+  REDO_LOG_MODIFY_TABLE_SCHEMA = 6,
 };
 
 bool is_trans_log(int64_t log_type);
@@ -132,6 +134,21 @@ struct ModifySubTableLogEntry : public ManifestLogEntry
   ModifySubTableLogEntry(int64_t index_id, ChangeInfo &change_info);
   virtual ~ModifySubTableLogEntry() override;
   DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_SUBTABLE_LOG_ENTRY_VERSION)
+  DECLARE_TO_STRING()
+};
+
+struct ModifyTableSchemaLogEntry : public ManifestLogEntry
+{
+  static const int64_t MODIFY_TABLE_SCHEMA_LOG_ENTRY_VERSION = 1;
+
+  int64_t index_id_;
+  table::TableSchema table_schema_;
+
+  ModifyTableSchemaLogEntry();
+  ModifyTableSchemaLogEntry(const int64_t index_id, const table::TableSchema &table_schema);
+  virtual ~ModifyTableSchemaLogEntry() override;
+
+  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_TABLE_SCHEMA_LOG_ENTRY_VERSION)
   DECLARE_TO_STRING()
 };
 

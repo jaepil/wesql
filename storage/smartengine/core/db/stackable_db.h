@@ -55,6 +55,11 @@ class StackableDB : public db::DB {
     return db_->DropColumnFamily(column_family);
   }
 
+  virtual int modify_table_schema(ColumnFamilyHandle *subtable_handle, const table::TableSchema &table_schema) override
+  {
+    return db_->modify_table_schema(subtable_handle, table_schema);
+  }
+
   virtual common::Status Put(const common::WriteOptions& options,
                              ColumnFamilyHandle* column_family,
                              const common::Slice& key,

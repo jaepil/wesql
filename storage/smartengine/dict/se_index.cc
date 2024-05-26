@@ -27,6 +27,7 @@
 #include "dict/se_dict_util.h"
 #include "handler/handler_alter.h"
 #include "handler/se_hton.h"
+#include "table/schema_struct.h"
 
 namespace smartengine {
 
@@ -508,7 +509,7 @@ bool SeKeyDef::unpack_info_has_checksum(const common::Slice &unpack_info)
   size_t size = unpack_info.size();
 
   // Skip unpack info if present.
-  if (size >= SE_UNPACK_HEADER_SIZE && ptr[0] == SE_UNPACK_DATA_TAG) {
+  if (size >= table::RecordFormat::RECORD_UNPACK_HEADER_SIZE && ptr[0] == table::RecordFormat::RECORD_UNPACK_DATA_FLAG) {
     const uint16 skip_len = se_netbuf_to_uint16(ptr + 1);
     SHIP_ASSERT(size >= skip_len);
 
@@ -659,7 +660,7 @@ uint SeKeyDef::pack_record(const TABLE *const tbl,
 
   if (unpack_info) {
     unpack_info->clear();
-    unpack_info->write_uint8(SE_UNPACK_DATA_TAG);
+    unpack_info->write_uint8(table::RecordFormat::RECORD_UNPACK_DATA_FLAG);
     unpack_len_pos = unpack_info->get_current_pos();
     // we don't know the total length yet, so write a zero
     unpack_info->write_uint16(0);
@@ -715,7 +716,7 @@ uint SeKeyDef::pack_record(const TABLE *const tbl,
     // Primary Keys are special: for them, store the unpack_info even if it's
     // empty (provided m_maybe_unpack_info==true, see
     // ha_smartengine::convert_record_to_storage_format)
-    if (len == SE_UNPACK_HEADER_SIZE &&
+    if (len == table::RecordFormat::RECORD_UNPACK_HEADER_SIZE &&
         m_index_type != SeKeyDef::INDEX_TYPE_PRIMARY) {
       unpack_info->clear();
     } else {
@@ -818,7 +819,7 @@ int SeKeyDef::pack_new_record(const TABLE *const old_tbl,
 
   if (unpack_info) {
     unpack_info->clear();
-    unpack_info->write_uint8(SE_UNPACK_DATA_TAG);
+    unpack_info->write_uint8(table::RecordFormat::RECORD_UNPACK_DATA_FLAG);
     unpack_len_pos = unpack_info->get_current_pos();
     // we don't know the total length yet, so write a zero
     unpack_info->write_uint16(0);
@@ -889,7 +890,7 @@ int SeKeyDef::pack_new_record(const TABLE *const old_tbl,
     // Primary Keys are special: for them, store the unpack_info even if it's
     // empty (provided m_maybe_unpack_info==true, see
     // ha_smartengine::convert_record_to_storage_format)
-    if (len == SE_UNPACK_HEADER_SIZE &&
+    if (len == table::RecordFormat::RECORD_UNPACK_HEADER_SIZE &&
         m_index_type != SeKeyDef::INDEX_TYPE_PRIMARY) {
       unpack_info->clear();
     } else {
@@ -1294,7 +1295,7 @@ int SeKeyDef::unpack_record_pk(TABLE *const table,
   }
 
   // Skip instant columns attribute
-  value_reader.read(SE_RECORD_HEADER_LENGTH);
+  value_reader.read(table::RecordFormat::RECORD_HEADER_SIZE);
 
   // Skip null-bytes
   uint32_t null_bytes_in_rec = dict_info->m_null_bytes_in_rec;
@@ -1310,8 +1311,8 @@ int SeKeyDef::unpack_record_pk(TABLE *const table,
   uint16 unpack_info_len = 0;
   common::Slice unpack_slice;
   if (dict_info->m_maybe_unpack_info) {
-    unpack_info = value_reader.read(SE_UNPACK_HEADER_SIZE);
-    if (!unpack_info || unpack_info[0] != SE_UNPACK_DATA_TAG) {
+    unpack_info = value_reader.read(table::RecordFormat::RECORD_UNPACK_HEADER_SIZE);
+    if (!unpack_info || unpack_info[0] != table::RecordFormat::RECORD_UNPACK_DATA_FLAG) {
       __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s",
                      table->s->table_name.str);
       return HA_ERR_INTERNAL_ERROR;
@@ -1321,7 +1322,7 @@ int SeKeyDef::unpack_record_pk(TABLE *const table,
         se_netbuf_to_uint16(reinterpret_cast<const uchar *>(unpack_info + 1));
     unpack_slice = common::Slice(unpack_info, unpack_info_len);
 
-    value_reader.read(unpack_info_len - SE_UNPACK_HEADER_SIZE);
+    value_reader.read(unpack_info_len - table::RecordFormat::RECORD_UNPACK_HEADER_SIZE);
   }
 
   if (!unpack_info && !table_has_unpack_info(table)) {
@@ -1382,8 +1383,8 @@ int SeKeyDef::unpack_record(TABLE *const table,
   // be reordered.
   const bool has_unpack_info =
       unp_reader.remaining_bytes() &&
-      *unp_reader.get_current_ptr() == SE_UNPACK_DATA_TAG;
-  if (has_unpack_info && !unp_reader.read(SE_UNPACK_HEADER_SIZE)) {
+      *unp_reader.get_current_ptr() == table::RecordFormat::RECORD_UNPACK_DATA_FLAG;
+  if (has_unpack_info && !unp_reader.read(table::RecordFormat::RECORD_UNPACK_HEADER_SIZE)) {
     __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }

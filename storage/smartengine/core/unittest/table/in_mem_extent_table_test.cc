@@ -110,6 +110,8 @@ TEST(InMemExtent, sim) {
                                16 * 1024 /**block_size*/,
                                16 /*block_restart_interval*/,
                                storage::FILE_EXTENT_SPACE,
+                               false /*use_column_format*/,
+                               table::TableSchema(),
                                &internal_comparator,
                                output_layer_position,
                                nullptr /*block_cache*/,

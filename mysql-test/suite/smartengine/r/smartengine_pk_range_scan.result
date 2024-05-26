@@ -21,7 +21,7 @@ count(*)
 10000
 explain select id from t1 where id >= 3000 order by id asc limit 1;
 id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-1	SIMPLE	t1	NULL	range	PRIMARY,k_1	PRIMARY	4	NULL	6271	#	Using where; Using index
+1	SIMPLE	t1	NULL	range	PRIMARY,k_1	PRIMARY	4	NULL	6274	#	Using where; Using index
 select id from t1 where id >= 3000 order by id asc limit 1;
 id
 3000

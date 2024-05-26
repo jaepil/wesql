@@ -56,6 +56,7 @@
 #include "transactions/transaction_db_impl.h"
 #include "db/db_impl.h"
 #include "write_batch/write_batch_with_index.h"
+#include "table/schema_struct.h"
 
 namespace smartengine
 {
@@ -130,58 +131,45 @@ static int set_duplicate_key_for_print(TABLE *new_table,
 static  bool se_need_rebuild(const Alter_inplace_info *ha_alter_info);
 
 /** Get instant ddl information from Data Dictionary
-@param[in]	table_def	dd table  */
-void ha_smartengine::get_instant_ddl_info_if_needed(const dd::Table *table_def)
+@param[in]	dd_table	dd table  */
+void ha_smartengine::get_instant_ddl_info_if_needed(const TABLE *curr_table, const dd::Table *curr_dd_table, InstantDDLInfo &instant_ddl_info)
 {
-  m_instant_ddl_info.clearup();
+  instant_ddl_info.clearup();
 
-  for (const auto col : table_def->columns()) {
+  for (const auto col : curr_dd_table->columns()) {
     if (col->is_virtual() || col->is_se_hidden()) {
       continue;
     }
     const dd::Properties &se_private_data = col->se_private_data();
-    if (!se_private_data.exists(
-            dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT_NULL]) &&
-        !se_private_data.exists(
-            dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT])) {
+    if (!se_private_data.exists(dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT_NULL]) &&
+        !se_private_data.exists(dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT])) {
       continue;
     }
-    if (se_private_data.exists(
-            dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT_NULL])) {
-      m_instant_ddl_info.instantly_added_default_value_null.push_back(true);
-      m_instant_ddl_info.instantly_added_default_values.push_back("");
-    } else if (se_private_data.exists(
-                   dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT])) {
+    if (se_private_data.exists(dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT_NULL])) {
+      instant_ddl_info.instantly_added_default_value_null.push_back(true);
+      instant_ddl_info.instantly_added_default_values.push_back("");
+    } else if (se_private_data.exists(dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT])) {
       dd::String_type value;
-      se_private_data.get(dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT],
-                          &value);
+      se_private_data.get(dd_column_key_strings[DD_INSTANT_COLUMN_DEFAULT], &value);
       size_t len;
       const byte *decoded_default_value;
       DD_instant_col_val_coder coder;
       decoded_default_value = coder.decode(value.c_str(), value.length(), &len);
 
-      std::string default_value(
-          reinterpret_cast<const char *>(decoded_default_value), len);
-      m_instant_ddl_info.instantly_added_default_value_null.push_back(false);
-      m_instant_ddl_info.instantly_added_default_values.push_back(
-          default_value);
+      std::string default_value(reinterpret_cast<const char *>(decoded_default_value), len);
+      instant_ddl_info.instantly_added_default_value_null.push_back(false);
+      instant_ddl_info.instantly_added_default_values.push_back(default_value);
     }
   }
 
-  if (table_def->se_private_data().exists(
-          dd_table_key_strings[DD_TABLE_INSTANT_COLS])) {
-    table_def->se_private_data().get(
-        dd_table_key_strings[DD_TABLE_INSTANT_COLS],
-        &m_instant_ddl_info.m_instant_cols);
-    assert(m_instant_ddl_info.instantly_added_default_values.size() ==
-           (table->s->fields - m_instant_ddl_info.m_instant_cols));
+  if (curr_dd_table->se_private_data().exists(dd_table_key_strings[DD_TABLE_INSTANT_COLS])) {
+    curr_dd_table->se_private_data().get(dd_table_key_strings[DD_TABLE_INSTANT_COLS], &instant_ddl_info.m_instant_cols);
+    assert(instant_ddl_info.instantly_added_default_values.size() == (curr_table->s->fields - instant_ddl_info.m_instant_cols));
   } else {
-    assert(m_instant_ddl_info.instantly_added_default_values.empty());
+    assert(instant_ddl_info.instantly_added_default_values.empty());
   }
-  if (table_def->se_private_data().exists(
-          dd_table_key_strings[DD_TABLE_NULL_BYTES])) {
-    table_def->se_private_data().get(dd_table_key_strings[DD_TABLE_NULL_BYTES],
-                                     &m_instant_ddl_info.m_null_bytes);
+  if (curr_dd_table->se_private_data().exists(dd_table_key_strings[DD_TABLE_NULL_BYTES])) {
+    curr_dd_table->se_private_data().get(dd_table_key_strings[DD_TABLE_NULL_BYTES], &instant_ddl_info.m_null_bytes);
   }
 }
 
@@ -995,9 +983,11 @@ int ha_smartengine::prepare_inplace_alter_table_dict(
                   old_tbl_def->m_dict_info->m_null_bytes_in_rec,
                   old_tbl_def->m_dict_info->m_maybe_unpack_info))) {
     __XHANDLER_LOG(ERROR, "SEDDL: setup field converters failed, table_name: %s", table->s->table_name.str);
-  } else if ((ret = setup_read_decoders(
-                  altered_table, old_tbl_def->m_dict_info->m_encoder_arr,
-                  old_tbl_def->m_dict_info->m_decoders_vect, true))) {
+  } else if ((ret = setup_read_decoders(altered_table,
+                                        old_tbl_def->m_dict_info->m_encoder_arr,
+                                        m_instant_ddl_info,
+                                        true /*force_decode_all_fields*/,
+                                        old_tbl_def->m_dict_info->m_decoders_vect))) {
     __XHANDLER_LOG(ERROR, "SEDDL: setup read decoders failed, table_name: %s", table->s->table_name.str);
   } else if ((ret = setup_col_maps(ha_alter_info, altered_table, old_table,
                                    old_tbl_def->m_dict_info))) {
@@ -1154,7 +1144,7 @@ int ha_smartengine::convert_new_record_from_old_record(
   int ret = HA_EXIT_SUCCESS;
 
   new_storage_record.length(0);
-  new_storage_record.fill(SE_RECORD_HEADER_LENGTH, 0);
+  new_storage_record.fill(table::RecordFormat::RECORD_HEADER_SIZE, 0);
 
   String null_bytes_str;
   null_bytes_str.length(0);
@@ -1200,7 +1190,7 @@ int ha_smartengine::convert_new_record_from_old_record(
 
     if (encoder_arr[i].maybe_null()) {
       char *const data =
-          (char *)new_storage_record.ptr() + SE_RECORD_HEADER_LENGTH;
+          (char *)new_storage_record.ptr() + table::RecordFormat::RECORD_HEADER_SIZE;
       if (field->is_null()) {
         data[encoder_arr[i].m_null_offset] |= encoder_arr[i].m_null_mask;
         continue;
@@ -2885,53 +2875,64 @@ int ha_smartengine::inplace_populate_index(
   and the default value of newly added columns.
   Note this function should only update the metadata
   which would not result in failure
-  @param[in]  new_table   New InnoDB table object
   @param[in]  old_table   MySQL table as it is before the ALTER operation
-  @param[in]  altered_table   MySQL table that is being altered
-  @param[in]  old_dd_tab  Old dd::Table
-  @param[in,out]  new_dd_tab  New dd::Table */
-void ha_smartengine::dd_commit_instant_table(const TABLE *old_table,
-                                             const TABLE *altered_table,
-                                             const dd::Table *old_dd_tab,
-                                             dd::Table *new_dd_tab)
+  @param[in]  new_table   MySQL table that is being altered
+  @param[in]  old_dd_table  Old dd::Table
+  @param[in,out]  new_dd_table  New dd::Table */
+int ha_smartengine::dd_commit_instant_table(const TABLE *old_table,
+                                            const TABLE *new_table,
+                                            const dd::Table *old_dd_table,
+                                            dd::Table *new_dd_table)
 {
-  assert(old_dd_tab->columns().size() <= new_dd_tab->columns()->size());
+  int ret = common::Status::kOk;
+  const char *instant_cols_key = dd_table_key_strings[DD_TABLE_INSTANT_COLS];
+  const char *instant_null_bytes_key = dd_table_key_strings[DD_TABLE_NULL_BYTES];
+  uint32_t instant_cols = 0;
+  uint32_t instant_null_bytes = 0;
 
-  // pass DD_TABLE_INSTANT_COLS from old to new DD
-  if (!new_dd_tab->se_private_data().exists(
-          dd_table_key_strings[DD_TABLE_INSTANT_COLS])) {
-    uint32_t instant_cols = old_table->s->fields;
+  if (IS_NULL(old_table) || IS_NULL(new_table)
+      || IS_NULL(old_dd_table) || IS_NULL(new_dd_table)) {
+    ret = common::Status::kInvalidArgument;
+    XHANDLER_LOG(WARN, "invalid argument", K(ret), KP(old_table), KP(new_table),
+        KP(old_dd_table), KP(new_dd_table));
+  } else if (old_dd_table->columns().size() > new_dd_table->columns()->size()) {
+    ret = common::Status::kErrorUnexpected;
+    XHANDLER_LOG(WARN, "column count should increase after instant add column", K(ret),
+        "old_column_count", old_dd_table->columns().size(),
+        "new_column_count", new_dd_table->columns()->size());
+  } else {
+    instant_cols = old_table->s->fields;;
+    instant_null_bytes = m_null_bytes_in_rec;
 
-    if (DDOperateHelper::dd_table_has_instant_cols(*old_dd_tab)) {
-      old_dd_tab->se_private_data().get(
-          dd_table_key_strings[DD_TABLE_INSTANT_COLS], &instant_cols);
+    /**copy DD_TABLE_INSTANT_COLS and DD_TABLE_NULL_BYTES from old dd to new dd.*/
+    if (DDOperateHelper::dd_table_has_instant_cols(*old_dd_table)) {
+      old_dd_table->se_private_data().get(instant_cols_key, &instant_cols);
+      old_dd_table->se_private_data().get(instant_null_bytes_key, &instant_null_bytes);
     }
 
-    new_dd_tab->se_private_data().set(
-        dd_table_key_strings[DD_TABLE_INSTANT_COLS], instant_cols);
-  }
-
-  // pass DD_TABLE_NULL_BYTES from old to new DD
-  if (!new_dd_tab->se_private_data().exists(
-          dd_table_key_strings[DD_TABLE_NULL_BYTES])) {
-    uint32_t null_bytes = m_null_bytes_in_rec;
-
-    if (DDOperateHelper::dd_table_has_instant_cols(*old_dd_tab)) {
-      old_dd_tab->se_private_data().get(
-          dd_table_key_strings[DD_TABLE_NULL_BYTES], &null_bytes);
+    if (!new_dd_table->se_private_data().exists(instant_cols_key)) {
+      new_dd_table->se_private_data().set(instant_cols_key, instant_cols);
     }
 
-    new_dd_tab->se_private_data().set(dd_table_key_strings[DD_TABLE_NULL_BYTES],
-                                      null_bytes);
+    if (!new_dd_table->se_private_data().exists(instant_null_bytes_key)) {
+      new_dd_table->se_private_data().set(instant_null_bytes_key, instant_null_bytes);
+    }
+
+    /**remember old default values if exist.*/
+    DDOperateHelper::dd_copy_table_columns(*new_dd_table, *old_dd_table);
+    /**add new default values*/
+    DDOperateHelper::dd_add_instant_columns(old_table, new_table, new_dd_table);
+
+    /**after instant add column, the primary key has not changed, so it is safe to
+    use the m_tbl_def which  is old version.*/
+    if (FAILED(pushdown_table_schema(new_table, new_dd_table, m_tbl_def.get()))) {
+      XHANDLER_LOG(WARN, "fail to pushdown table schema", K(ret));
+    } else {
+      XHANDLER_LOG(INFO, "success to push down table schema");
+    }
   }
 
-  /* To remember old default values if exist */
-  DDOperateHelper::dd_copy_table_columns(*new_dd_tab, *old_dd_tab);
-
-  /* Then add all new default values */
-  DDOperateHelper::dd_add_instant_columns(old_table, altered_table, new_dd_tab);
-
-  // assert(dd_table_has_instant_cols(*new_dd_tab));
+  return ret;
 }
 
 void ha_smartengine::dd_commit_inplace_no_change(
@@ -3020,30 +3021,45 @@ void dd_commit_inplace_update_instant_meta(
   return;
 }
 
-
-void ha_smartengine::dd_commit_inplace_instant(Alter_inplace_info *ha_alter_info,
-                                               const TABLE *old_table,
-                                               const TABLE *altered_table,
-                                               const dd::Table *old_dd_tab,
-                                               dd::Table *new_dd_tab)
+int ha_smartengine::dd_commit_inplace_instant(Alter_inplace_info *alter_info,
+                                              const TABLE *old_table,
+                                              const TABLE *new_table,
+                                              const dd::Table *old_dd_table,
+                                              dd::Table *new_dd_table)
 {
-  assert(is_instant(ha_alter_info));
+  int ret = common::Status::kOk;
 
-  auto type = static_cast<Instant_Type>(ha_alter_info->handler_trivial_ctx);
-
-  switch (type) {
-    case Instant_Type::INSTANT_NO_CHANGE:
-      dd_commit_inplace_no_change(old_dd_tab, new_dd_tab);
-      break;
-    case Instant_Type::INSTANT_ADD_COLUMN:
-      DDOperateHelper::dd_copy_private(*new_dd_tab, *old_dd_tab);
-      dd_commit_instant_table(old_table, altered_table, &old_dd_tab->table(),
-                              &new_dd_tab->table());
-      break;
-    case Instant_Type::INSTANT_IMPOSSIBLE:
-    default:
-      assert(0);
+  if (IS_NULL(alter_info) || IS_NULL(old_table) || IS_NULL(new_table)
+      || IS_NULL(old_dd_table) || IS_NULL(new_dd_table)) {
+    ret = common::Status::kInvalidArgument;
+    XHANDLER_LOG(WARN, "invalid argument", K(ret), KP(alter_info), KP(old_table),
+        KP(new_table), KP(old_dd_table), KP(new_dd_table));
+  } else if (!is_instant(alter_info)) {
+    ret = common::Status::kErrorUnexpected;
+    XHANDLER_LOG(WARN, "the ddl operation is not instant ddl", K(ret));
+  } else {
+    Instant_Type type = static_cast<Instant_Type>(alter_info->handler_trivial_ctx);
+    switch (type) {
+      case Instant_Type::INSTANT_NO_CHANGE:
+        dd_commit_inplace_no_change(old_dd_table, new_dd_table);
+        break;
+      case Instant_Type::INSTANT_ADD_COLUMN:
+        DDOperateHelper::dd_copy_private(*new_dd_table, *old_dd_table);
+        if (FAILED(dd_commit_instant_table(old_table,
+                                           new_table,
+                                           &old_dd_table->table(),
+                                           &new_dd_table->table()))) {
+          XHANDLER_LOG(WARN, "fail to commit instant dd table", K(ret));
+        }
+        break;
+      case Instant_Type::INSTANT_IMPOSSIBLE:
+      default:
+        ret = common::Status::kErrorUnexpected;
+        XHANDLER_LOG(WARN, "unexpected instant ddl type", KE(type));
+    }
   }
+
+  return ret;
 }
 
 /** If ddl failed, we need to rollback new added indexes.
@@ -3219,7 +3235,7 @@ int ha_smartengine::commit_inplace_alter_get_autoinc(
 int ha_smartengine::commit_inplace_alter_table_common(
     my_core::TABLE *const altered_table,
     my_core::Alter_inplace_info *const ha_alter_info,
-    bool commit,
+    const dd::Table *new_dd_table,
     const std::unordered_set<std::shared_ptr<SeKeyDef>> &new_added_indexes)
 {
   DBUG_ENTER_FUNC();
@@ -3287,6 +3303,14 @@ int ha_smartengine::commit_inplace_alter_table_common(
   }
 
   dict_manager.unlock();
+
+  //TODO: Zhao Dongsheng the whole function should been refined...
+  if (common::Status::kOk != pushdown_table_schema(altered_table,
+                                                   new_dd_table,
+                                                   ctx0->m_new_tdef.get())) {
+    XHANDLER_LOG(WARN, "fail to push down table schema");
+    DBUG_RETURN(HA_EXIT_FAILURE);
+  }
 
   /** if crash here, during crash-recovery, drop_thread will collect
     create-ongoing-indexs then drop subtables;
@@ -3397,8 +3421,7 @@ bool ha_smartengine::commit_inplace_alter_table_rebuild(
   */
   DBUG_EXECUTE_IF("ddl_log_crash_before_inplace_ddl_commit", DBUG_SUICIDE(););
 
-  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, commit,
-                                          new_added_indexes);
+  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, new_dd_tab, new_added_indexes);
 
 rebuild_fun_end:
   // any way, whether succeed or fail, we need to reload new_tdef for atomic ddl
@@ -3499,8 +3522,7 @@ bool ha_smartengine::commit_inplace_alter_table_norebuild(
   assert(ctx0 == ctx_array[0]);
   ha_alter_info->group_commit_ctx = nullptr;
 
-  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, commit,
-                                          ctx0->m_added_indexes);
+  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, new_dd_tab, ctx0->m_added_indexes);
 
 fun_end:
   // any way, whether succeed or fail, we need to reload new_tdef for atomic ddl

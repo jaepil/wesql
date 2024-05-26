@@ -147,6 +147,24 @@ int DBImpl::TEST_create_subtable(const ColumnFamilyDescriptor &cf, int32_t tid, 
   return ret;
 }
 
+int DBImpl::TEST_modify_table_schema(ColumnFamilyHandle *index_handle)
+{
+  int ret = Status::kOk;
+
+  // Fake table schema for valid check.
+  table::TableSchema table_schema;
+  table::ColumnSchema column_schema;
+  column_schema.type_ = table::ColumnType::PRIMARY_COLUMN;
+  column_schema.data_size_bytes_ = 4;
+  table_schema.column_schemas_.push_back(column_schema);
+
+  if (FAILED(modify_table_schema(index_handle, table_schema))) {
+    SE_LOG(WARN, "fail to modify table schema", K(ret), K(table_schema));
+  }
+
+  return ret;
+}
+
 Status DBImpl::TEST_GetLatestMutableCFOptions(
     ColumnFamilyHandle* column_family, MutableCFOptions* mutable_cf_options) {
   InstrumentedMutexLock l(&mutex_);

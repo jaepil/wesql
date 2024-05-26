@@ -142,6 +142,8 @@ Status SstFileWriter::Open(const std::string& file_path) {
                                tmp_factory->table_options().block_size,
                                tmp_factory->table_options().block_restart_interval,
                                r->ioptions.env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                               cfd->use_column_format(),
+                               cfd->get_table_schema(),
                                &(r->internal_comparator),
                                output_layer_position,
                                tmp_factory->table_options().block_cache.get(),

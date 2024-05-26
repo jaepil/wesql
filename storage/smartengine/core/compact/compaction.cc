@@ -145,6 +145,8 @@ int GeneralCompaction::open_extent() {
                                  tmp_factory->table_options().block_size,
                                  tmp_factory->table_options().block_restart_interval,
                                  context_.cf_options_->env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                                 cf_desc_.use_column_format_,
+                                 cf_desc_.table_schema_,
                                  context_.internal_comparator_,
                                  output_layer_position,
                                  tmp_factory->table_options().block_cache.get(),

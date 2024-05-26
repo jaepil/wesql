@@ -32,31 +32,38 @@
 #undef DeleteFile
 #endif
 
-namespace smartengine {
-namespace common {
+namespace smartengine
+{
+namespace common
+{
 struct Options;
 struct DBOptions;
 struct ColumnFamilyOptions;
 struct ReadOptions;
 struct WriteOptions;
 struct FlushOptions;
-}
+} // namespace common
 
-namespace table {
+namespace table
+{
 struct TableProperties;
 struct ExternalSstFileInfo;
-}
+struct TableSchema;
+} // namespace table
 
-namespace util {
+namespace util
+{
 class Env;
-}
+} // namespace util
 
-namespace storage {
+namespace storage
+{
 struct CompactionJobStatsInfo;
 struct DataFileStatistics;
-}
+} // namespace storage
 
-namespace db {
+namespace db
+{
 class WriteBatch;
 struct MiniTables;
 struct CreateSubTableArgs;
@@ -197,6 +204,7 @@ class DB {
   // family from flushing and compacting.
   virtual common::Status DropColumnFamily(ColumnFamilyHandle* column_family) = 0;
 
+  virtual int modify_table_schema(ColumnFamilyHandle *subtable_handle, const table::TableSchema &table_schema) = 0;
   // Set the database entry for "key" to "value".
   // If "key" already exists, it will be overwritten.
   // Returns OK on success, and a non-OK status on error.

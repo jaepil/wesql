@@ -97,6 +97,9 @@ private:
   int read_data_block(BlockDataHandle<RowBlock> &data_block_handle,
                       const int64_t scan_add_blocks_limit,
                       int64_t &added_blocks);
+  int convert_to_row_block(const common::Slice &column_block,
+                           const BlockInfo &block_info,
+                           common::Slice &row_block);
 
 private:
   bool is_inited_;
