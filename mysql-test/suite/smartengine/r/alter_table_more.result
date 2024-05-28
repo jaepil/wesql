@@ -474,32 +474,6 @@ desc t1;
 Field	Type	Null	Key	Default	Extra
 mycol	int	NO		0	
 drop table t1;
-create table t1(id int(8) primary key auto_increment) engine=heap;
-Warnings:
-Warning	1681	Integer display width is deprecated and will be removed in a future release.
-insert into t1 values (null);
-insert into t1 values (null);
-select * from t1;
-id
-1
-2
-alter table t1 auto_increment = 50;
-alter table t1 ENGINE = SMARTENGINE;
-insert into t1 values (null);
-select * from t1;
-id
-1
-2
-50
-alter table t1 engine = heap;
-insert into t1 values (null);
-select * from t1;
-id
-1
-2
-50
-51
-drop table t1;
 set sql_mode= "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION";
 create table t1(f1 int) ENGINE = SMARTENGINE;
 alter table t1 add column f2 datetime not null, add column f21 date not null;
@@ -1759,84 +1733,6 @@ drop table t2;
 #    various storage engines and using different ALTER
 #    algorithm.
 #
-# 3.a) Test coverage for simple storage engines (MyISAM/Heap).
-create table t1 (i int, key k(i)) ENGINE=MyISAM;
-insert into t1 values (1);
-create table t2 (i int, key k(i)) engine=memory;
-insert into t2 values (1);
-# MyISAM and Heap should be able to handle key renaming in-place.
-alter table t1 algorithm=inplace, rename key k to kk;
-alter table t2 algorithm=inplace, rename key k to kk;
-show create table t1;
-Table	Create Table
-t1	CREATE TABLE `t1` (
-  `i` int DEFAULT NULL,
-  KEY `kk` (`i`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-show create table t2;
-Table	Create Table
-t2	CREATE TABLE `t2` (
-  `i` int DEFAULT NULL,
-  KEY `kk` (`i`)
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-# So by default in-place algorithm should be chosen.
-# (ALTER TABLE should report 0 rows affected).
-alter table t1 rename key kk to kkk;
-affected rows: 0
-info: Records: 0  Duplicates: 0  Warnings: 0
-alter table t2 rename key kk to kkk;
-affected rows: 0
-info: Records: 0  Duplicates: 0  Warnings: 0
-show create table t1;
-Table	Create Table
-t1	CREATE TABLE `t1` (
-  `i` int DEFAULT NULL,
-  KEY `kkk` (`i`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-show create table t2;
-Table	Create Table
-t2	CREATE TABLE `t2` (
-  `i` int DEFAULT NULL,
-  KEY `kkk` (`i`)
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-# Copy algorithm should work as well.
-alter table t1 algorithm=copy, rename key kkk to kkkk;
-alter table t2 algorithm=copy, rename key kkk to kkkk;
-show create table t1;
-Table	Create Table
-t1	CREATE TABLE `t1` (
-  `i` int DEFAULT NULL,
-  KEY `kkkk` (`i`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-show create table t2;
-Table	Create Table
-t2	CREATE TABLE `t2` (
-  `i` int DEFAULT NULL,
-  KEY `kkkk` (`i`)
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-# When renaming is combined with other in-place operation
-# it still works as expected (i.e. works in-place).
-alter table t1 algorithm=inplace, rename key kkkk to k, alter column i set default 100;
-alter table t2 algorithm=inplace, rename key kkkk to k, alter column i set default 100;
-show create table t1;
-Table	Create Table
-t1	CREATE TABLE `t1` (
-  `i` int DEFAULT '100',
-  KEY `k` (`i`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-show create table t2;
-Table	Create Table
-t2	CREATE TABLE `t2` (
-  `i` int DEFAULT '100',
-  KEY `k` (`i`)
-) ENGINE=MEMORY DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-# Combining with non-inplace operation results in the whole ALTER
-# becoming non-inplace.
-alter table t1 algorithm=inplace, rename key k to kk, add column j int;
-ERROR 0A000: ALGORITHM=INPLACE is not supported for this operation. Try ALGORITHM=COPY.
-alter table t2 algorithm=inplace, rename key k to kk, add column j int;
-ERROR 0A000: ALGORITHM=INPLACE is not supported for this operation. Try ALGORITHM=COPY.
-drop table t1, t2;
 # 3.b) Basic tests for InnoDB. More tests can be found in
 #      innodb.innodb_rename_index*
 create table t1 (i int, key k(i)) ENGINE = SMARTENGINE;
