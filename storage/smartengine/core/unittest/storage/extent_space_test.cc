@@ -44,9 +44,8 @@ class ExtentSpaceTest : public testing::TestWithParam<bool> {
   {
     use_obj_ = GetParam();
     if (use_obj_) {
-      auto s = env_->SetObjectStore(
-          "local", test_local_obs_basepath /* use test_dir as the basepath */,
-          nullptr, false, test_local_obs_bucket);
+      auto s = env_->InitObjectStore("local", test_local_obs_basepath /* use test_dir as the basepath */, nullptr,
+                                     false, test_local_obs_bucket);
       assert(s.ok());
       s = env_->GetObjectStore(obs_);
       assert(s.ok());
@@ -61,7 +60,7 @@ class ExtentSpaceTest : public testing::TestWithParam<bool> {
     if (use_obj_) {
       auto ss = obs_->delete_bucket(test_local_obs_bucket);
       assert(ss.is_succ());
-      obs_ = nullptr;
+      env_->DestroyObjectStore();
     }
   }
 

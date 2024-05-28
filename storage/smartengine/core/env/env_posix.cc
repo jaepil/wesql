@@ -567,19 +567,31 @@ class PosixEnv : public Env
     return gettid(pthread_self());
   }
 
-   virtual common::Status SetObjectStore(
-      const std::string_view provider, const std::string_view region,
-      const std::string_view* endpoint, bool use_https,
-      const std::string_view bucket) override {
-     Status result;
-     obj_store_ =
-         objstore::create_object_store(provider, region, endpoint, use_https);
-     if (obj_store_ == nullptr) {
-       result = common::Status::InvalidArgument();
-     } else {
-       obj_store_bucket_ = bucket;
-     }
-     return result;
+  virtual common::Status InitObjectStore(const std::string_view provider, const std::string_view region,
+                                         const std::string_view *endpoint, bool use_https,
+                                         const std::string_view bucket) override {
+    Status result;
+
+    objstore::init_objstore_provider(provider);
+
+    obj_store_ = objstore::create_object_store(provider, region, endpoint, use_https);
+    if (obj_store_ == nullptr) {
+      result = common::Status::InvalidArgument();
+    } else {
+      obj_store_bucket_ = bucket;
+    }
+    return result;
+  }
+
+  virtual common::Status DestroyObjectStore() override {
+
+    if (obj_store_ != nullptr) {
+      objstore::cleanup_objstore_provider(obj_store_);
+
+      objstore::destroy_object_store(obj_store_);
+      obj_store_ = nullptr;
+    }
+    return common::Status::OK();
   }
 
   virtual bool IsObjectStoreSupported() const override {

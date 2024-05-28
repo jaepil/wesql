@@ -60,12 +60,20 @@ class S3ObjectStore : public ObjectStore {
   Status delete_object(const std::string_view &bucket,
                        const std::string_view &key) override;
 
+  std::string_view get_provider() const override { return provider_; }
+
  private:
+  constexpr static std::string_view provider_{"aws"};
+
   std::string region_;
   Aws::S3::S3Client s3_client_;
   // TODO(ljc): may add an configuration setting
   int retry_times_on_error_ = 10;
 };
+
+void init_s3_api();
+
+void cleanup_s3_api();
 
 S3ObjectStore *create_s3_objstore(const std::string_view region,
                                   const std::string_view *endpoint,

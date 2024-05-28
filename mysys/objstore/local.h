@@ -57,6 +57,8 @@ class LocalObjectStore : public ObjectStore {
   Status delete_object(const std::string_view &bucket,
                        const std::string_view &key) override;
 
+  std::string_view get_provider() const override { return provider_; }
+
  private:
   bool is_valid_key(const std::string_view &key);
   std::string generate_path(const std::string_view &bucket);
@@ -64,6 +66,7 @@ class LocalObjectStore : public ObjectStore {
                             const std::string_view &key);
 
  private:
+  constexpr static std::string_view provider_{"local"};
   std::mutex mutex_;
   std::string basepath_;
 };

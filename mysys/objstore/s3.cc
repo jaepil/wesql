@@ -37,20 +37,6 @@ namespace objstore {
 
 namespace { // anonymous namespace
 
-class S3ApiGlobalOption {
-public:
-  S3ApiGlobalOption() {
-    Aws::SDKOptions options;
-    Aws::InitAPI(options);
-  }
-  ~S3ApiGlobalOption() {
-    Aws::SDKOptions options;
-    Aws::ShutdownAPI(options);
-  }
-};
-
-S3ApiGlobalOption g_aws_api_option_initializor;
-
 Errors aws_error_to_objstore_error(const Aws::S3::S3Error &aws_error) {
   if (aws_error.ShouldRetry()) {
     // if the error is retryable, and we have retried enough times, we treat it
@@ -426,6 +412,16 @@ Status S3ObjectStore::delete_object(const std::string_view &bucket,
   }
 
   return Status();
+}
+
+void init_s3_api() {
+  Aws::SDKOptions options;
+  Aws::InitAPI(options);
+}
+
+void cleanup_s3_api() {
+  Aws::SDKOptions options;
+  Aws::ShutdownAPI(options);
 }
 
 S3ObjectStore *create_s3_objstore(const std::string_view region,

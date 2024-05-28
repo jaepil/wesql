@@ -233,11 +233,9 @@ static int se_init_func(void *const p)
     }
     std::string_view endpoint(
         opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
-    common::Status status = main_opts.env->SetObjectStore(
-        std::string_view(opt_objstore_provider),
-        std::string_view(opt_objstore_region),
-        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https,
-        opt_objstore_bucket);
+    common::Status status = main_opts.env->InitObjectStore(
+        std::string_view(opt_objstore_provider), std::string_view(opt_objstore_region),
+        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https, opt_objstore_bucket);
     if (!status.ok()) {
       std::string err_text = status.ToString();
       sql_print_error("SE: fail to create object store: %s", err_text.c_str());
@@ -431,6 +429,11 @@ static int se_done_func(void *const p)
   binlog_manager.cleanup();
   dict_manager.cleanup();
   cf_manager.cleanup();
+
+  util::Env *env = se_db->GetEnv();
+  if (env) {
+    env->DestroyObjectStore();
+  }
 
   delete se_db;
   se_db = nullptr;

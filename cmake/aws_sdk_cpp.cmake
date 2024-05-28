@@ -38,26 +38,12 @@ ENDMACRO()
 MACRO(PREPARE_BUNDLED_OJBSTORE)
   SET(OBJSTORE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/extra/aws-sdk-cpp")
 
-  INCLUDE(ExternalProject)
-  ExternalProject_Add(
-    aws-sdk-cpp-ext-proj
-    SOURCE_DIR "${PROJECT_SOURCE_DIR}/extra/aws-sdk-cpp"
-    GIT_REPOSITORY "https://github.com/aws/aws-sdk-cpp.git"
-    GIT_TAG "1.11.283"
-    UPDATE_COMMAND "" #git submodule update --init --recursive
-    # TODO: build with static lib
-    CMAKE_ARGS
-      -DCMAKE_BUILD_TYPE=Release
-      -DBUILD_ONLY=s3
-      -DBUILD_SHARED_LIBS=ON
-      -DCMAKE_INSTALL_PREFIX=${OBJSTORE_INSTALL_PREFIX}
-      -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-      -DENABLE_TESTING=OFF
-      -DAUTORUN_UNIT_TESTS=OFF
-    BUILD_ALWAYS      TRUE
-    TEST_COMMAND      ""
-  )
+  set(BUILD_ONLY "s3")
+  set(AUTORUN_UNIT_TESTS OFF)
+  set(BUILD_SHARED_LIBS OFF)
+  set(CMAKE_INSTALL_PREFIX ${OBJSTORE_INSTALL_PREFIX})
 
+  add_subdirectory(${PROJECT_SOURCE_DIR}/extra/aws-sdk-cpp)
   # compilation result installation is later phase, mkdir include path in advance avoid compile error.
   FILE(MAKE_DIRECTORY "${OBJSTORE_INSTALL_PREFIX}/include")
 ENDMACRO()
@@ -79,8 +65,8 @@ MACRO (MYSQL_CHECK_OBJSTORE)
     # Set the variables for the project
     SET(OBJSTORE_INCLUDE_DIR "${OBJSTORE_INSTALL_PREFIX}/include")
     SET(OBJSTORE_LIBRARY_PATH "${OBJSTORE_INSTALL_PREFIX}/lib64")
-    SET(OBJSTORE_LIBRARY "aws-cpp-sdk-s3;aws-cpp-sdk-core")
-    SET(OBJSTORE_PLATFORM_DEPS "pthread;curl")
+    SET(OBJSTORE_LIBRARY ${OBJSTORE_LIBRARIES})
+    SET(OBJSTORE_PLATFORM_DEPS ${OBJSTORE_PLATFORM_DEPS})
     # Prepare include and ld path
     INCLUDE_DIRECTORIES(${OBJSTORE_INCLUDE_DIR})
     LINK_DIRECTORIES(${OBJSTORE_LIBRARY_PATH})

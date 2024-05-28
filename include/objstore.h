@@ -132,6 +132,8 @@ class ObjectStore {
 
   virtual Status delete_object(const std::string_view &bucket,
                                const std::string_view &key) = 0;
+
+  virtual std::string_view get_provider() const = 0;
 };
 
 // create ObjectStore based credentials in credentials dir or environment
@@ -142,6 +144,10 @@ ObjectStore *create_object_store(const std::string_view &provider,
                                  bool use_https = true);
 
 void destroy_object_store(ObjectStore *obj_store);
+
+void init_objstore_provider(const std::string_view &provider);
+
+void cleanup_objstore_provider(ObjectStore *objstore);
 
 }  // namespace objstore
 
