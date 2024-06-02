@@ -381,9 +381,6 @@ class DBImpl : public DB {
   // Wait for any compaction
   common::Status TEST_WaitForCompact();
 
-  // Wait for background filter build task.
-  void TEST_wait_for_filter_build();
-
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes(
@@ -1459,8 +1456,6 @@ protected:
   // Each flush or compaction gets its own job id. this counter makes sure
   // they're unique
   std::atomic<int> next_job_id_;
-
-  std::atomic<int32_t> filter_build_quota_;
 
   // A flag indicating whether the current database has any
   // data that is not yet persisted into either WAL or SST file.

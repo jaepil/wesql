@@ -13,7 +13,6 @@
 
 #include "db/db_impl.h"
 #include "monitoring/thread_status_updater.h"
-#include "table/filter_manager.h"
 
 using namespace smartengine;
 using namespace common;
@@ -82,13 +81,6 @@ Status DBImpl::TEST_WaitForCompact() {
     bg_cv_.Wait();
   }
   return bg_error_;
-}
-
-void DBImpl::TEST_wait_for_filter_build() {
-  while (filter_build_quota_.load() <
-         mutable_db_options_.filter_building_threads) {
-    port::AsmVolatilePause();
-  }
 }
 
 void DBImpl::TEST_LockMutex() { mutex_.Lock(); }

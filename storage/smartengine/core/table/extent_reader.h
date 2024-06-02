@@ -90,6 +90,7 @@ public:
 
 private:
   int init_extent(const storage::ExtentMeta &extent_meta, bool use_full_prefetch_extent);
+  int check_in_bloom_filter(const common::Slice &user_key, const BlockInfo &block_info, bool &may_exist);
   int inner_get(const common::Slice &key,
                 const BlockInfo &block_info,
                 GetContext *get_context,

@@ -10,7 +10,6 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/db_test_util.h"
-#include "table/filter_policy.h"
 #include "table/table.h"
 
 namespace smartengine {
@@ -198,33 +197,23 @@ bool DBTestBase::ChangeFilterOptions() {
 }
 
 // Return the current option configuration.
-Options DBTestBase::CurrentOptions(
-    const anon::OptionsOverride& options_override) {
+Options DBTestBase::CurrentOptions()
+{
   Options options;
   options.write_buffer_size = 4090 * 4096;
   options.base_background_compactions = -1;
   options.wal_recovery_mode = WALRecoveryMode::kTolerateCorruptedTailRecords;
 
-  return CurrentOptions(options, options_override);
+  return CurrentOptions(options);
 }
 
-Options DBTestBase::CurrentOptions(
-    const Options& defaultOptions,
-    const anon::OptionsOverride& options_override) {
+Options DBTestBase::CurrentOptions(const Options& defaultOptions)
+{
   // this redundant copy is to minimize code change w/o having lint error.
   Options options = defaultOptions;
   BlockBasedTableOptions table_options;
   bool set_block_based_table_factory = true;
   switch (option_config_) {
-    case kFilter:
-      table_options.filter_policy.reset(NewBloomFilterPolicy(10, true));
-      break;
-    case kFullFilterWithNewTableReaderForCompactions:
-      table_options.filter_policy.reset(NewBloomFilterPolicy(10, false));
-      break;
-    case kPartitionedFilterWithNewTableReaderForCompactions:
-      table_options.filter_policy.reset(NewBloomFilterPolicy(10, false));
-      break;
     case kDBLogDir:
       //options.db_log_dir = alternative_db_log_dir_;
       break;
@@ -269,9 +258,6 @@ Options DBTestBase::CurrentOptions(
       break;
   }
 
-  if (options_override.filter_policy) {
-    table_options.filter_policy = options_override.filter_policy;
-  }
   if (set_block_based_table_factory) {
     options.table_factory.reset(
         table::NewExtentBasedTableFactory(table_options));

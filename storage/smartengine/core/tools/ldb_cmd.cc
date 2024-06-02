@@ -29,7 +29,6 @@
 #include "memory/base_malloc.h"
 #include "logger/log_module.h"
 #include "port/dirent.h"
-#include "table/filter_policy.h"
 #include "table/scoped_arena_iterator.h"
 #include "table/table.h"
 #include "tools/ldb_cmd_impl.h"
@@ -398,16 +397,6 @@ Options LDBCommand::PrepareOptionsForOpenDB() {
   std::map<std::string, std::string>::const_iterator itr;
 
   BlockBasedTableOptions table_options;
-  int bits;
-  if (ParseIntOption(option_map_, ARG_BLOOM_BITS, bits, exec_state_)) {
-    if (bits > 0) {
-      table_options.filter_policy.reset(NewBloomFilterPolicy(bits));
-    } else {
-      exec_state_ =
-          LDBCommandExecuteResult::Failed(ARG_BLOOM_BITS + " must be > 0.");
-    }
-  }
-
   int block_size;
   if (ParseIntOption(option_map_, ARG_BLOCK_SIZE, block_size, exec_state_)) {
     if (block_size > 0) {

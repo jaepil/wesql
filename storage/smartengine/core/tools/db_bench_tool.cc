@@ -55,7 +55,6 @@
 #include "port/stack_trace.h"
 // TODO @zhencheng : use QUERY TRACE to print this.
 // #include "smartengine/perf_context.h"
-#include "table/filter_policy.h"
 #include "transactions/optimistic_transaction_db.h"
 #include "transactions/transaction.h"
 #include "transactions/transaction_db.h"
@@ -2011,7 +2010,6 @@ class Benchmark {
  private:
   std::shared_ptr<Cache> cache_;
   std::shared_ptr<Cache> compressed_cache_;
-  std::shared_ptr<const FilterPolicy> filter_policy_;
   DBWithColumnFamilies db_;
   std::vector<DBWithColumnFamilies> multi_dbs_;
   int64_t num_;
@@ -2215,10 +2213,6 @@ class Benchmark {
   Benchmark()
       : cache_(NewCache(FLAGS_cache_size, ModId::kDefaultBlockCache)),
         compressed_cache_(NewCache(FLAGS_compressed_cache_size, ModId::kBkCacheCompress)),
-        filter_policy_(FLAGS_bloom_bits >= 0
-                           ? NewBloomFilterPolicy(FLAGS_bloom_bits,
-                                                  FLAGS_use_block_based_filter)
-                           : nullptr),
         num_(FLAGS_num),
         value_size_(FLAGS_value_size),
         key_size_(FLAGS_key_size),
@@ -2870,7 +2864,6 @@ class Benchmark {
     block_based_options.block_restart_interval = FLAGS_block_restart_interval;
     block_based_options.index_block_restart_interval =
         FLAGS_index_block_restart_interval;
-    block_based_options.filter_policy = filter_policy_;
     block_based_options.format_version = 2;
     block_based_options.read_amp_bytes_per_bit = FLAGS_read_amp_bytes_per_bit;
     block_based_options.format_version = 3;

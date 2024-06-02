@@ -15,6 +15,7 @@
  */
 
 #include "table/block_struct.h"
+#include "table/bloom_filter.h"
 #include "logger/log_module.h"
 #include "storage/io_extent.h"
 #include "table/row_block.h"
@@ -89,6 +90,9 @@ BlockInfo::BlockInfo()
       single_delete_row_count_(0),
       smallest_seq_(common::kMaxSequenceNumber),
       largest_seq_(0),
+      per_key_bits_(0),
+      probe_num_(0),
+      bloom_filter_(),
       column_block_(0),
       max_column_count_(0),
       unit_infos_()
@@ -102,6 +106,9 @@ BlockInfo::BlockInfo(const BlockInfo &block_info)
       single_delete_row_count_(block_info.single_delete_row_count_),
       smallest_seq_(block_info.smallest_seq_),
       largest_seq_(block_info.largest_seq_),
+      per_key_bits_(block_info.per_key_bits_),
+      probe_num_(block_info.probe_num_),
+      bloom_filter_(block_info.bloom_filter_),
       column_block_(block_info.column_block_),
       max_column_count_(block_info.max_column_count_),
       unit_infos_(block_info.unit_infos_)
@@ -118,6 +125,9 @@ BlockInfo &BlockInfo::operator=(const BlockInfo &block_info)
   single_delete_row_count_ = block_info.single_delete_row_count_;
   smallest_seq_ = block_info.smallest_seq_;
   largest_seq_ = block_info.largest_seq_;
+  per_key_bits_ = block_info.per_key_bits_;
+  probe_num_ = block_info.probe_num_;
+  bloom_filter_ = block_info.bloom_filter_;
   column_block_ = block_info.column_block_;
   max_column_count_ = block_info.max_column_count_;
   unit_infos_ = block_info.unit_infos_;
@@ -134,6 +144,9 @@ void BlockInfo::reset()
   single_delete_row_count_ = 0;
   smallest_seq_ = common::kMaxSequenceNumber;
   largest_seq_ = 0;
+  per_key_bits_ = 0;
+  probe_num_ = 0;
+  bloom_filter_.clear();
   column_block_ = 0;
   max_column_count_ = 0;
   unit_infos_.clear();
@@ -141,25 +154,39 @@ void BlockInfo::reset()
 
 bool BlockInfo::is_valid() const
 {
-  return handle_.is_valid() && !first_key_.empty() && row_count_ > 0 && max_column_count_ >= 0;
+  return handle_.is_valid() &&
+         !first_key_.empty() &&
+         row_count_ > 0 &&
+         per_key_bits_ > 0 &&
+         probe_num_ > 0 &&
+         !bloom_filter_.empty() &&
+         max_column_count_ >= 0;
 }
 
 int64_t BlockInfo::get_max_serialize_size() const
 {
-  // current_serialize_size + max serialize size of ColumnUnitInfo Array + size of BlockInfo(reserve)
-  int64_t size = get_serialize_size() +
-                 sizeof(int64_t) + max_column_count_ * ColumnUnitInfo::get_max_serialize_size() +
-                 sizeof(BlockInfo);
+  int64_t size = get_serialize_size() + sizeof(BlockInfo);
+
+  // max bloom filter size.
+  int32_t bloom_filter_size = 0;
+  int32_t dummy_cache_line_num = 0;
+  BloomFilterWriter::calculate_space_size(row_count_ + 1, per_key_bits_, bloom_filter_size, dummy_cache_line_num);
+  size += bloom_filter_size;
+
+  // max column unit info size.
+  size += sizeof(int64_t) + max_column_count_ * ColumnUnitInfo::get_max_serialize_size();
+
   return size;
 }
 
 DEFINE_TO_STRING(BlockInfo, KV_(handle), KV_(first_key), KV_(handle), KV_(row_count),
-    KV_(delete_row_count), KV_(single_delete_row_count), KV_(smallest_seq),
-    KV_(largest_seq), K_(column_block)/*, K_(unit_infos)*/)
+    KV_(delete_row_count), KV_(single_delete_row_count), KV_(smallest_seq), KV_(per_key_bits),
+    KV_(probe_num), KV_(bloom_filter), KV_(largest_seq), K_(column_block), K_(unit_infos))
 
 DEFINE_COMPACTIPLE_SERIALIZATION(BlockInfo, handle_, first_key_, row_count_,
-    delete_row_count_, single_delete_row_count_, smallest_seq_, largest_seq_, column_block_,
-    max_column_count_, unit_infos_)
+    delete_row_count_, single_delete_row_count_, smallest_seq_, largest_seq_,
+    per_key_bits_, probe_num_, bloom_filter_, column_block_, max_column_count_,
+    unit_infos_)
 
 int BlockIOHelper::read_block(IOExtent *extent,
                               const BlockHandle &handle,

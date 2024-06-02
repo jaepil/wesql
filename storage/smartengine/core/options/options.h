@@ -299,17 +299,6 @@ struct DBOptions {
   // regardless of this setting
   uint64_t delete_obsolete_files_period_micros = 6ULL * 60 * 60 * 1000000;
 
-  // The number of threads working background
-  //
-  // Default: 2
-  int32_t filter_building_threads = 2;
-
-  // The number of stripes for the request, the request is distributed in
-  // different stripes according to hash(filter_block_cache_key)
-  //
-  // default: 16
-  int32_t filter_queue_stripes = 16;
-
   // Suggested number of concurrent background compaction jobs, submitted to
   // the default LOW priority thread pool.
   //

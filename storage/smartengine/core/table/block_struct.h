@@ -76,6 +76,9 @@ struct BlockInfo
   int32_t single_delete_row_count_;
   common::SequenceNumber smallest_seq_;
   common::SequenceNumber largest_seq_;
+  int32_t per_key_bits_;
+  int32_t probe_num_;
+  common::Slice bloom_filter_;
   int8_t column_block_;
   int32_t max_column_count_;
   std::vector<ColumnUnitInfo> unit_infos_;

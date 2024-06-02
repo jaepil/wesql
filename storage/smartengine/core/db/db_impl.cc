@@ -57,7 +57,6 @@
 #include "port/likely.h"
 #include "storage/extent_space_manager.h"
 #include "table/extent_table_factory.h"
-#include "table/filter_manager.h"
 #include "table/merging_iterator.h"
 #include "table/two_level_iterator.h"
 #include "memory/alloc_mgr.h"
@@ -355,7 +354,6 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
       delete_obsolete_files_last_run_(env_->NowMicros()),
       last_stats_dump_time_microsec_(0),
       next_job_id_(1),
-      filter_build_quota_(options.filter_building_threads),
       has_unpersisted_data_(false),
       unable_to_flush_oldest_log_(false),
       env_options_(BuildDBOptions(immutable_db_options_, mutable_db_options_)),
@@ -400,9 +398,6 @@ DBImpl::~DBImpl() {
   int flushes_unscheduled = env_->UnSchedule(this, Env::Priority::HIGH);
   int dump_unscheduled = env_->UnSchedule(this, Env::Priority::LOW);
 
-  while (filter_build_quota_.load() < mutable_db_options_.filter_building_threads) {
-    port::AsmVolatilePause();
-  }
   get_tls_query_perf_context()->shutdown();
 
   mutex_.Lock();
@@ -1341,18 +1336,6 @@ Status DBImpl::CreateColumnFamily(CreateSubTableArgs &args, ColumnFamilyHandle *
     } else {
       SuperVersion *old_sv = InstallSuperVersionAndScheduleWork(cfd, nullptr, *cfd->GetLatestMutableCFOptions());
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
-      auto *table_factory =  dynamic_cast<table::ExtentBasedTableFactory*>(cfd->ioptions()->table_factory);
-      if (nullptr != table_factory) {
-        BlockBasedTableOptions table_opts = table_factory->table_options();
-        cfd->ioptions()->filter_manager->start_build_thread(
-            cfd, this, &mutex_, &(versions_->env_options()), env_,
-            table_opts.filter_policy, table_opts.block_cache,
-            table_opts.whole_key_filtering,
-            table_opts.cache_index_and_filter_blocks_with_high_priority,
-            mutable_db_options_.filter_queue_stripes,
-            mutable_db_options_.filter_building_threads,
-            &filter_build_quota_);
-      }
     }
   }
 

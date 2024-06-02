@@ -8,7 +8,6 @@
 #include "table/full_filter_block.h"
 
 #include "memory/base_malloc.h"
-#include "table/filter_policy.h"
 #include "table/table.h"
 #include "util/coding.h"
 #include "util/hash.h"

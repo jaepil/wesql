@@ -455,6 +455,7 @@ set(SOURCES
         storage/storage_logger.cc
         storage/table_space.cc
         table/block_struct.cc
+        table/bloom_filter.cc
         table/column_block_iterator.cc
         table/column_block_writer.cc
         table/column_struct.cc
@@ -463,9 +464,6 @@ set(SOURCES
         table/extent_struct.cc
         table/extent_table_factory.cc
         table/extent_writer.cc
-        table/bloom_block.cc
-        table/full_filter_block.cc
-        table/filter_manager.cc
         table/get_context.cc
         table/index_block_reader.cc
         table/index_block_writer.cc
@@ -488,7 +486,6 @@ set(SOURCES
         tools/sst_dump_tool.cc
         util/aio_wrapper.cc
         util/arena.cc
-        util/bloom.cc
         util/coding.cc
         util/comparator.cc
         util/compress/compressor.cc
@@ -506,7 +503,6 @@ set(SOURCES
         util/concurrent_direct_file_writer.cc
         util/file_util.cc
         util/filename.cc
-        util/filter_policy.cc
         util/hash.cc
         util/murmurhash.cc
         util/random.cc
@@ -645,7 +641,7 @@ set(TESTS
         unittest/storage/storage_logger_test.cc
         unittest/storage/table_space_test.cc
         #unittest/table/block_test.cc
-        unittest/table/full_filter_block_test.cc
+        unittest/table/bloom_filter_test.cc
         unittest/table/merger_test.cc
         #unittest/table/extent_table_test.cc
         unittest/table/in_mem_extent_table_test.cc
@@ -659,7 +655,6 @@ set(TESTS
         #unittest/util/alloc_mgr_test.cc
         #unittest/util/auto_roll_logger_test.cc
         unittest/util/autovector_test.cc
-        unittest/util/bloom_test.cc
         unittest/util/aio_test.cc
         unittest/util/coding_test.cc
         unittest/util/compress/compressor_test.cc

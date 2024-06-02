@@ -8,7 +8,6 @@
 //  of patent rights can be found in the PATENTS file in the same directory.
 
 #include "options/cf_options.h"
-#include "table/filter_manager.h"
 #include "table/table.h"
 #include "util/compression.h"
 
@@ -43,8 +42,7 @@ ImmutableCFOptions::ImmutableCFOptions(const ImmutableDBOptions& db_options,
       compression_per_level(cf_options.compression_per_level),
       compression_opts(cf_options.compression_opts),
       level_compaction_dynamic_level_bytes(cf_options.level_compaction_dynamic_level_bytes),
-      row_cache(db_options.row_cache),
-      filter_manager(new table::FilterManager())
+      row_cache(db_options.row_cache)
 {}
 
 void ImmutableCFOptions::dump() const
@@ -84,7 +82,6 @@ void ImmutableCFOptions::dump() const
 
   __SE_LOG(INFO, "               level_compaction_dynamic_level_bytes: %d", level_compaction_dynamic_level_bytes);
   __SE_LOG(INFO, "                                          row_cache: %p", row_cache.get());
-  __SE_LOG(INFO, "                                     filter_manager: %p", filter_manager.get());
 }
 
 void MutableCFOptions::Dump() const

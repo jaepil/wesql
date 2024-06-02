@@ -45,7 +45,6 @@ int main() {
 #include "db/version_set.h"
 #include "monitoring/histogram.h"
 #include "port/port.h"
-#include "table/filter_policy.h"
 #include "table/table.h"
 #include "util/coding.h"
 #include "util/compression.h"
@@ -798,11 +797,6 @@ class StressTest {
   StressTest()
       : cache_(NewCache(FLAGS_cache_size)),
         compressed_cache_(NewLRUCache(FLAGS_compressed_cache_size)),
-        filter_policy_(FLAGS_bloom_bits >= 0
-                           ? FLAGS_use_block_based_filter
-                                 ? NewBloomFilterPolicy(FLAGS_bloom_bits, true)
-                                 : NewBloomFilterPolicy(FLAGS_bloom_bits, false)
-                           : nullptr),
         db_(nullptr),
         new_column_family_name_(1),
         num_times_reopened_(0) {
@@ -1739,7 +1733,6 @@ class StressTest {
     block_based_options.block_cache_compressed = compressed_cache_;
     block_based_options.block_size = FLAGS_block_size;
     block_based_options.format_version = 2;
-    block_based_options.filter_policy = filter_policy_;
     options_.db_write_buffer_size = FLAGS_db_write_buffer_size;
     options_.write_buffer_size = FLAGS_write_buffer_size;
     options_.min_write_buffer_number_to_merge =
@@ -1865,7 +1858,6 @@ class StressTest {
  private:
   std::shared_ptr<Cache> cache_;
   std::shared_ptr<Cache> compressed_cache_;
-  std::shared_ptr<const FilterPolicy> filter_policy_;
   DB* db_;
   Options options_;
   std::vector<ColumnFamilyHandle*> column_families_;

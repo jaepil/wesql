@@ -62,6 +62,8 @@ class GetContext
 
   common::PinnableSlice* get_pinnable_val() const { return pinnable_val_; }
 
+  common::Slice get_user_key() const { return user_key_; }
+
  private:
   const util::Comparator* ucmp_;
   GetState state_;

@@ -120,8 +120,6 @@ TEST_F(OptionsSettableTest, BlockBasedTableOptionsAllFieldsSettable) {
        sizeof(std::shared_ptr<PersistentCache>)},
       {offsetof(struct BlockBasedTableOptions, block_cache_compressed),
        sizeof(std::shared_ptr<Cache>)},
-      {offsetof(struct BlockBasedTableOptions, filter_policy),
-       sizeof(std::shared_ptr<const FilterPolicy>)},
   };
 
   // In this test, we catch a new option of BlockBasedTableOptions that is not
@@ -172,7 +170,6 @@ TEST_F(OptionsSettableTest, BlockBasedTableOptionsAllFieldsSettable) {
       "metadata_block_size=1024;"
       "partition_filters=false;"
       "index_block_restart_interval=4;"
-      "filter_policy=bloomfilter:4:true;whole_key_filtering=1;"
       "format_version=1;"
       "hash_index_allow_collision=false;"
       "verify_compression=true;read_amp_bytes_per_bit=0",
@@ -184,7 +181,6 @@ TEST_F(OptionsSettableTest, BlockBasedTableOptionsAllFieldsSettable) {
 
   ASSERT_TRUE(new_bbto->block_cache.get() != nullptr);
   ASSERT_TRUE(new_bbto->block_cache_compressed.get() != nullptr);
-  ASSERT_TRUE(new_bbto->filter_policy.get() != nullptr);
 
   bbto->~BlockBasedTableOptions();
   new_bbto->~BlockBasedTableOptions();
@@ -258,8 +254,6 @@ TEST_F(OptionsSettableTest, DBOptionsAllFieldsSettable) {
       "table_cache_numshardbits=28;"
       "max_open_files=72;"
       "max_file_opening_threads=35;"
-      "filter_building_threads=2;"
-      "filter_queue_stripes=16;"
       "base_background_compactions=3;"
       "max_background_compactions=33;"
       "use_fsync=true;"

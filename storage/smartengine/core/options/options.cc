@@ -89,8 +89,6 @@ DBOptions::DBOptions(const Options &options)
       wal_dir(options.wal_dir),
       delete_obsolete_files_period_micros(
           options.delete_obsolete_files_period_micros),
-      filter_building_threads(options.filter_building_threads),
-      filter_queue_stripes(options.filter_queue_stripes),
       base_background_compactions(options.base_background_compactions),
       max_background_compactions(options.max_background_compactions),
       max_background_flushes(options.max_background_flushes),

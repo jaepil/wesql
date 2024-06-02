@@ -80,8 +80,6 @@ void ImmutableDBOptions::Dump() const {
 MutableDBOptions::MutableDBOptions()
     : base_background_compactions(1),
       max_background_compactions(1),
-      filter_building_threads(2),
-      filter_queue_stripes(16),
       avoid_flush_during_shutdown(false),
       max_total_wal_size(128 * 1024 * 1024),
       delete_obsolete_files_period_micros(6ULL * 60 * 60 * 1000000),
@@ -111,8 +109,6 @@ MutableDBOptions::MutableDBOptions()
 MutableDBOptions::MutableDBOptions(const DBOptions& options)
     : base_background_compactions(options.base_background_compactions),
       max_background_compactions(options.max_background_compactions),
-      filter_building_threads(options.filter_building_threads),
-      filter_queue_stripes(options.filter_queue_stripes),
       avoid_flush_during_shutdown(options.avoid_flush_during_shutdown),
       max_total_wal_size(options.max_total_wal_size),
       delete_obsolete_files_period_micros(options.delete_obsolete_files_period_micros),
@@ -142,8 +138,6 @@ MutableDBOptions::MutableDBOptions(const DBOptions& options)
 void MutableDBOptions::Dump() const {
   __SE_LOG(INFO, "            Options.base_background_compactions: %d", base_background_compactions);
   __SE_LOG(INFO, "             Options.max_background_compactions: %d", max_background_compactions);
-  __SE_LOG(INFO, "                Options.filter_building_threads: %d", filter_building_threads);
-  __SE_LOG(INFO, "                   Options.filter_queue_stripes: %d", filter_queue_stripes);
   __SE_LOG(INFO, "            Options.avoid_flush_during_shutdown: %d", avoid_flush_during_shutdown);
   __SE_LOG(INFO, "                    Options.max_total_wal_size: %ld", max_total_wal_size);
   __SE_LOG(INFO, "   Options.delete_obsolete_files_period_micros: %ld", delete_obsolete_files_period_micros);

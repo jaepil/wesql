@@ -13,7 +13,6 @@
 #include "db/db_test_util.h"
 #include "port/stack_trace.h"
 #include "table/extent_table_factory.h"
-#include "table/filter_policy.h"
 
 namespace smartengine {
 using namespace common;
@@ -299,7 +298,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksOfNewTableAddedToCache) {
   //options.statistics = CreateDBStatistics();
   BlockBasedTableOptions table_options;
   table_options.cache_index_and_filter_blocks = true;
-  table_options.filter_policy.reset(NewBloomFilterPolicy(20));
   options.table_factory.reset(
       new table::ExtentBasedTableFactory(table_options));
   CreateAndReopenWithCF({"pikachu"}, options);
@@ -308,7 +306,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksOfNewTableAddedToCache) {
   set_trace_count();
   set_tmp_schema(1);
   ASSERT_OK(Flush(1)); // flush
-  dbfull()->TEST_wait_for_filter_build();
 
   // index/filter blocks added to block cache right after table creation.
   ASSERT_EQ(index_add_cnt_ + 2, TestGetGlobalCount(CountPoint::BLOCK_CACHE_INDEX_ADD));
@@ -353,7 +350,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksStats) {
   // 200 bytes are enough to hold the first two blocks
   std::shared_ptr<Cache> cache = NewLRUCache(200, 0, false);
   table_options.block_cache = cache;
-  table_options.filter_policy.reset(NewBloomFilterPolicy(20));
   options.table_factory.reset(
       new table::ExtentBasedTableFactory(table_options));
   CreateAndReopenWithCF({"pikachu"}, options);
@@ -363,7 +359,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksStats) {
   set_trace_count();
   set_tmp_schema(1);
   ASSERT_OK(Flush(1));
-  dbfull()->TEST_wait_for_filter_build();
   size_t index_bytes_insert =
       TestGetGlobalCount(CountPoint::BLOCK_CACHE_INDEX_BYTES_INSERT) - index_insert_bytes_;
   size_t data_bytes_insert =
@@ -383,7 +378,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksStats) {
   // Create a new table
   set_tmp_schema(1);
   ASSERT_OK(Flush(1));
-  dbfull()->TEST_wait_for_filter_build();
   // cache evicted old index and block entries
   ASSERT_GT(TestGetGlobalCount(CountPoint::BLOCK_CACHE_INDEX_BYTES_INSERT) - index_insert_bytes_,
             index_bytes_insert);
@@ -433,7 +427,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksCachePriority) {
     BlockBasedTableOptions table_options;
     table_options.cache_index_and_filter_blocks = true;
     table_options.block_cache.reset(new MockCache());
-    table_options.filter_policy.reset(NewBloomFilterPolicy(20));
     table_options.cache_index_and_filter_blocks_with_high_priority =
         priority == Cache::Priority::HIGH ? true : false;
     options.table_factory.reset(
@@ -451,7 +444,6 @@ TEST_F(DBBlockCacheTest, IndexAndFilterBlocksCachePriority) {
     ASSERT_OK(Put("bar", "value"));
     ASSERT_OK(Flush(0));
     dbfull()->TEST_WaitForFlushMemTable();
-//    dbfull()->TEST_wait_for_filter_build();
 
     // index/filter blocks added to block cache right after table creation.
     // builder.cc: new index
@@ -508,7 +500,6 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   options.level0_file_num_compaction_trigger = 2;
   BlockBasedTableOptions table_options;
   table_options.cache_index_and_filter_blocks = false;
-  table_options.filter_policy.reset(NewBloomFilterPolicy(20));
   options.table_factory.reset(
       new table::ExtentBasedTableFactory(table_options));
 
@@ -521,7 +512,6 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   set_trace_count();
   ASSERT_OK(Flush(1));
   dbfull()->TEST_WaitForFlushMemTable(get_column_family_handle(1));
-//  dbfull()->TEST_wait_for_filter_build();
   ASSERT_EQ(cache_add_cnt_ + 1, /* read and cache data block */
             TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
 
@@ -530,7 +520,6 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   // Create a new SST file. This will further trigger a compaction
   // and generate another file.
   ASSERT_OK(Flush(1));
-  dbfull()->TEST_wait_for_filter_build();
   dbfull()->TEST_WaitForCompact();
   ASSERT_EQ(cache_add_cnt_ + 2,
             TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));
@@ -541,7 +530,6 @@ TEST_F(DBBlockCacheTest, ParanoidFileChecks) {
   ASSERT_OK(Put(1, "1_key4", "val4"));
   ASSERT_OK(Put(1, "9_key4", "val4"));
   ASSERT_OK(Flush(1));
-  dbfull()->TEST_wait_for_filter_build();
   dbfull()->TEST_WaitForCompact();
   ASSERT_EQ(cache_add_cnt_ + 4, /* Totally 3 files created up to now */
             TestGetGlobalCount(CountPoint::BLOCK_CACHE_ADD));

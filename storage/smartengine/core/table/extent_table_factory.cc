@@ -14,8 +14,6 @@
 #include <stdint.h>
 #include <string>
 
-#include "table/filter_policy.h"
-
 namespace smartengine {
 using namespace common;
 using namespace cache;
@@ -129,14 +127,6 @@ std::string ExtentBasedTableFactory::GetPrintableTableOptions() const {
   ret.append(buffer);
   snprintf(buffer, kBufferSize, "  index_block_restart_interval: %d\n",
            table_options_.index_block_restart_interval);
-  ret.append(buffer);
-  snprintf(buffer, kBufferSize, "  filter_policy: %s\n",
-           table_options_.filter_policy == nullptr
-               ? "nullptr"
-               : table_options_.filter_policy->Name());
-  ret.append(buffer);
-  snprintf(buffer, kBufferSize, "  whole_key_filtering: %d\n",
-           table_options_.whole_key_filtering);
   ret.append(buffer);
   snprintf(buffer, kBufferSize, "  format_version: %d\n",
            table_options_.format_version);

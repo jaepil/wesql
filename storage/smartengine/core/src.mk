@@ -95,17 +95,15 @@ LIB_SOURCES =                                                   \
   storage/table_space.cc                                        \
   storage/multi_version_extent_meta_layer.cc                    \
   table/block_struct.cc                                         \
+  table/bloom_filter.cc                                         \
   table/column_block_iterator.cc                                \
   table/column_block_writer.cc                                  \
   table/column_struct.cc                                        \
   table/column_unit.cc                                          \
   table/extent_table_factory.cc                                 \
-  table/bloom_block.cc                                          \
   table/extent_reader.cc                                        \
   table/extent_struct.cc                                        \
   table/extent_writer.cc                                        \
-  table/full_filter_block.cc                                    \
-  table/filter_manager.cc                                       \
   table/get_context.cc                                          \
   table/index_block_reader.cc                                   \
   table/index_block_writer.cc                                   \
@@ -123,7 +121,6 @@ LIB_SOURCES =                                                   \
   table/sstable_scan_iterator.cc                                \
   util/aio_wrapper.cc                                           \
   util/arena.cc                                                 \
-  util/bloom.cc                                                 \
   util/build_version.cc                                         \
   util/coding.cc                                                \
   util/comparator.cc                                            \
@@ -142,7 +139,6 @@ LIB_SOURCES =                                                   \
   util/concurrent_direct_file_writer.cc                         \
   util/file_util.cc                                             \
   util/filename.cc                                              \
-  util/filter_policy.cc                                         \
   util/hash.cc                                                  \
   util/murmurhash.cc                                            \
   util/random.cc                                                \
@@ -203,7 +199,6 @@ MAIN_SOURCES =                                                    \
   unittest/monitoring/statistics_test.cc                                         \
   unittest/options/options_test.cc                                               \
   unittest/table/block_test.cc                                                   \
-  unittest/table/full_filter_block_test.cc                                       \
   unittest/table/merger_test.cc                                                  \
   unittest/table/extent_table_test.cc                                            \
   unittest/third-party/gtest-1.7.0/fused-src/gtest/gtest-all.cc                  \
@@ -215,7 +210,6 @@ MAIN_SOURCES =                                                    \
   unittest/tools/sst_dump_test.cc                                                \
   unittest/util/arena_test.cc                                                    \
   unittest/util/autovector_test.cc                                               \
-  unittest/util/bloom_test.cc                                                    \
   unittest/util/coding_test.cc                                                   \
   unittest/util/crc32c_test.cc                                                   \
   unittest/util/dio_helper_test.cc                                               \

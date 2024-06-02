@@ -157,7 +157,6 @@ TEST_F(RowCacheTest, lru_cache_test) {
 
   record_trace_count();
   ASSERT_OK(Flush(1));
-  dbfull()->TEST_wait_for_filter_build();
   dbfull()->TEST_WaitForCompact(); // wait flush
   ASSERT_EQ(cache_evict_ + 2, TestGetGlobalCount(CountPoint::ROW_CACHE_EVICT));
   ASSERT_OK(Put(1, "d", "d1"));

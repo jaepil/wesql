@@ -147,6 +147,8 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     SE_LOG(WARN, "invalid argument", K(ret), K(args));
   } else if (FAILED(index_block_writer_.init())) {
     SE_LOG(WARN, "fail to init index block writer", K(ret));
+  } else if (FAILED(bloom_filter_writer_.init(BloomFilter::DEFAULT_PER_KEY_BITS, BloomFilter::DEFAULT_PROBE_NUM))) {
+    SE_LOG(WARN, "fail to init bloom filter block writer", K(ret));
   } else if (FAILED(init_data_block_writer(args))) {
     SE_LOG(WARN, "fail to init data block writer", K(ret), K(args));
   } else if (IS_NULL(extent_buf = reinterpret_cast<char *>(base_memalign(
@@ -166,6 +168,9 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     internal_key_comparator_ = args.internal_key_comparator_;
     block_cache_ = args.block_cache_;
     row_cache_ = args.row_cache_;
+    block_info_.max_column_count_ = table_schema_.column_schemas_.size();
+    block_info_.probe_num_ = BloomFilter::DEFAULT_PROBE_NUM;
+    block_info_.per_key_bits_ = BloomFilter::DEFAULT_PER_KEY_BITS;
     change_info_ = args.change_info_;
 
     is_inited_ = true;
@@ -413,6 +418,8 @@ int ExtentWriter::inner_append_row(const Slice &key, const Slice &value)
     SE_LOG(WARN, "invalid argument", K(ret), K(key.empty()));
   } else if (FAILED(data_block_writer_->append(key, value))) {
     SE_LOG(WARN, "fail to append row to block writer", K(ret), K(key), K(value));
+  } else if (FAILED(bloom_filter_writer_.add(ExtractUserKey(key)))) {
+    SE_LOG(WARN, "fail to add to bloom filter", K(ret));
   } else if (FAILED(update_block_stats(key))) {
     SE_LOG(WARN, "fail to update block stats", K(ret), K(key));
   } else {
@@ -561,6 +568,7 @@ bool ExtentWriter::need_switch_extent_for_row(const Slice &key, const Slice &val
 
   size += buf_.size(); // current extent sze
   size += data_block_writer_->future_size(key.size(), value.size()); // current block future size
+  // the bloom filter size is included.
   size += index_block_writer_.future_size(key, block_info_);
 
   return size >= MAX_EXTENT_SIZE;  
@@ -594,6 +602,8 @@ int ExtentWriter::write_data_block()
     // empty block, do nothing
   } else if (FAILED(data_block_writer_->build(raw_block, block_info_))) {
     SE_LOG(WARN, "fail to build data block", K(ret));
+  } else if (FAILED(bloom_filter_writer_.build(block_info_.bloom_filter_))) {
+    SE_LOG(WARN, "fail to build bloom filter", K(ret));
   } else if (FAILED(compress_helper_.compress(raw_block, compressed_block, compress_type))) {
     SE_LOG(WARN, "fail to compress data block", K(ret));
   } else {
@@ -625,8 +635,11 @@ int ExtentWriter::write_data_block()
 
       // clear previous block status
       data_block_writer_->reuse();
+      bloom_filter_writer_.reuse();
       block_info_.reset();
       block_info_.max_column_count_ = table_schema_.column_schemas_.size();
+      block_info_.probe_num_ = BloomFilter::DEFAULT_PROBE_NUM;
+      block_info_.per_key_bits_ = BloomFilter::DEFAULT_PER_KEY_BITS;
     }
   }
 

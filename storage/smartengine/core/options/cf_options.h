@@ -48,7 +48,6 @@ struct ImmutableCFOptions {
   bool level_compaction_dynamic_level_bytes;
   //TODO(Zhao Dongsheng), Putting the member variable "row cache" here is not appropriate.
   std::shared_ptr<cache::RowCache> row_cache;
-  std::shared_ptr<table::FilterManager> filter_manager;
 };
 
 struct MutableCFOptions {

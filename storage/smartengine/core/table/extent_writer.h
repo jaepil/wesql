@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "table/bloom_filter.h"
 #include "table/extent_struct.h"
 #include "table/index_block_writer.h"
 #include "table/row_block_writer.h"
@@ -161,6 +162,7 @@ private:
   util::BufferWriter buf_;
   Footer footer_;
   IndexBlockWriter index_block_writer_;
+  BloomFilterWriter bloom_filter_writer_;
   BlockWriter *data_block_writer_;
   storage::ChangeInfo *change_info_;
   bool migrate_flag_;

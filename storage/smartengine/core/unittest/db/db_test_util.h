@@ -94,13 +94,6 @@ class AtomicCounter {
   int count_;
 };
 
-struct OptionsOverride {
-  std::shared_ptr<const table::FilterPolicy> filter_policy = nullptr;
-  // These will be used only if filter_policy is set
-  // Used as a bit mask of individual enums in which to skip an XF test point
-  int skip_policy = 0;
-};
-
 }  // namespace anon
 
 enum SkipPolicy { kSkipNone = 0, kSkipNoSnapshot = 1, kSkipNoPrefix = 2 };
@@ -632,12 +625,9 @@ class DBTestBase : public testing::Test {
   bool ChangeFilterOptions();
 
   // Return the current option configuration.
-  common::Options CurrentOptions(
-      const anon::OptionsOverride& options_override = anon::OptionsOverride());
+  common::Options CurrentOptions();
 
-  common::Options CurrentOptions(
-      const common::Options& defaultOptions,
-      const anon::OptionsOverride& options_override = anon::OptionsOverride());
+  common::Options CurrentOptions(const common::Options& defaultOptions);
 
   DBImpl* dbfull() { return reinterpret_cast<DBImpl*>(db_); }
 

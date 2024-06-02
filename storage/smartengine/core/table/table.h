@@ -142,15 +142,6 @@ struct BlockBasedTableOptions {
   // Default: true
   bool use_delta_encoding = true;
 
-  // If non-nullptr, use the specified filter policy to reduce disk reads.
-  // Many applications will benefit from passing the result of
-  // NewBloomFilterPolicy() here.
-  std::shared_ptr<const FilterPolicy> filter_policy = nullptr;
-
-  // If true, place whole keys in the filter (not just prefixes).
-  // This must generally be true for gets to be efficient.
-  bool whole_key_filtering = true;
-
   // Verify that decompressing the compressed block gives back the input. This
   // is a verification mode that we use to detect bugs in compression
   // algorithms.

@@ -82,7 +82,6 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   std::map<std::string, std::string>::const_iterator itr;
 
   BlockBasedTableOptions table_options;
-  // table_options.filter_policy.reset(NewBloomFilterPolicy(10));
   int block_size = 16 * 1024;
   //int block_size = 65535;
   table_options.block_size = block_size;

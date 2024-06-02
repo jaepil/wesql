@@ -20,6 +20,7 @@
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/io_extent.h"
+#include "table/bloom_filter.h"
 #include "table/column_block_iterator.h"
 #include "table/get_context.h"
 #include "table/index_block_reader.h"
@@ -102,6 +103,7 @@ int ExtentReader::get(const Slice &key, GetContext *get_context)
 {
   int ret = Status::kOk;
   bool done = false; // meaning the completion of get process, not mean that the key is found.
+  bool may_exist = true;
   IndexBlockReader index_block_reader;
   BlockInfo block_info;
 
@@ -115,14 +117,26 @@ int ExtentReader::get(const Slice &key, GetContext *get_context)
     SE_LOG(WARN, "fail to init index block reader", K(ret));
   } else {
     index_block_reader.seek(key);
+    // TODO(Zhao Dongsheng): the loop can optimize.
     while (SUCCED(ret) && !done && index_block_reader.valid()) {
       block_info.reset();
+      may_exist = true;
       if (FAILED(index_block_reader.get_value(block_info))) {
         SE_LOG(WARN, "fail to get block index", K(ret));
-      } else if (FAILED(inner_get(key, block_info, get_context, done))) {
-        SE_LOG(WARN, "fail to get from data block", K(ret), K(block_info));
+      } else if (FAILED(check_in_bloom_filter(get_context->get_user_key(), block_info, may_exist))) {
+        SE_LOG(WARN, "fail to check in bloom filter", K(ret), K(block_info));
       } else {
-        index_block_reader.next();
+        if (may_exist) {
+          if (FAILED(inner_get(key, block_info, get_context, done))) {
+            SE_LOG(WARN, "fail to get from data block", K(ret), K(block_info));
+          }
+        } else {
+          QUERY_COUNT(CountPoint::BLOOM_FILTER_USEFUL);
+        }
+
+        if (SUCCED(ret)) {
+          index_block_reader.next();
+        }
       }
     }
   }
@@ -441,6 +455,23 @@ int ExtentReader::init_extent(const ExtentMeta &extent_meta, bool use_full_prefe
         MOD_DELETE_OBJECT(RowBlock, index_block_);
       }
     }
+  }
+
+  return ret;
+}
+
+int ExtentReader::check_in_bloom_filter(const Slice &user_key, const BlockInfo &block_info, bool &may_exist)
+{
+  int ret = Status::kOk;
+  BloomFilterReader bloom_filter_reader;
+
+  if (UNLIKELY(user_key.empty()) || UNLIKELY(!block_info.is_valid())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(user_key), K(block_info));
+  } else if (FAILED(bloom_filter_reader.init(block_info.bloom_filter_, block_info.probe_num_))) {
+    SE_LOG(WARN, "fail to init bloom filter reader", K(ret), K(block_info));
+  } else if (FAILED(bloom_filter_reader.check(user_key, may_exist))) {
+    SE_LOG(WARN, "fail to check through bloom filter reader", K(ret), K(user_key));
   }
 
   return ret;

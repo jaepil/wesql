@@ -20,7 +20,6 @@
 #include "db/replay_thread_pool.h"
 #include "options/options_helper.h"
 #include "table/extent_table_factory.h"
-#include "table/filter_manager.h"
 #include "memory/mod_info.h"
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
@@ -1402,22 +1401,9 @@ Status DB::Open(const Options &options,
 
   if (s.ok()) {
     SubTable* sub_table = nullptr;
-    for (auto iter :
-         impl->versions_->get_global_ctx()->all_sub_table_->sub_table_map_) {
+    // TODO(Zhao Dongsheng): The follow loop to set snapshot supported is useless?
+    for (auto iter : impl->versions_->get_global_ctx()->all_sub_table_->sub_table_map_) {
       sub_table = iter.second;
-
-      auto* table_factory = dynamic_cast<table::ExtentBasedTableFactory*>(
-          sub_table->ioptions()->table_factory);
-      if (table_factory != nullptr) {
-        BlockBasedTableOptions table_opts = table_factory->table_options();
-        sub_table->ioptions()->filter_manager->start_build_thread(
-            sub_table, impl, &(impl->mutex_), &(impl->versions_->env_options()),
-            impl->env_, table_opts.filter_policy, table_opts.block_cache,
-            table_opts.whole_key_filtering,
-            table_opts.cache_index_and_filter_blocks_with_high_priority,
-            db_options.filter_queue_stripes, db_options.filter_building_threads,
-            &(impl->filter_build_quota_));
-      }
       if (!sub_table->mem()->IsSnapshotSupported()) {
         impl->is_snapshot_supported_ = false;
       }

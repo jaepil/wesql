@@ -204,7 +204,6 @@ BlockBasedTableOptions RandomBlockBasedTableOptions(Random* rnd) {
   opt.block_size_deviation = rnd->Uniform(100);
   opt.block_restart_interval = rnd->Uniform(100);
   opt.index_block_restart_interval = rnd->Uniform(100);
-  opt.whole_key_filtering = rnd->Uniform(2);
 
   return opt;
 }

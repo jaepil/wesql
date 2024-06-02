@@ -62,8 +62,6 @@ struct MutableDBOptions
 
   int base_background_compactions;
   int max_background_compactions;
-  int32_t filter_building_threads;
-  int32_t filter_queue_stripes;
   bool avoid_flush_during_shutdown;
   uint64_t max_total_wal_size;
   uint64_t delete_obsolete_files_period_micros;

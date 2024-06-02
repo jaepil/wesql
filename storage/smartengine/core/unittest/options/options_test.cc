@@ -457,8 +457,7 @@ TEST_F(OptionsTest, GetBlockBasedTableOptionsFromString) {
       "cache_index_and_filter_blocks=1;index_type=kHashSearch;"
       "checksum=kxxHash;hash_index_allow_collision=1;no_block_cache=1;"
       "block_cache=1M;block_cache_compressed=1k;block_size=1024;"
-      "block_size_deviation=8;block_restart_interval=4;"
-      "filter_policy=bloomfilter:4:true;whole_key_filtering=1;",
+      "block_size_deviation=8;block_restart_interval=4;",
       &new_opt));
   ASSERT_TRUE(new_opt.cache_index_and_filter_blocks);
   ASSERT_EQ(new_opt.index_type, BlockBasedTableOptions::kHashSearch);
@@ -472,7 +471,6 @@ TEST_F(OptionsTest, GetBlockBasedTableOptionsFromString) {
   ASSERT_EQ(new_opt.block_size, 1024UL);
   ASSERT_EQ(new_opt.block_size_deviation, 8);
   ASSERT_EQ(new_opt.block_restart_interval, 4);
-  ASSERT_TRUE(new_opt.filter_policy != nullptr);
 
   // unknown option
   ASSERT_NOK(GetBlockBasedTableOptionsFromString(
@@ -503,22 +501,18 @@ TEST_F(OptionsTest, GetBlockBasedTableOptionsFromString) {
   // unrecognized filter policy name
   ASSERT_NOK(
       GetBlockBasedTableOptionsFromString(table_opt,
-                                          "cache_index_and_filter_blocks=1;"
-                                          "filter_policy=bloomfilterxx:4:true",
+                                          "cache_index_and_filter_blocks=1;",
                                           &new_opt));
   ASSERT_EQ(table_opt.cache_index_and_filter_blocks,
             new_opt.cache_index_and_filter_blocks);
-  ASSERT_EQ(table_opt.filter_policy, new_opt.filter_policy);
 
   // unrecognized filter policy config
   ASSERT_NOK(
       GetBlockBasedTableOptionsFromString(table_opt,
-                                          "cache_index_and_filter_blocks=1;"
-                                          "filter_policy=bloomfilter:4",
+                                          "cache_index_and_filter_blocks=1;",
                                           &new_opt));
   ASSERT_EQ(table_opt.cache_index_and_filter_blocks,
             new_opt.cache_index_and_filter_blocks);
-  ASSERT_EQ(table_opt.filter_policy, new_opt.filter_policy);
 }
 
 TEST_F(OptionsTest, GetPlainTableOptionsFromString) {
@@ -880,7 +874,6 @@ TEST_F(OptionsTest, ConvertOptionsTest) {
   ASSERT_EQ(table_opt.block_size, leveldb_opt.block_size);
   ASSERT_EQ(table_opt.block_restart_interval,
             leveldb_opt.block_restart_interval);
-  ASSERT_EQ(table_opt.filter_policy.get(), leveldb_opt.filter_policy);
 }
 
 class OptionsParserTest : public testing::Test {

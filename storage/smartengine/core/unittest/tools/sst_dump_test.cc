@@ -16,7 +16,6 @@
 #include "util/file_reader_writer.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
-#include "smartengine/filter_policy.h"
 
 using namespace smartengine;
 using namespace common;
@@ -123,7 +122,6 @@ TEST_F(SSTDumpToolTest, EmptyFilter) {
 }
 
 TEST_F(SSTDumpToolTest, FilterBlock) {
-  table_options_.filter_policy.reset(NewBloomFilterPolicy(10, true));
   std::string file_name = "smartengine_sst_test.sst";
   createSST(file_name, table_options_);
 
@@ -145,7 +143,6 @@ TEST_F(SSTDumpToolTest, FilterBlock) {
 }
 
 TEST_F(SSTDumpToolTest, FullFilterBlock) {
-  table_options_.filter_policy.reset(NewBloomFilterPolicy(10, false));
   std::string file_name = "smartengine_sst_test.sst";
   createSST(file_name, table_options_);
 
@@ -167,7 +164,6 @@ TEST_F(SSTDumpToolTest, FullFilterBlock) {
 }
 
 TEST_F(SSTDumpToolTest, GetProperties) {
-  table_options_.filter_policy.reset(NewBloomFilterPolicy(10, false));
   std::string file_name = "smartengine_sst_test.sst";
   createSST(file_name, table_options_);
 
@@ -189,7 +185,6 @@ TEST_F(SSTDumpToolTest, GetProperties) {
 }
 
 TEST_F(SSTDumpToolTest, CompressedSizes) {
-  table_options_.filter_policy.reset(NewBloomFilterPolicy(10, false));
   std::string file_name = "smartengine_sst_test.sst";
   createSST(file_name, table_options_);
 

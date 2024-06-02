@@ -128,6 +128,7 @@ DEFINE_MOD_TYPE(kColumnUnitWriter)
 DEFINE_MOD_TYPE(kColumnUnitReader)
 DEFINE_MOD_TYPE(kColumnBlockWriter)
 DEFINE_MOD_TYPE(kColumnBlockReader)
+DEFINE_MOD_TYPE(kBloomFilter)
 
 DEFINE_MOD_TYPE(kMaxMod)
 #endif
