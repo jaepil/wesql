@@ -2203,6 +2203,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
   if ((res = global_merge_ctx.finish())) {
     DBUG_EXECUTE_IF("crash_during_global_merge", {
       if (ddl_ctx_set[0]->bg_merge.get_interrupt()) {
+        sleep(5);
         DEBUG_SYNC(ha_thd(), "se.global_merge_interrupted");
       };
     });

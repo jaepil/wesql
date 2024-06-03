@@ -38,10 +38,10 @@ ENDMACRO()
 MACRO(PREPARE_BUNDLED_OJBSTORE)
   SET(OBJSTORE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/extra/aws-sdk-cpp")
 
-  set(BUILD_ONLY "s3")
-  set(AUTORUN_UNIT_TESTS OFF)
-  set(BUILD_SHARED_LIBS OFF)
-  set(CMAKE_INSTALL_PREFIX ${OBJSTORE_INSTALL_PREFIX})
+  set(BUILD_ONLY "s3;core" CACHE STRING "AWS sdk components to build")
+  set(AUTORUN_UNIT_TESTS OFF CACHE BOOL "AWS sdk auto run unittests")
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build aws sdk static library")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "AWS sdk build type")
 
   add_subdirectory(${PROJECT_SOURCE_DIR}/extra/aws-sdk-cpp)
   # compilation result installation is later phase, mkdir include path in advance avoid compile error.

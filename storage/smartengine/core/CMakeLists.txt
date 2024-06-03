@@ -300,7 +300,6 @@ add_definitions(-DGFLAGS=gflags)
 # import ADD_CONVENIENCE_LIBRARY from MySQL cmake util module
 INCLUDE(${CMAKE_SOURCE_DIR}/../../../cmake/libutils.cmake)
 # import objstore related macroes
-INCLUDE(aws_sdk_cpp)
 
 IF(NOT WITH_SMARTENGINE)
   # import lz4 related macroes
@@ -345,11 +344,13 @@ IF(NOT WITH_SMARTENGINE)
   ELSE()
     MESSAGE(FATAL_ERROR "WITH_ZSTD must be bundled now")
   ENDIF()
-ENDIF()
 
-MYSQL_CHECK_OBJSTORE()
-MYSQL_BUILD_OBJSTORE()
-list(APPEND THIRDPARTY_LIBS myobjstore)
+  INCLUDE(cmake/aws_sdk_cpp.cmake)
+  MYSQL_CHECK_OBJSTORE()
+  MYSQL_BUILD_OBJSTORE()
+  list(APPEND THIRDPARTY_LIBS myobjstore)
+
+ENDIF()
 
 #for zstd compile to find my_compiler.h
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/../../../include)

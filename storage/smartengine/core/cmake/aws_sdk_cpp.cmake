@@ -42,9 +42,9 @@ MACRO(PREPARE_BUNDLED_OJBSTORE)
   ExternalProject_Add(
     aws-sdk-cpp-ext-proj
     SOURCE_DIR "${PROJECT_SOURCE_DIR}/../../../extra/aws-sdk-cpp"
-    GIT_REPOSITORY "https://github.com/aws/aws-sdk-cpp.git"
-    GIT_TAG "1.11.283"
-    UPDATE_COMMAND "" #git submodule update --init --recursive
+    #GIT_REPOSITORY "https://github.com/aws/aws-sdk-cpp.git"
+    #GIT_TAG "1.11.283"
+    #UPDATE_COMMAND "" #git submodule update --init --recursive
     # TODO: build with static lib
     CMAKE_ARGS
       -DBUILD_ONLY=s3
