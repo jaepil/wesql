@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 #pragma once
-//#ifndef UTIL_BASE_MALLOC_H_
-//#define UTIL_BASE_MALLOC_H_
 
 #include "alloc_mgr.h"
 #include <memory>
@@ -216,4 +214,33 @@ struct ptr_destruct_delete {
       (ptr) = nullptr;                            \
     }                                             \
    })
-//#endif /* UTIL_BASE_MALLOC_H_ */
+
+#define DEFINE_PURE_VIRTUAL_CONSTRUCTOR_SIZE() \
+  public: \
+    virtual int64_t constructor_size() const = 0;
+
+#define DEFINE_VIRTUAL_CONSTRUCTOR_SIZE() \
+  public: \
+    virtual int64_t constructor_size() const { return sizeof(*this); }
+
+#define DEFINE_OVERRIDE_CONSTRUCTOR_SIZE() \
+  public: \
+    int64_t constructor_size() const  override { return sizeof(*this); }
+
+#define NEW_OBJECT(MOD, T, ...) \
+  ({ \
+    T *__new_ret = new T (__VA_ARGS__); \
+    if (nullptr != __new_ret) { \
+      update_hold_size(__new_ret->constructor_size(), MOD);  \
+    } \
+    __new_ret; \
+  })
+
+#define DELETE_OBJECT(MOD, ptr) \
+  ({ \
+    if (nullptr != ptr) { \
+      update_hold_size(-(ptr->constructor_size()), MOD); \
+      delete ptr; \
+      ptr = nullptr; \
+    } \
+  })

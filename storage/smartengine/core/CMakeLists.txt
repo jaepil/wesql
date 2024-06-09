@@ -625,6 +625,7 @@ set(TESTS
         #unittest/env/env_test.cc
         unittest/env/mock_env_test.cc
         unittest/memory/alloc_mgr_test.cc
+        unittest/memory/base_malloc_test.cc
         unittest/memory/chunk_allocator_test.cc
         unittest/monitoring/histogram_test.cc
         unittest/monitoring/iostats_context_test.cc
