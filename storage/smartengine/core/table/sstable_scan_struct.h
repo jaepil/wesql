@@ -186,7 +186,7 @@ struct BlockDataHandle
 
   storage::ExtentId extent_id_;
   BlockInfo block_info_;
-  CacheEntry<T> block_entry_;
+  cache::CacheEntry<T> block_entry_;
   // used to release cache handle
   cache::Cache *cache_;
   util::AIOHandle aio_handle_;

@@ -32,19 +32,6 @@ using namespace util;
 namespace storage
 {
 
-namespace
-{
-constexpr int32_t kObjStoreFDBit = 31;
-
-int32_t convert_table_space_to_fd(uint64_t table_space_id) {
-  constexpr uint64_t kMaxTableSpaceId = 1ULL << kObjStoreFDBit;
-  assert(table_space_id < kMaxTableSpaceId);
-  int32_t fd = table_space_id;
-  // make fd negative, so that it can be distinguished from normal file number.
-  return fd | (1 << kObjStoreFDBit);
-}
-}  // anonymous namespace
-
 ObjectExtentSpace::ObjectExtentSpace(util::Env *env,
                                      const util::EnvOptions &env_options,
                                      ::objstore::ObjectStore *objstore)
@@ -54,7 +41,7 @@ ObjectExtentSpace::ObjectExtentSpace(util::Env *env,
       objstore_(objstore),
       extent_bucket_(),
       table_space_id_(0),
-      extent_space_type_(OBJ_EXTENT_SPACE),
+      extent_space_type_(OBJECT_EXTENT_SPACE),
       total_extent_count_(0),
       used_extent_count_(0),
       free_extent_count_(0),
@@ -165,8 +152,12 @@ int ObjectExtentSpace::allocate(ExtentIOInfo &io_info) {
       if (inused_extent_set_.insert(extent_id.offset).second) {
         ++total_extent_count_;
         ++used_extent_count_;
-        io_info.set_param(faked_fn, extent_id, MAX_EXTENT_SIZE, DATA_BLOCK_SIZE,
-                          UniqueIdAllocator::get_instance().alloc(), objstore_,
+        io_info.set_param(OBJECT_EXTENT_SPACE,
+                          extent_id,
+                          MAX_EXTENT_SIZE,
+                          UniqueIdAllocator::get_instance().alloc(),
+                          faked_fn,
+                          objstore_,
                           env_->GetObjectStoreBucket());
       } else {
         ret = Status::kErrorUnexpected;
@@ -235,8 +226,12 @@ int ObjectExtentSpace::reference(const ExtentId extent_id,
       g_next_allocated_id_ = extent_id.offset;
     }
 
-    io_info.set_param(faked_fn, extent_id, MAX_EXTENT_SIZE, DATA_BLOCK_SIZE,
-                      UniqueIdAllocator::get_instance().alloc(), objstore_,
+    io_info.set_param(OBJECT_EXTENT_SPACE,
+                      extent_id,
+                      MAX_EXTENT_SIZE,
+                      UniqueIdAllocator::get_instance().alloc(),
+                      faked_fn,
+                      objstore_,
                       env_->GetObjectStoreBucket());
 
     SE_LOG(DEBUG, "success to reference extent", K(extent_id));
@@ -286,7 +281,7 @@ int ObjectExtentSpace::get_data_file_stats(
     SE_LOG(WARN, "ObjectExtentSpace should been inited first", K(ret));
   } else {
     data_file_statistic.table_space_id_ = table_space_id_;
-    data_file_statistic.extent_space_type_ = OBJ_EXTENT_SPACE;
+    data_file_statistic.extent_space_type_ = OBJECT_EXTENT_SPACE;
     data_file_statistic.file_number_ =
         convert_table_space_to_fd(table_space_id_);
     data_file_statistic.total_extent_count_ = total_extent_count_;

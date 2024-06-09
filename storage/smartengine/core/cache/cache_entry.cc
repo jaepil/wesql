@@ -22,7 +22,7 @@ namespace smartengine
 {
 using namespace common;
 
-namespace table
+namespace cache
 {
 CacheEntryKey::CacheEntryKey() : is_inited_(false), key_prefix_{0}, key_prefix_size_(0) {}
 CacheEntryKey::~CacheEntryKey() {}
@@ -65,5 +65,5 @@ int CacheEntryKey::generate(const int64_t id, char *buf, Slice &key)
   return ret;
 }
 
-} // namespace table
+} // namespace cache
 } // namespace smartengine

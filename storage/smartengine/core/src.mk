@@ -4,6 +4,7 @@ LIB_SOURCES =                                                   \
   cache/cache_entry.cc                                          \
   cache/clock_cache.cc                                          \
   cache/lru_cache.cc                                            \
+  cache/persistent_cache.cc                                     \
   cache/row_cache.cc                                            \
   cache/sharded_cache.cc                                        \
   compact/reuse_block_merge_iterator.cc                         \

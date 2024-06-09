@@ -743,29 +743,31 @@ int ExtentWriter::write_extent()
 int ExtentWriter::flush_extent()
 {
   int ret = Status::kOk;
-  storage::WritableExtent writable_extent;
+  storage::IOExtent *extent = nullptr;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
-  } else if (FAILED(ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, &writable_extent))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, extent))) {
     SE_LOG(WARN, "fail to allocate extent", K(ret));
-  } else if (FAILED(writable_extent.append(Slice(buf_.data(), MAX_EXTENT_SIZE)))) {
+  } else if (FAILED(extent->write(Slice(buf_.data(), MAX_EXTENT_SIZE)))) {
     SE_LOG(WARN, "fail to append extent data", K(ret));
   } else {
     extent_info_.table_space_id_ = table_space_id_;
     extent_info_.extent_space_type_ = extent_space_type_;
-    extent_info_.extent_id_ = writable_extent.get_extent_id();
+    extent_info_.extent_id_ = extent->get_extent_id();
     ExtentMeta extent_meta(storage::ExtentMeta::F_NORMAL_EXTENT, extent_info_, table_schema_);
     if (FAILED(write_extent_meta(extent_meta, false /*is_large_object_extent*/))) {
       SE_LOG(WARN, "fail to write extent meta", K(ret));
     } else {
       // Migrate the flagged blocks.This is a best-effort task and should not affect the
       // normal data persistence process.
-      migrate_block_cache(writable_extent);
+      migrate_block_cache(extent);
       writed_extent_infos_.push_back(extent_info_);
     }
   }
+
+  DELETE_OBJECT(ModId::kIOExtent, extent);
 
   return ret;
 }
@@ -819,7 +821,7 @@ int ExtentWriter::convert_to_large_object_key(const Slice &key, LargeObject &lar
 int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject &large_object)
 {
   int ret = Status::kOk;
-  storage::WritableExtent extent;
+  storage::IOExtent *extent = nullptr;
   storage::ExtentMeta extent_meta;
   CompressionType actual_compress_type = compress_type_;
   Slice compressed_value;
@@ -839,25 +841,28 @@ int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject 
     large_object.value_.size_ = compressed_value.size();
 
     while (SUCCED(ret) && offset < (static_cast<int64_t>(compressed_value.size()))) {
-      extent.reset();
-      extent_meta.reset();
-
+      memset(value_buf, 0, storage::MAX_EXTENT_SIZE);
       size = ((compressed_value.size() - offset) > storage::MAX_EXTENT_SIZE)
              ? storage::MAX_EXTENT_SIZE : (compressed_value.size() - offset);
       memcpy(value_buf, compressed_value.data() + offset, size);
 
-      if (FAILED(storage::ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, &extent))) {
+      if (FAILED(storage::ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, extent))) {
         SE_LOG(WARN, "fail to allocate writable extent", K(ret));
-      } else if (FAILED(extent.append(Slice(value_buf, DIOHelper::align_size(size))))) {
+      // The last large object extent contains valid data of size.Since all extents are
+      // currently 2MB, we will directly write padding the data to 2MB size here.
+      // the valid size is recorded in ExtentMeta.
+      } else if (FAILED(extent->write(Slice(value_buf, storage::MAX_EXTENT_SIZE)))) {
         SE_LOG(WARN, "fail to append part of large object", K(ret));
-      } else if (FAILED(build_large_object_extent_meta(Slice(large_object.key_), extent.get_extent_id(), size, extent_meta))) {
+      } else if (FAILED(build_large_object_extent_meta(Slice(large_object.key_), extent->get_extent_id(), size, extent_meta))) {
         SE_LOG(WARN, "fail to build large object extent meta", K(ret));
       } else if (FAILED(write_extent_meta(extent_meta, true /*is_large_object_extent*/))) {
         SE_LOG(WARN, "fail to write large object extent meta", K(ret), K(extent_meta));
       } else {
-        large_object.value_.extents_.push_back(extent.get_extent_id());
+        large_object.value_.extents_.push_back(extent->get_extent_id());
         offset += size;
+        extent_meta.reset();
       }
+      DELETE_OBJECT(ModId::kIOExtent, extent);
     }
   }
 
@@ -1021,7 +1026,7 @@ int ExtentWriter::collect_migrating_block(const Slice &block,
   return ret;
 }
 
-int ExtentWriter::migrate_block_cache(const WritableExtent &extent)
+int ExtentWriter::migrate_block_cache(const IOExtent *extent)
 {
   int ret = Status::kOk;
   CacheEntryKey cache_entry_key;
@@ -1030,10 +1035,13 @@ int ExtentWriter::migrate_block_cache(const WritableExtent &extent)
   char *cache_value = nullptr;
   RowBlock *block = nullptr;
   
-  if (migrating_blocks_.empty() || IS_NULL(block_cache_)) {
+  if (IS_NULL(extent)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(extent));
+  } else if (migrating_blocks_.empty() || IS_NULL(block_cache_)) {
     // There are no blocks that need to be migrated.
-  } else if (FAILED(cache_entry_key.setup(&extent))) {
-    SE_LOG(WARN, "fail to setup cache entry key", K(ret), K(extent));
+  } else if (FAILED(cache_entry_key.setup(extent))) {
+    SE_LOG(WARN, "fail to setup cache entry key", K(ret));
   } else {
     for (auto iter = migrating_blocks_.begin(); SUCCED(ret) && migrating_blocks_.end() != iter; ++iter) {
       if(IS_NULL(block = iter->second)) {

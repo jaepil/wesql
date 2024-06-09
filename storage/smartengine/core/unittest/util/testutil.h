@@ -637,6 +637,12 @@ private:
   std::uniform_int_distribution<int64_t> distribution_;
 };
 
+class RandomStringGenerator
+{
+public:
+  static std::string generate(int64_t size);
+};
+
 }  // namespace test
 }  // namespace util
 }  // namespace smartengine

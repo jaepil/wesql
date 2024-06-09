@@ -40,12 +40,11 @@ using namespace util;
 namespace table
 {
 
-DEFINE_TO_STRING(ExtentReaderArgs, KV_(extent_id), KV_(use_full_prefetch_extent), KVP_(internal_key_comparator), KVP_(block_cache))
+DEFINE_TO_STRING(ExtentReaderArgs, KV_(extent_id), KVP_(internal_key_comparator), KVP_(block_cache))
 
 ExtentReader::ExtentReader()
     : is_inited_(false),
       internal_key_comparator_(nullptr),
-      use_full_prefetch_extent_(false),
       extent_(nullptr),
       extent_meta_(nullptr),
       index_block_(nullptr),
@@ -58,6 +57,11 @@ ExtentReader::~ExtentReader()
   destroy();
 }
 
+// TODO(Zhao Dongsheng) : In the current implementation, the lifecycle of the index block
+// is kept consistent with the extent reader, resulting in the index block being synchronously
+// read during the initialization of the extent reader.This is unnecessary for compaction
+// tasks, in a compaction task, the IO for reading the index block can be optimized because
+// the data for the entire extent has already been prefetched.
 int ExtentReader::init(const ExtentReaderArgs &args)
 {
   int ret = Status::kOk;
@@ -70,14 +74,29 @@ int ExtentReader::init(const ExtentReaderArgs &args)
     SE_LOG(WARN, "invalid argument", K(ret), K(args));
   } else if (FAILED(IS_NULL(extent_meta_ = ExtentMetaManager::get_instance().get_meta(args.extent_id_)))) {
     SE_LOG(WARN, "fail to get extent meta", K(ret), K(args));
-  } else if (FAILED(init_extent(*extent_meta_, args.use_full_prefetch_extent_))) {
-    SE_LOG(WARN, "fail to init extent", K(ret), K(args));
+  } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(extent_meta_->extent_id_, extent_))) {
+    SE_LOG(WARN, "fail to get readable extent", K(ret), K(*extent_meta_));
+  } else if (FAILED(BlockIOHelper::read_and_uncompress_block(extent_,
+                                                             extent_meta_->index_block_handle_,
+                                                             ModId::kIndexBlockReader,
+                                                             nullptr /**aio_handle*/,
+                                                             index_block_))) {
+    SE_LOG(WARN, "fail to read index block", K(ret), K(*extent_meta_));
   } else if (FAILED(cache_entry_key_.setup(extent_))) {
     SE_LOG(WARN, "fail to setup cache key", K(ret), K(args));
   } else {
     internal_key_comparator_ = args.internal_key_comparator_;
     block_cache_ = args.block_cache_;
     is_inited_ = true;
+  }
+
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(extent_)) {
+      DELETE_OBJECT(ModId::kIOExtent, extent_);
+    }
+    if (IS_NOTNULL(index_block_)) {
+      MOD_DELETE_OBJECT(RowBlock, index_block_);
+    }
   }
 
   return ret;
@@ -87,18 +106,11 @@ void ExtentReader::destroy()
 {
   if (is_inited_) {
     MOD_DELETE_OBJECT(RowBlock, index_block_);
-    if (use_full_prefetch_extent_) {
-      FullPrefetchExtent *full_prefetch_extent = reinterpret_cast<FullPrefetchExtent *>(extent_);
-      MOD_DELETE_OBJECT(FullPrefetchExtent, full_prefetch_extent);
-    } else {
-      MOD_DELETE_OBJECT(ReadableExtent, extent_);
-    }
-    extent_ = nullptr;
+    DELETE_OBJECT(ModId::kIOExtent, extent_);
     is_inited_ = false;
   }
 }
 
-// TODO(Zhao Dongsheng): unused skip_filters
 int ExtentReader::get(const Slice &key, GetContext *get_context)
 {
   int ret = Status::kOk;
@@ -213,7 +225,7 @@ int ExtentReader::do_io_prefetch(const int64_t offset, const int64_t size, AIOHa
   } else if (UNLIKELY(offset < 0) || UNLIKELY(size <= 0) || IS_NULL(aio_handle)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(offset), K(size), KP(aio_handle));
-  } else if (FAILED(extent_->prefetch(offset, size, aio_handle))) {
+  } else if (FAILED(extent_->prefetch(aio_handle, offset, size))) {
     SE_LOG(WARN, "fail to prefetch", K(ret), K(offset), K(size));
   } else {
     // succeed
@@ -254,13 +266,6 @@ int ExtentReader::setup_index_block_iterator(RowBlockIterator *index_block_itera
   } else if (IS_NULL(index_block_iterator)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(index_block_iterator));
-  } else if (use_full_prefetch_extent_ && IS_NULL(index_block_) &&
-             FAILED(BlockIOHelper::read_and_uncompress_block(extent_,
-                                                             extent_meta_->index_block_handle_,
-                                                             ModId::kExtentReader,
-                                                             nullptr /*aio_handle*/,
-                                                             index_block_))) {
-    SE_LOG(WARN, "fail to read index block", K(ret), K(*extent_meta_));
   } else if (FAILED(index_block_iterator->setup(internal_key_comparator_, index_block_, true /*is_index_block*/))) {
     SE_LOG(WARN, "fail to setup index block iterator", K(ret));
   } else {
@@ -286,7 +291,7 @@ int ExtentReader::setup_data_block_iterator(BlockDataHandle<RowBlock> &data_bloc
   } else if (FAILED(BlockIOHelper::read_and_uncompress_block(extent_,
                                                              data_block_handle.block_info_.handle_,
                                                              ModId::kExtentReader,
-                                                             nullptr /*aio_handle*/,
+                                                             &(data_block_handle.aio_handle_),
                                                              data_block_content))) {
     SE_LOG(WARN, "fail to read data block", K(ret), K(data_block_handle.block_info_));
   } else {
@@ -402,62 +407,6 @@ int ExtentReader::approximate_key_offet(const Slice &key, int64_t &offset)
 int64_t ExtentReader::get_usable_size() const
 {
   return sizeof(*this) + sizeof(*index_block_) + index_block_->size_;
-}
-
-int ExtentReader::init_extent(const ExtentMeta &extent_meta, bool use_full_prefetch_extent)
-{
-  int ret = Status::kOk;
-
-  if (use_full_prefetch_extent) {
-    FullPrefetchExtent *full_prefetch_extent = nullptr;
-    if (IS_NULL(full_prefetch_extent = MOD_NEW_OBJECT(ModId::kExtentReader, FullPrefetchExtent))) {
-      ret = Status::kMemoryLimit;
-      SE_LOG(WARN, "fail to allocate memory for FullPrefetchExtent", K(ret));
-    } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(extent_meta.extent_id_, full_prefetch_extent))) {
-      SE_LOG(WARN, "fail to get FullPrefetchExtent", K(ret), K(extent_meta));
-    } else if (FAILED(full_prefetch_extent->full_prefetch())) {
-      SE_LOG(WARN, "fail to full prefetch extent", K(ret), K(extent_meta));
-    } else {
-      extent_ = full_prefetch_extent;
-      use_full_prefetch_extent_ = true;
-    }
-
-    if (FAILED(ret)) {
-      if (IS_NOTNULL(full_prefetch_extent)) {
-        MOD_DELETE_OBJECT(FullPrefetchExtent, full_prefetch_extent);
-      }
-    }
-  }
-
-  // There are two scenarios where "use_full_prefetch_extent_" is false:
-  // 1. The input parameter 'use_full_prefetch_extent' is false.
-  // 2. The input parameter 'use_full_prefetch_extent' is true, but fail to build FullPrefetchExtent,
-  //    fallback to use ReadableExtent and overwrite ret.
-  if (!use_full_prefetch_extent_) {
-    if (IS_NULL(extent_ = MOD_NEW_OBJECT(ModId::kExtentReader, ReadableExtent))) {
-      ret = Status::kMemoryLimit;
-      SE_LOG(WARN, "fail to allocate memory for ReadableExtent", K(ret));
-    } else if (FAILED(ExtentSpaceManager::get_instance().get_readable_extent(extent_meta.extent_id_, extent_))) {
-      SE_LOG(WARN, "fail to get readable extent", K(ret), K(extent_meta));
-    } else if (FAILED(BlockIOHelper::read_and_uncompress_block(extent_,
-                                                               extent_meta.index_block_handle_,
-                                                               ModId::kIndexBlockReader,
-                                                               nullptr /*aio_handle*/,
-                                                               index_block_))) {
-      SE_LOG(WARN, "fail to read index block", K(ret), K(extent_meta));
-    }
-
-    if (FAILED(ret)) {
-      if (IS_NOTNULL(extent_)) {
-        MOD_DELETE_OBJECT(ReadableExtent, extent_);
-      }
-      if (IS_NOTNULL(index_block_)) {
-        MOD_DELETE_OBJECT(RowBlock, index_block_);
-      }
-    }
-  }
-
-  return ret;
 }
 
 int ExtentReader::check_in_bloom_filter(const Slice &user_key, const BlockInfo &block_info, bool &may_exist)
@@ -577,10 +526,10 @@ int ExtentReader::read_data_block(BlockDataHandle<RowBlock> &data_block_handle,
 
       if (SUCCED(ret)) {
         if (IS_NULL(data_block_handle.block_entry_.value_ = MOD_NEW_OBJECT(ModId::kBlock,
-                                                                                           RowBlock, 
-                                                                                           row_block.data(),
-                                                                                           row_block.size(),
-                                                                                           kNoCompression))) {
+                                                                           RowBlock, 
+                                                                           row_block.data(),
+                                                                           row_block.size(),
+                                                                           kNoCompression))) {
           ret = Status::kMemoryLimit;
           SE_LOG(WARN, "fail to allocate memory for Block", K(ret));
         } else if (IS_NOTNULL(block_cache_) && added_blocks < scan_add_blocks_limit) {

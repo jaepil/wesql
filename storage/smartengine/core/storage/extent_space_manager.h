@@ -50,7 +50,7 @@ public:
   //extent relative function
   int allocate(const int64_t table_space_id,
                const int32_t extent_space_type,
-               WritableExtent *extent);
+               IOExtent *&extent);
   int recycle(const int64_t table_space_id,
               const int32_t extent_space_type,
               const ExtentId extent_id,
@@ -59,7 +59,7 @@ public:
   int reference(const int64_t table_space_id,
                 const int32_t extent_space_type,
                 const ExtentId extent_id);
-  int get_readable_extent(ExtentId extent_id, ReadableExtent *extent);
+  int get_readable_extent(ExtentId extent_id, IOExtent *&extent);
 
   //shrink relative function
   int get_shrink_infos(const ShrinkCondition &shrink_condition, std::vector<ShrinkInfo> &shrink_infos);
@@ -95,6 +95,7 @@ private:
   void update_max_file_number(const int64_t file_number);
   void update_max_table_space_id(const int64_t table_space_id);
   int clear_garbage_files();
+  int init_extent(const ExtentIOInfo &io_info, IOExtent *&extent);
 
 private:
   bool is_inited_;

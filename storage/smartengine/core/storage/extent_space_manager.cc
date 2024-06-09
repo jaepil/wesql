@@ -232,7 +232,7 @@ int ExtentSpaceManager::unregister_subtable(const int64_t table_space_id, const 
 
 int ExtentSpaceManager::allocate(const int64_t table_space_id,
                                  const int32_t extent_space_type,
-                                 WritableExtent *extent)
+                                 IOExtent *&extent)
 {
   int ret = Status::kOk;
   TableSpace *table_space = nullptr;
@@ -242,10 +242,9 @@ int ExtentSpaceManager::allocate(const int64_t table_space_id,
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentSpaceManager should been inited first", K(ret));
   } else if (UNLIKELY(table_space_id < 0) ||
-             UNLIKELY(!is_valid_extent_space_type(extent_space_type)) ||
-             IS_NULL(extent)) {
+             UNLIKELY(!is_valid_extent_space_type(extent_space_type))) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(table_space_id), K(extent_space_type), KP(extent));
+    SE_LOG(WARN, "invalid argument", K(ret), K(table_space_id), K(extent_space_type));
   } else {
 #ifndef NDEBUG
     TEST_SYNC_POINT("ExtentSpaceManager::allocate::inject_allocate_hang");
@@ -262,8 +261,8 @@ int ExtentSpaceManager::allocate(const int64_t table_space_id,
     
     if (SUCCED(ret)) {
       SpinWLockGuard w_guard(io_info_map_lock_);
-      if (FAILED(extent->init(io_info))) {
-        SE_LOG(WARN, "fail to init WritableExtent", K(ret), K(io_info), K(table_space_id), K(extent_space_type));
+      if (FAILED(init_extent(io_info, extent))) {
+        SE_LOG(WARN, "fail to init extent", K(ret), K(io_info));
       } else if (!(extent_io_info_map_.emplace(io_info.extent_id_.id(), io_info).second)) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, fail to emplace to io_info map", K(ret), K(io_info), K(table_space_id), K(extent_space_type));
@@ -362,7 +361,7 @@ int ExtentSpaceManager::reference(const int64_t table_space_id,
   return ret;
 }
 
-int ExtentSpaceManager::get_readable_extent(ExtentId extent_id, ReadableExtent *readable_extent)
+int ExtentSpaceManager::get_readable_extent(ExtentId extent_id, IOExtent *&readable_extent)
 {
   int ret = Status::kOk;
   ExtentIOInfo io_info;
@@ -370,16 +369,13 @@ int ExtentSpaceManager::get_readable_extent(ExtentId extent_id, ReadableExtent *
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentSpaceManager should been inited first", K(ret));
-  } else if (IS_NULL(readable_extent)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(readable_extent));
   } else {
     SpinRLockGuard r_guard(io_info_map_lock_);
     auto iter = extent_io_info_map_.find(extent_id.id());
     if (extent_io_info_map_.end() == iter) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "unexpected error, the extent not exist", K(ret), K(extent_id));
-    } else if (FAILED(readable_extent->init(iter->second))) {
+    } else if (FAILED(init_extent(iter->second, readable_extent))) {
       SE_LOG(WARN, "fail to init readable extent", K(ret), K(io_info));
     } else {
       SE_LOG(DEBUG, "success to get readable extent", K(extent_id));
@@ -600,7 +596,7 @@ int ExtentSpaceManager::open_all_data_file()
     SE_LOG(WARN, "ExtentSpaceManager should been inited first", K(ret));
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < db_options_.db_paths.size(); ++i) {
-      if (i == OBJ_EXTENT_SPACE) {
+      if (i == OBJECT_EXTENT_SPACE) {
         // there is no file in object extent space.
         continue;
       }
@@ -806,6 +802,50 @@ int ExtentSpaceManager::clear_garbage_files()
   }
 
   garbage_files_.clear();
+  return ret;
+}
+
+int ExtentSpaceManager::init_extent(const ExtentIOInfo &io_info, IOExtent *&extent)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!io_info.is_valid())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(io_info));
+  } else if (FILE_EXTENT_SPACE == io_info.type_) {
+    FileIOExtent *file_extent = nullptr;
+    if (IS_NULL(file_extent = NEW_OBJECT(ModId::kIOExtent, FileIOExtent))) {
+      ret = Status::kMemoryLimit;
+      SE_LOG(WARN, "fail to allocate memory for FileIOExtent", K(ret));
+    } else if (FAILED(file_extent->init(io_info.extent_id_, io_info.unique_id_, io_info.fd_))) {
+      SE_LOG(WARN, "fail to init file extent", K(ret), K(io_info));
+    } else {
+      extent = file_extent;
+    }
+
+    // resource clean
+    if (FAILED(ret)) {
+      DELETE_OBJECT(ModId::kIOExtent, file_extent);
+    }
+  } else if (OBJECT_EXTENT_SPACE == io_info.type_) {
+    ObjectIOExtent *object_extent = nullptr;
+    if (IS_NULL(object_extent = NEW_OBJECT(ModId::kIOExtent, ObjectIOExtent))) {
+      ret = Status::kMemoryLimit;
+      SE_LOG(WARN, "fail to allocate memory for ObjectIOExtent", K(ret));
+    } else if (FAILED(object_extent->init(io_info.extent_id_, io_info.unique_id_, io_info.object_store_, io_info.bucket_))) {
+      SE_LOG(WARN, "fail to init object extent", K(ret), K(io_info));
+    } else {
+      extent = object_extent;
+    }
+
+    // resource clean
+    if (FAILED(ret)) {
+      DELETE_OBJECT(ModId::kIOExtent, object_extent);
+    }
+  } else {
+    se_assert(false);
+  }
+
   return ret;
 }
 

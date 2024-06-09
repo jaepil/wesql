@@ -134,8 +134,9 @@ DBOptions::DBOptions(const Options &options)
       table_cache_size(options.table_cache_size),
       auto_shrink_schedule_interval(options.auto_shrink_schedule_interval),
       estimate_cost_depth(options.estimate_cost_depth),
-      master_thread_compaction_enabled(
-          options.master_thread_compaction_enabled) {}
+      master_thread_compaction_enabled(options.master_thread_compaction_enabled),
+      persistent_cache_size(options.persistent_cache_size)
+{}
 
 void DBOptions::Dump() const {
   ImmutableDBOptions(*this).Dump();

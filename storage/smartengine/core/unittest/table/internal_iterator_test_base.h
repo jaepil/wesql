@@ -347,7 +347,7 @@ void InternalIteratorTestBase::open_extent_writer()
                         mini_tables_.table_space_id_,
                         tmp_factory->table_options().block_size,
                         tmp_factory->table_options().block_restart_interval,
-                        context_->icf_options_.env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                        context_->icf_options_.env->IsObjectStoreSupported() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
                         false /*use_column_format*/,
                         table::TableSchema(),
                         &internal_comparator_,

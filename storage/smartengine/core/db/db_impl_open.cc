@@ -15,6 +15,7 @@
 #endif
 #include <thread>
 
+#include "cache/persistent_cache.h"
 #include "db/debug_info.h"
 #include "db/replay_task.h"
 #include "db/replay_thread_pool.h"
@@ -1333,6 +1334,8 @@ Status DB::Open(const Options &options,
   if (IS_NULL(impl->table_cache_.get())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, table cache must not nullptr", K(ret));
+  } else if (FAILED(cache::PersistentCache::get_instance().init(impl->env_, dbname, impl->immutable_db_options_.persistent_cache_size))) {
+    SE_LOG(WARN, "fail to init PersistentCache", K(ret), K(dbname), "persistent_cache_size", impl->immutable_db_options_.persistent_cache_size);
   } else if (FAILED(StorageLogger::get_instance().init(impl->env_,
                                                        dbname,
                                                        impl->env_options_,

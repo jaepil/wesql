@@ -34,7 +34,7 @@ namespace storage
 {
 struct ChangeInfo;
 struct ExtentMeta;
-class WritableExtent;
+class IOExtent;
 } // namespace storage
 
 namespace table
@@ -135,7 +135,7 @@ private:
   int collect_migrating_block(const common::Slice &block,
                               const BlockHandle &block_handle,
                               const common::CompressionType &compress_type);
-  int migrate_block_cache(const storage::WritableExtent &extent);
+  int migrate_block_cache(const storage::IOExtent *extent);
   void calculate_block_checksum(const common::Slice &block, uint32_t &checksum);
 
 private:

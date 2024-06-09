@@ -154,9 +154,12 @@ int DataBlockIterator::update(const Slice &start, const Slice &end)
 {
   int ret = Status::kOk;
   int64_t pos = 0;
-  // TODO(Zhao Dongsheng): A strict implementation should have 'MetaDescriptor' provide
-  // a 'reset' or 'reuse' function.It's important to note whether the 'type_' field can
-  // be reset.
+  // TODO(Zhao Dongsheng): A strict implementation should have 'MetaDescriptor'
+  // provide a 'reset' or 'reuse' function.It's important that the 'type_'
+  // field can‘t be reset, because it includes the extent's property, like 
+  // MetaType.sequcence which is set at create_extent_index_iterator which
+  // represents the index of current reader in GeneralCompaction.reader_reps_
+  // (confused...)
   meta_descriptor_.block_info_.reset();
 
   if (FAILED(meta_descriptor_.block_info_.deserialize(end.data(), end.size(), pos))) {
@@ -351,10 +354,10 @@ int ExtSEIterator::create_current_iterator() {
 }
 
 void ExtSEIterator::prefetch_next_extent() {
-  table::ExtentReader *extent_reader = nullptr;
+  GeneralCompaction::PrefetchedExtent *prefetched_extent = nullptr;
   if (extent_index_ + 1 < extent_list_.size()) {
     int64_t next_extent_id = extent_list_.at(extent_index_ + 1).block_position_.first;
-    compaction_->prefetch_extent(next_extent_id, extent_reader);
+    compaction_->prefetch_extent(next_extent_id, prefetched_extent);
   }
 }
 
@@ -371,6 +374,7 @@ int ExtSEIterator::create_block_iter(const MetaDescriptor &meta) {
     current_data_block_handle_.reset();
     current_data_block_handle_.extent_id_ = cur_rep_.extent_id_;
     current_data_block_handle_.block_info_ = meta.block_info_;
+    current_data_block_handle_.aio_handle_.aio_req_ = cur_rep_.aio_handle_->aio_req_;
 
     ret = compaction_->create_data_block_iterator(cur_rep_.extent_reader_,
                                                   current_data_block_handle_,

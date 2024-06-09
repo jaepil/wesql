@@ -25,80 +25,80 @@ namespace storage
 class IOExtent
 {
 public:
-  IOExtent() : is_inited_(false), io_info_() {}
-  virtual ~IOExtent() {}
+  IOExtent();
+  virtual ~IOExtent();
 
-  virtual int init(const ExtentIOInfo &io_info);
-  virtual void reset();
-  virtual int prefetch(const int64_t offset, const int64_t size, util::AIOHandle *aio_handle) { return common::Status::kNotSupported; }
-  virtual int read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result) { return common::Status::kNotSupported; }
-  virtual int append(const common::Slice &data) { return common::Status::kNotSupported; }
-  virtual ExtentId get_extent_id() const { return io_info_.get_extent_id(); }
+  virtual int write(const common::Slice &data) = 0;
+  virtual int read(util::AIOHandle *aio_handle,
+                   int64_t offset,
+                   int64_t size,
+                   char *buf,
+                   common::Slice &result) = 0;
+  virtual int prefetch(util::AIOHandle *aio_handle, int64_t offset, int64_t size) = 0;
+  virtual ExtentId get_extent_id() const { return extent_id_; }
   virtual int64_t get_unique_id(char *id, const int64_t max_size) const;
 
-  DECLARE_AND_DEFINE_TO_STRING(KV_(io_info))
-protected:
-  bool is_aligned(const int64_t offset, const int64_t size, const char *buf) const;
-
+  DEFINE_PURE_VIRTUAL_CONSTRUCTOR_SIZE()
 protected:
   bool is_inited_;
-  ExtentIOInfo io_info_;
+  ExtentId extent_id_;
+  int64_t unique_id_; // for unique identify in cache
 };
 
-class WritableExtent : public IOExtent
+class FileIOExtent : public IOExtent
 {
 public:
-  WritableExtent() : curr_offset_(0) {}
-  virtual ~WritableExtent() override {}
+  FileIOExtent();
+  ~FileIOExtent() override;
 
-  virtual void reset() override;
-  virtual int append(const common::Slice &data) override;
+  int init(const ExtentId &extent_id, int64_t unique_id, int fd);
+  int write(const common::Slice &data) override;
+  int read(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, common::Slice &result) override;
+  int prefetch(util::AIOHandle *aio_handle, int64_t offset, int64_t size) override; 
 
+  DEFINE_OVERRIDE_CONSTRUCTOR_SIZE()
 private:
-  int direct_write(const int fd, const int64_t offset, const char *buf, const int64_t size);
-
-private:
-  int64_t curr_offset_;
-};
-
-class ReadableExtent : public IOExtent
-{
-public:
-  ReadableExtent() {}
-  virtual ~ReadableExtent() override {}
-
-  virtual int prefetch(const int64_t offset, const int64_t size, util::AIOHandle *aio_handle) override;
-  virtual int read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result) override;
+  inline int64_t get_base_offset() const { return (extent_id_.offset * storage::MAX_EXTENT_SIZE); }
+  // convert the offset int the extent to the offset in the data file.
+  int fill_aio_info(int64_t offset, int64_t size, util::AIOInfo &aio_info) const;
+  bool is_aligned(int64_t offset, int64_t size, const char *buf) const;
+  int align_to_direct_write(int fd, int64_t offset, const char *buf, int64_t size);
+  int direct_write(int fd, int64_t offset, const char *buf, int64_t size);
+  int sync_read(int64_t offset, int64_t size, char *buf, common::Slice &result);
+  int async_read(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, common::Slice &result);
+  int align_to_direct_read(int fd, int64_t offset, int64_t size, char *buf);
+  int direct_read(int fd, int64_t offset, int64_t size, char *buf);
 
 protected:
-  int sync_read(const int64_t offset, const int64_t size, char *buf, common::Slice &result);
-  int async_read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result);
-  // convert the offset int the extent to the offset in the data file.
-  int fill_aio_info(const int64_t offset, const int64_t size, util::AIOInfo &aio_info) const;
-
-private:
-  int align_to_direct_read(const int fd, const int64_t offset, const int64_t size, char *buf);
-  int direct_read(const int fd, const int64_t offset, const int64_t size, char *buf);
+  int fd_;
 };
 
-class FullPrefetchExtent : public ReadableExtent
+class ObjectIOExtent : public IOExtent
 {
 public:
-  FullPrefetchExtent() : aio_(nullptr), aio_req_() {}
-  virtual ~FullPrefetchExtent() override {}
+  ObjectIOExtent();
+  virtual ~ObjectIOExtent() override;
 
-  virtual int init(const ExtentIOInfo &io_info) override;
-  virtual void reset() override;
-  virtual int full_prefetch();
-  virtual int read(const int64_t offset, const int64_t size, char *buf, util::AIOHandle *aio_handle, common::Slice &result) override;
+  int init(const ExtentId &extent_id,
+           int64_t unique_id,
+           ::objstore::ObjectStore *object_store,
+           const std::string &bucket);
+  int write(const common::Slice &data) override;
+  int read(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, common::Slice &result) override;
+  int prefetch(util::AIOHandle *aio_handle, int64_t offset, int64_t size) override; 
 
+  DEFINE_OVERRIDE_CONSTRUCTOR_SIZE()
 private:
-  int reap();
+  int fill_aio_info(util::AIOHandle *aio_handle, int64_t offset, int64_t size, util::AIOInfo &aio_info);
+  int write_object(const char *data, int64_t data_size);
+  int read_object(int64_t offset, int64_t size, char *buf, common::Slice &result);
+  int read_persistent_cache(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, common::Slice &result);
+  int load_extent(cache::Cache::Handle **handle);
 
-private:
-  util::AIO *aio_;
-  util::AIOReq aio_req_;
+protected:
+  ::objstore::ObjectStore *object_store_;
+  std::string bucket_;
 };
 
-}  // storage
-}  // smartengine
+}  // namespace storage
+}  // namespace smartengine

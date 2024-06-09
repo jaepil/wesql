@@ -15,6 +15,7 @@
  */
 
 #include "util/aio_wrapper.h"
+#include "cache/persistent_cache.h"
 #include "util/time_interval.h"
 #include "util/misc_utility.h"
 
@@ -43,6 +44,11 @@ void AIOReq::reset()
   memset(&iocb_, 0, sizeof(iocb));
   status_ = common::Status::kInvalidArgument;
   aio_data_ = nullptr;
+  if (IS_NOTNULL(handle_)) {
+    assert(cache::PersistentCache::get_instance().is_enabled());
+    cache::PersistentCache::get_instance().release_handle(handle_);
+    handle_ = nullptr;
+  }
 }
 
 

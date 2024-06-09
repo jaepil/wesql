@@ -646,8 +646,8 @@ int FileExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
 {
   int ret = Status::kOk;
   ExtentIOInfo origin_io_info;
-  ReadableExtent origin_extent;
-  WritableExtent new_extent;
+  FileIOExtent origin_extent;
+  FileIOExtent new_extent;
   Slice extent_slice;
 
   if (UNLIKELY(!is_inited_)) {
@@ -658,19 +658,19 @@ int FileExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
     SE_LOG(WARN, "invalid argument", K(ret), KP(src_data_file), KP(extent_buf));
   } else if (FAILED(src_data_file->get_extent_io_info(origin_extent_id, origin_io_info))){
     SE_LOG(WARN, "fail to get extent io info", K(ret), K(origin_extent_id));
-  } else if (FAILED(origin_extent.init(origin_io_info))) {
+  } else if (FAILED(origin_extent.init(origin_io_info.extent_id_, origin_io_info.unique_id_, origin_io_info.fd_))) {
     SE_LOG(WARN, "fail to init origin extent", K(ret), K(origin_io_info));
   } else if (FAILED(allocate_extent(new_io_info))) {
     SE_LOG(WARN, "fail to allocate new extent", K(ret));
   } else if (new_io_info.extent_id_.id() >= origin_io_info.extent_id_.id()) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, the new extent should at the front", K(ret), K(origin_io_info), K(new_io_info));
-  } else if (FAILED(new_extent.init(new_io_info))) {
+  } else if (FAILED(new_extent.init(new_io_info.extent_id_, new_io_info.unique_id_, new_io_info.fd_))) {
     SE_LOG(WARN, "fail to init new extent", K(ret), K(new_io_info));
-  } else if (FAILED(origin_extent.read(0, origin_io_info.extent_size_, extent_buf, nullptr /*aio_handle=*/, extent_slice))) {
+  } else if (FAILED(origin_extent.read(nullptr /*aio_handle=*/, 0, origin_io_info.extent_size_, extent_buf, extent_slice))) {
     SE_LOG(WARN, "fail to read origin extent", K(ret), K(origin_extent_id));
-  } else if (FAILED(new_extent.append(extent_slice))) {
-    SE_LOG(WARN, "fail to append new extent", K(ret), K(new_extent));
+  } else if (FAILED(new_extent.write(extent_slice))) {
+    SE_LOG(WARN, "fail to append new extent", K(ret), K(new_io_info));
   } else {
     SE_LOG(INFO, "success to move one extent to front", K(origin_extent_id), K(new_io_info));
   }

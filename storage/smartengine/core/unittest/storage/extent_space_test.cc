@@ -66,7 +66,7 @@ class ExtentSpaceTest : public testing::TestWithParam<bool> {
 
   void build_extent_space_args(CreateExtentSpaceArgs &args) {
     args.table_space_id_ = 1;
-    args.extent_space_type_ = use_obj_ ? OBJ_EXTENT_SPACE : FILE_EXTENT_SPACE;
+    args.extent_space_type_ = use_obj_ ? OBJECT_EXTENT_SPACE : FILE_EXTENT_SPACE;
     args.db_path_.path = use_obj_ ? test_local_obs_bucket : test_dir;
     args.db_path_.target_size = use_obj_ ? UINT64_MAX : 1024 * 1024 * 1024;
   }
@@ -141,15 +141,15 @@ TEST_P(ExtentSpaceTest, file_extent_allocate_and_recycle) {
   for (int64_t i = 1; Status::kOk == ret && i < 5120; ++i) {
     ret = extent_space_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_EQ(0, io_info.get_extent_id().file_number);
-    ASSERT_EQ(i, io_info.get_extent_id().offset);
+    ASSERT_EQ(0, io_info.extent_id_.file_number);
+    ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int64_t i = 1; Status::kOk == ret && i < 5120; ++i) {
     ret = extent_space_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_EQ(1, io_info.get_extent_id().file_number);
-    ASSERT_EQ(i, io_info.get_extent_id().offset);
+    ASSERT_EQ(1, io_info.extent_id_.file_number);
+    ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   // recycle extent, which datafile not exist
@@ -171,8 +171,8 @@ TEST_P(ExtentSpaceTest, file_extent_allocate_and_recycle) {
   ASSERT_EQ(Status::kOk, ret);
   ExtentIOInfo new_io_info;
   ret = extent_space_->allocate(new_io_info);
-  ASSERT_EQ(1, new_io_info.get_extent_id().file_number);
-  ASSERT_EQ(1, new_io_info.get_extent_id().offset);
+  ASSERT_EQ(1, new_io_info.extent_id_.file_number);
+  ASSERT_EQ(1, new_io_info.extent_id_.offset);
 
   for (int32_t i = 1; Status::kOk == ret && i <= 256; ++i) {
     extent_id.file_number = 0;
@@ -191,22 +191,22 @@ TEST_P(ExtentSpaceTest, file_extent_allocate_and_recycle) {
   for (int32_t i = 1; Status::kOk == ret && i <= 256; ++i) {
     ret = extent_space_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_EQ(0, io_info.get_extent_id().file_number);
-    ASSERT_EQ(i, io_info.get_extent_id().offset);
+    ASSERT_EQ(0, io_info.extent_id_.file_number);
+    ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int32_t i = 1; Status::kOk == ret && i <= 256; ++i) {
     ret = extent_space_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_EQ(1, io_info.get_extent_id().file_number);
-    ASSERT_EQ(i, io_info.get_extent_id().offset);
+    ASSERT_EQ(1, io_info.extent_id_.file_number);
+    ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int32_t i = 1; Status::kOk == ret && i <= 512; ++i) {
     ret = extent_space_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_EQ(2, io_info.get_extent_id().file_number);
-    ASSERT_EQ(i, io_info.get_extent_id().offset);
+    ASSERT_EQ(2, io_info.extent_id_.file_number);
+    ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 }
 
@@ -232,15 +232,15 @@ TEST_P(ExtentSpaceTest, obj_extetn_allocate_and_recycle) {
   for (int64_t i = 1; i <= 5120; ++i) {
     ret = extent_space_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_LT(io_info.get_extent_id().file_number, 0);
-    ASSERT_EQ(i, io_info.get_extent_id().offset);
+    ASSERT_LT(io_info.extent_id_.file_number, 0);
+    ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int64_t i = 1; i <= 5120; ++i) {
     ret = extent_space_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_LT(io_info.get_extent_id().file_number, 0);
-    ASSERT_EQ(i + 5120, io_info.get_extent_id().offset);
+    ASSERT_LT(io_info.extent_id_.file_number, 0);
+    ASSERT_EQ(i + 5120, io_info.extent_id_.offset);
   }
 
   int correct_fd = io_info.extent_id_.file_number;
@@ -265,8 +265,8 @@ TEST_P(ExtentSpaceTest, obj_extetn_allocate_and_recycle) {
   ASSERT_EQ(Status::kOk, ret);
   ExtentIOInfo new_io_info;
   ret = extent_space_->allocate(new_io_info);
-  ASSERT_LT(new_io_info.get_extent_id().file_number, 0);
-  ASSERT_EQ(next_exent_id, new_io_info.get_extent_id().offset);
+  ASSERT_LT(new_io_info.extent_id_.file_number, 0);
+  ASSERT_EQ(next_exent_id, new_io_info.extent_id_.offset);
 
   for (int32_t i = 2; i <= next_exent_id; ++i) {
     extent_id.offset = i;

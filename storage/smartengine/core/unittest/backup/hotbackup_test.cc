@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#ifndef ROCKSDB_LIT
-
 #include "backup/hotbackup_impl.h"
 #include "util/testharness.h"
 #include "port/stack_trace.h"
@@ -107,10 +105,9 @@ void HotbackupTest::replay_sst_files(const std::string &backup_dir,
     } else {
       fd = iter->second;
     }
-    ExtentIOInfo io_info(fd, extent_id, MAX_EXTENT_SIZE, 16 * 1024 /*block_size=*/, extent_id.id());
-    WritableExtent writable_extent;
-    ASSERT_EQ(Status::kOk, writable_extent.init(io_info));
-    ASSERT_EQ(Status::kOk, writable_extent.append(Slice(extent_buf, storage::MAX_EXTENT_SIZE)));
+    FileIOExtent writable_extent;
+    ASSERT_EQ(Status::kOk, writable_extent.init(extent_id, extent_id.id(), fd));
+    ASSERT_EQ(Status::kOk, writable_extent.write(Slice(extent_buf, storage::MAX_EXTENT_SIZE)));
     SE_LOG(INFO, "replay extent", K(extent_id));
   }
   for (auto &iter : fds_map) {
@@ -155,10 +152,9 @@ void HotbackupTest::copy_extents(const std::string &backup_tmp_dir_path,
       fd = iter->second;
     }
     Slice extent_result;
-    ExtentIOInfo io_info(fd, extent_id, storage::MAX_EXTENT_SIZE, 16 * 1024, extent_id.id());
-    ReadableExtent readable_extent;
-    ASSERT_EQ(Status::kOk, readable_extent.init(io_info));
-    ASSERT_EQ(Status::kOk, readable_extent.read(0, storage::MAX_EXTENT_SIZE, extent_buf, nullptr /*aio_handle=*/, extent_result));
+    FileIOExtent readable_extent;
+    ASSERT_EQ(Status::kOk, readable_extent.init(extent_id, extent_id.id(), fd));
+    ASSERT_EQ(Status::kOk, readable_extent.read(nullptr /*aio_handle=*/, 0, storage::MAX_EXTENT_SIZE, extent_buf, extent_result));
     ASSERT_OK(extent_writer->Append(extent_result));
     SE_LOG(INFO, "copy extent", K(extent_id));
   }
@@ -670,5 +666,3 @@ int main(int argc, char **argv)
 	smartengine::util::test::init_logger(info_log_path.c_str(), smartengine::logger::INFO_LEVEL);
   return RUN_ALL_TESTS();
 }
-
-#endif // ROCKSDB_LIT

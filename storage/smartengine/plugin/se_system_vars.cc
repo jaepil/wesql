@@ -1474,6 +1474,14 @@ static MYSQL_SYSVAR_BOOL(master_thread_compaction_enabled,
                          nullptr, se_set_master_thread_compaction_enabled,
                          se_db_options.master_thread_compaction_enabled);
 
+static MYSQL_SYSVAR_ULONG(
+    persistent_cache_size,
+    se_db_options.persistent_cache_size,
+    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
+    "DBOptions::persistent_cache_size for SE",
+    nullptr, nullptr,
+    se_db_options.persistent_cache_size, 0, ULONG_MAX, 0);
+
 ulong se_thd_lock_wait_timeout(THD *thd)
 {
   return THDVAR(thd, lock_wait_timeout);
@@ -1596,6 +1604,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(scan_add_blocks_limit),
     MYSQL_SYSVAR(master_thread_monitor_interval_ms),
     MYSQL_SYSVAR(master_thread_compaction_enabled),
+    MYSQL_SYSVAR(persistent_cache_size),
     nullptr};
 
 SYS_VAR **se_system_vars_export = se_system_vars_internal;

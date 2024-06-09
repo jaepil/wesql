@@ -20,6 +20,7 @@
 #include <libaio.h>
 #include <unistd.h>
 #include <unordered_set>
+#include "cache/cache.h"
 #include "logger/log_module.h"
 #include "monitoring/query_perf_context.h"
 #include "util/dio_helper.h"
@@ -197,11 +198,14 @@ struct AIOReq
   int status_;
   // extra user attached info, checked on completion, like iocb.data
   void *aio_data_;
+  // persistent cache handle
+  cache::Cache::Handle *handle_;
 
   AIOReq() : aio_info_(),
              aio_buf_(),
              status_(common::Status::kInvalidArgument),
-             aio_data_(nullptr)
+             aio_data_(nullptr),
+             handle_(nullptr)
   {
     memset(&iocb_, 0, sizeof(iocb));
   }

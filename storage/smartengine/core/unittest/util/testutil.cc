@@ -293,6 +293,24 @@ RandomInt64Generator::RandomInt64Generator(const int64_t lower_bound, const int6
 }
 
 int64_t RandomInt64Generator::generate() { return distribution_(generator_); }
+
+std::string RandomStringGenerator::generate(int64_t size)
+{
+  // use current time as seed
+  unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+  std::mt19937_64 generator(seed);
+  std::uniform_int_distribution<int> distribution(32, 126); // ASCII visible range
+
+  // generate
+  std::string result;
+  result.reserve(size);
+  for (int64_t i = 0; i < size; ++i) {
+      result.push_back(static_cast<char>(distribution(generator)));
+  }
+
+  return result;
+}
+
 }  // namespace test
 }  // namespace util
 }  // namespace smartengine

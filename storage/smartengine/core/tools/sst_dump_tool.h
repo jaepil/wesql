@@ -37,7 +37,7 @@ private:
 
 private:
   db::InternalKeyComparator internal_comparator_;
-  storage::ReadableExtent extent_;
+  storage::FileIOExtent extent_;
 };
 
 class SSTDumpTool {

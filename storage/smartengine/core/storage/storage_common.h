@@ -228,7 +228,7 @@ struct ExtentStats
 
 enum ExtentSpaceType {
   FILE_EXTENT_SPACE = 0,
-  OBJ_EXTENT_SPACE = 1,
+  OBJECT_EXTENT_SPACE = 1,
   MAX_EXTENT_SPACE
 };
 
@@ -452,123 +452,85 @@ struct ShrinkInfo
 
 struct ExtentIOInfo
 {
-  int fd_;
+  ExtentSpaceType type_;
   ExtentId extent_id_;
   int64_t extent_size_;
-  int64_t block_size_;
   int64_t unique_id_;
-  ::objstore::ObjectStore *objstore_;
+  int fd_;
+  ::objstore::ObjectStore *object_store_;
   std::string bucket_;
 
   ExtentIOInfo()
-      : fd_(-1),
+      : type_(FILE_EXTENT_SPACE),
         extent_id_(),
         extent_size_(0),
-        block_size_(0),
         unique_id_(0),
-        objstore_(nullptr),
+        fd_(-1),
+        object_store_(nullptr),
         bucket_()
   {
   }
   ExtentIOInfo(const ExtentIOInfo &) = default;
-  ExtentIOInfo(const int fd,
-               const ExtentId extent_id,
-               int64_t extent_size,
-               int64_t block_size,
-               int64_t unique_id)
-      : fd_(fd),
-        extent_id_(extent_id),
-        extent_size_(extent_size),
-        block_size_(block_size),
-        unique_id_(unique_id),
-        objstore_(nullptr),
-        bucket_()
-  {
-  }
-  ExtentIOInfo(const int fd,
-               const ExtentId extent_id,
-               int64_t extent_size,
-               int64_t block_size,
-               int64_t unique_id,
-               ::objstore::ObjectStore *objstore,
-               std::string_view bucket)
-      : fd_(fd),
-        extent_id_(extent_id),
-        extent_size_(extent_size),
-        block_size_(block_size),
-        unique_id_(unique_id),
-        objstore_(objstore),
-        bucket_(bucket)
-  {
-  }
-  ~ExtentIOInfo()
-  {
-  }
+  ~ExtentIOInfo() {}
   ExtentIOInfo &operator=(const ExtentIOInfo &) = default;
 
   bool is_valid() const
   {
-    return ((objstore_ != nullptr && fd_ < 0) ||
-            (objstore_ == nullptr && fd_ >= 0)) &&
-           extent_size_ > 0 && block_size_ > 0 && unique_id_ >= 0;
+    bool res = (FILE_EXTENT_SPACE == type_ || OBJECT_EXTENT_SPACE == type_) &&
+                unique_id_ >= 0 && extent_size_ > 0;
+
+    if (res) {
+      res = (FILE_EXTENT_SPACE == type_ && fd_ >= 0) ||
+            (OBJECT_EXTENT_SPACE == type_ && IS_NOTNULL(object_store_)&&
+             fd_ < 0 && !bucket_.empty());
+    }
+
+    return res;
   }
 
   void reset()
   {
-    fd_ = -1;
+    type_ = FILE_EXTENT_SPACE;
     extent_id_.reset();
     extent_size_ = 0;
-    block_size_ = 0;
     unique_id_ = 0;
-    objstore_ = nullptr;
+    fd_ = -1;
+    object_store_ = nullptr;
     bucket_.clear();
   }
-  void set_param(const int fd,
-                 const ExtentId extent_id,
-                 const int64_t extent_size,
-                 const int64_t block_size,
-                 const int64_t unique_id)
+
+  void set_param(ExtentSpaceType type,
+                 const ExtentId &extent_id,
+                 int64_t extent_size,
+                 int64_t unique_id,
+                 int fd)
   {
-    fd_ = fd;
+    type_ = type;
     extent_id_ = extent_id;
     extent_size_ = extent_size;
-    block_size_ = block_size;
     unique_id_ = unique_id;
+    fd_ = fd;
   }
-  void set_param(const int fd,
-                 const ExtentId extent_id,
-                 const int64_t extent_size,
-                 const int64_t block_size,
-                 const int64_t unique_id,
-                 ::objstore::ObjectStore *objstore,
-                 std::string_view bucket) {
-    fd_ = fd;
+
+  void set_param(ExtentSpaceType type,
+                 const ExtentId &extent_id,
+                 int64_t extent_size,
+                 int64_t unique_id,
+                 int fd,
+                 ::objstore::ObjectStore *object_store,
+                 const std::string bucket)
+  {
+    type_ = type;
     extent_id_ = extent_id;
     extent_size_ = extent_size;
-    block_size_ = block_size;
     unique_id_ = unique_id;
-    objstore_ = objstore;
+    fd_ = fd;
+    object_store_ = object_store;
     bucket_ = bucket;
   }
 
-  void set_fd(const int fd) { fd_ = fd; }
-  void set_extent_id(const ExtentId extent_id) { extent_id_ = extent_id; }
-  void set_extent_size(const int64_t extent_size) { extent_size_ = extent_size; }
-  void set_block_size(const int64_t block_size) { block_size_ = block_size; }
-  void set_unique_id(const int64_t unique_id) { unique_id_ = unique_id; }
-  void set_objstore(::objstore::ObjectStore *objstore) { objstore_ = objstore; }
-  void set_bucket(const std::string_view bucket) { bucket_ = bucket; }
-  int64_t get_offset() const { return extent_id_.offset * extent_size_; }
-  int get_fd() const { return fd_; }
-  ExtentId get_extent_id() const { return extent_id_; }
-  int64_t get_extent_size() const { return extent_size_; }
-  int64_t get_block_size() const { return block_size_; }
-  int64_t get_unique_id() const { return unique_id_; }
-  ::objstore::ObjectStore *get_objstore() const { return objstore_; }
-  const std::string &get_bucket() const { return bucket_; }
-
-  DECLARE_AND_DEFINE_TO_STRING(KV_(fd), KV_(extent_id), KV_(extent_size),
-                               KV_(block_size), KV_(unique_id), KVP_(objstore))
+  DECLARE_AND_DEFINE_TO_STRING(KVE_(type), KV_(extent_id), KV_(extent_size),
+      KV_(unique_id), KV_(fd), KVP_(object_store), KV_(bucket))
 };
 
 struct DataFileStatistics
@@ -638,8 +600,8 @@ struct EstimateCostStats {
 inline constexpr int32_t kObjStoreFDBit = 31;
 inline constexpr int64_t kMaxTableSpaceId = 1LL << kObjStoreFDBit;
 
-inline int32_t convert_table_space_to_fdfn(int64_t table_space_id) {
-  assert(static_cast<int64_t>(table_space_id) < kMaxTableSpaceId);
+inline int32_t convert_table_space_to_fd(uint64_t table_space_id) {
+  assert(table_space_id < kMaxTableSpaceId);
   int32_t fd = table_space_id;
   // make fd negative, so that it can be distinguished from normal file number.
   return fd | (1 << kObjStoreFDBit);

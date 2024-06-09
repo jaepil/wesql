@@ -144,7 +144,7 @@ int GeneralCompaction::open_extent() {
                                  context_.table_space_id_,
                                  tmp_factory->table_options().block_size,
                                  tmp_factory->table_options().block_restart_interval,
-                                 context_.cf_options_->env->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                                 context_.cf_options_->env->IsObjectStoreSupported() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
                                  cf_desc_.use_column_format_,
                                  cf_desc_.table_schema_,
                                  context_.internal_comparator_,
@@ -356,31 +356,36 @@ int GeneralCompaction::create_extent_index_iterator(const MetaDescriptor &extent
                                                     ExtSEIterator::ReaderRep &rep)
 {
   int ret = Status::kOk;
+  PrefetchedExtent *prefetched_extent = nullptr;
 
-  if (IS_NULL(rep.extent_reader_ = get_prefetched_extent(extent_desc.block_position_.first)) &&
-      FAILED(prefetch_extent(extent_desc.block_position_.first, rep.extent_reader_))) {
+  if (IS_NULL(prefetched_extent = get_prefetched_extent(extent_desc.block_position_.first)) &&
+      FAILED(prefetch_extent(extent_desc.block_position_.first, prefetched_extent))) {
     COMPACTION_LOG(WARN, "fail to get prefetched extent", K(ret), K(extent_desc));
-  } else if (IS_NULL(rep.index_iterator_ = MOD_NEW_OBJECT(ModId::kCompaction, RowBlockIterator))) {
-    ret = Status::kMemoryLimit;
-    COMPACTION_LOG(WARN, "fail to allocate memory for index block iterator", K(ret));
-  } else if (FAILED(rep.extent_reader_->setup_index_block_iterator(rep.index_iterator_))) {
-    COMPACTION_LOG(WARN, "fail to setup index block iterator", K(ret));
   } else {
-    iterator_index = reader_reps_.size();
-    rep.extent_id_ = extent_desc.block_position_.first;
-    MetaType meta_type(MetaType::SSTable,
-                       MetaType::DataBlock,
-                       MetaType::InternalKey,
-                       extent_desc.type_.level_,
-                       extent_desc.type_.way_,
-                       iterator_index);
-    if (IS_NULL(rep.block_iter_ = MOD_NEW_OBJECT(ModId::kCompaction, DataBlockIterator, meta_type, rep.index_iterator_))) {
+    rep.extent_reader_ = prefetched_extent->reader_;
+    rep.aio_handle_ = &(prefetched_extent->aio_handle_);
+    if (IS_NULL(rep.index_iterator_ = MOD_NEW_OBJECT(ModId::kCompaction, RowBlockIterator))) {
       ret = Status::kMemoryLimit;
-      COMPACTION_LOG(WARN, "fail to allocate memory for data block iterator", K(ret));
+      COMPACTION_LOG(WARN, "fail to allocate memory for index block iterator", K(ret));
+    } else if (FAILED(rep.extent_reader_->setup_index_block_iterator(rep.index_iterator_))) {
+      COMPACTION_LOG(WARN, "fail to setup index block iterator", K(ret));
     } else {
-      stats_.record_stats_.total_input_bytes += rep.extent_reader_->get_data_size();
-      iterator = rep.block_iter_;
-      reader_reps_.emplace_back(rep);
+      iterator_index = reader_reps_.size();
+      rep.extent_id_ = extent_desc.block_position_.first;
+      MetaType meta_type(MetaType::SSTable,
+                         MetaType::DataBlock,
+                         MetaType::InternalKey,
+                         extent_desc.type_.level_,
+                         extent_desc.type_.way_,
+                         iterator_index);
+      if (IS_NULL(rep.block_iter_ = MOD_NEW_OBJECT(ModId::kCompaction, DataBlockIterator, meta_type, rep.index_iterator_))) {
+        ret = Status::kMemoryLimit;
+        COMPACTION_LOG(WARN, "fail to allocate memory for data block iterator", K(ret));
+      } else {
+        stats_.record_stats_.total_input_bytes += rep.extent_reader_->get_data_size();
+        iterator = rep.block_iter_;
+        reader_reps_.emplace_back(rep);
+      }
     }
   }
 
@@ -401,18 +406,26 @@ int GeneralCompaction::destroy_extent_index_iterator(const int64_t iterator_inde
 {
   int ret = Status::kOk;
   int64_t erase_count = 0;
+  PrefetchedExtent *prefetched_extent = nullptr;
 
   if (iterator_index < (int64_t)reader_reps_.size()) {
     ExtSEIterator::ReaderRep &rep = reader_reps_[iterator_index];
     if (0 != rep.extent_id_) {
-      if (1 != (erase_count = prefetched_extents_.erase(rep.extent_id_))) {
+      auto iter = prefetched_extents_.find(rep.extent_id_);
+      if (prefetched_extents_.end() == iter) {
         ret = Status::kErrorUnexpected;
-        COMMON_LOG(WARN, "fail to erase prefetched extent", K(ret), 
-            K(erase_count), "extent_id", ExtentId(rep.extent_id_));
-      }
-
-      if (IS_NOTNULL(rep.extent_reader_)) {
-        MOD_DELETE_OBJECT(ExtentReader, rep.extent_reader_);
+        SE_LOG(WARN, "the prefetched extent must exist", K(ret), "extent_id", ExtentId(rep.extent_id_));
+      } else if (IS_NULL(prefetched_extent = iter->second)) {
+        ret = Status::kErrorUnexpected;
+        SE_LOG(WARN, "the prefetched extent must not be nullptr", K(ret), "extent_id", ExtentId(rep.extent_id_));
+      } else {
+        MOD_DELETE_OBJECT(ExtentReader, prefetched_extent->reader_);
+        MOD_DELETE_OBJECT(PrefetchedExtent, prefetched_extent);
+        if (1 != (erase_count = prefetched_extents_.erase(rep.extent_id_))) {
+          ret = Status::kErrorUnexpected;
+          COMMON_LOG(WARN, "fail to erase prefetched extent", K(ret), 
+              K(erase_count), "extent_id", ExtentId(rep.extent_id_));
+        }
       }
 
       if (IS_NOTNULL(rep.index_iterator_)) {
@@ -661,45 +674,55 @@ int GeneralCompaction::run() {
   return ret;
 }
 
-int GeneralCompaction::prefetch_extent(int64_t id, ExtentReader *&extent_reader)
+int GeneralCompaction::prefetch_extent(int64_t id, PrefetchedExtent *&prefetched_extent)
 {
   int ret = Status::kOk;
   ExtentId extent_id(id);
   /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
   ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory*>(context_.cf_options_->table_factory);
   Cache *block_cache = tmp_factory->table_options().block_cache.get();
-  ExtentReaderArgs extent_reader_args(extent_id, true, context_.internal_comparator_, block_cache);
-  extent_reader = nullptr;
+  ExtentReaderArgs extent_reader_args(extent_id, context_.internal_comparator_, block_cache);
 
-  if (IS_NULL(extent_reader = MOD_NEW_OBJECT(ModId::kExtentReader, ExtentReader))) {
+  if (IS_NULL(prefetched_extent = MOD_NEW_OBJECT(ModId::kCompaction, PrefetchedExtent))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for PrefetchedExtent", K(ret));
+  } else if (IS_NULL(prefetched_extent->reader_ = MOD_NEW_OBJECT(ModId::kExtentReader, ExtentReader))) {
     ret = Status::kMemoryLimit;
     COMPACTION_LOG(WARN, "fail to allocate memory for ExtentReader", K(ret));
-  } else if (FAILED(extent_reader->init(extent_reader_args))) {
+  } else if (FAILED(prefetched_extent->reader_->init(extent_reader_args))) {
     COMPACTION_LOG(WARN, "fail to init extent reader", K(ret), K(extent_reader_args));
   } else {
-    prefetched_extents_.insert(std::make_pair(id, extent_reader));
+    prefetched_extent->aio_handle_.aio_req_.reset(new AIOReq());
+    if (FAILED(prefetched_extent->reader_->do_io_prefetch(0, storage::MAX_EXTENT_SIZE, &(prefetched_extent->aio_handle_)))) {
+      COMPACTION_LOG(WARN, "fail to prefetch the extent", K(extent_id));
+    } else {
+      prefetched_extents_.insert(std::make_pair(id, prefetched_extent));
+    }
   }
 
   // Resource clean
   if (FAILED(ret)) {
-    if (IS_NOTNULL(extent_reader)) {
-      MOD_DELETE_OBJECT(ExtentReader, extent_reader);
+    if (IS_NOTNULL(prefetched_extent)) {
+      if (IS_NOTNULL(prefetched_extent->reader_)) {
+        MOD_DELETE_OBJECT(ExtentReader, prefetched_extent->reader_);
+      }
+      MOD_DELETE_OBJECT(PrefetchedExtent, prefetched_extent);
     }
   }
 
   return ret;
 }
 
-ExtentReader *GeneralCompaction::get_prefetched_extent(int64_t extent_id) const
+GeneralCompaction::PrefetchedExtent *GeneralCompaction::get_prefetched_extent(int64_t extent_id) const
 {
-  ExtentReader *extent_reader = nullptr;
-  std::unordered_map<int64_t, ExtentReader*>::const_iterator iter =
+  PrefetchedExtent *prefetched_extent = nullptr;
+  std::unordered_map<int64_t, PrefetchedExtent*>::const_iterator iter =
       prefetched_extents_.find(extent_id);
   if (iter != prefetched_extents_.end()) {
-    extent_reader = iter->second;
-    se_assert(IS_NOTNULL(extent_reader));
+    prefetched_extent = iter->second;
+    se_assert(IS_NOTNULL(prefetched_extent));
   }
-  return extent_reader;
+  return prefetched_extent;
 }
 
 int GeneralCompaction::cleanup() {
@@ -738,7 +761,8 @@ void GeneralCompaction::clear_current_readers() {
   reader_reps_.clear();
   for (auto &item : prefetched_extents_) {
     if (nullptr != item.second) {
-      MOD_DELETE_OBJECT(ExtentReader, item.second);
+      MOD_DELETE_OBJECT(ExtentReader, item.second->reader_);
+      MOD_DELETE_OBJECT(PrefetchedExtent, item.second);
     }
   }
   prefetched_extents_.clear();

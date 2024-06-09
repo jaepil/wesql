@@ -43,8 +43,9 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions &options)
       allow_2pc(options.allow_2pc),
       row_cache(options.row_cache),
       avoid_flush_during_recovery(options.avoid_flush_during_recovery),
-      table_cache_size(options.table_cache_size) {
-}
+      table_cache_size(options.table_cache_size),
+      persistent_cache_size(options.persistent_cache_size)
+{}
 
 void ImmutableDBOptions::Dump() const {
   __SE_LOG(INFO, "                                    Options.env: %p", env);
@@ -75,6 +76,7 @@ void ImmutableDBOptions::Dump() const {
   __SE_LOG(INFO, "                              Options.row_cache: %p", row_cache.get());
   __SE_LOG(INFO, "            Options.avoid_flush_during_recovery: %d", avoid_flush_during_recovery);
   __SE_LOG(INFO, "                       Options.table_cache_size: %d", table_cache_size);
+  __SE_LOG(INFO, "                  Options.persistent_cache_size: %d", persistent_cache_size);
 }
 
 MutableDBOptions::MutableDBOptions()

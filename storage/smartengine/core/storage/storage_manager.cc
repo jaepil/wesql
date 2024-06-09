@@ -15,6 +15,7 @@
  */
 
 #include "storage/storage_manager.h"
+#include "cache/persistent_cache.h"
 #include "db/internal_stats.h"
 #include "db/table_cache.h"
 #include "monitoring/query_perf_context.h"
@@ -1656,10 +1657,20 @@ int StorageManager::do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery
     if (!for_recovery) {
       //evict from table cache
       db::TableCache::evict(table_cache_, extent_meta->extent_id_.id());
-      if (FAILED(ExtentSpaceManager::get_instance().recycle(extent_meta->table_space_id_,
-                                                            extent_meta->extent_space_type_,
-                                                            extent_meta->extent_id_))) {
-        SE_LOG(WARN, "fail to recycle extent", K(ret));
+      //evict from persistent cache
+      if (cache::PersistentCache::get_instance().is_enabled()) {
+        if (FAILED(cache::PersistentCache::get_instance().evict(extent_meta->extent_id_))) {
+          SE_LOG(WARN, "fail to recycle from persistent cache", K(ret), K(*extent_meta));
+          se_assert(false);
+        }
+      }
+
+      if (SUCCED(ret)) {
+        if (FAILED(ExtentSpaceManager::get_instance().recycle(extent_meta->table_space_id_,
+                                                              extent_meta->extent_space_type_,
+                                                              extent_meta->extent_id_))) {
+          SE_LOG(WARN, "fail to recycle extent", K(ret));
+        }
       }
     } else {
       if (FAILED(ExtentMetaManager::get_instance().recycle_meta(extent_meta->extent_id_))) {

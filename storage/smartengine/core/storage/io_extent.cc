@@ -16,105 +16,176 @@
 
 #include "storage/io_extent.h"
 #include <unistd.h>
+#include "cache/persistent_cache.h"
 #include "util/misc_utility.h"
 
 namespace smartengine
 {
-using namespace util;
+using namespace cache;
 using namespace common;
+using namespace memory;
 using namespace table;
-
-namespace table
-{
-extern const uint64_t kExtentBasedTableMagicNumber;
-}
+using namespace util;
 
 namespace storage
 {
 
-int IOExtent::init(const ExtentIOInfo &io_info)
+IOExtent::IOExtent()
+    : is_inited_(false),
+      extent_id_(),
+      unique_id_(0)
+{}
+
+IOExtent::~IOExtent() {}
+
+
+int64_t IOExtent::get_unique_id(char *id, const int64_t max_size) const
+{
+  int64_t len = std::min(static_cast<int64_t>(sizeof(unique_id_)), max_size);
+  memcpy(id, (char *)(&(unique_id_)), len);
+  return len;
+}
+
+FileIOExtent::FileIOExtent() : fd_(-1) {}
+
+FileIOExtent::~FileIOExtent() {}
+
+int FileIOExtent::init(const ExtentId &extent_id, int64_t unique_id, int fd)
 {
   int ret = Status::kOk;
 
   if (UNLIKELY(is_inited_)) {
     ret = Status::kInitTwice;
-    SE_LOG(WARN, "the extent has been inited", K(ret), K(io_info));
-  } else if (UNLIKELY(!io_info.is_valid())) {
+    SE_LOG(WARN, "FileIOExtent has been inited", K(ret));
+  } else if (UNLIKELY(unique_id < 0) || UNLIKELY(fd < 0)) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(io_info));
+    SE_LOG(WARN, "invalid argument", K(ret), K(unique_id), K(fd));
   } else {
-    io_info_ = io_info;
+    extent_id_ = extent_id;
+    unique_id_ = unique_id;
+    fd_ = fd;
+
     is_inited_ = true;
   }
 
   return ret;
 }
 
-void IOExtent::reset()
+int FileIOExtent::write(const common::Slice &data)
 {
-  is_inited_ = false;
-  io_info_.reset();
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "FileIOExtent has not been inited", K(ret));
+  } else if (UNLIKELY(data.empty()) || UNLIKELY(data.size() > storage::MAX_EXTENT_SIZE)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(data), "size", data.size());
+  } else if (UNLIKELY(!DIOHelper::is_aligned(data.size()))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "unexpected error, the writing data is not aligned", K(ret), "size", data.size());
+  } else if (DIOHelper::is_aligned(reinterpret_cast<std::uintptr_t>(data.data()))) {
+    if (FAILED(direct_write(fd_, get_base_offset(), data.data(), data.size()))) {
+      SE_LOG(WARN, "fail to write file", K(ret), K_(extent_id), K_(fd), "size", data.size());
+    }
+  } else if (FAILED(align_to_direct_write(fd_, get_base_offset(), data.data(), data.size()))) {
+    SE_LOG(WARN, "fail to align to direct write", K(ret));
+  }
+
+  return ret;
 }
 
-int64_t IOExtent::get_unique_id(char *id, const int64_t max_size) const
+int FileIOExtent::read(AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, Slice &result)
 {
-  int64_t len = std::min(static_cast<int64_t>(sizeof(io_info_.unique_id_)), max_size);
-  memcpy(id, (char *)(&(io_info_.unique_id_)), len);
-  return len;
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "FileIOExtent has not been inited", K(ret));
+  } else if (UNLIKELY(offset < 0) || UNLIKELY(size <= 0) || IS_NULL(buf)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(offset), K(size), KP(buf));
+  } else if (UNLIKELY(offset + size > storage::MAX_EXTENT_SIZE)) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "the range to read is overflow", K(ret), K(offset), K(size));
+  } else {
+    if (IS_NULL(aio_handle)) {
+      // Sync read
+      if (FAILED(sync_read(offset, size, buf, result))) {
+        SE_LOG(WARN, "fail to sync read", K(ret),
+            K_(extent_id), K_(fd), K(offset), K(size));
+      }
+    } else {
+      // Async read
+      if (FAILED(async_read(aio_handle, offset, size, buf, result))) {
+        SE_LOG(WARN, "fail to async read", K(result),
+            K_(extent_id), K_(fd), K(offset), K(size));
+      }
+    }
+  }
+
+  return ret;
 }
-bool IOExtent::is_aligned(const int64_t offset, const int64_t size, const char *buf) const
+
+int FileIOExtent::prefetch(util::AIOHandle *aio_handle, int64_t offset, int64_t size)
+{
+  int ret = Status::kOk;
+  AIOInfo aio_info;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "ReadableExtent should be inited", K(ret));
+  } else if (IS_NULL(aio_handle) || UNLIKELY(offset < 0) || UNLIKELY(size <= 0)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(aio_handle), K(offset), K(size));
+  } else if (FAILED(fill_aio_info(offset, size, aio_info))) {
+    SE_LOG(WARN, "fail to fill aio info", K(ret), K_(fd), K_(extent_id), K(offset), K(size));
+  } else if (FAILED(aio_handle->prefetch(aio_info))) {
+      SE_LOG(WARN, "fail to pretch", K(ret), K(aio_info));
+  }
+
+  // Prefetch failed, will try sync IO, overwrite ret here.
+  if (FAILED(ret)) {
+    ret = Status::kOk;
+    aio_handle->aio_req_->status_ = Status::kErrorUnexpected;
+    SE_LOG(WARN, "aio prefetch failed, will try sync IO!");
+  }
+
+  return ret;
+}
+
+
+bool FileIOExtent::is_aligned(int64_t offset, int64_t size, const char *buf) const
 {
   return DIOHelper::is_aligned(offset) &&
          DIOHelper::is_aligned(size) &&
          DIOHelper::is_aligned(reinterpret_cast<std::uintptr_t>(buf));
 }
 
-void WritableExtent::reset()
-{
-  IOExtent::reset();
-  curr_offset_ = 0;
-}
-
-int WritableExtent::append(const Slice &data)
+int FileIOExtent::align_to_direct_write(int fd, int64_t offset, const char *buf, int64_t size)
 {
   int ret = Status::kOk;
-  int64_t offset = io_info_.get_offset() + curr_offset_;
+  char *aligned_buf = nullptr;
 
-  if (UNLIKELY(!is_inited_)) {
-    ret = Status::kNotInit;
-    SE_LOG(WARN, "WritableExtent should be inited", K(ret));
-  } else if (UNLIKELY(IS_NULL(data.data())) || UNLIKELY(0 == data.size())) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(data));
-  } else if (UNLIKELY((curr_offset_ + static_cast<int64_t>(data.size())) > io_info_.extent_size_)) {
-    ret = Status::kOverLimit;
-    SE_LOG(WARN, "extent size overlimit", K(ret), K(offset), K_(curr_offset),
-      K(data), "data_size", data.size(), K_(io_info));
-  } else if (UNLIKELY(!is_aligned(offset, data.size(), data.data()))) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "the write buf should be aligned", K(ret), K(offset), K_(curr_offset), K(data));
-  } else if (io_info_.get_objstore()) {
-    std::string objid = std::to_string(assemble_objid_by_fdfn(
-        io_info_.get_extent_id().file_number, io_info_.get_extent_id().offset));
-    objstore::Status st = io_info_.get_objstore()->put_object(
-        io_info_.get_bucket(), objid,
-        std::string_view(data.data(), data.size()));
-    if (!st.is_succ()) {
-      ret = Status::kObjStoreError;
-      SE_LOG(WARN, "io error, failed to put obj", "data_size", data.size(),
-             K_(io_info), K(int(st.error_code())),
-             K(std::string(st.error_message())), K(ret));
-    }
-  } else if (FAILED(direct_write(io_info_.fd_, offset, data.data(), data.size()))) {
-    SE_LOG(WARN, "fail to direct write", K(ret), K_(io_info), K(offset), K_(curr_offset), K(data));
+  if (IS_NULL(aligned_buf = reinterpret_cast<char *>(base_memalign(DIOHelper::DIO_ALIGN_SIZE, size, ModId::kIOExtent)))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for aligned buffer", K(ret), K(size));
   } else {
-    curr_offset_ += data.size();
+    memcpy(aligned_buf, buf, size);
+    if (FAILED(direct_write(fd_, get_base_offset(), aligned_buf, size))) {
+      SE_LOG(WARN, "fail to write file", K(ret), K_(extent_id), K_(fd), K(size));
+    }
+  }
+
+  if (IS_NOTNULL(aligned_buf)) {
+    base_memalign_free(aligned_buf);
+    aligned_buf = nullptr;
   }
 
   return ret;
 }
 
-int WritableExtent::direct_write(const int fd, const int64_t offset, const char *buf, const int64_t size)
+int FileIOExtent::direct_write(int fd, int64_t offset, const char *buf, int64_t size)
 {
   assert(fd > 0 && offset >= 0 && size > 0 && (nullptr != buf));
   assert(is_aligned(offset, size, buf));
@@ -150,92 +221,37 @@ int WritableExtent::direct_write(const int fd, const int64_t offset, const char 
   return ret;
 }
 
-int ReadableExtent::prefetch(const int64_t offset, const int64_t size, AIOHandle *aio_handle)
+int FileIOExtent::fill_aio_info(int64_t offset, int64_t size, AIOInfo &aio_info) const
 {
   int ret = Status::kOk;
-  AIOInfo aio_info;
+  aio_info.reset();
 
-  if (UNLIKELY(!is_inited_)) {
-    ret = Status::kNotInit;
-    SE_LOG(WARN, "ReadableExtent should be inited", K(ret));
-  } else if (UNLIKELY(offset < 0) || UNLIKELY(size <= 0) || IS_NULL(aio_handle)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(offset), K(size), KP(aio_handle));
-  } else if (FAILED(fill_aio_info(offset, size, aio_info))) {
-    SE_LOG(WARN, "fail to fill aio info", K(ret), K(offset), K(size), K_(io_info));
-  } else if (FAILED(aio_handle->prefetch(aio_info))) {
-      SE_LOG(WARN, "fail to pretch", K(ret), K(aio_info));
-  }
-
-  // Prefetch failed, will try sync IO, overwrite ret here.
-  if (FAILED(ret)) {
-    ret = Status::kOk;
-    aio_handle->aio_req_->status_ = Status::kErrorUnexpected;
-    SE_LOG(INFO, "aio prefetch failed, will try sync IO!");
-  }
-
-  return ret;
-}
-
-int ReadableExtent::read(const int64_t offset, const int64_t size, char *buf, AIOHandle *aio_handle, Slice &result)
-{
-  int ret = Status::kOk;
-
-  if (UNLIKELY(!is_inited_)) {
-    ret = Status::kNotInit;
-    SE_LOG(WARN, "ReadableExtent should be inited", K(ret));
-  } else if (UNLIKELY(offset < 0) || UNLIKELY(size <= 0) || IS_NULL(buf)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(offset), K(size), KP(buf));
-  } else if (UNLIKELY((offset + size) > io_info_.extent_size_)) {
+  if (UNLIKELY((offset + size) > storage::MAX_EXTENT_SIZE)) {
     ret = Status::kOverLimit;
-    SE_LOG(WARN, "extent size overflow", K(ret), K(offset), K(size),
-        K(buf), K_(io_info));
-  } else if (io_info_.get_objstore()) {
-    std::string objid = std::to_string(assemble_objid_by_fdfn(
-        io_info_.get_extent_id().file_number, io_info_.get_extent_id().offset));
-    std::string body;
-    ::objstore::Status st = io_info_.get_objstore()->get_object(
-        io_info_.get_bucket(), objid, offset, size, body);
-    if (st.is_succ()) {
-      assert(static_cast<int64_t>(body.size()) <= size);
-      memcpy(buf, body.data(), body.size());
-      result.assign(buf, size);
-    } else {
-      ret = Status::kObjStoreError;
-      SE_LOG(WARN, "io error, failed to get obj", K(size), K_(io_info),
-             K(int(st.error_code())), K(std::string(st.error_message())),
-             K(ret));
-    }
+    SE_LOG(WARN, "extent size overflow!", K(ret), K(offset), K(size));
   } else {
-    if (IS_NULL(aio_handle)) {
-      // sync read
-      if (FAILED(sync_read(offset, size, buf, result))) {
-        SE_LOG(WARN, "fail to sync read", K(ret), K(offset), K(size), K_(io_info));
-      }
-    } else {
-      // async read
-      if (FAILED(async_read(offset, size, buf, aio_handle, result))) {
-        SE_LOG(WARN, "fail to async read", K(ret), K(offset), K(size), K_(io_info));
-      }
-    }
+    aio_info.fd_ = fd_;
+    aio_info.offset_ = get_base_offset() + offset;
+    aio_info.size_ = size;
   }
 
   return ret;
 }
 
-int ReadableExtent::sync_read(const int64_t offset, const int64_t size, char *buf, Slice &result)
+int FileIOExtent::sync_read(int64_t offset, int64_t size, char *buf, Slice &result)
 {
   int ret = Status::kOk;
-  int64_t file_offset = io_info_.get_offset() + offset;
+  int64_t file_offset = get_base_offset() + offset;
 
   if (is_aligned(offset, size, buf)) {
-    if (FAILED(direct_read(io_info_.fd_, file_offset, size, buf))) {
-      SE_LOG(WARN, "fail to direct read", K(ret), K(offset), K(size), K_(io_info));
+    if (FAILED(direct_read(fd_, file_offset, size, buf))) {
+      SE_LOG(WARN, "fail to direct read", K(ret),
+          K_(fd), K_(extent_id), K(offset), K(size));
     }
   } else {
-    if (FAILED(align_to_direct_read(io_info_.fd_, file_offset, size, buf))) {
-      SE_LOG(WARN, "fail to convert to direct read", K(ret), K(offset), K(size), K_(io_info));
+    if (FAILED(align_to_direct_read(fd_, file_offset, size, buf))) {
+      SE_LOG(WARN, "fail to convert to direct read", K(ret),
+          K_(fd), K_(extent_id), K(offset), K(size));
     }
   }
 
@@ -244,19 +260,23 @@ int ReadableExtent::sync_read(const int64_t offset, const int64_t size, char *bu
   }
 
   return ret;
+
 }
 
-int ReadableExtent::async_read(const int64_t offset, const int64_t size, char *buf, AIOHandle *aio_handle, Slice &result)
+int FileIOExtent::async_read(AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, Slice &result)
 {
   assert(nullptr != aio_handle);
   int ret = Status::kOk;
   AIOInfo aio_info;
 
   if (FAILED(fill_aio_info(offset, size, aio_info))) {
-    SE_LOG(WARN, "fail to fill aio info", K(ret), K(offset), K(size), K_(io_info));
+    SE_LOG(WARN, "fail to fill aio info", K(ret),
+        K_(fd), K_(extent_id), K(offset), K(size));
   } else if (FAILED(aio_handle->read(aio_info.offset_, aio_info.size_, &result, buf))) {
     SE_LOG(WARN, "fail to aio handle read", K(ret), K(offset), K(size), K(aio_info));
     BACKTRACE(ERROR, "aio handle read failed!");
+  } else {
+    // succeed
   }
 
   // AIO read failed, try sync read, overwrite ret here.
@@ -268,32 +288,7 @@ int ReadableExtent::async_read(const int64_t offset, const int64_t size, char *b
 
   return ret;
 }
-
-int ReadableExtent::fill_aio_info(const int64_t offset, const int64_t size, AIOInfo &aio_info) const
-{
-  int ret = Status::kOk;
-  aio_info.reset();
-
-  if (offset + size > io_info_.extent_size_) {
-    ret = Status::kNotSupported;
-    SE_LOG(INFO, "larger than one extent, will try sync IO!", K(ret));
-  } else if (io_info_.get_objstore()) {
-    ret = Status::kNotSupported;
-    SE_LOG(INFO, "not support aio operation on obj extent, will try sync IO!",
-           K(ret));
-  } else if (UNLIKELY((offset + size) > io_info_.extent_size_)) {
-    ret = Status::kOverLimit;
-    SE_LOG(WARN, "extent size overflow!", K(ret), K(offset), K(size), K_(io_info));
-  } else {
-    aio_info.fd_ = io_info_.fd_;
-    aio_info.offset_ = io_info_.get_offset() + offset;
-    aio_info.size_ = size;
-  }
-
-  return ret;
-}
-
-int ReadableExtent::align_to_direct_read(const int fd, const int64_t offset, const int64_t size, char *buf)
+int FileIOExtent::align_to_direct_read(const int fd, const int64_t offset, const int64_t size, char *buf)
 {
   assert(fd > 0 && offset >= 0 && size > 0 && (nullptr != buf));
   assert(!is_aligned(offset, size, buf));
@@ -304,7 +299,7 @@ int ReadableExtent::align_to_direct_read(const int fd, const int64_t offset, con
   char *aligned_buf = nullptr;
 
   if (IS_NULL(aligned_buf = reinterpret_cast<char *>(memory::base_memalign(
-      DIOHelper::DIO_ALIGN_SIZE, aligned_size, memory::ModId::kReadableExtent)))) {
+      DIOHelper::DIO_ALIGN_SIZE, aligned_size, memory::ModId::kIOExtent)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for aligned buffer", K(ret), K(aligned_size));
   } else if (FAILED(direct_read(fd, aligned_offset, aligned_size, aligned_buf))) {
@@ -321,7 +316,7 @@ int ReadableExtent::align_to_direct_read(const int fd, const int64_t offset, con
   return ret;
 }
 
-int ReadableExtent::direct_read(int fd, const int64_t offset, const int64_t size, char *buf)
+int FileIOExtent::direct_read(int fd, int64_t offset, int64_t size, char *buf)
 {
   assert(fd > 0 && offset >= 0 && size > 0 && (nullptr != buf));
   assert(is_aligned(offset, size, buf));
@@ -357,95 +352,278 @@ int ReadableExtent::direct_read(int fd, const int64_t offset, const int64_t size
   return ret;
 }
 
+ObjectIOExtent::ObjectIOExtent() : object_store_(nullptr), bucket_() {}
 
-int FullPrefetchExtent::init(const ExtentIOInfo &io_info)
+ObjectIOExtent::~ObjectIOExtent() {}
+
+int ObjectIOExtent::init(const ExtentId &extent_id,
+                         int64_t unique_id,
+                         ::objstore::ObjectStore *object_store,
+                         const std::string &bucket)
 {
   int ret = Status::kOk;
 
-  if (io_info.get_objstore()) {
-    ret = Status::kNotSupported;
-    SE_LOG(WARN, "async op is not supported on a obj extent", K(ret), K(io_info));
-  } else if (FAILED(IOExtent::init(io_info))) {
-    SE_LOG(WARN, "fail to init basic io", K(ret));
+  if (UNLIKELY(is_inited_)) {
+    ret = Status::kInitTwice;
+    SE_LOG(WARN, "ObjectIOExtent has been inited", K(ret));
+  } else if (UNLIKELY(unique_id < 0) ||
+             UNLIKELY(IS_NULL(object_store)) ||
+             UNLIKELY(bucket.empty())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(unique_id), KP(object_store), K(bucket));
   } else {
-    aio_req_.status_ = Status::kInvalidArgument; // not prepare
-    if (IS_NULL(aio_ = AIO::get_instance())) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "aio instance must not be nullptr", K(ret));
-    }
+    extent_id_ = extent_id;
+    unique_id_ = unique_id;
+    object_store_ = object_store;
+    bucket_ = bucket;
+
+    is_inited_ = true;
   }
 
   return ret;
 }
 
-
-void FullPrefetchExtent::reset()
+int ObjectIOExtent::write(const Slice &data)
 {
-  IOExtent::reset();
-  aio_ = nullptr;
-  aio_req_.reset();
-}
-
-int FullPrefetchExtent::full_prefetch()
-{
-  assert(!io_info_.get_objstore());
-  int ret = Status::kOk;
-  AIOInfo aio_info(io_info_.fd_, io_info_.get_offset(), io_info_.extent_size_);
-
-  if (UNLIKELY(!is_inited_)) {
-    SE_LOG(WARN, "FullPrefetchExtent should be inited", K(ret));
-  } else if (FAILED(aio_req_.prepare_read(aio_info))) {
-    SE_LOG(WARN, "fail to prepare iocb", K(ret), K(aio_info));
-  } else if (FAILED(aio_->submit(&aio_req_, 1))) {
-    SE_LOG(WARN, "fail to submit aio request", K(ret), K(aio_info));
-  }
-
-  return ret;
-}
-
-int FullPrefetchExtent::read(const int64_t offset, const int64_t size, char *buf, AIOHandle *aio_handle, Slice &result)
-{
-  UNUSED(aio_handle);
   int ret = Status::kOk;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
-    SE_LOG(WARN, "FullPrefetchExtent should be inited", K(ret));
-  } else if (FAILED(reap())) {
-    SE_LOG(WARN, "fail to reap aio result", K(ret), K(offset), K(size));
-  } else if (UNLIKELY((offset + size) > aio_req_.aio_buf_.size())) {
-    ret = Status::kOverLimit;
-    SE_LOG(WARN, "extent size overflow", K(ret), K(offset), K(size), K_(aio_req));
+    SE_LOG(WARN, "ObjectIOExtent has not been inited", K(ret));
+  } else if (UNLIKELY(data.empty()) || UNLIKELY(data.size() > storage::MAX_EXTENT_SIZE)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(data), "size", data.size());
+  } else if (FAILED(write_object(data.data(), data.size()))) {
+    SE_LOG(WARN, "fail to write object", K(ret), K_(bucket));
   } else {
-    memcpy(buf, aio_req_.aio_buf_.data() + offset, size);
-    result.assign(buf, size);
+    // succeed
   }
 
-  // async read failed, try sync read, overwrite ret here.
-  if (FAILED(ret)) {
-    if (FAILED(ReadableExtent::read(offset, size, buf, nullptr, result))) {
-      SE_LOG(WARN, "fail to sync read after async read failed", K(ret), K(offset), K(size), K_(io_info));
+  return ret;
+}
+
+
+int ObjectIOExtent::read(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, Slice &result)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "ObjectIOExtent has not been inited", K(ret));
+  } else if (UNLIKELY(offset < 0) || UNLIKELY(size <= 0) || IS_NULL(buf)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(offset), K(size), KP(buf));
+  } else if (UNLIKELY(offset + size > storage::MAX_EXTENT_SIZE)) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "the range to read is overflow", K(ret), K(offset), K(size));
+  } else if (FAILED(read_persistent_cache(aio_handle, offset, size, buf, result))) {
+    if (Status::kNotFound != ret) {
+      SE_LOG(WARN, "fail to read from persistent cache", K(ret), K_(extent_id));
+    } else if (FAILED(read_object(offset, size, buf, result))) {
+      SE_LOG(WARN, "fail to read object", K(ret), K(offset), K(size));
+    } else {
+      // succeed
     }
   }
 
   return ret;
 }
 
-int FullPrefetchExtent::reap()
+int ObjectIOExtent::prefetch(util::AIOHandle *aio_handle, int64_t offset, int64_t size)
 {
   int ret = Status::kOk;
+  AIOInfo aio_info;
 
-  if (Status::kBusy == aio_req_.status_) {
-    // have submit, but not reap
-    if (FAILED(aio_->reap(&aio_req_))) {
-      aio_req_.status_ = Status::kIOError;
-    } else if (FAILED(aio_req_.status_)) {
-      aio_req_.status_ = Status::kIOError;
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "ObjectIOExtent should be inited", K(ret));
+  } else if (UNLIKELY(IS_NULL(aio_handle)) || UNLIKELY(offset < 0) || UNLIKELY(size <= 0)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(aio_handle), K(offset), K(size));
+  } else if (FAILED(fill_aio_info(aio_handle, offset, size, aio_info))) {
+    if (Status::kNoSpace != ret) {
+      SE_LOG(WARN, "fail to fill aio info for ObjectIOExtent", K(ret), K_(extent_id),
+          KP(aio_handle), K(offset), K(size));
+    }
+  } else if (FAILED(aio_handle->prefetch(aio_info))) {
+    SE_LOG(WARN, "fail to prefetch", K(ret), K_(extent_id), K(aio_info));
+  } else {
+    SE_LOG(DEBUG, "success to prefetch", K(offset), K(size));
+  }
+
+  // Prefetch failed, will try sync io, overwrite ret here.
+  if (FAILED(ret)) {
+    if (Status::kNoSpace == ret) {
+      aio_handle->aio_req_->status_ = Status::kNoSpace;
+    } else {
+      aio_handle->aio_req_->status_ = Status::kErrorUnexpected;
+      SE_LOG(WARN, "aio prefetch object extent failed, will try sync IO!", K(ret));
+    }
+    ret = Status::kOk;
+  }
+
+  return ret;
+}
+
+int ObjectIOExtent::fill_aio_info(AIOHandle *aio_handle, int64_t offset, int64_t size, AIOInfo &aio_info)
+{
+  int ret = Status::kOk;
+  PersistentCacheInfo *cache_info = nullptr;
+  aio_info.reset();
+
+  if (UNLIKELY(IS_NULL(aio_handle)) || UNLIKELY(offset < 0) || UNLIKELY(size <= 0)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(aio_handle), K(offset), K(size));
+  } else if (UNLIKELY((offset + size) > storage::MAX_EXTENT_SIZE)) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "the read range is overflow", K(ret), K(offset), K(size));
+  } else if (!PersistentCache::get_instance().is_enabled()) {
+    ret = Status::kNoSpace;
+  } else if (IS_NOTNULL(aio_handle->aio_req_->handle_)) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the persistent cache handle must be nullptr before actually prefetch", K(ret),
+        K_(extent_id), K(offset), K(size));
+  } else if (FAILED(load_extent(&(aio_handle->aio_req_->handle_)))) {
+    if (Status::kNoSpace != ret) {
+      SE_LOG(WARN, "fail to load extent", K(ret));
+    }
+  } else if (IS_NULL(cache_info = PersistentCache::get_instance().get_cache_info_from_handle(aio_handle->aio_req_->handle_))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "the cache info must not be nullptr", K(ret), K_(extent_id));
+  } else {
+    aio_info.fd_ = cache_info->get_fd();
+    aio_info.offset_ = cache_info->get_offset() + offset;
+    aio_info.size_ = size;
+  }
+
+  return ret;
+}
+
+int ObjectIOExtent::write_object(const char *data, int64_t data_size)
+{
+  int ret = Status::kOk;
+  ::objstore::Status object_status;
+  std::string object_id = std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
+
+  object_status = object_store_->put_object(bucket_, object_id, std::string_view(data, data_size));
+  if (UNLIKELY(!object_status.is_succ())) {
+    ret = Status::kObjStoreError;
+    SE_LOG(WARN, "io error, failed to put obj", K(ret), KE((object_status.error_code())), K(std::string(object_status.error_message())),
+        K_(extent_id), K_(bucket), K(object_id), K(data_size), K_(bucket));
+  } else {
+    SE_LOG(DEBUG, "success to write object", K_(extent_id), K_(bucket), K(object_id));
+  }
+
+  return ret;
+}
+
+int ObjectIOExtent::read_object(int64_t offset, int64_t size, char *buf, common::Slice &result)
+{
+  int ret = Status::kOk;
+  ::objstore::Status object_status;
+  std::string object_id = std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
+  std::string body;
+
+  if (PersistentCache::get_instance().is_enabled()) {
+    object_status = object_store_->get_object(bucket_, object_id, 0, MAX_EXTENT_SIZE, body);
+    if (UNLIKELY(!object_status.is_succ())) {
+      ret = Status::kObjStoreError;
+      SE_LOG(WARN, "io error, failed to get obj", K(ret), KE(object_status.error_code()),
+            K(std::string(object_status.error_message())), K_(bucket), K_(extent_id), K(object_id));
+    } else if (UNLIKELY(MAX_EXTENT_SIZE != body.size())) {
+      ret = Status::kCorruption;
+      SE_LOG(WARN, "the data is corrupted", K(ret), "size", body.size());
+    } else {
+      memcpy(buf, body.data() + offset, size);
+      result.assign(buf, size);
+
+      if (FAILED(PersistentCache::get_instance().insert(extent_id_, Slice(body.data(), body.size()), nullptr))) {
+        if (Status::kNoSpace != ret) {
+          SE_LOG(WARN, "fail to insert into persistent cache", K(ret), K_(extent_id));
+        } else {
+          // persistent cache is full, overwrite ret here.
+          ret = Status::kOk;
+        }
+      }
+    }
+  } else {
+    object_status = object_store_->get_object(bucket_, object_id, offset, size, body);
+    if (UNLIKELY(!object_status.is_succ())) {
+      ret = Status::kObjStoreError;
+      SE_LOG(WARN, "io error, failed to get obj", K(ret), KE(object_status.error_code()),
+            K(std::string(object_status.error_message())), K_(extent_id), K(object_id));
+    } else if (UNLIKELY(size != static_cast<int64_t>(body.size()))) {
+      ret = Status::kCorruption;
+      SE_LOG(WARN, "the data is corrupted", K(ret), "expected_size", size, "actual_size", body.size());
+    } else {
+      assert(static_cast<int64_t>(body.size()) <= size);
+      memcpy(buf, body.data(), body.size());
+      result.assign(buf, size);
     }
   }
 
-  return aio_req_.status_; 
+  return ret;
 }
 
-}  // storage
-}  // smartengine
+int ObjectIOExtent::read_persistent_cache(AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, Slice &result)
+{
+  int ret = Status::kNotFound;
+  Cache::Handle *handle = nullptr;
+
+  if (PersistentCache::get_instance().is_enabled()) { 
+    if (FAILED(PersistentCache::get_instance().lookup(extent_id_, handle))) {
+      if (Status::kNotFound != ret) {
+        SE_LOG(WARN, "fail to lookup from PersistentCache", K(ret), K_(extent_id));
+      }
+    } else if (FAILED(PersistentCache::get_instance().read_from_handle(handle,
+                                                                       aio_handle,
+                                                                       offset,
+                                                                       size,
+                                                                       buf,
+                                                                       result))) {
+      SE_LOG(WARN, "fail to read data from handle", K(ret));
+    } else {
+      SE_LOG(DEBUG, "success to read from persistent cache", K_(extent_id));
+    }
+
+    if (IS_NOTNULL(handle)) {
+      PersistentCache::get_instance().release_handle(handle);
+      handle = nullptr;
+    }
+  }
+
+  return ret;
+}
+
+int ObjectIOExtent::load_extent(cache::Cache::Handle **handle)
+{
+  int ret = Status::kOk;
+
+  if (FAILED(PersistentCache::get_instance().lookup(extent_id_, *handle))) {
+    if (Status::kNotFound != ret) {
+      SE_LOG(WARN, "fail to lookup from persistent cache", K(ret), K_(extent_id));
+    } else {
+      std::string object_id = std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
+      std::string body;
+      ::objstore::Status object_status = object_store_->get_object(bucket_, object_id, 0, MAX_EXTENT_SIZE, body);
+
+      if (UNLIKELY(!object_status.is_succ())) {
+        ret = Status::kObjStoreError;
+        SE_LOG(WARN, "io error, fail to get object", K(ret), KE(object_status.error_code()),
+            K(std::string(object_status.error_message())), K_(extent_id), K(object_id));
+      } else if (UNLIKELY(MAX_EXTENT_SIZE != body.size())) {
+        ret = Status::kCorruption;
+        SE_LOG(WARN, "the data is corrupted", K(ret), "size", body.size());
+      } else if (FAILED(PersistentCache::get_instance().insert(extent_id_, Slice(body.data(), body.size()), handle))) {
+        if (Status::kNoSpace != ret) {
+          SE_LOG(WARN, "fail to insert into persistent cache", K(ret), K_(extent_id), K(object_id));
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+}  // namespace storage
+}  // namespace smartengine

@@ -121,8 +121,8 @@ TEST_F(DataFileTest, allocate)
   for (int32_t i = 512; Status::kOk == ret && i < 5120; ++i) {
     ret = data_file_->allocate(io_info);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_EQ(file_number, io_info.get_extent_id().file_number);
-    ASSERT_EQ(i, io_info.get_extent_id().offset);
+    ASSERT_EQ(file_number, io_info.extent_id_.file_number);
+    ASSERT_EQ(i, io_info.extent_id_.offset);
   }
   ret = data_file_->allocate(io_info);
   ASSERT_EQ(Status::kNoSpace, ret);

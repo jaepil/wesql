@@ -204,10 +204,10 @@ int BlockIOHelper::read_block(IOExtent *extent,
   } else if (IS_NULL(buf = reinterpret_cast<char *>(base_malloc(handle.size_, ModId::kBlock)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for block", K(ret), K(handle));
-  } else if (FAILED(extent->read(handle.offset_,
+  } else if (FAILED(extent->read(aio_handle,
+                                 handle.offset_,
                                  handle.size_,
                                  buf,
-                                 aio_handle,
                                  block))) {
     SE_LOG(WARN, "fail to do io of block", K(ret), K(handle), K(handle));
   } else if (UNLIKELY(buf != block.data()) ||

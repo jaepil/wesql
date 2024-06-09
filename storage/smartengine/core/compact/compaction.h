@@ -219,6 +219,14 @@ class GeneralCompaction : public Compaction {
   bool check_do_reuse(const MetaDescriptor &meta) const;
  protected:
   friend class ExtSEIterator;
+  struct PrefetchedExtent
+  {
+    table::ExtentReader *reader_;
+    util::AIOHandle aio_handle_;
+
+    PrefetchedExtent() : reader_(nullptr), aio_handle_() {}
+    ~PrefetchedExtent() { aio_handle_.reset(); }
+  };
 
   int open_extent();
   int close_extent(db::MiniTables *flush_tables = nullptr);
@@ -235,7 +243,7 @@ class GeneralCompaction : public Compaction {
   int merge_extents(MultipleSEIterator *&merge_iterator,
       db::MiniTables *flush_tables = nullptr);
 
-  int prefetch_extent(int64_t extent_id, table::ExtentReader *&extent_reader);
+  int prefetch_extent(int64_t extent_id, PrefetchedExtent *&prefetched_extent);
 
   int create_data_block_iterator(table::ExtentReader *extent_reader,
                                  table::BlockDataHandle<table::RowBlock> &data_block_handle,
@@ -243,7 +251,7 @@ class GeneralCompaction : public Compaction {
 
   int destroy_data_block_iterator(table::RowBlockIterator *block_iterator);
 
-  table::ExtentReader *get_prefetched_extent(int64_t extent_id) const;
+  PrefetchedExtent *get_prefetched_extent(int64_t extent_id) const;
 
   virtual void clear_current_readers();
 
@@ -255,10 +263,11 @@ class GeneralCompaction : public Compaction {
       CompactRecordStats &stats);
 
  protected:
-  using PrefetchExtentMap = std::unordered_map<int64_t, table::ExtentReader *,
+
+  using PrefetchExtentMap = std::unordered_map<int64_t, PrefetchedExtent *,
   std::hash<int64_t>, std::equal_to<int64_t>,
   memory::stl_adapt_allocator<std::pair<const int64_t,
-  table::ExtentReader *>, memory::ModId::kCompaction>>;
+  PrefetchedExtent *>, memory::ModId::kCompaction>>;
 
   //TODO(Zhao Dongsheng): dummy dict?
   std::string compression_dict_;

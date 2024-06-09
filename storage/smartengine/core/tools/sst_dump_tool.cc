@@ -55,10 +55,9 @@ int ExtentDumper::init(const std::string &file_path, const int32_t extent_offset
     io_info.fd_ = fd;
     io_info.extent_id_ = ExtentId(0, extent_offset); // The zero is a dummy file number.
     io_info.extent_size_ = MAX_EXTENT_SIZE;
-    io_info.block_size_ = 16 * 1024; // for valid check
     io_info.unique_id_ = 1; // for valid check
 
-    if (FAILED(extent_.init(io_info))) {
+    if (FAILED(extent_.init(io_info.extent_id_, io_info.unique_id_, io_info.fd_))) {
       SE_LOG(WARN, "fail to init readable extent", K(ret), K(io_info));
     } else {
 #ifndef NDEBUG
@@ -238,7 +237,7 @@ int ExtentDumper::read_footer(Footer &footer)
   char footer_buf[footer_size];
   memset(footer_buf, 0, footer_size);
 
-  if (FAILED(extent_.read(footer_offset, footer_size, footer_buf, nullptr, footer_result))) {
+  if (FAILED(extent_.read(nullptr, footer_offset, footer_size, footer_buf, footer_result))) {
     fprintf(stderr, "fail to read footer. ret = %d\n", ret);
   } else if (FAILED(footer.deserialize(footer_buf, footer_size, pos))) {
     fprintf(stderr, "fail to deserialize footer: %d\n", ret);

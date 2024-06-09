@@ -217,7 +217,7 @@ int TableCache::create_extent_reader(const InternalKeyComparator &internal_key_c
   //TODO(Zhao Dongsheng): It's ugly to get block cache here.
   ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(ioptions_.table_factory);
   Cache *block_cache = tmp_factory->table_options().block_cache.get();
-  ExtentReaderArgs args(extent_id, false, &internal_key_comparator, block_cache);
+  ExtentReaderArgs args(extent_id, &internal_key_comparator, block_cache);
 
   if (IS_NULL(extent_reader = MOD_NEW_OBJECT(ModId::kTableCache, ExtentReader))) {
     ret = Status::kMemoryLimit;

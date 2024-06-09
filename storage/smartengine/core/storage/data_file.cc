@@ -363,11 +363,11 @@ int DataFile::allocate(ExtentIOInfo &io_info)
   } else if (FAILED(allocate_extent(extent_id))) {
     SE_LOG(WARN, "fail to allocate extent id", K(ret));
   } else {
-    io_info.set_param(file_->get_fd(),
+    io_info.set_param(FILE_EXTENT_SPACE,
                       extent_id,
                       data_file_header_.extent_size_,
-                      data_file_header_.data_block_size_,
-                      UniqueIdAllocator::get_instance().alloc());
+                      UniqueIdAllocator::get_instance().alloc(),
+                      file_->get_fd());
   }
 
   return ret;
@@ -412,11 +412,11 @@ int DataFile::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
     SE_LOG(WARN, "unexpected error, the extent is used", K(ret), K(extent_id));
   } else {
     set_used_status(extent_id.offset);
-    io_info.set_param(file_->get_fd(),
+    io_info.set_param(FILE_EXTENT_SPACE,
                       extent_id,
                       data_file_header_.extent_size_,
-                      data_file_header_.data_block_size_,
-                      UniqueIdAllocator::get_instance().alloc());
+                      UniqueIdAllocator::get_instance().alloc(),
+                      file_->get_fd());
   }
 
   return ret;
@@ -463,11 +463,11 @@ int DataFile::get_extent_io_info(const ExtentId extent_id, ExtentIOInfo &io_info
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(extent_id), K_(data_file_header));
   } else {
-    io_info.set_param(file_->get_fd(),
+    io_info.set_param(FILE_EXTENT_SPACE,
                       extent_id,
                       data_file_header_.extent_size_,
-                      data_file_header_.data_block_size_,
-                      UniqueIdAllocator::get_instance().alloc());
+                      UniqueIdAllocator::get_instance().alloc(),
+                      file_->get_fd());
   }
 
   return ret;

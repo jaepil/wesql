@@ -377,11 +377,13 @@ class ExtSEIterator : public SEIterator{
     ReaderRep()
         : extent_id_(0),
           extent_reader_(nullptr),
+          aio_handle_(nullptr),
           index_iterator_(nullptr),
           block_iter_(nullptr)
     {}
     int64_t extent_id_;
     table::ExtentReader *extent_reader_;
+    util::AIOHandle *aio_handle_;
     table::RowBlockIterator *index_iterator_;
     DataBlockIterator *block_iter_;
   };

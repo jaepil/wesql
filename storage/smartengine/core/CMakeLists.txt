@@ -380,6 +380,7 @@ set(SOURCES
         cache/cache_entry.cc
         cache/clock_cache.cc
         cache/lru_cache.cc
+        cache/persistent_cache.cc
         cache/sharded_cache.cc
         cache/row_cache.cc
         db/column_family.cc
@@ -619,6 +620,7 @@ endif()
 set(TESTS
         unittest/backup/hotbackup_test.cc
         unittest/cache/cache_test.cc
+        unittest/cache/persistent_cache_test.cc
         unittest/cache/row_cache_test.cc
         #cache/lru_cache_test.cc
         unittest/env/env_basic_test.cc

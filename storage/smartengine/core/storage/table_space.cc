@@ -80,7 +80,7 @@ int TableSpace::create(const CreateTableSpaceArgs &args)
                                     FileExtentSpace, env_, env_options_);
     } else {
       // extent_space_type & extent_space_args need to revise.
-      extent_space_type = OBJ_EXTENT_SPACE;
+      extent_space_type = OBJECT_EXTENT_SPACE;
       extent_space_args.extent_space_type_ = extent_space_type;
       // args.db_paths_ is the local path for manifest file and so on.
       extent_space_args.db_path_.path = env_->GetObjectStoreBucket();

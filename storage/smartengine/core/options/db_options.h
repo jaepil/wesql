@@ -48,6 +48,7 @@ struct ImmutableDBOptions {
   std::shared_ptr<cache::RowCache> row_cache;
   bool avoid_flush_during_recovery;
   uint64_t table_cache_size;
+  uint64_t persistent_cache_size;
 };
 
 struct MutableDBOptions

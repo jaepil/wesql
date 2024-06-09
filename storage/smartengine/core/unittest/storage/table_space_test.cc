@@ -100,7 +100,7 @@ TEST_F(TableSpaceTest, allocate_and_recycle)
   ret = table_space_->create(args);
   ASSERT_EQ(Status::kOk, ret);
   //the extent space not exist
-  ret = table_space_->allocate(OBJ_EXTENT_SPACE, extent);
+  ret = table_space_->allocate(OBJECT_EXTENT_SPACE, extent);
   ASSERT_EQ(Status::kErrorUnexpected, ret);
 
   //success to allocate
@@ -109,8 +109,8 @@ TEST_F(TableSpaceTest, allocate_and_recycle)
     for (int64_t j = 1; Status::kOk == ret && j < 5120; ++j) {
       ret = table_space_->allocate(FILE_EXTENT_SPACE, extent);
       ASSERT_EQ(Status::kOk, ret);
-      ASSERT_EQ(i, extent.get_extent_id().file_number);
-      ASSERT_EQ(j, extent.get_extent_id().offset);
+      ASSERT_EQ(i, extent.extent_id_.file_number);
+      ASSERT_EQ(j, extent.extent_id_.offset);
     }
   }
 
@@ -131,8 +131,8 @@ TEST_F(TableSpaceTest, allocate_and_recycle)
     for (int64_t j = 1; Status::kOk == ret && j < 5120; ++j) {
       ret = table_space_->allocate(FILE_EXTENT_SPACE, extent);
       ASSERT_EQ(Status::kOk, ret);
-      ASSERT_EQ(i, extent.get_extent_id().file_number);
-      ASSERT_EQ(j, extent.get_extent_id().offset);
+      ASSERT_EQ(i, extent.extent_id_.file_number);
+      ASSERT_EQ(j, extent.extent_id_.offset);
     }
   }
 }
@@ -151,7 +151,7 @@ TEST_F(TableSpaceTest, recycle)
   ret = table_space_->create(args);
   ASSERT_EQ(Status::kOk, ret);
   //the extent space not exist
-  ret = table_space_->recycle(OBJ_EXTENT_SPACE, extent_id);
+  ret = table_space_->recycle(OBJECT_EXTENT_SPACE, extent_id);
   ASSERT_EQ(Status::kErrorUnexpected, ret);
 
 

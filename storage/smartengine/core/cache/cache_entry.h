@@ -28,7 +28,7 @@ namespace storage
 class IOExtent;
 }
 
-namespace table
+namespace cache
 {
 template <typename T>
 struct CacheEntry
@@ -84,5 +84,5 @@ public:
   }
 };
 
-} // namespace table
+} // namespace cache 
 } // namespace smartengine

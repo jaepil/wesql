@@ -136,7 +136,7 @@ TEST(InMemExtent, sim) {
   common::Slice data_block1;
   {
     // method 1: read it normally
-    ExtentReaderArgs extent_reader_args(eid, false, &internal_comparator, nullptr /*block_cache*/);
+    ExtentReaderArgs extent_reader_args(eid, &internal_comparator, nullptr /*block_cache*/);
     ExtentReader extent_reader;
     ret = extent_reader.init(extent_reader_args);
     ASSERT_EQ(Status::kOk, ret);

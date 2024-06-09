@@ -35,16 +35,13 @@ class RowBlockIterator;
 struct ExtentReaderArgs
 {
   storage::ExtentId extent_id_;
-  bool use_full_prefetch_extent_;
   const db::InternalKeyComparator *internal_key_comparator_;
   cache::Cache *block_cache_;
 
   ExtentReaderArgs(const storage::ExtentId &extent_id,
-                   bool use_full_prefetch_extent,
                    const db::InternalKeyComparator *internal_key_comparator,
                    cache::Cache *block_cache)
       : extent_id_(extent_id),
-        use_full_prefetch_extent_(use_full_prefetch_extent),
         internal_key_comparator_(internal_key_comparator),
         block_cache_(block_cache)
   {}
@@ -105,12 +102,11 @@ private:
 private:
   bool is_inited_;
   const db::InternalKeyComparator *internal_key_comparator_;
-  bool use_full_prefetch_extent_;
-  storage::ReadableExtent *extent_;
+  storage::IOExtent *extent_;
   storage::ExtentMeta *extent_meta_;
   RowBlock *index_block_;
   cache::Cache *block_cache_;
-  CacheEntryKey cache_entry_key_;
+  cache::CacheEntryKey cache_entry_key_;
 };
 
 } // namespace table

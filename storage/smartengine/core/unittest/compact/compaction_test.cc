@@ -547,7 +547,7 @@ class CompactionTest : public testing::Test {
                                  0 /**table_space_id*/,
                                  tmp_factory->table_options().block_size,
                                  tmp_factory->table_options().block_restart_interval,
-                                 env_->IsObjectStoreSupported() ? storage::OBJ_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                                 env_->IsObjectStoreSupported() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
                                  false /*use_column_format*/,
                                  table::TableSchema(),
                                  &internal_comparator_,
