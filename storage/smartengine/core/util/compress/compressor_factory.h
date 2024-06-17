@@ -31,24 +31,13 @@ class CompressorFactory
 {
 public:
   static CompressorFactory &get_instance();
-  int get_compressor(const common::CompressionType compress_type, Compressor *&compressor);
+
+  int alloc_compressor(common::CompressionType compress_type, Compressor *&compressor);
+  int free_compressor(Compressor *&compressor);
 
 private:
   CompressorFactory() {}
   virtual ~CompressorFactory() {}
-
-private:
-#ifdef HAVE_LZ4
-  LZ4Compressor lz4_compressor_;
-#endif // HAVE_LZ4
-
-#ifdef HAVE_ZLIB
-  ZLIBCompressor zlib_compressor_;
-#endif // HAVE_ZLIB
-
-#ifdef HAVE_ZSTD
-  ZSTDCompressor zstd_compressor_;
-#endif // HAVE_ZSTD
 };
 
 } // namespace util

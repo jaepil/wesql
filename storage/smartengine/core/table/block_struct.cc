@@ -181,7 +181,8 @@ int64_t BlockInfo::get_max_serialize_size() const
 
 DEFINE_TO_STRING(BlockInfo, KV_(handle), KV_(first_key), KV_(handle), KV_(row_count),
     KV_(delete_row_count), KV_(single_delete_row_count), KV_(smallest_seq), KV_(per_key_bits),
-    KV_(probe_num), KV_(bloom_filter), KV_(largest_seq), K_(column_block), K_(unit_infos))
+    KV_(probe_num), KV_(bloom_filter), KV_(largest_seq), K_(column_block), K_(max_column_count),
+    K_(unit_infos))
 
 DEFINE_COMPACTIPLE_SERIALIZATION(BlockInfo, handle_, first_key_, row_count_,
     delete_row_count_, single_delete_row_count_, smallest_seq_, largest_seq_,

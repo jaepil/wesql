@@ -88,7 +88,7 @@ ColumnUnitWriter::ColumnUnitWriter()
     : is_inited_(false),
       column_schema_(),
       compress_type_(kNoCompression),
-      compress_helper_(ModId::kColumnUnitWriter),
+      compress_helper_(),
       column_count_(0),
       null_column_count_(0),
       buf_(ModId::kColumnUnitWriter)
@@ -106,6 +106,8 @@ int ColumnUnitWriter::init(const ColumnSchema &column_schema, const CompressionT
   } else if (UNLIKELY(!column_schema.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "Invalid argument", K(ret), K(column_schema));
+  } else if (FAILED(compress_helper_.init(compress_type))) {
+    SE_LOG(WARN, "fail to init compress helper", K(ret));
   } else if (FAILED(buf_.reserve(DEFAULT_COLUMN_UNIT_BUFFER_SIZE))) {
     SE_LOG(WARN, "Fail to reserve buffer", K(ret));
   } else {
@@ -153,7 +155,7 @@ int ColumnUnitWriter::append(const Column *column)
 int ColumnUnitWriter::build(Slice &unit_data, ColumnUnitInfo &unit_info)
 {
   int ret = Status::kOk;
-  CompressionType compress_type = compress_type_;
+  CompressionType compress_type = common::kNoCompression;
   Slice raw_unit(buf_.data(), buf_.size());
 
   if (UNLIKELY(!is_inited_)) {

@@ -112,6 +112,7 @@ class Slice {
   // Return a string that contains the copy of the referenced data.
   // when hex is true, returns a string of twice the length hex encoded (0-9A-F)
   std::string ToString(bool hex = false) const;
+  // TODO (Zhao Dongsheng) : print the size.
   int64_t to_string(char* buf, const int64_t buf_len) const;
 
   // Decodes the current slice interpreted as an hexadecimal string into result,

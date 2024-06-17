@@ -24,25 +24,27 @@ namespace smartengine
 {
 namespace util
 {
+class Compressor;
 
 class CompressHelper
 {
 public:
-  CompressHelper(int64_t mod_id) : compress_buf_(mod_id) {}
-  ~CompressHelper() {}
+  CompressHelper();
+  ~CompressHelper();
 
+  int init(common::CompressionType compress_type);
+  void destroy();
   int compress(const common::Slice &raw_data,
                common::Slice &compressed_data,
-               common::CompressionType &compress_type);
+               common::CompressionType &actual_compress_type);
   
 private:
-  int compress_internal(const char *raw_data,
-                        const int64_t raw_data_size,
-                        char *&compressed_data,
-                        int64_t &compressed_data_size,
-                        common::CompressionType &compress_type);
+  int actual_compress(const common::Slice &raw_data, common::Slice &compressed_data, common::CompressionType &actual_compress_type);
 
 private:
+  bool is_inited_;
+  common::CompressionType compress_type_;
+  util::Compressor *compressor_;
   util::AutoBufferWriter compress_buf_;
 };
 
@@ -56,12 +58,11 @@ public:
                         common::Slice &raw_data);
 
 private:
-  static int uncompress_internal(const char *compressed_data,
-                                 const int64_t compressed_data_size,
-                                 const common::CompressionType compress_type,
-                                 const int64_t mod_id,
-                                 const int64_t raw_data_size,
-                                 char *&raw_data);
+  static int actual_uncompress(const common::Slice &compressed_data,
+                               const common::CompressionType compress_type,
+                               const int64_t mod_id,
+                               const int64_t raw_data_size,
+                               common::Slice &raw_data);
 };
 
 } // namespace util

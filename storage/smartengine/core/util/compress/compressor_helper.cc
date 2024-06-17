@@ -32,77 +32,106 @@ using namespace memory;
 namespace util
 {
 
-int CompressHelper::compress(const Slice &raw_data,
-                             Slice &compressed_data,
-                             CompressionType &compress_type)
+CompressHelper::CompressHelper()
+    : is_inited_(false),
+      compressor_(nullptr),
+      compress_buf_(ModId::kCompressor)
+{}
+
+CompressHelper::~CompressHelper()
+{
+  destroy();
+}
+
+void CompressHelper::destroy()
+{
+  if (is_inited_) {
+    CompressorFactory::get_instance().free_compressor(compressor_);
+    compressor_ = nullptr;
+    is_inited_ = false;
+  }
+}
+
+int CompressHelper::init(CompressionType compress_type)
 {
   int ret = Status::kOk;
-  char *compressed_buf = nullptr;
-  int64_t compressed_buf_size = 0;
 
-  if (kNoCompression == compress_type) {
-    compressed_data.assign(raw_data.data(), raw_data.size());
+  if (UNLIKELY(is_inited_)) {
+    ret = Status::kInitTwice;
+    SE_LOG(WARN, "the CompressHelper has been inited", K(ret));
+  } else if ((kNoCompression != compress_type) &&
+              FAILED(CompressorFactory::get_instance().alloc_compressor(compress_type, compressor_))) {
+    SE_LOG(WARN, "fail to allocate compressor", K(ret), KE(compress_type));
   } else {
-    if (FAILED(compress_internal(raw_data.data(),
-                                 raw_data.size(),
-                                 compressed_buf,
-                                 compressed_buf_size,
-                                 compress_type))) {
-      SE_LOG(WARN, "fail to compress", K(ret));
+    compress_type_ = compress_type;
+    is_inited_ = true;
+  }
+
+  return ret;
+}
+
+int CompressHelper::compress(const Slice &raw_data, Slice &compressed_data, CompressionType &actual_compress_type)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "the CompressHelper has not been inited", K(ret));
+  } else if (UNLIKELY(raw_data.empty())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret));
+  } else {
+    if (kNoCompression == compress_type_) {
+      compressed_data.assign(raw_data.data(), raw_data.size());
+      actual_compress_type = kNoCompression;
     } else {
-      compressed_data.assign(compressed_buf, compressed_buf_size);
+      if (FAILED(actual_compress(raw_data, compressed_data, actual_compress_type))) {
+        SE_LOG(WARN, "fail to compress", K(ret));
+      }
     }
   }
 
   return ret;
 }
 
-int CompressHelper::compress_internal(const char *raw_data,
-                                      const int64_t raw_data_size,
-                                      char *&compressed_data,
-                                      int64_t &compressed_data_size,
-                                      CompressionType &compress_type)
+int CompressHelper::actual_compress(const Slice &raw_data, Slice &compressed_data, CompressionType &actual_compress_type)
 {
   int ret = Status::kOk;
   bool not_compress = false;
   int64_t max_compress_size = 0;
   int64_t compressed_size = 0;
-  Compressor *compressor = nullptr;
 
   compress_buf_.reuse();
-  if (IS_NULL(raw_data) || (raw_data_size <= 0)) {
+  if (UNLIKELY(raw_data.empty())) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "Invalid argument", K(ret), KP(raw_data), K(raw_data_size));
-  } else if (FAILED(CompressorFactory::get_instance().get_compressor(compress_type, compressor))) {
-    SE_LOG(WARN, "fail to get compressor", K(ret), KE(compress_type));
-  } else if (FAILED(compressor->get_max_compress_size(raw_data_size, max_compress_size))) {
-    SE_LOG(WARN, "Failed to get max compress size", K(ret), K(raw_data_size));
+    SE_LOG(WARN, "Invalid argument", K(ret), K(raw_data));
+  } else if (FAILED(compressor_->get_max_compress_size(raw_data.size(), max_compress_size))) {
+    SE_LOG(WARN, "Failed to get max compress size", K(ret), "raw_data_size", raw_data.size());
   } else if (FAILED(compress_buf_.reserve(max_compress_size))) {
     SE_LOG(WARN, "Failed to reserve compress buffer", K(ret), K(max_compress_size));
-  } else if (FAILED(compressor->compress(raw_data,
-                                         raw_data_size,
-                                         compress_buf_.data(),
-                                         compress_buf_.capacity(),
-                                         compressed_size))) {
+  } else if (FAILED(compressor_->compress(raw_data.data(),
+                                          raw_data.size(),
+                                          compress_buf_.data(),
+                                          compress_buf_.capacity(),
+                                          compressed_size))) {
     if (Status::kNotCompress == ret) {
       not_compress = true;
       //override ret
       ret = Status::kOk;
     } else {
-      SE_LOG(WARN, "Failed to compress data", K(ret));
+      SE_LOG(WARN, "fail to compress data", K(ret));
     }
-  } else if (compressed_size >= raw_data_size) {
+  } else if (compressed_size >= static_cast<int64_t>(raw_data.size())) {
     not_compress = true;
   } else {
-    compressed_data = compress_buf_.data();
-    compressed_data_size = compressed_size;
-    compress_type = compressor->get_compress_type();
+    compressed_data.assign(compress_buf_.data(), compressed_size);
+    actual_compress_type = compress_type_;
   }
 
   if (SUCCED(ret) && not_compress) {
-    compressed_data = const_cast<char*>(raw_data);
-    compressed_data_size = raw_data_size;
-    compress_type = kNoCompression;
+    // TODO (Zhao Dongsheng) : Add some statistics for actually not compress.
+    compressed_data.assign(raw_data.data(), raw_data.size());
+    actual_compress_type = kNoCompression;
   }
 
   return ret;
@@ -117,62 +146,73 @@ int UncompressHelper::uncompress(const Slice &compresed_data,
   int ret = Status::kOk;
   char *uncompressed_data = nullptr;
 
-  if (kNoCompression == compress_type) {
-    raw_data.assign(compresed_data.data(), compresed_data.size());
-  } else if (FAILED(uncompress_internal(compresed_data.data(),
-                                        compresed_data.size(),
-                                        compress_type,
-                                        mod_id,
-                                        raw_data_size,
-                                        uncompressed_data))) {
-    SE_LOG(WARN, "fail to internal uncompress data", K(ret));
+  if (UNLIKELY(compresed_data.empty()) || UNLIKELY(raw_data_size < static_cast<int64_t>(compresed_data.size()))) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(compresed_data), K(raw_data_size));
   } else {
-    raw_data.assign(uncompressed_data, raw_data_size);
+    if (kNoCompression == compress_type) {
+      if (UNLIKELY(raw_data_size != static_cast<int64_t>(compresed_data.size()))) {
+        ret = Status::kCorruption;
+        SE_LOG(WARN, "the data is corrupted or compress type is wrong", K(ret),
+            K(raw_data_size), KE(compress_type), K(compresed_data));
+      } else {
+        raw_data.assign(compresed_data.data(), compresed_data.size());
+      }
+    } else {
+      if (FAILED(actual_uncompress(compresed_data,
+                                   compress_type,
+                                   mod_id,
+                                   raw_data_size,
+                                   raw_data))) {
+        SE_LOG(WARN, "fail to internal uncompress data", K(ret));
+      }
+    }
   }
 
   return ret;
 }
 
-int UncompressHelper::uncompress_internal(const char *compressed_data,
-                                          const int64_t compressed_data_size,
-                                          const CompressionType compress_type,
-                                          const int64_t mod_id,
-                                          const int64_t raw_data_size,
-                                          char *&raw_data)
+int UncompressHelper::actual_uncompress(const Slice &compressed_data,
+                                        const CompressionType compress_type,
+                                        const int64_t mod_id,
+                                        const int64_t raw_data_size,
+                                        Slice &raw_data)
 {
   int ret = Status::kOk;
-  char *uncompress_buf = nullptr;
-  int64_t uncompressed_size = 0;
+  char *raw_buf = nullptr;
+  int64_t raw_size = 0;
   Compressor *compressor = nullptr;
 
-  if (IS_NULL(compressed_data) || (compressed_data_size <= 0)
-      || (raw_data_size <= compressed_data_size)) {
+  if (UNLIKELY(compressed_data.empty()) || UNLIKELY(raw_data_size < static_cast<int64_t>(compressed_data.size()))) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(compressed_data),
-        K(compressed_data_size), K(raw_data_size));
-  } else if (FAILED(CompressorFactory::get_instance().get_compressor(compress_type, compressor))) {
-    SE_LOG(WARN, "fail to get compressor", K(ret), KE(compress_type));
-  } else if (IS_NULL(uncompress_buf = reinterpret_cast<char *>(base_malloc(raw_data_size, mod_id)))) {
+    SE_LOG(WARN, "invalid argument", K(ret), K(compressed_data), K(raw_data_size));
+  } else if (FAILED(CompressorFactory::get_instance().alloc_compressor(compress_type, compressor))) {
+    SE_LOG(WARN, "fail to allocate compressor", K(ret), KE(compress_type));
+  } else if (IS_NULL(raw_buf = reinterpret_cast<char *>(base_malloc(raw_data_size, mod_id)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for uncompress buf", K(ret), K(raw_data_size));
-  } else if (FAILED(compressor->uncompress(compressed_data,
-                                           compressed_data_size,
-                                           uncompress_buf,
+  } else if (FAILED(compressor->uncompress(compressed_data.data(),
+                                           compressed_data.size(),
+                                           raw_buf,
                                            raw_data_size,
-                                           uncompressed_size))) {
+                                           raw_size))) {
     SE_LOG(WARN, "Failed to uncompress data", K(ret));
-  } else if (raw_data_size != uncompressed_size) {
+  } else if (raw_data_size != raw_size) {
     ret = Status::kCorruption;
-    SE_LOG(WARN, "The data maybe corrupted", K(ret), K(raw_data_size), K(uncompressed_size));
+    SE_LOG(WARN, "The data maybe corrupted", K(ret), K(raw_data_size), K(raw_size));
   } else {
-    raw_data = uncompress_buf;
+    raw_data.assign(raw_buf, raw_size);
   }
 
   // release resource
+  if (IS_NOTNULL(compressor)) {
+    CompressorFactory::get_instance().free_compressor(compressor);
+  }
+
   if (FAILED(ret)) {
-    if (IS_NOTNULL(uncompress_buf)) {
-      base_free(uncompress_buf);
-      uncompress_buf = nullptr;
+    if (IS_NOTNULL(raw_buf)) {
+      base_free(raw_buf);
+      raw_buf = nullptr;
     }
   }
 
