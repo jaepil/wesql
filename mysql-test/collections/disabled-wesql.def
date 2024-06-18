@@ -517,6 +517,7 @@ consensus_replication.purge_log                             : WL#001 not stable
 consensus_replication.cascade_replication                   : WL#001 not stable
 consensus_replication.auto_leader_transfer                  : WL#001 not stable
 consensus_replication.force_single_mode                     : WL#001 not stable
+consensus_replication.event_scheduler                       : WL#001 not stable
 consensus_replication.failpoint                             : WL#001 only works with cmake -DWITH_FAIL_POINT=ON
 
 # Group Replication tests.
