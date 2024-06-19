@@ -45,15 +45,21 @@ env:
 
 
 jobs:
-  enable-runner:
+  enable-amd-runner:
     uses: ./.github/workflows/enable-gke-runner.yml
     with:
-      GITHUB_REPO: "wesql/wesql-server"
+      RUNNER_LABEL: "gke-oracle8-amd-runner"
+    secrets: inherit
+
+  enable-arm-runner:
+    uses: ./.github/workflows/enable-gke-runner.yml
+    with:
+      RUNNER_LABEL: "gke-arm-runner"
     secrets: inherit
 
   release-rpm:
     name: release x86_64 rpm
-    needs: [ enable-runner ]
+    needs: [ enable-amd-runner ]
     runs-on: [self-hosted, gke-oracle8-amd-runner ]
     steps:
       - uses: actions/checkout@v3
@@ -93,7 +99,7 @@ jobs:
 
   release-arm-rpm:
     name: release aarch64 rpm
-    needs: [ enable-runner ]
+    needs: [ enable-arm-runner ]
     runs-on: [ self-hosted, gke-arm-runner ]
     steps:
       - uses: actions/checkout@v3
@@ -157,6 +163,5 @@ jobs:
     if: ${{ always() }}
     uses: ./.github/workflows/enable-gke-runner.yml
     with:
-      GITHUB_REPO: "wesql/wesql-server"
       ENABLE: "disable"
     secrets: inherit
