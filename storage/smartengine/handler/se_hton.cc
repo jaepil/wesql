@@ -17,6 +17,7 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "se_hton.h"
+#include "binlog.h"
 #include "mysql/psi/mysql_stage.h"
 #include "se_status_vars.h"
 #include "se_system_vars.h"
@@ -27,6 +28,7 @@
 #include "sql_class.h"
 #include "query_options.h"
 #include "ha_smartengine.h"
+#include "db/db_impl.h"
 #include "transaction/se_transaction_factory.h"
 #include "transactions/transaction_db_impl.h"
 #include "core/util/memory_stat.h"
@@ -681,6 +683,17 @@ bool se_is_supported_system_table(const char *db,
 }
 
 void se_post_recover() { ddl_log_manager.recover(); }
+
+void se_post_engine_recover() {
+  util::TransactionDBImpl *txn_db_impl;
+  LOG_INFO log_info;
+
+  txn_db_impl = dynamic_cast<util::TransactionDBImpl *>(se_db);
+
+  mysql_bin_log.get_current_log(&log_info);
+  txn_db_impl->GetDBImpl()->set_global_binlog_pos(&log_info.log_file_name[0],
+                                                  log_info.pos);
+}
 
 void se_post_ddl(THD *thd) { ddl_log_manager.post_ddl(thd); }
 

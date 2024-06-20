@@ -144,6 +144,7 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
   bool need_log = false;
   bool need_log_sync = false;
   WriteBatch* merged_batch = &(w_request->group_merged_log_batch_);
+  BinlogPosition merged_binlog_pos;
   merged_batch->Clear();
   w_request->group_run_in_parallel_ =
       immutable_db_options_.allow_concurrent_memtable_write;
@@ -160,6 +161,9 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
       QUERY_COUNT_ADD(CountPoint::WAL_FILE_BYTES,
                       writer->batch_->GetDataSize());
     }
+    if (writer->batch_->HasBinlogPosition() &&
+        merged_binlog_pos.compare(*writer->batch_->GetBinlogPosition()) < 0)
+      merged_binlog_pos = *writer->batch_->GetBinlogPosition();
     total_byte_size = WriteBatchInternal::AppendedByteSize(
         total_byte_size, WriteBatchInternal::ByteSize(writer->batch_));
   }
@@ -190,6 +194,11 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
   TEST_SYNC_POINT("DBimpl::WriteImplAsync::AfterPreprocessWrite");
 
   this->increase_active_thread(!w_request->group_run_in_parallel_);
+
+  if (merged_binlog_pos.valid() &&
+      this->global_binlog_pos_.compare(merged_binlog_pos) < 0) {
+    this->global_binlog_pos_ = merged_binlog_pos;
+  }
 
   uint64_t last_sequence =
       versions_->AllocateSequence(w_request->group_total_count_);

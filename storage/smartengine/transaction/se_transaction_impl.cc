@@ -385,6 +385,18 @@ bool SeTransactionImpl::commit_no_binlog()
     cb_param = nullptr;
   }
 
+  // If the binary log is not enabled, or the transaction
+  // is not written to the binary log, the file name will
+  // be nullptr
+  if (m_se_tx->GetWriteBatch()->GetWriteBatch()) {
+    const char *file_name = nullptr;
+    ulonglong offset = 0;
+
+    thd_binlog_pos(m_thd, &file_name, &offset);
+    m_se_tx->GetWriteBatch()->GetWriteBatch()->SetBinlogPosition(file_name,
+                                                                 offset);
+  }
+
   const common::Status s = m_se_tx->CommitAsync(cb_param);
 
   if (async_commit) {//async commit return directly
@@ -398,6 +410,9 @@ bool SeTransactionImpl::commit_no_binlog()
     se_handle_io_error(s, SE_IO_ERROR_TX_COMMIT);
     res = true;
   }
+
+  if (m_se_tx->GetWriteBatch()->GetWriteBatch())
+    m_se_tx->GetWriteBatch()->GetWriteBatch()->ClearBinlogPosition();
 
   /* Save the transaction object to be reused */
   release_tx();

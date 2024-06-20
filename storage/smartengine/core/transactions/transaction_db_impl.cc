@@ -386,12 +386,14 @@ int TransactionDBImpl::do_manual_checkpoint(int32_t &manifest_file_num) {
 int TransactionDBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
                                               int32_t &last_manifest_file_num,
                                               uint64_t &last_manifest_file_size,
-                                              uint64_t &last_wal_file_num)
+                                              uint64_t &last_wal_file_num,
+                                              BinlogPosition &last_binlog_pos)
 {
   return db_impl_->create_backup_snapshot(meta_snapshot,
                                           last_manifest_file_num,
                                           last_manifest_file_size,
-                                          last_wal_file_num);
+                                          last_wal_file_num,
+                                          last_binlog_pos);
 }
 
 int TransactionDBImpl::release_backup_snapshot(MetaSnapshotMap &meta_snapshot) {

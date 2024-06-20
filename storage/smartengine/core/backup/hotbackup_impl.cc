@@ -151,7 +151,8 @@ int BackupSnapshotImpl::acquire_snapshots(DB *db)
     if (FAILED(db->create_backup_snapshot(meta_snapshots_,
                                           last_manifest_file_num_,
                                           last_manifest_file_size_,
-                                          last_wal_file_num_))) {
+                                          last_wal_file_num_,
+                                          last_binlog_pos_))) {
       SE_LOG(WARN, "Failed to acquire backup snapshot", K(ret));
     } else {
 #ifndef NDEBUG

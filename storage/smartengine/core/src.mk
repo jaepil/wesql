@@ -19,6 +19,7 @@ LIB_SOURCES =                                                   \
   compact/compaction_iterator.cc                                \
   compact/new_compaction_iterator.cc                            \
   compact/compaction_stats.cc                                   \
+  db/binlog_position.cc                                         \
   db/column_family.cc                                           \
   db/db_filesnapshot.cc                                         \
   db/db_impl.cc                                                 \

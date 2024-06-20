@@ -31,8 +31,9 @@
 
 #include <stdint.h>
 #include <atomic>
-#include "memory/stl_adapt_allocator.h"
+#include "db/binlog_position.h"
 #include "memory/modtype_define.h"
+#include "memory/stl_adapt_allocator.h"
 #include "util/status.h"
 #include "util/types.h"
 #include "write_batch/write_batch_base.h"
@@ -40,6 +41,7 @@
 namespace smartengine {
 namespace db {
 struct SavePoints;
+struct BinlogPosition;
 class ColumnFamilyHandle;
 }
 
@@ -290,6 +292,20 @@ class WriteBatch : public WriteBatchBase {
 
   void SetMaxBytes(size_t max_bytes) override { max_bytes_ = max_bytes; }
 
+  bool HasBinlogPosition() { return binlog_pos_.valid(); }
+
+  BinlogPosition *GetBinlogPosition() { return &binlog_pos_; }
+
+  void SetBinlogPosition(const char *file_name, uint64_t offset) {
+    binlog_pos_.set(file_name, offset);
+  }
+
+  void SetBinlogPosition(const BinlogPosition &binlog_pos) {
+    binlog_pos_ = binlog_pos;
+  }
+
+  void ClearBinlogPosition() { binlog_pos_.clear(); }
+
  private:
   friend class WriteBatchInternal;
   friend class LocalSavePoint;
@@ -310,6 +326,11 @@ class WriteBatch : public WriteBatchBase {
   size_t max_bytes_;
  protected:
   memory::xstring rep_;  // See comment in write_batch.cc for the format of rep_
+
+  // If MySQL binlog is used, binlog_pos_ contain the file
+  // name and the end offset of the binlog entry for this
+  // transaction; If not used，the file name is a empty string
+  BinlogPosition binlog_pos_;
 
   // Intentionally copyable
 };

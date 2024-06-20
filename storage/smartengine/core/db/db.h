@@ -23,6 +23,7 @@
 #include <vector>
 #include <mutex>
 #include "db/async_callback.h"
+#include "db/binlog_position.h"
 #include "options/options.h"
 #include "table/iterator.h"
 #include "transactions/transaction_log.h"
@@ -721,7 +722,8 @@ class DB {
   virtual int create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
                                      int32_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
-                                     uint64_t &last_wal_file_num)
+                                     uint64_t &last_wal_file_num,
+                                     BinlogPosition &last_binlog_pos)
   {
     return common::Status::kNotSupported;
   }

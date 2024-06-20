@@ -109,6 +109,7 @@ static int se_init_func(void *const p)
                         HTON_SUPPORTS_ATOMIC_DDL;
 
   se_hton->post_recover = se_post_recover;
+  se_hton->post_engine_recover = se_post_engine_recover;
   se_hton->post_ddl = se_post_ddl;
 
   se_hton->data = se_api_cb;

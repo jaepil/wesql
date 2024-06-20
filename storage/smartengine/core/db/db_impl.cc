@@ -2364,8 +2364,8 @@ int DBImpl::do_manual_checkpoint(int32_t &start_manifest_file_num) {
 int DBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
                                    int32_t &last_manifest_file_num,
                                    uint64_t &last_manifest_file_size,
-                                   uint64_t &last_wal_file_num)
-{
+                                   uint64_t &last_wal_file_num,
+                                   BinlogPosition &last_binlog_pos) {
   int ret = Status::kOk;
   // keep create snapshot and do checkpoint atomic,
   // exclusive from apply_change_info in flush/compaction
@@ -2390,9 +2390,11 @@ int DBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
       last_manifest_file_num = StorageLogger::get_instance().current_manifest_file_number();
       last_manifest_file_size = StorageLogger::get_instance().current_manifest_file_size();
       last_wal_file_num = logfile_number_;
+      last_binlog_pos = global_binlog_pos_;
       SE_LOG(INFO, "Create a backup snapshot", K(ret),
-                  K(last_manifest_file_num), K(last_manifest_file_size),
-                  K(last_wal_file_num));
+             K(last_manifest_file_num), K(last_manifest_file_size),
+             K(last_wal_file_num), K(last_binlog_pos.file_name_),
+             K(last_binlog_pos.offset_));
     }
   }
 

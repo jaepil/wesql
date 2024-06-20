@@ -271,7 +271,8 @@ class DBImpl : public DB {
   virtual int create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
                                      int32_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
-                                     uint64_t &last_wal_file_num) override;
+                                     uint64_t &last_wal_file_num,
+                                     BinlogPosition &last_binlog_pos) override;
 
   virtual int record_incremental_extent_ids(const int32_t first_manifest_file_num,
                                             const int32_t last_manifest_file_num,
@@ -673,6 +674,17 @@ class DBImpl : public DB {
       return it->second;
     }
   }
+
+  void set_global_binlog_pos(const char *file, uint64_t offset) {
+    BinlogPosition binlog_pos(file, offset);
+    mutex_.Lock();
+
+    if (global_binlog_pos_.compare(binlog_pos) < 0)
+      global_binlog_pos_ = binlog_pos;
+
+    mutex_.Unlock();
+  }
+  BinlogPosition *get_global_binlog_pos() { return &global_binlog_pos_; }
 
   void MarkLogAsHavingPrepSectionFlushed(uint64_t log);
   void MarkLogAsContainingPrepSection(uint64_t log);
@@ -1180,6 +1192,9 @@ protected:
   WriteBufferManager* storage_write_buffer_manager_;
 
   WriteBatch tmp_batch_;
+
+  // MySQL Binlog Position. Protected by db mutex.
+  BinlogPosition global_binlog_pos_;
 
   // Add for smartengine
   db::PiplineQueueManager pipline_manager_;

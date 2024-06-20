@@ -383,6 +383,7 @@ set(SOURCES
         cache/persistent_cache.cc
         cache/sharded_cache.cc
         cache/row_cache.cc
+        db/binlog_position.cc
         db/column_family.cc
         db/db_filesnapshot.cc
         db/db_impl.cc

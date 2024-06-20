@@ -134,14 +134,16 @@ WriteBatch::WriteBatch(const WriteBatch& src)
       wal_term_point_(src.wal_term_point_),
       content_flags_(src.content_flags_.load(std::memory_order_relaxed)),
       max_bytes_(src.max_bytes_),
-      rep_(src.rep_) {}
+      rep_(src.rep_),
+      binlog_pos_(src.binlog_pos_) {}
 
 WriteBatch::WriteBatch(WriteBatch&& src)
     : save_points_(std::move(src.save_points_)),
       wal_term_point_(std::move(src.wal_term_point_)),
       content_flags_(src.content_flags_.load(std::memory_order_relaxed)),
       max_bytes_(src.max_bytes_),
-      rep_(std::move(src.rep_)) {}
+      rep_(std::move(src.rep_)),
+      binlog_pos_(std::move(src.binlog_pos_)) {}
 
 WriteBatch& WriteBatch::operator=(const WriteBatch& src) {
   if (&src != this) {

@@ -380,6 +380,9 @@ Status TransactionImpl::CommitAsync(AsyncCallback* call_back) {
     // We take the commit-time batch and append the Commit marker.
     // The Memtable will ignore the Commit marker in non-recovery mode
     WriteBatch* working_batch = GetCommitTimeWriteBatch();
+    if (GetWriteBatch()->GetWriteBatch() != nullptr)
+      working_batch->SetBinlogPosition(
+          *(GetWriteBatch()->GetWriteBatch()->GetBinlogPosition()));
     WriteBatchInternal::MarkCommit(working_batch, name_);
 
     // any operations appended to this working_batch will be ignored from WAL
@@ -403,6 +406,7 @@ Status TransactionImpl::CommitAsync(AsyncCallback* call_back) {
     dbimpl_->MarkLogAsHavingPrepSectionFlushed(log_number_);
     txn_db_impl_->UnregisterTransaction(this);
 
+    working_batch->ClearBinlogPosition();
     Clear();
     txn_state_.store(COMMITED);
   } else if (txn_state_ == LOCKS_STOLEN) {

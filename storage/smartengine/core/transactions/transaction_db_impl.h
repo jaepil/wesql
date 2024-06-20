@@ -107,7 +107,8 @@ class TransactionDBImpl : public util::TransactionDB {
   virtual int create_backup_snapshot(db::MetaSnapshotMap &meta_snapshot,
                                      int32_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
-                                     uint64_t &last_wal_file_num) override;
+                                     uint64_t &last_wal_file_num,
+                                     db::BinlogPosition &last_binlog_pos) override;
 
   virtual int release_backup_snapshot(db::MetaSnapshotMap &meta_snapshot) override;
 

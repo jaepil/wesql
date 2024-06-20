@@ -79,6 +79,8 @@ private:
   uint64_t last_wal_file_num_;
   // Snapshots of all subtables
   db::MetaSnapshotMap meta_snapshots_;
+  // Binlog position of last trx
+  db::BinlogPosition last_binlog_pos_;
   std::string backup_tmp_dir_path_;
 };
 

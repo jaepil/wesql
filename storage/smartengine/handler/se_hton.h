@@ -226,6 +226,7 @@ bool se_is_supported_system_table(const char *db,
                                   bool is_sql_layer_system_table);
 
 void se_post_recover();
+void se_post_engine_recover();
 
 void se_post_ddl(THD *thd);
 } // namespace smartengine
