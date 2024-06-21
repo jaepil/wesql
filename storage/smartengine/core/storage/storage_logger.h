@@ -64,33 +64,46 @@ public:
 struct CheckpointBlockHeader
 {
   static const int64_t BLOCK_HEADER_VERSION = 1;
-  int64_t type_; //0: extent meta block; 1: sub table meta
-  int64_t block_size_;
-  int64_t entry_count_;
-  int64_t data_offset_;
-  int64_t data_size_;
-  int64_t reserve_[2];
+  int64_t type_{0}; // 0: extent meta block; 1: sub table meta
+  int64_t block_size_{0};
+  int64_t entry_count_{0};
+  int64_t data_offset_{0};
+  int64_t data_size_{0};
+  int64_t reserve_[2]{0, 0};
 
-  CheckpointBlockHeader();
-  ~CheckpointBlockHeader();
+  CheckpointBlockHeader() {}
+  ~CheckpointBlockHeader() {}
   void reset();
   DECLARE_TO_STRING()
 };
 
+struct BackupSnapshotInfo {
+  int64_t backup_id_{0};
+  int64_t meta_snapshot_count_{0};
+  int64_t meta_snapshot_meta_block_count_{0};
+  int64_t meta_snapshot_meta_block_offset_{0};
+};
+
+constexpr size_t kMaxBackupSnapshotReservedNum = 32;
+
+static_assert(db::BackupSnapshotMap::kMaxBackupSnapshotNum <= kMaxBackupSnapshotReservedNum);
+
 struct CheckpointHeader
 {
-  //static const int64_t CHECKPOINT_HEADER_VERSION = 1;
-  int64_t start_log_id_;
-  int64_t extent_count_;
-  int64_t sub_table_count_;
-  int64_t extent_meta_block_count_;
-  int64_t sub_table_meta_block_count_;
-  int64_t extent_meta_block_offset_;
-  int64_t sub_table_meta_block_offset_;
-  int64_t reserve_[2];
+  static const int64_t CHECKPOINT_HEADER_VERSION = 1;
+  int64_t start_log_id_{0};
+  int64_t extent_count_{0};
+  int64_t sub_table_count_{0};
+  int64_t extent_meta_block_count_{0};
+  int64_t sub_table_meta_block_count_{0};
+  int64_t extent_meta_block_offset_{0};
+  int64_t sub_table_meta_block_offset_{0};
+  int64_t backup_snapshots_count_{0};
+  BackupSnapshotInfo backup_snapshot_info_[kMaxBackupSnapshotReservedNum];
+  int64_t reserve_[2]{0, 0};
 
-  CheckpointHeader();
-  ~CheckpointHeader();
+  CheckpointHeader() {}
+  ~CheckpointHeader() {}
   //DECLARE_COMPACTIPLE_SERIALIZATION(CHECKPOINT_HEADER_VERSION);
   DECLARE_TO_STRING()
 };
@@ -136,9 +149,8 @@ public:
   int manifest_file_range(int32_t &begin, int32_t &end, int64_t &end_pos);
   int32_t current_manifest_file_number() const { return current_manifest_file_number_; }
   uint64_t current_manifest_file_size() const { return log_writer_->file()->get_file_size(); }
-  int record_incremental_extent_ids(const int32_t first_manifest_file_num,
-                                    const int32_t last_manifest_file_num,
-                                    const uint64_t last_manifest_file_size);
+  int record_incremental_extent_ids(const std::string &backup_tmp_dir_path, const int32_t first_manifest_file_num,
+                                    const int32_t last_manifest_file_num, const uint64_t last_manifest_file_size);
 #ifndef NDEBUG
   void TEST_reset();
 #endif

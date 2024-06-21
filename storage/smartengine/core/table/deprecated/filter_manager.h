@@ -158,8 +158,8 @@ private:
   void schedule();
   int build_filter(const std::string &key, QueueElement &ele,
                    QuotaGuard &&_quota_guard);
-  const db::Snapshot *get_meta_snapshot();
-  void release_meta_snapshot(const db::Snapshot *meta_snapshot);
+  db::Snapshot *get_meta_snapshot();
+  void release_meta_snapshot(db::Snapshot *meta_snapshot);
   // Wrap 2 functions for thread pool schedule.
   friend void schedule_wrapper(void *filter_manager);
   friend void build_filter_wrapper(void *filter_args);

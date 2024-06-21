@@ -76,11 +76,13 @@ enum TrimMemFlushState {
 
 struct GlobalContext
 {
+  // declare
+  static util::Env *env_;
+  static cache::Cache *cache_;
+
   std::string db_name_;
   common::Options options_;
   util::EnvOptions env_options_;
-  util::Env *env_;
-  cache::Cache *cache_;
   WriteBufferManager *write_buf_mgr_;
   std::mutex all_sub_table_mutex_;
   std::atomic<int64_t> version_number_;
@@ -88,9 +90,13 @@ struct GlobalContext
   AllSubTable *all_sub_table_;
   util::Directory *db_dir_;
 
-  GlobalContext();
+  GlobalContext() = delete;
   GlobalContext(const std::string &db_name, const common::Options &options);
   ~GlobalContext();
+
+  static cache::Cache *get_cache() { return GlobalContext::cache_; }
+  static util::Env *get_env() { return GlobalContext::env_; }
+
   bool is_valid();
   void reset();
   int acquire_thread_local_all_sub_table(AllSubTable *&all_sub_table);
@@ -183,9 +189,9 @@ class DBImpl : public DB {
                                WriteBatch* updates) override;
 
   using DB::WriteAsync;
-  virtual common::Status WriteAsync(const common::WriteOptions& options,
-                                    WriteBatch* updates,
-                                    common::AsyncCallback* call_back) override;
+  virtual common::Status WriteAsync(const common::WriteOptions &options,
+                                    WriteBatch *updates,
+                                    common::AsyncCallback *call_back) override;
 
   using DB::Get;
   virtual common::Status Get(const common::ReadOptions& options,
@@ -268,17 +274,17 @@ class DBImpl : public DB {
   virtual common::Status EnableFileDeletions(bool force) override;
   virtual int IsFileDeletionsEnabled() const;
 
-  virtual int create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
+  virtual int create_backup_snapshot(BackupSnapshotId backup_id,
+                                     MetaSnapshotSet &meta_snapshots,
                                      int32_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
                                      uint64_t &last_wal_file_num,
                                      BinlogPosition &last_binlog_pos) override;
 
-  virtual int record_incremental_extent_ids(const int32_t first_manifest_file_num,
+  virtual int record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
+                                            const int32_t first_manifest_file_num,
                                             const int32_t last_manifest_file_num,
                                             const uint64_t last_manifest_file_size) override;
-
-  virtual int release_backup_snapshot(MetaSnapshotMap &meta_snapshot) override;
 
   virtual int shrink_table_space(int32_t table_space_id) override;
 
@@ -294,9 +300,8 @@ class DBImpl : public DB {
 
   virtual common::Status GetUpdatesSince(
       common::SequenceNumber seq_number,
-      unique_ptr<TransactionLogIterator>* iter,
-      const db::TransactionLogIterator::ReadOptions& read_options =
-          TransactionLogIterator::ReadOptions()) override;
+      unique_ptr<TransactionLogIterator> *iter,
+      const db::TransactionLogIterator::ReadOptions &read_options = TransactionLogIterator::ReadOptions()) override;
 
   VersionSet* get_version_set() { return versions_.get(); }
 
@@ -498,6 +503,7 @@ class DBImpl : public DB {
     TEST_after_create_backup_snapshot_ = val;
   }
   bool TEST_get_after_create_backup_snapshot() const { return TEST_after_create_backup_snapshot_; }
+
 #endif  // NDEBUG
 
   // Return maximum background compaction allowed to be scheduled based on
@@ -762,12 +768,12 @@ protected:
                            uint64_t* log_used = nullptr, uint64_t log_ref = 0,
                            bool disable_memtable = false);
 
-  common::Status WriteImplAsync(
-      const common::WriteOptions& options, WriteBatch* updates, /*in: */
-      common::AsyncCallback* async_callback, /*in:async call back*/
-      uint64_t* log_used, /*out: param, log used for this write*/
-      uint64_t log_ref,   /*in: log_ref for this writer*/
-      bool disable_memtable /*in:wether disable memtable*/);
+  common::Status WriteImplAsync(const common::WriteOptions &options,
+                                WriteBatch *updates,                   /*in: */
+                                common::AsyncCallback *async_callback, /*in:async call back*/
+                                uint64_t *log_used,                    /*out: param, log used for this write*/
+                                uint64_t log_ref,                      /*in: log_ref for this writer*/
+                                bool disable_memtable /*in:wether disable memtable*/);
 
   uint64_t FindMinLogContainingOutstandingPrep();
   uint64_t FindMinPrepLogReferencedByMemTable();
@@ -1027,10 +1033,10 @@ protected:
   void add_compaction_job(ColumnFamilyData* cfd, CompactionTasksPicker::TaskInfo task_info);
   // shrink extent no need to schedule it
   void remove_compaction_job(CFCompactionJob*& cf_job, bool schedule = true);
-  common::Status build_compaction_job(ColumnFamilyData* cfd,
-                                      const db::Snapshot* snapshot,
-                                      JobContext* job_context,
-                                      storage::CompactionJob*& job,
+  common::Status build_compaction_job(ColumnFamilyData *cfd,
+                                      db::Snapshot *snapshot,
+                                      JobContext *job_context,
+                                      storage::CompactionJob *&job,
                                       CFCompactionJob &cf_job);
 
   common::Status run_one_compaction_task(ColumnFamilyData* cfd,
@@ -1264,38 +1270,39 @@ protected:
   // one column family compaction task associates with multiple compaction unit;
   struct CFCompactionJob {
     ColumnFamilyData* cfd_;
-    const Snapshot* meta_snapshot_;
+    Snapshot *meta_snapshot_;
     storage::CompactionJob* job_;
     CompactionTasksPicker::TaskInfo task_info_;
     bool need_check_snapshot_;
     memory::ArenaAllocator compaction_alloc_;
-    void update_snapshot(const Snapshot* meta_snapshot) {
-      meta_snapshot_ = meta_snapshot;
-    }
-    CFCompactionJob(ColumnFamilyData* cfd,
-                    const Snapshot* s,
-                    storage::CompactionJob* job,
+
+    void update_snapshot(Snapshot *meta_snapshot) { meta_snapshot_ = meta_snapshot; }
+
+    CFCompactionJob(ColumnFamilyData *cfd,
+                    Snapshot *s,
+                    storage::CompactionJob *job,
                     CompactionTasksPicker::TaskInfo task_info,
                     const bool need_check_snapshot)
-      : cfd_(cfd),
-        meta_snapshot_(s),
-        job_(job),
-        task_info_(task_info),
-        need_check_snapshot_(true),
-        compaction_alloc_(memory::CharArena::DEFAULT_PAGE_SIZE, memory::ModId::kCompaction) {}
+        : cfd_(cfd),
+          meta_snapshot_(s),
+          job_(job),
+          task_info_(task_info),
+          need_check_snapshot_(true),
+          compaction_alloc_(memory::CharArena::DEFAULT_PAGE_SIZE, memory::ModId::kCompaction)
+    {
+    }
   };
 
   struct STFlushJob {
-    STFlushJob(ColumnFamilyData *sub_table, const Snapshot* s,
-         db::TaskType type, const bool need_check_snapshot = true)
-       : sub_table_(sub_table),
-         meta_snapshot_(s),
-         task_type_(type),
-         need_check_snapshot_(need_check_snapshot),
-         flush_alloc_(8 * 1024, memory::ModId::kFlush) {}
-    void update_snapshot(const Snapshot* meta_snapshot) {
-      meta_snapshot_ = meta_snapshot;
-    }
+    STFlushJob(ColumnFamilyData *sub_table, Snapshot *s, db::TaskType type, const bool need_check_snapshot = true)
+        : sub_table_(sub_table),
+          meta_snapshot_(s),
+          task_type_(type),
+          need_check_snapshot_(need_check_snapshot),
+          flush_alloc_(8 * 1024, memory::ModId::kFlush) {}
+
+    void update_snapshot(Snapshot *meta_snapshot) { meta_snapshot_ = meta_snapshot; }
+
     ColumnFamilyData *get_subtable() const {
       return sub_table_;
     }
@@ -1303,7 +1310,7 @@ protected:
       return task_type_;
     }
     ColumnFamilyData *sub_table_;
-    const Snapshot* meta_snapshot_;
+    Snapshot *meta_snapshot_;
     TaskType task_type_;
     bool need_check_snapshot_;
     memory::ArenaAllocator flush_alloc_;
@@ -1562,6 +1569,7 @@ protected:
   storage::CompactionJobStatsInfo compaction_sum_;
   RecoveryDebugInfo recovery_debug_info_;
 };
+
 
 extern common::Options SanitizeOptions(const std::string& db,
                                        const common::Options& src);

@@ -14,6 +14,8 @@
 #include "storage/multi_version_extent_meta_layer.h"
 
 namespace smartengine {
+using namespace common;
+using namespace storage;
 namespace db {
 
 class SnapshotList;
@@ -22,16 +24,15 @@ class SnapshotList;
 // Each SnapshotImpl corresponds to a particular sequence number.
 class SnapshotImpl : public Snapshot {
  public:
-  common::SequenceNumber number_;  // const after creation
-  storage::ExtentLayerVersion *extent_layer_versions_[storage::MAX_TIER_COUNT];
-  std::atomic<uint32_t> ref_;
-
   SnapshotImpl();
   virtual ~SnapshotImpl() override;
   int init(storage::ExtentLayerVersion **extent_layer_versions, common::SequenceNumber seq_num);
   void destroy(util::autovector<storage::ExtentLayerVersion *> &recyle_extent_layer_versions);
-  bool ref() { return 0 == ref_++ ? true : false; }
-  bool unref() { return 0 == --ref_ ? true : false; }
+  bool ref(int32_t *old_ref);
+  bool unref(int32_t *old_ref);
+  bool backup_ref();
+  bool backup_unref();
+
   virtual storage::ExtentLayerVersion* get_extent_layer_version(const int64_t level) const override
   {
     return extent_layer_versions_[level];
@@ -52,6 +53,28 @@ class SnapshotImpl : public Snapshot {
   inline bool is_write_conflict_boundary() {
     return is_write_conflict_boundary_;
   }
+
+  int extent_layer_versions_serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int extent_layer_versions_deserialize(char *buf, int64_t buf_len, int64_t &pos);
+  int64_t extent_layer_versions_get_serialize_size() const;
+
+  int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int deserialize(char *buf, int64_t buf_len, int64_t &pos);
+  int64_t get_serialize_size() const;
+
+  DECLARE_TO_STRING()
+ private:
+  static const int64_t META_SNAPSHOT_VERSION = 1;
+
+ public:
+  SequenceNumber number_; // const after creation
+  ExtentLayerVersion *extent_layer_versions_[storage::MAX_TIER_COUNT];
+
+  std::mutex destroy_mutex_;
+
+  std::mutex ref_mutex_;
+  int32_t ref_;        // protected by ref_mutex_
+  int32_t backup_ref_; // protected by ref_mutex_
 
  private:
   friend class SnapshotList;

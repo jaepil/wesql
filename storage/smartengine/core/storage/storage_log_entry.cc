@@ -39,6 +39,10 @@ bool is_extent_log(int64_t log_type)
   return REDO_LOG_MODIFY_EXTENT_META == log_type;
 }
 
+bool is_backup_snapshot_log(int64_t log_type) {
+  return REDO_LOG_ACCQUIRE_BACKUP_SNAPSHOT == log_type || REDO_LOG_RELEASE_BACKUP_SNAPSHOT == log_type;
+}
+
 LogHeader::LogHeader()
     : magic_number_(MAGIC_NUMBER),
       data_checksum_(0),
@@ -148,6 +152,28 @@ ModifyExtentMetaLogEntry::~ModifyExtentMetaLogEntry()
 DEFINE_COMPACTIPLE_SERIALIZATION(ModifyExtentMetaLogEntry, extent_meta_)
 
 DEFINE_TO_STRING(ModifyExtentMetaLogEntry, KV_(extent_meta))
+
+AccquireBackupSnapshotLogEntry::AccquireBackupSnapshotLogEntry(BackupSnapshotId backup_id)
+    : backup_id_(backup_id)
+{
+}
+AccquireBackupSnapshotLogEntry::~AccquireBackupSnapshotLogEntry()
+{
+}
+DEFINE_COMPACTIPLE_SERIALIZATION(AccquireBackupSnapshotLogEntry, backup_id_)
+
+DEFINE_TO_STRING(AccquireBackupSnapshotLogEntry, KV_(backup_id))
+
+ReleaseBackupSnapshotLogEntry::ReleaseBackupSnapshotLogEntry(BackupSnapshotId backup_id)
+    : backup_id_(backup_id)
+{
+}
+ReleaseBackupSnapshotLogEntry::~ReleaseBackupSnapshotLogEntry()
+{
+}
+DEFINE_COMPACTIPLE_SERIALIZATION(ReleaseBackupSnapshotLogEntry, backup_id_)
+
+DEFINE_TO_STRING(ReleaseBackupSnapshotLogEntry, KV_(backup_id))
 
 } //namespace storage
 } //namespace smartengine

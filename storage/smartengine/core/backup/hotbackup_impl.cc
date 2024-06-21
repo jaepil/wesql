@@ -15,9 +15,10 @@
  */
 
 #include "backup/hotbackup_impl.h"
+#include "memory/thread_local_store.h"
+#include "storage/storage_manager.h"
 #include "util/file_util.h"
 #include "util/sync_point.h"
-#include "memory/thread_local_store.h"
 
 namespace smartengine
 {
@@ -28,77 +29,119 @@ using namespace storage;
 namespace util
 {
 
-int BackupSnapshot::create(BackupSnapshot *&backup_instance)
-{
-  int ret = Status::kOk;
-  backup_instance = new BackupSnapshotImpl();
-  if (IS_NULL(backup_instance)) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(ERROR, "Failed to allocate backup_instance", K(ret));
-  }
-  return ret;
-}
+char se_backup_status[][16] = {"checkpoint",
+                               "acquire",
+                               "incremental",
+                               "release",
+                               ""};
+
+BackupSnapshot *BackupSnapshot::get_instance() { return BackupSnapshotImpl::get_instance(); }
 
 int BackupSnapshot::init(DB *db, const char *backup_tmp_dir_path)
 {
   return Status::kNotSupported;
 }
 
-int BackupSnapshot::do_checkpoint(DB *db)
+int BackupSnapshot::lock_instance() { return Status::kNotSupported; }
+
+int BackupSnapshot::unlock_instance() { return Status::kNotSupported; }
+
+int BackupSnapshot::lock_one_step() { return Status::kNotSupported; }
+
+int BackupSnapshot::unlock_one_step() { return Status::kNotSupported; }
+
+int BackupSnapshot::check_lock_status() { return Status::kNotSupported; }
+
+int BackupSnapshot::get_backup_status(const char*& status) {
+  return Status::kNotSupported;
+}
+
+int BackupSnapshot::set_backup_status(const char* status) {
+  return Status::kNotSupported;
+}
+
+int BackupSnapshot::do_checkpoint(DB *db, const char *backup_tmp_dir_path) { return Status::kNotSupported; }
+
+int BackupSnapshot::accquire_backup_snapshot(DB *db, BackupSnapshotId *backup_id, db::BinlogPosition &binlog_pos)
 {
   return Status::kNotSupported;
 }
 
-int BackupSnapshot::acquire_snapshots(DB *db)
+int BackupSnapshot::record_incremental_extent_ids(DB *db) { return Status::kNotSupported; }
+
+int BackupSnapshot::release_old_backup_snapshot(DB *db, BackupSnapshotId backup_id)
 {
   return Status::kNotSupported;
 }
 
-int BackupSnapshot::record_incremental_extent_ids(DB *db)
-{
-  return Status::kNotSupported;
+int BackupSnapshot::list_backup_snapshots(std::vector<BackupSnapshotId> &backup_ids) { return Status::kNotSupported; }
+
+int BackupSnapshot::release_current_backup_snapshot(DB *db) { return Status::kNotSupported; }
+
+BackupSnapshotId BackupSnapshot::current_backup_id() {
+  return 0;
 }
 
-int BackupSnapshot::release_snapshots(DB *db)
-{
-  return Status::kNotSupported;
+BackupSnapshotImpl::BackupSnapshotImpl()
+    : process_tid_(free_tid_),
+      first_manifest_file_num_(0),
+      last_manifest_file_num_(0),
+      last_manifest_file_size_(0),
+      last_wal_file_num_(0),
+      last_backup_id_(0),
+      cur_backup_id_(0) {}
+
+BackupSnapshotImpl::~BackupSnapshotImpl() {
+  destroy();
 }
 
-int BackupSnapshotImpl::init(DB *db, const char *backup_tmp_dir_path)
-{
+void BackupSnapshotImpl::destroy() {
+  // we can only clear this map when smartengine exit
+  backup_snapshot_map_.clear();
+}
+
+BackupSnapshotImpl *BackupSnapshotImpl::get_instance() {
+  static BackupSnapshotImpl instance;
+  return &instance;
+}
+
+int BackupSnapshotImpl::try_exclusive_lock() {
   int ret = Status::kOk;
   int tid = memory::get_tc_tid();
   int free_tid = free_tid_;
   if (!process_tid_.compare_exchange_strong(free_tid, tid)) {
     ret = Status::kInitTwice;
-    SE_LOG(WARN, "There is another backup job still running!", K(ret));
-  } else if (IS_NULL(db)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "db is nullptr", K(ret));
-  } else {
-    first_manifest_file_num_ = 0;
-    last_manifest_file_num_ = 0;
-    last_manifest_file_size_ = 0;
-    last_wal_file_num_ = 0;
-    backup_tmp_dir_path_ = (nullptr == backup_tmp_dir_path) ?
-        db->GetName() + BACKUP_TMP_DIR : backup_tmp_dir_path;
-    do_cleanup(db);
+    SE_LOG(WARN, "There is another running backup job!", K(ret));
   }
   return ret;
 }
 
-void BackupSnapshotImpl::reset()
-{
-  first_manifest_file_num_ = 0;
-  last_manifest_file_num_ = 0;
-  last_manifest_file_size_ = 0;
-  last_wal_file_num_ = 0;
-  backup_tmp_dir_path_.clear();
+int BackupSnapshotImpl::unlock_exclusive_lock() {
   process_tid_.store(free_tid_);
+  return Status::kOk;
 }
 
-int BackupSnapshotImpl::check_status()
-{
+int BackupSnapshotImpl::lock_instance() {
+  int ret = Status::kOk;
+  if (SUCCED(try_exclusive_lock())) {
+    instance_locked_ = true;
+  }
+  return ret;
+}
+
+int BackupSnapshotImpl::unlock_instance() {
+  int ret = Status::kOk;
+  if (instance_locked_ && SUCCED(unlock_exclusive_lock())) {
+    instance_locked_ = false;
+  }
+  return ret;
+}
+
+int BackupSnapshotImpl::lock_one_step() { return try_exclusive_lock(); }
+
+int BackupSnapshotImpl::unlock_one_step() { return unlock_exclusive_lock(); }
+
+int BackupSnapshotImpl::check_lock_status() {
   int ret = Status::kOk;
   int tid = memory::get_tc_tid();
   int process_tid = process_tid_.load();
@@ -112,16 +155,84 @@ int BackupSnapshotImpl::check_status()
   return ret;
 }
 
-int BackupSnapshotImpl::do_checkpoint(DB *db)
+int BackupSnapshotImpl::init(DB *db, const char *backup_tmp_dir_path) {
+  int ret = Status::kOk;
+  if (IS_NULL(db)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "db is nullptr", K(ret));
+  } else {
+    first_manifest_file_num_ = 0;
+    last_manifest_file_num_ = 0;
+    last_manifest_file_size_ = 0;
+    last_wal_file_num_ = 0;
+    cur_backup_id_ = 0;
+    backup_tmp_dir_path_ = (nullptr == backup_tmp_dir_path) ?
+        db->GetName() + BACKUP_TMP_DIR : backup_tmp_dir_path;
+    do_cleanup(db);
+    backup_status_ = se_backup_status[4];
+  }
+  return ret;
+}
+
+void BackupSnapshotImpl::reset() {
+  first_manifest_file_num_ = 0;
+  last_manifest_file_num_ = 0;
+  last_manifest_file_size_ = 0;
+  last_wal_file_num_ = 0;
+  cur_backup_id_ = 0;
+  backup_tmp_dir_path_.clear();
+  cur_meta_snapshots_.clear();
+  backup_status_ = se_backup_status[4];
+  if (instance_locked_) {
+    unlock_instance();
+  }
+}
+
+int BackupSnapshotImpl::get_backup_status(const char *&status) {
+  status = backup_status_;  
+  return Status::kOk;
+}
+
+int BackupSnapshotImpl::set_backup_status(const char *status) {
+  backup_status_ = status;
+  return Status::kOk;
+}
+
+BackupSnapshotId BackupSnapshotImpl::current_backup_id()
 {
+  return cur_backup_id_;
+}
+
+BackupSnapshotId BackupSnapshotImpl::generate_backup_id()
+{
+  std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+  BackupSnapshotId snapshot_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+  if (last_backup_id_ == 0) {
+    last_backup_id_ = backup_snapshot_map_.get_latest_backup_id();
+  }
+
+  if (last_backup_id_ >= snapshot_time_ms) {
+      snapshot_time_ms = last_backup_id_ + 1;
+  }
+  return snapshot_time_ms;
+}
+
+int BackupSnapshotImpl::do_checkpoint(DB *db, const char *backup_tmp_dir_path) {
   int ret = Status::kOk;
   SSTFileChecker sst_file_checker;
   WalDirFileChecker *wal_file_checker = nullptr;
-  if (FAILED(check_status())) {
-    SE_LOG(WARN, "Failed to check status", K(ret));
-  } else if (IS_NULL(db)) {
+  if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
+  } else if (FAILED(check_lock_status())) {
+    SE_LOG(WARN, "Failed to check lock status", K(ret));
+  } else if (backup_snapshot_map_.get_backup_snapshot_count() >= db::BackupSnapshotMap::kMaxBackupSnapshotNum) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN, "backup snapshot count reach the max limit, please release some old backup snapshots first", K(ret),
+           "max backup snapshot num", db::BackupSnapshotMap::kMaxBackupSnapshotNum);
+  } else if (FAILED(init(db, backup_tmp_dir_path))) {
+    SE_LOG(WARN, "Failed to init backup snapshot", K(ret));
   } else if (FAILED(db->do_manual_checkpoint(first_manifest_file_num_))) {
     SE_LOG(WARN, "Failed to do manual checkpoint", K(ret));
   } else if (FAILED(create_tmp_dir(db))) {
@@ -131,24 +242,41 @@ int BackupSnapshotImpl::do_checkpoint(DB *db)
   } else {
     SE_LOG(INFO, "Success to do checkpoint", K(ret), K(first_manifest_file_num_));
   }
+
   if (FAILED(ret) && Status::kInitTwice != ret) {
     do_cleanup(db);
     reset();
   }
+
   return ret;
 }
 
-int BackupSnapshotImpl::acquire_snapshots(DB *db)
+int BackupSnapshotImpl::accquire_backup_snapshot(DB *db, BackupSnapshotId *backup_id, db::BinlogPosition &binlog_pos)
 {
   int ret = Status::kOk;
-  if (FAILED(check_status())) {
-    SE_LOG(WARN, "Failed to check status", K(ret));
-  } else if (IS_NULL(db)) {
+  if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
+  } else if (IS_NULL(backup_id)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "backup id is nullptr", K(ret));
+  } else if (FAILED(check_lock_status())) {
+    SE_LOG(WARN, "Failed to check lock status", K(ret));
+  } else if (backup_snapshot_map_.get_backup_snapshot_count() >= db::BackupSnapshotMap::kMaxBackupSnapshotNum) {
+    ret = Status::kOverLimit;
+    SE_LOG(WARN,
+           "backup snapshot count reach the max limit, please release some old backup snapshots first",
+           K(ret),
+           "max backup snapshot num",
+           db::BackupSnapshotMap::kMaxBackupSnapshotNum);
   } else {
+    *backup_id = generate_backup_id();
+    last_backup_id_ = *backup_id;
+    cur_backup_id_ = *backup_id;
+
     db->DisableFileDeletions();
-    if (FAILED(db->create_backup_snapshot(meta_snapshots_,
+    if (FAILED(db->create_backup_snapshot(cur_backup_id_,
+                                          cur_meta_snapshots_,
                                           last_manifest_file_num_,
                                           last_manifest_file_size_,
                                           last_wal_file_num_,
@@ -158,6 +286,7 @@ int BackupSnapshotImpl::acquire_snapshots(DB *db)
 #ifndef NDEBUG
       TEST_SYNC_POINT_CALLBACK("BackupSnapshotImpl::acquire_snapshot::after_create_backup_snapshot", db);
 #endif
+      binlog_pos = last_binlog_pos_;
       std::string last_manifest_file_dest = DescriptorFileName(backup_tmp_dir_path_, last_manifest_file_num_);
       std::string last_manifest_file_src = DescriptorFileName(db->GetName(), last_manifest_file_num_);
       DataDirFileChecker data_file_checker(first_manifest_file_num_, last_manifest_file_num_);
@@ -170,10 +299,16 @@ int BackupSnapshotImpl::acquire_snapshots(DB *db)
                                  last_manifest_file_size_,
                                  false /**use_fsync*/).code())) { // copy last MANIFEST file
         SE_LOG(WARN, "Failed to copy last manifest file", K(ret));
+      } else if (IS_FALSE(backup_snapshot_map_.add_backup_snapshot(cur_backup_id_, std::move(cur_meta_snapshots_)))) {
+        ret = Status::kErrorUnexpected;
+        SE_LOG(WARN, "backup snapshot id already exists", K(ret), K(cur_backup_id_));
       } else {
-        SE_LOG(INFO, "Success to copy last MANIFEST file and acquire snapshots",
-            K(last_manifest_file_dest), K(last_manifest_file_num_),
-            K(last_manifest_file_size_), K(last_wal_file_num_));
+        SE_LOG(INFO,
+               "Success to copy last MANIFEST file and acquire snapshots",
+               K(last_manifest_file_dest),
+               K(last_manifest_file_num_),
+               K(last_manifest_file_size_),
+               K(last_wal_file_num_));
       }
     }
     db->EnableFileDeletions(false /**force enable*/);
@@ -183,18 +318,20 @@ int BackupSnapshotImpl::acquire_snapshots(DB *db)
     do_cleanup(db);
     reset();
   }
+
   return ret;
 }
 
 int BackupSnapshotImpl::record_incremental_extent_ids(DB *db)
 {
   int ret = Status::kOk;
-  if (FAILED(check_status())) {
-    SE_LOG(WARN, "Failed to check status", K(ret));
-  } else if (IS_NULL(db)) {
+  if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
-  } else if (FAILED(db->record_incremental_extent_ids(first_manifest_file_num_,
+  } else if (FAILED(check_lock_status())) {
+    SE_LOG(WARN, "Failed to check lock status", K(ret));
+  } else if (FAILED(db->record_incremental_extent_ids(backup_tmp_dir_path_,
+                                                      first_manifest_file_num_,
                                                       last_manifest_file_num_,
                                                       last_manifest_file_size_))) {
     SE_LOG(WARN, "Failed to record incremental extents", K(ret));
@@ -205,25 +342,53 @@ int BackupSnapshotImpl::record_incremental_extent_ids(DB *db)
     do_cleanup(db);
     reset();
   }
+
   return ret;
 }
 
-int BackupSnapshotImpl::release_snapshots(DB *db)
-{
+int BackupSnapshotImpl::release_old_backup_snapshot(DB *db, BackupSnapshotId backup_id) {
   int ret = Status::kOk;
-  if (FAILED(check_status())) {
-    if (Status::kInitTwice == ret) {
-      SE_LOG(WARN, "There is another backup job still running!", K(ret));
-    }
-  } else if (IS_NULL(db)) {
+  if (IS_NULL(db)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "db is nullptr", K(ret));
-  } else if (FAILED(db->release_backup_snapshot(meta_snapshots_))) {
-    SE_LOG(WARN, "Failed to acquire backup snapshot", K(ret));
+  } else if (FAILED(backup_snapshot_map_.release_backup_snapshot(backup_id))) {
+    SE_LOG(WARN, "Failed to release backup snapshot", K(ret), K(backup_id));
+  } else {
+    SE_LOG(INFO, "Success to release old backup snapshot", K(ret), K(backup_id));
   }
+  return ret;
+}
+
+int BackupSnapshotImpl::release_current_backup_snapshot(DB *db)
+{
+  int ret = Status::kOk;
+  if (IS_NULL(db)) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "db is nullptr", K(ret));
+  } else if (FAILED(check_lock_status())) {
+    SE_LOG(WARN, "Failed to check lock status", K(ret));
+  } else if (FAILED(backup_snapshot_map_.release_backup_snapshot(cur_backup_id_))) {
+    SE_LOG(WARN, "Failed to release backup snapshot", K(ret), K(cur_backup_id_));
+  } else {
+    SE_LOG(INFO, "Success to release current backup snapshot", K(ret), K(cur_backup_id_));
+  }
+
   if (Status::kInitTwice != ret) {
     do_cleanup(db);
     reset();
+  }
+  return ret;
+}
+
+int BackupSnapshotImpl::list_backup_snapshots(std::vector<BackupSnapshotId> &backup_ids) {
+  int ret = Status::kOk;
+  BackupSnapshotId prev_backup_id = 0;
+  BackupSnapshotId backup_id = 0;
+  MetaSnapshotSet *backup_snapshot = nullptr;
+
+  while (backup_snapshot_map_.get_next_backup_snapshot(prev_backup_id, backup_id, backup_snapshot)) {
+    backup_ids.push_back(backup_id);
+    prev_backup_id = backup_id;
   }
   return ret;
 }
@@ -255,11 +420,8 @@ int BackupSnapshotImpl::do_cleanup(DB *db)
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else {
-    // release snapshots
-    if (meta_snapshots_.size() > 0) {
-      db->release_backup_snapshot(meta_snapshots_);
-      meta_snapshots_.clear();
-    }
+    StorageManager::cleanup_backup_snapshot(cur_meta_snapshots_);
+
     // delete tmp dir
     std::vector<std::string> all_files;
     if (FAILED(db->GetEnv()->GetChildren(backup_tmp_dir_path_, &all_files).code())) {

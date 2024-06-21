@@ -879,7 +879,7 @@ void DBImpl::add_compaction_job(ColumnFamilyData* sub_table, CompactionTasksPick
   assert(!sub_table->pending_compaction());
   assert(is_valid_task_type(task_info.task_type_));
   // check if compaction can do without snapshot, must get the meta_snapshot first
-  const Snapshot* meta_snapshot = sub_table->get_meta_snapshot(&mutex_);
+  Snapshot *meta_snapshot = sub_table->get_meta_snapshot(&mutex_);
   bool need_check = need_snapshot_check(task_info.task_type_, meta_snapshot);
   auto priority = sub_table->compaction_priority();
   sub_table->Ref();
@@ -913,7 +913,7 @@ void DBImpl::remove_flush_job(DBImpl::STFlushJob *&flush_job, bool schedule) {
   mutex_.AssertHeld();
   if (nullptr != flush_job) {
     if (nullptr != flush_job->meta_snapshot_) {
-      const Snapshot* s = flush_job->meta_snapshot_;
+      Snapshot *s = flush_job->meta_snapshot_;
       flush_job->meta_snapshot_ = nullptr;
       flush_job->sub_table_->release_meta_snapshot(s);
     }
@@ -947,7 +947,7 @@ void DBImpl::remove_compaction_job(CFCompactionJob*& cf_job, bool schedule) {
   assert(nullptr != cf_job->cfd_);
   FREE_OBJECT(CompactionJob, cf_job->compaction_alloc_, cf_job->job_);
   if (nullptr != cf_job->meta_snapshot_) {
-    const Snapshot* s = cf_job->meta_snapshot_;
+    Snapshot *s = cf_job->meta_snapshot_;
     cf_job->meta_snapshot_ = nullptr;
     cf_job->cfd_->release_meta_snapshot(s, &mutex_);
   }
@@ -977,7 +977,7 @@ void DBImpl::remove_compaction_job(CFCompactionJob*& cf_job, bool schedule) {
 
 void DBImpl::AddToFlushQueue(ColumnFamilyData* sub_table, TaskType type) {
   assert(!sub_table->pending_flush());
-  const Snapshot* meta_snapshot = sub_table->get_meta_snapshot(&mutex_);
+  Snapshot *meta_snapshot = sub_table->get_meta_snapshot(&mutex_);
   // here no memtables' max_seq, so just do the snapshot check
   bool need_check = true;
   sub_table->Ref();
@@ -1611,12 +1611,11 @@ void DBImpl::BackgroundCallCompaction()
   }
 }
 
-Status DBImpl::build_compaction_job(ColumnFamilyData* cfd,
-                                    const Snapshot* snapshot,
-                                    JobContext* job_context,
-                                    storage::CompactionJob*& job,
+Status DBImpl::build_compaction_job(ColumnFamilyData *cfd,
+                                    Snapshot *snapshot,
+                                    JobContext *job_context,
+                                    storage::CompactionJob *&job,
                                     CFCompactionJob &cf_job) {
-
   int ret = Status::kOk;
   job = ALLOC_OBJECT(CompactionJob, cf_job.compaction_alloc_, cf_job.compaction_alloc_);
   if (nullptr == job) {
@@ -1669,7 +1668,7 @@ Status DBImpl::build_compaction_job(ColumnFamilyData* cfd,
         if (nullptr != snapshot) {
           cfd->release_meta_snapshot(snapshot, &mutex_);
         }
-        const Snapshot *new_snapshot = cfd->get_meta_snapshot(&mutex_);
+        Snapshot *new_snapshot = cfd->get_meta_snapshot(&mutex_);
         cf_job.update_snapshot(new_snapshot);
         job->update_snapshot(new_snapshot);
         if (FAILED(job->prepare_major_task(task_info.l1_pick_pos_,
@@ -1918,7 +1917,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress, JobContext* job_context
         // We release meta snapshot after build compaction job since only 1 compaction
         // job will proceed for each CF.
         if (nullptr != cf_job->meta_snapshot_) {
-          const Snapshot* s = cf_job->meta_snapshot_;
+          Snapshot *s = cf_job->meta_snapshot_;
           cf_job->meta_snapshot_ = nullptr;
           cf_job->cfd_->release_meta_snapshot(s, &mutex_);
           SE_LOG(DEBUG, "release meta snapshot cfd", K(cfd->GetName().c_str()), K(cfd->GetID()));

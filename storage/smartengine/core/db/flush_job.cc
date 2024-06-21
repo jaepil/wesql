@@ -347,7 +347,7 @@ void BaseFlush::upload_current_flush_stats_to_global(uint64_t bytes_written,
 int BaseFlush::delete_old_M0(const InternalKeyComparator *internal_comparator, MiniTables &mtables) {
   int ret = Status::kOk;
   LayerPosition layer_position(0, storage::LayerPosition::INVISIBLE_LAYER_INDEX);
-  const Snapshot *current_snapshot = nullptr;
+  Snapshot *current_snapshot = nullptr;
   const ExtentLayer *dump_layer = nullptr;
   const ExtentMeta *lob_extent_meta = nullptr;
   table::InternalIterator *meta_iter = nullptr;

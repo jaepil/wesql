@@ -23,7 +23,6 @@ using namespace db;
 using namespace util;
 
 namespace common {
-
 ImmutableCFOptions::ImmutableCFOptions(const Options& options)
     : ImmutableCFOptions(ImmutableDBOptions(options), options)
 {}
@@ -101,5 +100,5 @@ void MutableCFOptions::Dump() const
   __SE_LOG(INFO, "            compaction_task_extents_limit: %d", compaction_task_extents_limit);
 }
 
-}  // namespace common
+} // namespace common
 }  // namespace smartengine

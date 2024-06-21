@@ -33,34 +33,59 @@ namespace util
 class BackupSnapshotImpl : public BackupSnapshot
 {
 public:
-  // Check backup job and do init
-  virtual int init(db::DB *db, const char *backup_tmp_dir_path = nullptr) override;
-  // Do a manual checkpoint and flush memtable
-  virtual int do_checkpoint(db::DB *db) override;
-  // Acquire snapshots and hard-link/copy MANIFEST files
-  virtual int acquire_snapshots(db::DB *db) override;
-  // Parse incremental MANIFEST files and record the modified extent ids
-  virtual int record_incremental_extent_ids(db::DB *db) override;
-  // Release the snapshots
-  virtual int release_snapshots(db::DB *db) override;
+  virtual ~BackupSnapshotImpl() override;
+
+  static BackupSnapshotImpl *get_instance();
+
+  void destroy();
+
+  virtual int lock_instance() override;
+  virtual int unlock_instance() override;
+  virtual int lock_one_step() override;
+  virtual int unlock_one_step() override;
+  virtual int check_lock_status() override;
 
 public:
-  BackupSnapshotImpl() : process_tid_(free_tid_),
-                         first_manifest_file_num_(0),
-                         last_manifest_file_num_(0),
-                         last_manifest_file_size_(0),
-                         last_wal_file_num_(0)
-  {}
-  virtual ~BackupSnapshotImpl() override {}
+  // Check backup job and do init
+  virtual int init(db::DB *db, const char *backup_tmp_dir_path = nullptr) override;
+  // Get backup status
+  virtual int get_backup_status(const char *&status) override;
+  // Set backup status
+  virtual int set_backup_status(const char *status) override;
+  // Do a manual checkpoint and flush memtable
+  virtual int do_checkpoint(db::DB *db, const char *backup_tmp_dir_path = nullptr) override;
+  // Acquire snapshots and hard-link/copy MANIFEST files
+  virtual int accquire_backup_snapshot(db::DB *db,
+                                       BackupSnapshotId *backup_id,
+                                       db::BinlogPosition &binlog_pos) override;
+  // Parse incremental MANIFEST files and record the modified extent ids
+  virtual int record_incremental_extent_ids(db::DB *db) override;
+  // Release an old backup snapshot
+  virtual int release_old_backup_snapshot(db::DB *db, BackupSnapshotId backup_id) override;
+  // Release the current backup snapshot
+  virtual int release_current_backup_snapshot(db::DB *db) override;
+  // List all backup snapshots and return the backup ids
+  virtual int list_backup_snapshots(std::vector<BackupSnapshotId> &backup_ids) override;
+  // Get current backup id of the backup instance
+  virtual BackupSnapshotId current_backup_id() override;
+
+public:
+  int try_exclusive_lock();
+  int unlock_exclusive_lock();
+  db::BackupSnapshotMap &get_backup_snapshot_map() { return backup_snapshot_map_; }
+
+private:
+  BackupSnapshotImpl();
 
 private:
   int create_tmp_dir(db::DB *db);
   int link_sst_files(db::DB *db);
   template<typename DataFileChecker, typename WalFileChecker>
   int link_files(db::DB *db, DataFileChecker *data_file_checker, WalFileChecker *wal_file_checker);
-  template<typename FileChecker>
-  int link_dir_files(db::DB *db, const std::string &dir_path, const std::vector<std::string> &files, FileChecker *file_checker);
-  int check_status();
+  template <typename FileChecker>
+  int link_dir_files(db::DB *db, const std::string &dir_path, const std::vector<std::string> &files,
+                     FileChecker *file_checker);
+  BackupSnapshotId generate_backup_id();
   // Cleanup the tmp dir
   int do_cleanup(db::DB *db);
   void reset();
@@ -69,6 +94,10 @@ private:
   static const int free_tid_ = -1;
   // A backup job is in process
   std::atomic<int> process_tid_;
+  std::atomic<bool> instance_locked_;
+
+  const char *backup_status_;
+
   // The written MANIFEST file after do checkpoint
   int32_t first_manifest_file_num_;
   // The written MANIFEST file used when acquiring snapshots
@@ -77,10 +106,16 @@ private:
   uint64_t last_manifest_file_size_;
   // The written WAL log file after switch memtable in acquiring_snapshots
   uint64_t last_wal_file_num_;
-  // Snapshots of all subtables
-  db::MetaSnapshotMap meta_snapshots_;
   // Binlog position of last trx
   db::BinlogPosition last_binlog_pos_;
+  // The backup snapshot id of the last time
+  BackupSnapshotId last_backup_id_;
+  // The backup snapshot id of the backup instance, which is milliseconds since epoch
+  std::atomic<BackupSnapshotId> cur_backup_id_;
+  // current backup snapshot(snapshots of all subtables)
+  db::MetaSnapshotSet cur_meta_snapshots_;
+  // every backup snapshot has a map of meta snapshots(snapshots of all subtables)
+  db::BackupSnapshotMap backup_snapshot_map_;
   std::string backup_tmp_dir_path_;
 };
 

@@ -112,6 +112,12 @@ static int se_init_func(void *const p)
   se_hton->post_engine_recover = se_post_engine_recover;
   se_hton->post_ddl = se_post_ddl;
 
+  se_hton->checkpoint = se_checkpoint;
+  se_hton->create_backup_snapshot = se_create_backup_snapshot;
+  se_hton->incremental_backup = se_incremental_backup;
+  se_hton->release_backup_snapshot = se_release_backup_snapshot;
+  se_hton->list_backup_snapshots = se_list_backup_snapshots;
+
   se_hton->data = se_api_cb;
 
   //assert(!mysqld_embedded);
@@ -307,28 +313,28 @@ static int se_init_func(void *const p)
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
-  auto err = se_bg_thread.create_thread(BG_THREAD_NAME
+  int ret = se_bg_thread.create_thread(BG_THREAD_NAME
 #ifdef HAVE_PSI_INTERFACE
                                          ,
                                          se_background_psi_thread_key
 #endif
                                          );
-  if (err != 0) {
+  if (ret != 0) {
     sql_print_error("SE: Couldn't start the background thread: (errno=%d)",
-                    err);
+                    ret);
     se_open_tables.free_hash();
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
-  err = se_drop_idx_thread.create_thread(INDEX_THREAD_NAME
+  ret = se_drop_idx_thread.create_thread(INDEX_THREAD_NAME
 #ifdef HAVE_PSI_INTERFACE
                                           ,
                                           se_drop_idx_psi_thread_key
 #endif
                                           );
-  if (err != 0) {
+  if (ret != 0) {
     sql_print_error("SE: Couldn't start the drop index thread: (errno=%d)",
-                    err);
+                    ret);
     se_open_tables.free_hash();
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
@@ -339,18 +345,14 @@ static int se_init_func(void *const p)
     se_db->PauseBackgroundWork();
   }
 
-  if (smartengine::common::Status::kOk != BackupSnapshot::create(backup_instance)) {
-    sql_print_error("SE: Failed to create backup instance.");
+  // remove hard links in backup tmp dir if exists
+  if (FAILED(BackupSnapshot::get_instance()->init(se_db))) {
+    sql_print_error("SE: Failed to init backup instance.");
     DBUG_RETURN(HA_EXIT_FAILURE);
-  } else if (nullptr != backup_instance) {
-    // remove hard links in backup tmp dir if exists
-    backup_instance->init(se_db);
-    backup_instance->release_snapshots(se_db);
   }
 
-  // NO_LINT_DEBUG
-  sql_print_information("SE: global statistics using %s indexer",
-                        STRINGIFY_ARG(SE_INDEXER));
+    // NO_LINT_DEBUG
+    sql_print_information("SE: global statistics using %s indexer", STRINGIFY_ARG(SE_INDEXER));
 #if defined(HAVE_SCHED_GETCPU)
   if (sched_getcpu() == -1) {
     // NO_LINT_DEBUG

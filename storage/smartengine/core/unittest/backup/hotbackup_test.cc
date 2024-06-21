@@ -15,10 +15,11 @@
  */
 
 #include "backup/hotbackup_impl.h"
-#include "util/testharness.h"
 #include "port/stack_trace.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/io_extent.h"
 #include "util/file_reader_writer.h"
+#include "util/testharness.h"
 #define private public
 #define protected public
 #include "db/db_test_util.h"
@@ -38,18 +39,24 @@ public:
   HotbackupTest() : DBTestBase(test_dir) 
   {
     backup_tmp_dir_path_ = db_->GetName() + BACKUP_TMP_DIR;
+    backup_tmp_dir_path2_ = db_->GetName() + "/hotbackup_tmp2";
+    backup_tmp_dir_path3_ = db_->GetName() + "/hotbackup_tmp3";
   }
   const char *backup_dir_ = "/backup_dir";
+  const char *backup_dir2_ = "/backup_dir2";
+  const char *backup_dir3_ = "/backup_dir3";
   void replay_sst_files(const std::string &backup_tmp_dir_path,
                         const std::string &extent_ids_file, 
                         const std::string &extent_file);
-  void copy_sst_files();
-  void copy_rest_files(const std::string &backup_tmp_dir_path);
+  void copy_sst_files(std::string backup_path);
+  void copy_rest_files(const std::string &backup_tmp_dir_path, std::string backup_path);
   void copy_extents(const std::string &backup_tmp_dir_path,
                     const std::string &extent_ids_file, 
                     const std::string &extent_file);
   uint64_t last_sst_file_num_ = 0;
   std::string backup_tmp_dir_path_;
+  std::string backup_tmp_dir_path2_;
+  std::string backup_tmp_dir_path3_;
 };
 
 struct RestFileChecker
@@ -57,22 +64,16 @@ struct RestFileChecker
   RestFileChecker(const uint64_t last_sst_file_num) : last_sst_file_num_(last_sst_file_num) {}
   inline bool operator()(const util::FileType &type, const uint64_t &file_num)
   {
-    return (type == util::kTableFile && file_num > last_sst_file_num_)
-        || (type == util::kLogFile)
-        || (type == util::kDescriptorFile)
-        || (type == util::kCheckpointFile)
-        || (type == kCurrentFile)
-        || (type == kCurrentCheckpointFile);
+    return (type == util::kTableFile && (file_num > last_sst_file_num_ || last_sst_file_num_ == 0)) ||
+           (type == util::kLogFile) || (type == util::kDescriptorFile) || (type == util::kCheckpointFile) ||
+           (type == kCurrentFile) || (type == kCurrentCheckpointFile);
   }
   uint64_t last_sst_file_num_;
 };
 
 void HotbackupTest::replay_sst_files(const std::string &backup_dir,
                                      const std::string &extent_ids_file,
-                                     const std::string &extent_file)
-{
-//  std::unique_ptr<SequentialFile> id_reader;
-//  std::unique_ptr<SequentialFile> extent_reader;
+                                     const std::string &extent_file) {
   SequentialFile *id_reader = nullptr;
   SequentialFile *extent_reader = nullptr;
   char buf[16];
@@ -167,15 +168,13 @@ void HotbackupTest::copy_extents(const std::string &backup_tmp_dir_path,
   }
 }
 
-void HotbackupTest::copy_sst_files()
-{
+void HotbackupTest::copy_sst_files(std::string backup_path) {
   std::vector<std::string> all_files;
   SSTFileChecker file_checker;
   ASSERT_OK(db_->GetEnv()->GetChildren(dbname_, &all_files));
   uint64_t file_num = 0;
   util::FileType type;
   char cmd[1024];
-  std::string backup_path = dbname_ + backup_dir_;
   ASSERT_OK(db_->GetEnv()->CreateDir(backup_path));
   for (auto &file : all_files) {
     if (ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) {
@@ -190,15 +189,13 @@ void HotbackupTest::copy_sst_files()
   }
 }
 
-void HotbackupTest::copy_rest_files(const std::string &backup_tmp_dir_path)
-{
+void HotbackupTest::copy_rest_files(const std::string &backup_tmp_dir_path, std::string backup_path) {
   std::vector<std::string> all_files;
   RestFileChecker file_checker(last_sst_file_num_);
   ASSERT_OK(db_->GetEnv()->GetChildren(backup_tmp_dir_path, &all_files));
   uint64_t file_num = 0;
   util::FileType type;
   char cmd[1024];
-  std::string backup_path = dbname_ + backup_dir_;
   for (auto &file : all_files) {
     if ((ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) 
         || file == "extent_ids.inc" || file == "extent.inc") {
@@ -210,32 +207,21 @@ void HotbackupTest::copy_rest_files(const std::string &backup_tmp_dir_path)
   }
 }
 
-TEST_F(HotbackupTest, backup_job_exclusive)
+TEST_F(HotbackupTest, normal)
 {
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
-  ASSERT_EQ(Status::kInitTwice, backup_snapshot->init(db_));
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
 
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  ASSERT_EQ(Status::kInitTwice, backup_snapshot->init(db_));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
-  ASSERT_EQ(Status::kInitTwice, backup_snapshot->init(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
 
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
-  ASSERT_EQ(Status::kInitTwice, backup_snapshot->init(db_));
-  
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
 
-  // with out init
-  ASSERT_EQ(Status::kNotInit, backup_snapshot->do_checkpoint(db_));
-  ASSERT_EQ(Status::kNotInit, backup_snapshot->acquire_snapshots(db_));
-  ASSERT_EQ(Status::kNotInit, backup_snapshot->record_incremental_extent_ids(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
+  backup_snapshot->unlock_instance();
 
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
   Close();
   DestroyDB(backup_tmp_dir_path_, last_options_);
 }
@@ -243,16 +229,19 @@ TEST_F(HotbackupTest, backup_job_exclusive)
 TEST_F(HotbackupTest, incremental_extent)
 {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
   int32_t dummy_file_num = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+
   ASSERT_OK(Put(1, "1", "11"));
   ASSERT_OK(Put(1, "2", "22"));
   ASSERT_OK(Flush(1));
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  copy_sst_files();
-  
+  copy_sst_files(backup_path);
+
   ASSERT_OK(Put(1, "a", "aa"));
   ASSERT_OK(Put(1, "b", "bb"));
   ASSERT_OK(Flush(1));
@@ -265,19 +254,18 @@ TEST_F(HotbackupTest, incremental_extent)
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
 
-  copy_rest_files(backup_tmp_dir_path_);
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
-
-  // 
-  std::string backup_path = dbname_ + backup_dir_;
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
+  //
   replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+  backup_snapshot->unlock_instance();
+
   Reopen(CurrentOptions(), &backup_path); 
   ASSERT_EQ("11", Get(1, "1"));
   ASSERT_EQ("22", Get(1, "2"));
@@ -294,19 +282,122 @@ TEST_F(HotbackupTest, incremental_extent)
   DestroyDB(backup_path, last_options_);
 }
 
-TEST_F(HotbackupTest, delete_cf)
-{
-  CreateColumnFamilies({"hotbackup", "delete_cf"}, CurrentOptions());
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+TEST_F(HotbackupTest, create_backups_and_recover) {
+  CreateColumnFamilies({"hotbackup"}, CurrentOptions());
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
+  BackupSnapshotId backup_id2 = 0;
+  BackupSnapshotId backup_id3 = 0;
   int32_t dummy_file_num = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+
   ASSERT_OK(Put(1, "1", "11"));
   ASSERT_OK(Put(1, "2", "22"));
   ASSERT_OK(Flush(1));
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+
+  // create the first backup snapshot
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  copy_sst_files();
-  
+
+  ASSERT_OK(Put(1, "a", "aa"));
+  ASSERT_OK(Put(1, "b", "bb"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "c", "cc"));
+  ASSERT_OK(Put(1, "d", "dd"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "e", "ee"));
+  ASSERT_OK(Put(1, "f", "ff"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "g", "gg"));
+  ASSERT_OK(Put(1, "h", "hh"));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+
+  ASSERT_OK(Put(1, "a", "aaa"));
+  ASSERT_OK(Put(1, "b", "bbb"));
+  ASSERT_OK(Flush(1));
+
+  Reopen(CurrentOptions(), &dbname_);
+  ASSERT_EQ(1, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+
+  // create the second backup snapshot
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+
+  ASSERT_OK(Put(1, "c", "ccc"));
+  ASSERT_OK(Put(1, "d", "ddd"));
+  ASSERT_OK(Flush(1));
+
+  Reopen(CurrentOptions(), &dbname_);
+  ASSERT_EQ(2, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+
+  // create the third backup snapshot
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id3));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+
+  backup_snapshot->unlock_instance();
+
+  ASSERT_OK(Put(1, "e", "eee"));
+  ASSERT_OK(Put(1, "f", "fff"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "g", "ggg"));
+  ASSERT_OK(Put(1, "h", "hhh"));
+  ASSERT_OK(Flush(1));
+
+  Reopen(CurrentOptions(), &dbname_);
+  ASSERT_EQ(3, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+
+  std::vector<BackupSnapshotId> backup_ids;
+  backup_snapshot->list_backup_snapshots(backup_ids);
+  ASSERT_EQ(3, backup_ids.size());
+  ASSERT_TRUE(std::find(backup_ids.begin(), backup_ids.end(), backup_id) != backup_ids.end());
+  ASSERT_TRUE(std::find(backup_ids.begin(), backup_ids.end(), backup_id2) != backup_ids.end());
+  ASSERT_TRUE(std::find(backup_ids.begin(), backup_ids.end(), backup_id3) != backup_ids.end());
+  backup_ids.clear();
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_old_backup_snapshot(db_, backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_old_backup_snapshot(db_, backup_id2));
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_old_backup_snapshot(db_, backup_id3));
+  backup_snapshot->list_backup_snapshots(backup_ids);
+  ASSERT_EQ(0, backup_ids.size());
+
+  Reopen(CurrentOptions(), &dbname_);
+  ASSERT_EQ(0, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+
+  ASSERT_EQ("11", Get(1, "1"));
+  ASSERT_EQ("22", Get(1, "2"));
+  ASSERT_EQ("aaa", Get(1, "a"));
+  ASSERT_EQ("bbb", Get(1, "b"));
+  ASSERT_EQ("ccc", Get(1, "c"));
+  ASSERT_EQ("ddd", Get(1, "d"));
+  ASSERT_EQ("eee", Get(1, "e"));
+  ASSERT_EQ("fff", Get(1, "f"));
+  ASSERT_EQ("ggg", Get(1, "g"));
+  ASSERT_EQ("hhh", Get(1, "h"));
+
+  Close();
+  DestroyDB(dbname_, last_options_);
+}
+
+TEST_F(HotbackupTest, delete_cf)
+{
+  CreateColumnFamilies({"hotbackup", "delete_cf"}, CurrentOptions());
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
+  int32_t dummy_file_num = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+
+  ASSERT_OK(Put(1, "1", "11"));
+  ASSERT_OK(Put(1, "2", "22"));
+  ASSERT_OK(Flush(1));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+  copy_sst_files(backup_path);
+
   ASSERT_OK(Put(1, "a", "aa"));
   ASSERT_OK(Put(1, "b", "bb"));
   ASSERT_OK(Flush(1));
@@ -334,18 +425,18 @@ TEST_F(HotbackupTest, delete_cf)
   // delete sst file
   ExtentSpaceManager::get_instance().recycle_dropped_table_space();
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_,
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
 
-  copy_rest_files(backup_tmp_dir_path_);
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
 
-  std::string backup_path = dbname_ + backup_dir_;
   replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+  backup_snapshot->unlock_instance();
+
   Reopen(CurrentOptions(), &backup_path);
   ASSERT_EQ("11", Get(1, "1"));
   ASSERT_EQ("22", Get(1, "2"));
@@ -362,22 +453,206 @@ TEST_F(HotbackupTest, delete_cf)
   DestroyDB(backup_path, last_options_);
 }
 
+TEST_F(HotbackupTest, delete_cf_before_and_after_create_snapshot) {
+  CreateColumnFamilies({"hotbackup", "delete_cf"}, CurrentOptions());
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
+  BackupSnapshotId backup_id2 = 0;
+  int32_t dummy_file_num = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+  std::string backup_path2 = dbname_ + backup_dir2_;
+  int64_t lob_size = 5 * 1024 * 1024;
+  char *lob_value = new char[lob_size];
+  memset(lob_value, 'l', lob_size);
+
+  ASSERT_OK(Put(1, "1", "11"));
+  ASSERT_OK(Put(1, "2", "22"));
+  ASSERT_OK(Flush(1));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
+
+  // create the first backup snapshot before delete cf
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_, backup_tmp_dir_path_.c_str()));
+  copy_sst_files(backup_path);
+
+  ASSERT_OK(Put(1, "a", "aa"));
+  ASSERT_OK(Put(1, "b", "bb"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "c", "cc"));
+  ASSERT_OK(Put(1, "d", "dd"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "e", "ee"));
+  ASSERT_OK(Put(1, "f", "ff"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "g", "gg"));
+  ASSERT_OK(Put(1, "h", "hh"));
+  ASSERT_OK(Put(1, "l", Slice(lob_value, lob_size)));
+
+  ASSERT_OK(Put(2, "a", "aa"));
+  ASSERT_OK(Put(2, "b", "bb"));
+  ASSERT_OK(Flush(2));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+
+  // get meta snapshot of cf 2
+  ColumnFamilyHandleImpl *cfh = dynamic_cast<ColumnFamilyHandleImpl *>(get_column_family_handle(2));
+  SnapshotImpl *meta_snapshot = dynamic_cast<SnapshotImpl *>(cfh->cfd()->get_backup_meta_snapshot());
+  cfh->cfd()->storage_manager_.release_backup_meta_snapshot(meta_snapshot);
+  ASSERT_EQ(2, meta_snapshot->ref_);
+  ASSERT_EQ(1, meta_snapshot->backup_ref_);
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+
+  DropColumnFamily(2);
+
+  // tigger gc, pop_front_gc_job needs to be protected by db_mutex_
+  dbfull()->TEST_LockMutex();
+  DBImpl::GCJob *gc_job = dbfull()->pop_front_gc_job();
+  dbfull()->TEST_UnlockMutex();
+  ASSERT_TRUE(gc_job != nullptr);
+  int64_t index_id = gc_job->sub_table_->GetID();
+  // will unref meta snapshot ref count from 2 to 1
+  ASSERT_OK(gc_job->sub_table_->release_memtable_resource());
+  // will unref meta snapshot ref count from 1 to 0, but backup ref count is not 0, so the extents will not be recycled
+  // at now.
+  ASSERT_OK(gc_job->sub_table_->storage_manager_.release_extent_resource(false));
+  ASSERT_EQ(0, meta_snapshot->ref_);
+  ASSERT_EQ(1, meta_snapshot->backup_ref_);
+  ASSERT_OK(ExtentSpaceManager::get_instance().unregister_subtable(gc_job->sub_table_->get_table_space_id(), index_id));
+  // try to delete sst file
+  ExtentSpaceManager::get_instance().recycle_dropped_table_space();
+
+  copy_extents(backup_tmp_dir_path_, backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+
+  std::vector<ExtentId> extent_ids;
+  auto *sn = dynamic_cast<SnapshotImpl *>(meta_snapshot);
+  for (int64_t level = 0; level < storage::MAX_TIER_COUNT; level++) {
+    storage::ExtentLayer *extent_layer = nullptr;
+    storage::ExtentLayerVersion *extent_layer_version = sn->get_extent_layer_version(level);
+    for (int64_t index = 0; index < extent_layer_version->get_extent_layer_size(); index++) {
+      extent_layer = extent_layer_version->get_extent_layer(index);
+      ASSERT_TRUE(extent_layer != nullptr);
+      for (auto &extent_meta : extent_layer->extent_meta_arr_) {
+        ASSERT_EQ(1, extent_meta->refs_);
+        extent_ids.push_back(extent_meta->extent_id_);
+      }
+      for (auto &lob_meta : extent_layer->lob_extent_arr_) {
+        ASSERT_EQ(1, lob_meta->refs_);
+        extent_ids.push_back(lob_meta->extent_id_);
+      }
+    }
+    extent_layer = extent_layer_version->dump_extent_layer_;
+    if (extent_layer) {
+      for (auto &extent_meta : extent_layer->extent_meta_arr_) {
+        ASSERT_EQ(1, extent_meta->refs_);
+        extent_ids.push_back(extent_meta->extent_id_);
+      }
+      for (auto &lob_meta : extent_layer->lob_extent_arr_) {
+        ASSERT_EQ(1, lob_meta->refs_);
+        extent_ids.push_back(lob_meta->extent_id_);
+      }
+    }
+  }
+
+  for (auto extent_id : extent_ids) {
+    ASSERT_TRUE(nullptr != storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+  }
+
+  Reopen(CurrentOptions(), &dbname_);
+  for (auto extent_id : extent_ids) {
+    ASSERT_TRUE(nullptr != storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+  }
+
+  ASSERT_OK(backup_snapshot->release_current_backup_snapshot(db_));
+
+  Reopen(CurrentOptions(), &dbname_);
+
+  for (auto extent_id : extent_ids) {
+    ASSERT_EQ(nullptr, storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+  }
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
+
+  // create the second backup snapshot after delete cf
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_, backup_tmp_dir_path2_.c_str()));
+  copy_sst_files(backup_path2);
+
+  ASSERT_OK(Delete(1, "l"));
+  ASSERT_OK(Flush(1));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+  copy_extents(backup_tmp_dir_path2_, backup_tmp_dir_path2_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path2_ + BACKUP_EXTENTS_FILE);
+  copy_rest_files(backup_tmp_dir_path2_, backup_path2);
+  replay_sst_files(backup_path2, backup_path2 + BACKUP_EXTENT_IDS_FILE, backup_path2 + BACKUP_EXTENTS_FILE);
+
+  for (auto extent_id : extent_ids) {
+    ASSERT_EQ(nullptr, storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+  }
+
+  ASSERT_OK(backup_snapshot->release_current_backup_snapshot(db_));
+
+  backup_snapshot->unlock_instance();
+
+  Reopen(CurrentOptions(), &backup_path);
+  ASSERT_EQ("11", Get(1, "1"));
+  ASSERT_EQ("22", Get(1, "2"));
+  ASSERT_EQ("aa", Get(1, "a"));
+  ASSERT_EQ("bb", Get(1, "b"));
+  ASSERT_EQ("cc", Get(1, "c"));
+  ASSERT_EQ("dd", Get(1, "d"));
+  ASSERT_EQ("ee", Get(1, "e"));
+  ASSERT_EQ("ff", Get(1, "f"));
+  ASSERT_EQ("gg", Get(1, "g"));
+  ASSERT_EQ("hh", Get(1, "h"));
+  ASSERT_EQ(lob_size, Get(1, "l").size());
+  ASSERT_EQ("aa", Get(2, "a"));
+  ASSERT_EQ("bb", Get(2, "b"));
+
+  Close();
+  DestroyDB(backup_path, last_options_);
+
+  Reopen(CurrentOptions(), &backup_path2);
+  ASSERT_EQ("11", Get(1, "1"));
+  ASSERT_EQ("22", Get(1, "2"));
+  ASSERT_EQ("aa", Get(1, "a"));
+  ASSERT_EQ("bb", Get(1, "b"));
+  ASSERT_EQ("cc", Get(1, "c"));
+  ASSERT_EQ("dd", Get(1, "d"));
+  ASSERT_EQ("ee", Get(1, "e"));
+  ASSERT_EQ("ff", Get(1, "f"));
+  ASSERT_EQ("gg", Get(1, "g"));
+  ASSERT_EQ("hh", Get(1, "h"));
+  ASSERT_EQ("NOT_FOUND", Get(1, "l"));
+  ASSERT_EQ(nullptr, get_column_family_handle(2));
+
+  Close();
+  DestroyDB(backup_path2, last_options_);
+  delete[] lob_value;
+}
+
 TEST_F(HotbackupTest, large_object)
 {
   CreateColumnFamilies({"large_object"}, CurrentOptions());
   int64_t lob_size = 5 * 1024 * 1024;
+  std::string backup_path = dbname_ + backup_dir_;
   char *lob_value = new char[lob_size];
   memset(lob_value, '0', lob_size);
 
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+  BackupSnapshotId backup_id = 0;
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+
   ASSERT_OK(Put(1, "1", Slice(lob_value, lob_size)));
   ASSERT_OK(Put(1, "2", Slice(lob_value, lob_size)));
   ASSERT_OK(Flush(1));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  copy_sst_files();
+  copy_sst_files(backup_path);
 
   ASSERT_OK(Delete(1, "1"));
   ASSERT_OK(Flush(1));
@@ -388,19 +663,19 @@ TEST_F(HotbackupTest, large_object)
   ASSERT_OK(Put(1, "4", Slice(lob_value, lob_size)));
   ASSERT_OK(Flush(1));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
 
-  copy_rest_files(backup_tmp_dir_path_);
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
-
-  // 
-  std::string backup_path = dbname_ + backup_dir_;
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
+  //
   replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+
+  backup_snapshot->unlock_instance();
+
   Reopen(CurrentOptions(), &backup_path); 
 
   ASSERT_EQ("NOT_FOUND", Get(1, "1"));
@@ -410,21 +685,25 @@ TEST_F(HotbackupTest, large_object)
 
   Close();
   DestroyDB(backup_path, last_options_);
+  delete[] lob_value;
 }
 
 TEST_F(HotbackupTest, multi_checkpoint)
 {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
   int32_t dummy_file_num = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+
   ASSERT_OK(Put(1, "1", "11"));
   ASSERT_OK(Put(1, "2", "22"));
   ASSERT_OK(Flush(1));
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  copy_sst_files();
-  
+  copy_sst_files(backup_path);
+
   ASSERT_OK(Put(1, "a", "aa"));
   ASSERT_OK(Put(1, "b", "bb"));
   ASSERT_OK(Flush(1));
@@ -438,19 +717,19 @@ TEST_F(HotbackupTest, multi_checkpoint)
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
 
-  copy_rest_files(backup_tmp_dir_path_);
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
-
-  // 
-  std::string backup_path = dbname_ + backup_dir_;
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
+  //
   replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+
+  backup_snapshot->unlock_instance();
+
   Reopen(CurrentOptions(), &backup_path); 
   ASSERT_EQ("11", Get(1, "1"));
   ASSERT_EQ("22", Get(1, "2"));
@@ -470,10 +749,11 @@ TEST_F(HotbackupTest, multi_checkpoint)
 TEST_F(HotbackupTest, delete_manifest_before_acquire)
 {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+  BackupSnapshotId backup_id = 0;
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
 
   ASSERT_OK(Put(1, "a", "aa"));
@@ -486,21 +766,105 @@ TEST_F(HotbackupTest, delete_manifest_before_acquire)
   db_->do_manual_checkpoint(dummy_file_num);
   ASSERT_OK(Put(1, "e", "ee"));
   ASSERT_OK(Put(1, "f", "ff"));
+  // delete manifest file before acquire
   ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
   ASSERT_EQ(Status::kNotFound, backup_snapshot->record_incremental_extent_ids(db_));
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
+
+  backup_snapshot->unlock_instance();
 }
 
-TEST_F(HotbackupTest, delete_manifest_before_acquire2)
-{
-  CreateColumnFamilies({"hotbackup"}, CurrentOptions());
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+TEST_F(HotbackupTest, checkpoint_contain_dropped_cf) {
+  CreateColumnFamilies({"hotbackup", "delete_cf"}, CurrentOptions());
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+  BackupSnapshotId backup_id = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+  std::string str;
+  str.assign(3 * 1024 * 1024, 'a');
+  std::map<int, size_t> value_size_map;
+
+  size_t lob_value_count = 20;
+  size_t little_value_count = 100 + rand() % 200;
+  size_t total_key_count = lob_value_count + little_value_count;
+
+  while (value_size_map.size() < lob_value_count) {
+    size_t idx = rand() % total_key_count;
+    if (value_size_map.find(idx) == value_size_map.end()) {
+      value_size_map.emplace(idx, 2 * 1024 * 1024 + rand() % 1024 * 1024);
+    }
+  }
+  while (value_size_map.size() < total_key_count) {
+    size_t idx = rand() % total_key_count;
+    if (value_size_map.find(idx) == value_size_map.end()) {
+      value_size_map.emplace(idx, rand() % 100);
+    }
+  }
+
+  for (size_t i = 0; i < total_key_count; i++) {
+    size_t val_size = value_size_map[i];
+    ASSERT_OK(Put(1, std::to_string(i) + "del", str.substr(0, val_size)));
+    ASSERT_OK(Put(2, std::to_string(i), str.substr(0, val_size)));
+  }
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  copy_sst_files();
+  copy_sst_files(backup_path);
+
+  SE_LOG(INFO, "", K(lob_value_count), K(little_value_count));
+
+  for (size_t i = 0; i < total_key_count; i++) {
+    size_t val_size = value_size_map[i];
+    ASSERT_OK(Put(1, std::to_string(i), str.substr(0, val_size)));
+    ASSERT_OK(Delete(1, std::to_string(i) + "del"));
+  }
+
+  ASSERT_OK(Flush(1));
+
+  DropColumnFamily(2);
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+  copy_extents(backup_tmp_dir_path_, backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
+
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
+
+  replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+
+  backup_snapshot->unlock_instance();
+
+  Reopen(CurrentOptions(), &dbname_);
+  for (size_t i = 0; i < total_key_count; i++) {
+    ASSERT_EQ(Get(1, std::to_string(i)).size(), value_size_map[i]);
+    ASSERT_EQ(Get(1, std::to_string(i) + "del"), "NOT_FOUND");
+  }
+  ASSERT_TRUE(get_column_family_handle(2) == nullptr);
+  Close();
+  DestroyDB(dbname_, last_options_);
+
+  Reopen(CurrentOptions(), &backup_path);
+  for (size_t i = 0; i < total_key_count; i++) {
+    ASSERT_EQ(Get(1, std::to_string(i)).size(), value_size_map[i]);
+    ASSERT_EQ(Get(1, std::to_string(i) + "del"), "NOT_FOUND");
+  }
+  ASSERT_TRUE(get_column_family_handle(2) == nullptr);
+
+  Close();
+  DestroyDB(backup_path, last_options_);
+}
+
+TEST_F(HotbackupTest, delete_manifest_after_accquire) {
+  CreateColumnFamilies({"hotbackup"}, CurrentOptions());
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  int32_t dummy_file_num = 0;
+  BackupSnapshotId backup_id = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+  copy_sst_files(backup_path);
 
   ASSERT_OK(Put(1, "a", "aa"));
   ASSERT_OK(Put(1, "b", "bb"));
@@ -515,20 +879,21 @@ TEST_F(HotbackupTest, delete_manifest_before_acquire2)
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  // delete manifest file after acquire
   ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
-  copy_extents(backup_tmp_dir_path_, 
-               backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
+  copy_extents(backup_tmp_dir_path_, backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
 
-  copy_rest_files(backup_tmp_dir_path_);
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
-  //
-  std::string backup_path = dbname_ + backup_dir_;
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
+
   replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
-  Reopen(CurrentOptions(), &backup_path); 
+
+  backup_snapshot->unlock_instance();
+
+  Reopen(CurrentOptions(), &backup_path);
   ASSERT_EQ("aa", Get(1, "a"));
   ASSERT_EQ("bb", Get(1, "b"));
   ASSERT_EQ("cc", Get(1, "c"));
@@ -537,32 +902,189 @@ TEST_F(HotbackupTest, delete_manifest_before_acquire2)
   ASSERT_EQ("ff", Get(1, "f"));
   ASSERT_EQ("gg", Get(1, "g"));
   ASSERT_EQ("hh", Get(1, "h"));
-  //
+
   Close();
   DestroyDB(backup_path, last_options_);
+}
+
+TEST_F(HotbackupTest, create_multiple_backup_snapshots) {
+  CreateColumnFamilies({"hotbackup"}, CurrentOptions());
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  int32_t dummy_file_num = 0;
+  BackupSnapshotId backup_id = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
+
+  // create the first backup snapshot
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+  copy_sst_files(backup_path);
+
+  ASSERT_OK(Put(1, "a", "aa"));
+  ASSERT_OK(Put(1, "b", "bb"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "c", "cc"));
+  ASSERT_OK(Put(1, "d", "dd"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "e", "ee"));
+  ASSERT_OK(Put(1, "f", "ff"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "g", "gg"));
+  ASSERT_OK(Put(1, "h", "hh"));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+  copy_extents(backup_tmp_dir_path_, backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
+
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+
+  replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+
+  // create the second backup snapshot
+  std::string backup_path2 = dbname_ + backup_dir2_;
+  BackupSnapshotId backup_id2 = 0;
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_, backup_tmp_dir_path2_.c_str()));
+  copy_sst_files(backup_path2);
+
+  ASSERT_OK(Put(1, "a", "aaa"));
+  ASSERT_OK(Put(1, "b", "bbb"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "c", "ccc"));
+  ASSERT_OK(Put(1, "d", "ddd"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "e", "eee"));
+  ASSERT_OK(Put(1, "f", "fff"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "g", "ggg"));
+  ASSERT_OK(Put(1, "h", "hhh"));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+  copy_extents(backup_tmp_dir_path2_, backup_tmp_dir_path2_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path2_ + BACKUP_EXTENTS_FILE);
+
+  copy_rest_files(backup_tmp_dir_path2_, backup_path2);
+
+  replay_sst_files(backup_path2, backup_path2 + BACKUP_EXTENT_IDS_FILE, backup_path2 + BACKUP_EXTENTS_FILE);
+
+  // create the third backup snapshot
+  std::string backup_path3 = dbname_ + backup_dir3_;
+  BackupSnapshotId backup_id3 = 0;
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_, backup_tmp_dir_path3_.c_str()));
+  copy_sst_files(backup_path3);
+
+  ASSERT_OK(Put(1, "a", "aaaa"));
+  ASSERT_OK(Put(1, "b", "bbbb"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "c", "cccc"));
+  ASSERT_OK(Put(1, "d", "dddd"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "e", "eeee"));
+  ASSERT_OK(Put(1, "f", "ffff"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "g", "gggg"));
+  ASSERT_OK(Put(1, "h", "hhhh"));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id3));
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+  copy_extents(backup_tmp_dir_path3_, backup_tmp_dir_path3_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path3_ + BACKUP_EXTENTS_FILE);
+
+  copy_rest_files(backup_tmp_dir_path3_, backup_path3);
+
+  replay_sst_files(backup_path3, backup_path3 + BACKUP_EXTENT_IDS_FILE, backup_path3 + BACKUP_EXTENTS_FILE);
+
+  ASSERT_EQ(3, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+  ASSERT_TRUE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id));
+  ASSERT_TRUE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id2));
+  ASSERT_TRUE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id3));
+
+  backup_snapshot->unlock_instance();
+
+  Reopen(CurrentOptions(), &backup_path);
+  ASSERT_EQ("aa", Get(1, "a"));
+  ASSERT_EQ("bb", Get(1, "b"));
+  ASSERT_EQ("cc", Get(1, "c"));
+  ASSERT_EQ("dd", Get(1, "d"));
+  ASSERT_EQ("ee", Get(1, "e"));
+  ASSERT_EQ("ff", Get(1, "f"));
+  ASSERT_EQ("gg", Get(1, "g"));
+  ASSERT_EQ("hh", Get(1, "h"));
+
+  ASSERT_EQ(0, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+  ASSERT_FALSE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id));
+
+  Close();
+  DestroyDB(backup_path, last_options_);
+
+  Reopen(CurrentOptions(), &backup_path2);
+  ASSERT_EQ("aaa", Get(1, "a"));
+  ASSERT_EQ("bbb", Get(1, "b"));
+  ASSERT_EQ("ccc", Get(1, "c"));
+  ASSERT_EQ("ddd", Get(1, "d"));
+  ASSERT_EQ("eee", Get(1, "e"));
+  ASSERT_EQ("fff", Get(1, "f"));
+  ASSERT_EQ("ggg", Get(1, "g"));
+  ASSERT_EQ("hhh", Get(1, "h"));
+
+  ASSERT_EQ(1, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+  ASSERT_TRUE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id));
+  ASSERT_FALSE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id2));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_old_backup_snapshot(db_, backup_id));
+
+  Close();
+  DestroyDB(backup_path2, last_options_);
+
+  Reopen(CurrentOptions(), &backup_path3);
+  ASSERT_EQ("aaaa", Get(1, "a"));
+  ASSERT_EQ("bbbb", Get(1, "b"));
+  ASSERT_EQ("cccc", Get(1, "c"));
+  ASSERT_EQ("dddd", Get(1, "d"));
+  ASSERT_EQ("eeee", Get(1, "e"));
+  ASSERT_EQ("ffff", Get(1, "f"));
+  ASSERT_EQ("gggg", Get(1, "g"));
+  ASSERT_EQ("hhhh", Get(1, "h"));
+
+  ASSERT_EQ(2, backup_snapshot->get_backup_snapshot_map().get_backup_snapshot_count());
+  ASSERT_TRUE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id));
+  ASSERT_TRUE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id2));
+  ASSERT_FALSE(backup_snapshot->get_backup_snapshot_map().find_backup_snapshot(backup_id3));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_old_backup_snapshot(db_, backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_old_backup_snapshot(db_, backup_id2));
+
+  Close();
+  DestroyDB(backup_path3, last_options_);
 }
 
 TEST_F(HotbackupTest, amber_test)
 {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
-  BackupSnapshot *backup_snapshot = nullptr;
   WriteOptions wo;
   wo.disableWAL = true;
   std::string backup_path = dbname_ + backup_dir_;
 
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
+  BackupSnapshotId backup_id = 0;
+
   ASSERT_OK(Put(1, "1", "11", wo));
   ASSERT_OK(Put(1, "2", "22", wo));
   ASSERT_OK(Flush(1));
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_, backup_path.c_str()));
-  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_, backup_path.c_str()));
 
   ASSERT_OK(Put(1, "a", "aa", wo));
   ASSERT_OK(Put(1, "b", "bb", wo));
   ASSERT_OK(Flush(1));
-  
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
 
   ASSERT_OK(Put(1, "c", "cc", wo));
   ASSERT_OK(Put(1, "d", "dd", wo));
@@ -572,6 +1094,8 @@ TEST_F(HotbackupTest, amber_test)
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "gg", wo));
   ASSERT_OK(Put(1, "h", "hh", wo));
+
+  backup_snapshot->unlock_instance();
 
   Reopen(CurrentOptions(), &backup_path); 
 
@@ -585,8 +1109,7 @@ TEST_F(HotbackupTest, amber_test)
   ASSERT_EQ("NOT_FOUND", Get(1, "f"));
   ASSERT_EQ("NOT_FOUND", Get(1, "g"));
   ASSERT_EQ("NOT_FOUND", Get(1, "h"));
-  //
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
+
   Close();
   DestroyDB(backup_path, last_options_);
 }
@@ -594,53 +1117,55 @@ TEST_F(HotbackupTest, amber_test)
 TEST_F(HotbackupTest, lost_wal)
 {
   CreateColumnFamilies({"lost_wal"}, CurrentOptions());
-  BackupSnapshot *backup_snapshot = nullptr;
-  ASSERT_EQ(Status::kOk, BackupSnapshot::create(backup_snapshot));
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
+  std::string backup_path = dbname_ + backup_dir_;
 
   //step 1: insert base data 
   ASSERT_OK(Put(1, "1", "11"));
   ASSERT_OK(Flush(1));
 
-  //step 2: first step of xtrabackup, copy full sst files
-  ASSERT_EQ(Status::kOk, backup_snapshot->init(db_));
+  // step 2: first step of xtrabackup, copy full sst files
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  copy_sst_files();
+  copy_sst_files(backup_path);
 
   SyncPoint::GetInstance()->SetCallBack("DBImpl::wait_create_backup_snapshot",
       [&](void *arg) {
-        DBImpl *db_impl = reinterpret_cast<DBImpl *>(arg);
-        while (!db_impl->TEST_get_after_create_backup_snapshot()) {
+        DBImpl *db_impl_t = reinterpret_cast<DBImpl *>(arg);
+        while (!db_impl_t->TEST_get_after_create_backup_snapshot()) {
           sleep(1);
         }
       });
   SyncPoint::GetInstance()->SetCallBack("BackupSnapshotImpl::acquire_snapshot::after_create_backup_snapshot",
       [&](void *arg) {
-        DBImpl *db_impl = reinterpret_cast<DBImpl *>(arg);
-        db_impl->TEST_set_after_create_backup_snapshot(true);
-        db_impl->TEST_WaitForCompact();
+        DBImpl *db_impl_t = reinterpret_cast<DBImpl *>(arg);
+        db_impl_t->TEST_set_after_create_backup_snapshot(true);
+        db_impl_t->TEST_WaitForCompact();
       });
   SyncPoint::GetInstance()->EnableProcessing();
 
   //step 3: insert incremental data
   ASSERT_OK(Put(1, "2", "22"));
-  //This flush job should execute after create_backup_snapshot in acquire_snapshots
+  // This flush job should execute after create_backup_snapshot in accquire_backup_snapshot
   ASSERT_OK(Flush(1, false /**wait*/));
 
 
   //step 4: remaining steps of xtrabackup
-  ASSERT_EQ(Status::kOk, backup_snapshot->acquire_snapshots(db_));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
 
-  copy_rest_files(backup_tmp_dir_path_);
-  ASSERT_EQ(Status::kOk, backup_snapshot->release_snapshots(db_));
-  delete reinterpret_cast<BackupSnapshotImpl*>(backup_snapshot);
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
 
-  //step 5: prepare and restore the backup
-  std::string backup_path = dbname_ + backup_dir_;
+  // step 5: prepare and restore the backup
   replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+
+  backup_snapshot->unlock_instance();
+
   Reopen(CurrentOptions(), &backup_path); 
 
   //step 6: check data

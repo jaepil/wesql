@@ -85,7 +85,7 @@ TEST_P(RecoveryTest, simple_put_then_restart) {
   options1.allow_2pc = true;
   options1.parallel_wal_recovery = true;
   TransactionDB* db;
-  ASSERT_OK(test_open_trans_db(options_, TransactionDBOptions(), db_name_, &db));
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), db_name_, &db));
 
   common::WriteOptions write_options;
   Transaction* txn = db->BeginTransaction(write_options);
@@ -101,7 +101,7 @@ TEST_P(RecoveryTest, simple_put_then_restart) {
 
   // recovery the db
   db = nullptr;
-  ASSERT_OK(test_open_trans_db(options_, TransactionDBOptions(), db_name_, &db));
+  ASSERT_OK(test_open_trans_db(options1, TransactionDBOptions(), db_name_, &db));
   ReadOptions read_options1;
   std::string value;
   ASSERT_OK(db->Get(read_options1, db->DefaultColumnFamily(), "foo00", &value));

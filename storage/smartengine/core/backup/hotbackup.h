@@ -15,8 +15,12 @@
  */
 #pragma once
 
+#include <cstdint>
+#include <vector>
+#include "db/binlog_position.h"
 namespace smartengine
 {
+using BackupSnapshotId = uint64_t;
 namespace db
 {
 class DB;
@@ -30,18 +34,35 @@ static const char *const BACKUP_EXTENTS_FILE = "/extent.inc";
 class BackupSnapshot
 {
 public:
-  // Create a backup snapshot instance
-  static int create(BackupSnapshot *&backup_instance);
+  // Get a backup snapshot instance
+  static BackupSnapshot *get_instance();
   // Check backup job and do init
   virtual int init(db::DB *db, const char *backup_tmp_dir_path = nullptr);
+  // lock backup instance for tools like xtrabackup
+  virtual int lock_instance();
+  virtual int unlock_instance();
+  // lock one backup step for handler interface used by server layer
+  virtual int lock_one_step();
+  virtual int unlock_one_step();
+  virtual int check_lock_status();
+  // Get backup status
+  virtual int get_backup_status(const char *&status);
+  // Set backup status
+  virtual int set_backup_status(const char *status);
   // Do a manual checkpoint and flush memtable
-  virtual int do_checkpoint(db::DB *db);
-  // Acquire snapshots and hard-link/copy MANIFEST files
-  virtual int acquire_snapshots(db::DB *db);
+  virtual int do_checkpoint(db::DB *db, const char *backup_tmp_dir_path = nullptr);
+  // Acquire an backup snapshot and hard-link/copy MANIFEST files
+  virtual int accquire_backup_snapshot(db::DB *db, BackupSnapshotId *backup_id, db::BinlogPosition &binlog_pos);
   // Parse incremental MANIFEST files and record the modified extent ids
   virtual int record_incremental_extent_ids(db::DB *db);
-  // Release the snapshots
-  virtual int release_snapshots(db::DB *db);
+  // Release an old backup snapshot
+  virtual int release_old_backup_snapshot(db::DB *db, BackupSnapshotId backup_id);
+  // List all backup snapshots and return the backup ids
+  virtual int list_backup_snapshots(std::vector<BackupSnapshotId> &backup_ids);
+  // Release the current backup snapshot
+  virtual int release_current_backup_snapshot(db::DB *db);
+  // Get temporary current backup id of the backup instance
+  virtual BackupSnapshotId current_backup_id();
 
 protected:
   BackupSnapshot() {}

@@ -52,14 +52,15 @@ struct RecycleArgs
 class StorageManager
 {
 public:
-	explicit StorageManager(const util::EnvOptions &env_options,
+  explicit StorageManager(const util::EnvOptions &env_options,
                           const common::ImmutableCFOptions &imm_cf_options,
                           const common::MutableCFOptions &mutable_cf_options);
-	virtual ~StorageManager();
+  virtual ~StorageManager();
+
+  int init();
   void destroy();
 
-	int init(util::Env *env, cache::Cache *cache);
-	int apply(const ChangeInfo &change_info, bool for_recovery);
+  int apply(const ChangeInfo &change_info, bool for_recovery);
   int get(const common::Slice &key,
           const db::Snapshot &current_meta,
           std::function<int(const ExtentMeta *extent_meta, int32_t level, bool &found)> save_value);
@@ -107,9 +108,19 @@ public:
                             const ExtentId &extent_id,
                             const int32_t level,
                             int64_t &offset);
-	void print_raw_meta();
-  const db::SnapshotImpl *acquire_meta_snapshot();
-  void release_meta_snapshot(const db::SnapshotImpl *meta_snapshot);
+  void print_raw_meta();
+
+  db::SnapshotImpl *accquire_meta_snapshot();
+  void release_meta_snapshot(db::SnapshotImpl *meta_snapshot);
+  static void release_backup_meta_snapshot(db::SnapshotImpl *meta_snapshot);
+  static int cleanup_backup_snapshot(db::MetaSnapshotSet &meta_snapshots);
+  void destroy_meta_snapshot(db::SnapshotImpl *meta_snapshot,
+                             util::autovector<storage::ExtentLayerVersion *> &recyle_extent_layer_versions);
+  // clang-format off
+  static void destroy_backup_meta_snapshot(db::SnapshotImpl *meta_snapshot,
+                                           util::autovector<storage::ExtentLayerVersion *> &recyle_extent_layer_versions);
+  // clang-format on
+  static int recycle_backup_snapshot(db::MetaSnapshotSet &meta_snapshots);
   static void async_recycle(void *args);
   int recycle();
   int recover_extent_space();
@@ -117,10 +128,11 @@ public:
   int release_extent_resource(bool for_recovery);
   bool can_gc()
   {
-    //make sure, only one version snapshot current, and all old version snapshot has been recycle
+    // make sure, only one version snapshot current, and all old version snapshot has been recycle
     std::lock_guard<std::mutex> meta_mutex_guard(meta_mutex_);
     return (1 == meta_snapshot_list_.count() && 0 == bg_recycle_count_ && 0 == waiting_delete_versions_.size());
   }
+
   bool can_shrink()
   {
     //make sure, only single version snapshot current, and all old version snapshot has been recycle
@@ -134,9 +146,10 @@ public:
   int get_extent_positions(const int64_t index_id, ExtentPositionMap &extent_info_map);
   DECLARE_SERIALIZATION()
   DECLARE_TO_STRING()
+
 private:
   int init_extent_layer_versions(db::InternalKeyComparator *internalkey_comparator);
-	int normal_apply(const ChangeInfo &change_info);
+  int normal_apply(const ChangeInfo &change_info);
   int apply_large_object(const ChangeInfo &change_info);
   int build_new_version(ExtentLayerVersion *old_version,
                         const ExtentChangeArray &extent_changes,
@@ -178,15 +191,13 @@ private:
                                      int64_t estimate_cost_depth,
                                      EstimateCostStats &cost_stats);
   int update_current_meta_snapshot(ExtentLayerVersion **new_extent_layer_versions);
-  const db::SnapshotImpl *acquire_meta_snapshot_unsafe();
-  void release_meta_snapshot_unsafe(const db::SnapshotImpl *meta_snapshot);
+  db::SnapshotImpl *accquire_meta_snapshot_unsafe();
+  db::SnapshotImpl *accquire_backup_meta_snapshot();
+
+  void release_meta_snapshot_unsafe(db::SnapshotImpl *meta_snapshot);
+
   //TODO(Zhao Dongsheng): The filter logic need reconstructure.
   bool is_filter_skipped(int32_t level) { return level > 0; }
-  int recycle_unsafe(bool recovery);
-  int recycle_extent_layer_version(ExtentLayerVersion *extent_layer_version, bool for_recovery);
-  int recycle_extent_layer(ExtentLayer *extent_layer, bool for_recovery);
-  int recycle_lob_extent(bool for_recovery);
-  int do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery);
   void print_raw_meta_unsafe();
   int build_new_extent_layer(util::autovector<ExtentId> &extent_ids, ExtentLayer *&extent_layer);
   int deserialize_extent_layer(const char *buf, int64_t buf_len, int64_t &pos,
@@ -194,15 +205,29 @@ private:
                                util::autovector<ExtentId> &extent_ids,
                                util::autovector<ExtentId> &lob_extent_ids);
   int calc_extent_stats_unsafe();
+
+  int recycle_lob_extent(bool for_recovery);
+
+  int recycle_unsafe(bool recovery);
+
+  static void async_recycle_meta_snapshot(void *args);
+  static int recycle_meta_snapshot(bool for_recovery, util::autovector<ExtentLayerVersion *> &extent_layer_versions);
+  static int recycle_extent_layer_versions(bool for_recovery,
+                                           util::autovector<ExtentLayerVersion *> &waiting_delete_versions);
+  static int recycle_extent_layer_version(ExtentLayerVersion *extent_layer_version, bool for_recovery);
+  static int recycle_extent_layer(ExtentLayer *extent_layer, bool for_recovery);
+  static int do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery);
+
 private:
   static const int64_t STORAGE_MANAGER_VERSION = 1;
+
 private:
+  friend class db::ColumnFamilyData;
+
   bool is_inited_;
   const util::EnvOptions &env_options_;
   const common::ImmutableCFOptions &immutable_cfoptions_;
   const common::MutableCFOptions &mutable_cf_options_;
-  util::Env *env_;
-  cache::Cache *table_cache_;
   int32_t column_family_id_;
   int64_t bg_recycle_count_;
   db::InternalKeyComparator *internalkey_comparator_;

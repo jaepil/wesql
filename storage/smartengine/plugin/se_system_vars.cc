@@ -116,28 +116,23 @@ static int se_hotbackup(THD *const thd MY_ATTRIBUTE((__unused__)),
   int ret = 0;
   const char *cmd = value->val_str(value, buf, &len);
   SeTransaction *const tx = get_or_create_tx(thd);
+  util::BackupSnapshot *backup_instance = util::BackupSnapshot::get_instance();
+  BackupSnapshotId backup_id = 0;
+  db::BinlogPosition binlog_pos;
 
   if (!my_core::thd_test_options(thd, OPTION_BEGIN)) {
     ret = smartengine::common::Status::kNotSupported;
     my_printf_error(ER_UNKNOWN_ERROR, "SE: should begin a trx first", MYF(0));
-  } else if (IS_NULL(backup_instance)) {
-    XHANDLER_LOG(WARN, "backup_instance is nullptr", K(tx->get_backup_running()));
-    if (tx->get_backup_running()) {
-      ret = smartengine::common::Status::kErrorUnexpected;
-      my_printf_error(ER_UNKNOWN_ERROR, "SE: fatal error", MYF(0));
-    } else if (FAILED(util::BackupSnapshot::create(backup_instance))) {
-      my_printf_error(ER_UNKNOWN_ERROR, "SE: unexpected error", MYF(0));
-    }
   }
 
   if (FAILED(ret)) {
     // do nothing
   } else if (0 == strcasecmp(cmd, se_backup_status[0])) {
-    if (FAILED(backup_instance->init(se_db))) {
+    if (FAILED(backup_instance->lock_instance())) {
       if (ret == common::Status::kInitTwice) {
         my_printf_error(ER_UNKNOWN_ERROR, "SE: there is another backup job running\n", MYF(0));
       } else {
-        my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to init backup snapshot", MYF(0));
+        my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to lock backup instance", MYF(0));
       }
     } else {
       se_register_tx(se_hton, thd, tx);
@@ -153,8 +148,8 @@ static int se_hotbackup(THD *const thd MY_ATTRIBUTE((__unused__)),
       my_printf_error(ER_UNKNOWN_ERROR, "SE: should execute command: %s before this command\n", MYF(0), se_backup_status[0]);
     } else if (!tx->get_backup_running()) {
       my_printf_error(ER_UNKNOWN_ERROR, "SE: should do checkpoint first\n", MYF(0));
-    } else if (FAILED(backup_instance->acquire_snapshots(se_db))) {
-      my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to acquire snapshots for backup", MYF(0));
+    } else if (FAILED(backup_instance->accquire_backup_snapshot(se_db, &backup_id, binlog_pos))) {
+      my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to accquire snapshots for backup", MYF(0));
     } else {
       se_hotbackup_name = se_backup_status[1];
     }
@@ -173,7 +168,7 @@ static int se_hotbackup(THD *const thd MY_ATTRIBUTE((__unused__)),
       my_printf_error(ER_UNKNOWN_ERROR, "SE: should execute command: %s before this command\n", MYF(0), se_backup_status[2]);
     } else if (!tx->get_backup_running()) {
       my_printf_error(ER_UNKNOWN_ERROR, "SE: should do checkpoint first\n", MYF(0));
-    } else if (FAILED(backup_instance->release_snapshots(se_db))) {
+    } else if (FAILED(backup_instance->release_current_backup_snapshot(se_db))) {
       my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to release snapshots for backup", MYF(0));
     } else {
       se_hotbackup_name = se_backup_status[4];

@@ -9,7 +9,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include "db/db_impl.h"
-#include <cstdint>
 #include "memory/base_malloc.h"
 #include "memory/mod_info.h"
 
@@ -20,7 +19,6 @@
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
-#include <stdint.h>
 #ifdef OS_SOLARIS
 #include <alloca.h>
 #endif
@@ -37,6 +35,7 @@
 #include <utility>
 #include <vector>
 
+#include "backup/hotbackup_impl.h"
 #include "cache/row_cache.h"
 #include "compact/compaction_job.h"
 #include "db/db_info_dumper.h"
@@ -48,6 +47,7 @@
 #include "db/table_cache.h"
 #include "db/version_set.h"
 #include "db/write_callback.h"
+#include "memory/alloc_mgr.h"
 #include "memtable/memtable_list.h"
 #include "monitoring/query_perf_context.h"
 #include "monitoring/thread_status_updater.h"
@@ -55,11 +55,12 @@
 #include "options/cf_options.h"
 #include "options/options_helper.h"
 #include "port/likely.h"
+#include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
+#include "storage/storage_logger.h"
 #include "table/extent_table_factory.h"
 #include "table/merging_iterator.h"
 #include "table/two_level_iterator.h"
-#include "memory/alloc_mgr.h"
 #include "util/autovector.h"
 #include "util/build_version.h"
 #include "util/coding.h"
@@ -71,8 +72,6 @@
 #include "util/filename.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
-#include "storage/extent_meta_manager.h"
-#include "storage/storage_logger.h"
 #include "write_batch/write_batch_internal.h"
 
 namespace smartengine {
@@ -85,6 +84,136 @@ using namespace table;
 using namespace util;
 
 namespace db {
+
+void BackupSnapshotMap::clear() {
+  std::unique_lock lock(mutex_);
+  backup_snapshots_.clear();
+}
+
+bool BackupSnapshotMap::find_backup_snapshot(BackupSnapshotId backup_id) {
+  std::unique_lock lock(mutex_);
+  return backup_snapshots_.find(backup_id) != backup_snapshots_.end();
+}
+
+bool BackupSnapshotMap::get_next_backup_snapshot(BackupSnapshotId prev_backup_id,
+                                                 BackupSnapshotId &backup_id,
+                                                 MetaSnapshotSet *&meta_snapshots) {
+  std::unique_lock lock(mutex_);
+  auto it = backup_snapshots_.upper_bound(prev_backup_id);
+  if (it == backup_snapshots_.end()) {
+    backup_id = 0;
+    return false;
+  }
+  backup_id = it->first;
+  meta_snapshots = &it->second;
+  return true;
+}
+
+bool BackupSnapshotMap::add_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &&meta_snapshots)
+{
+  std::unique_lock lock(mutex_);
+  if (backup_snapshots_.find(backup_id) != backup_snapshots_.end()) {
+    // unexpected, backup snapshot already exists
+    return false;
+  } else {
+    backup_snapshots_[backup_id] = std::move(meta_snapshots);
+    return true;
+  }
+}
+
+bool BackupSnapshotMap::remove_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &to_clean, bool &existed)
+{
+  std::unique_lock lock(mutex_);
+  if (backup_snapshots_.find(backup_id) == backup_snapshots_.end()) {
+    existed = false;
+    return true;
+  }
+  existed = true;
+  if (in_use_) {
+    pending_release_backups_.push_back(backup_id);
+  } else {
+    to_clean = std::move(backup_snapshots_[backup_id]);
+    backup_snapshots_.erase(backup_id);
+  }
+  return !in_use_;
+}
+
+int BackupSnapshotMap::release_backup_snapshot(BackupSnapshotId backup_id)
+{
+  int ret = Status::kOk;
+  ReleaseBackupSnapshotLogEntry log_entry(backup_id);
+  MetaSnapshotSet backup_snapshot;
+  bool existed = false;
+  int64_t commit_seq = 0;
+
+  if (backup_id == 0) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "Invalid backup id", K(backup_id), K(ret));
+  } else if (FAILED(StorageLogger::get_instance().begin(storage::SeEvent::RELEASE_BACKUP_SNAPSHOT))) {
+    SE_LOG(WARN, "fail to begin release backup snapshot log", K(backup_id), K(ret));
+  } else if (FAILED(StorageLogger::get_instance().write_log(storage::REDO_LOG_RELEASE_BACKUP_SNAPSHOT, log_entry))) {
+    SE_LOG(WARN, "fail to write release backup snapshot log", K(backup_id), K(ret));
+  } else if (FAILED(StorageLogger::get_instance().commit(commit_seq))) {
+    SE_LOG(WARN, "fail to commit release backup snapshot log", K(backup_id), K(ret));
+  } else if (IS_FALSE(remove_backup_snapshot(backup_id, backup_snapshot, existed)) && existed) {
+    // normal case, maybe background checkpoint thread is using the backup snapshot
+    SE_LOG(INFO, "Backup snapshot is in use, will be deleted later", K(ret), K(backup_id));
+  } else if (IS_FALSE(existed)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "backup snapshot id not found", K(ret), K(backup_id));
+  } else if (FAILED(StorageManager::cleanup_backup_snapshot(backup_snapshot))) {
+    SE_LOG(WARN, "fail to cleanup backup snapshot", K(backup_id), K(ret));
+  } else {
+    SE_LOG(INFO, "success to release the backup snapshot", K(backup_id), K(ret));
+  }
+
+  return ret;
+}
+
+int BackupSnapshotMap::do_pending_release()
+{
+  int ret = Status::kOk;
+  std::vector<BackupSnapshotId> to_release;
+  {
+    std::unique_lock lock(mutex_);
+    if (in_use_) {
+      ret = Status::kErrorUnexpected;
+    } else {
+      to_release = std::move(pending_release_backups_);
+    }
+  }
+  if (FAILED(ret)) {
+    SE_LOG(WARN, "unexpected, backup snapshot map is in use", K(ret));
+  } else {
+    for (auto backup_id : to_release) {
+      if (FAILED(release_backup_snapshot(backup_id))) {
+        SE_LOG(WARN, "failed to release backup snapshot", K(backup_id));
+        break;
+      } else {
+        SE_LOG(INFO, "success to release backup snapshot", K(backup_id));
+      }
+    }
+  }
+  return ret;
+}
+
+void BackupSnapshotMap::set_in_use(bool in_use) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  in_use_ = in_use;
+}
+
+BackupSnapshotId BackupSnapshotMap::get_latest_backup_id() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (backup_snapshots_.empty()) {
+    return 0;
+  }
+  return backup_snapshots_.rbegin()->first;
+}
+
+size_t BackupSnapshotMap::get_backup_snapshot_count() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return backup_snapshots_.size();
+}
 
 #ifdef WITH_STRESS_CHECK
 thread_local std::unordered_map<std::string, std::string> *STRESS_CHECK_RECORDS =
@@ -144,38 +273,19 @@ void all_sub_table_unref_handle(void *ptr)
   }
 }
 
-GlobalContext::GlobalContext()
-    : db_name_(),
-      options_(),
-      env_options_(),
-      env_(nullptr),
-      cache_(nullptr),
-      write_buf_mgr_(nullptr),
-      all_sub_table_mutex_(),
-      version_number_(0),
-      local_all_sub_table_(nullptr),
-      all_sub_table_(nullptr),
-      db_dir_(nullptr)
-{
-  local_all_sub_table_.reset(MOD_NEW_OBJECT(ModId::kAllSubTable, ThreadLocalPtr, &all_sub_table_unref_handle));
-  all_sub_table_ = MOD_NEW_OBJECT(ModId::kAllSubTable, AllSubTable);
-  all_sub_table_->ref();
-  all_sub_table_->all_sub_table_mutex_ = &all_sub_table_mutex_;
-}
+util::Env *GlobalContext::env_ = nullptr;
+cache::Cache *GlobalContext::cache_ = nullptr;
 
 GlobalContext::GlobalContext(const std::string &db_name, const common::Options &options)
     : db_name_(db_name),
       options_(options),
       env_options_(),
-      env_(nullptr),
-      cache_(nullptr),
       write_buf_mgr_(nullptr),
       all_sub_table_mutex_(),
       version_number_(0),
       local_all_sub_table_(nullptr),
       all_sub_table_(nullptr),
-      db_dir_(nullptr)
-{
+      db_dir_(nullptr) {
   local_all_sub_table_.reset(MOD_NEW_OBJECT(ModId::kAllSubTable, ThreadLocalPtr, &all_sub_table_unref_handle));
   all_sub_table_ = MOD_NEW_OBJECT(ModId::kAllSubTable, AllSubTable);
   all_sub_table_->ref();
@@ -190,15 +300,12 @@ GlobalContext::~GlobalContext()
   }
 }
 
-bool GlobalContext::is_valid()
-{
-  return nullptr != cache_ && nullptr != write_buf_mgr_;
-}
+bool GlobalContext::is_valid() { return nullptr != GlobalContext::get_cache() && nullptr != write_buf_mgr_; }
 
 void GlobalContext::reset()
 {
-  env_ = nullptr;
-  cache_ = nullptr;
+  GlobalContext::env_ = nullptr;
+  GlobalContext::cache_ = nullptr;
   write_buf_mgr_ = nullptr;
   all_sub_table_->reset();
   db_dir_ = nullptr;
@@ -288,7 +395,7 @@ int GlobalContext::install_new_all_sub_table(AllSubTable *all_sub_table)
   return ret;
 }
 
-DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
+DBImpl::DBImpl(const DBOptions &options, const std::string &dbname)
     : env_(options.env),
       dbname_(dbname),
       initial_db_options_(SanitizeOptions(dbname, options)),
@@ -316,7 +423,8 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname)
       total_log_size_(0),
       is_snapshot_supported_(true),
       write_buffer_manager_(immutable_db_options_.write_buffer_manager.get()),
-      trim_mem_flush_waited_(kFlushDone), next_trim_time_(0),
+      trim_mem_flush_waited_(kFlushDone),
+      next_trim_time_(0),
       storage_write_buffer_manager_(nullptr),
       pipline_manager_(100 * 1024),
       pipline_parallel_worker_num_(0),
@@ -539,6 +647,7 @@ DBImpl::~DBImpl() {
   StorageLogger::get_instance().destroy();
   ExtentMetaManager::get_instance().destroy();
   ExtentSpaceManager::get_instance().destroy();
+  BackupSnapshotImpl::get_instance()->destroy();
   if (nullptr != global_ctx) {
     MOD_DELETE_OBJECT(GlobalContext, global_ctx);
   }
@@ -1516,7 +1625,7 @@ const Snapshot* DBImpl::GetSnapshotForWriteConflictBoundary() {
  * if needed.
  *
  * Some trickery issues:
- * 1. As release first do node->ref-- without lock protected, then after
+ * As release first do node->ref-- without lock protected, then after
  * decrease, ref == 0, but during this period, Get Snapshot has also get
  * this node and do node->ref++, and also release this node node->ref--.
  * At this time, two threads are both waiting lock with ref == 0, both
@@ -1526,16 +1635,14 @@ const Snapshot* DBImpl::GetSnapshotForWriteConflictBoundary() {
  * called Release and waiting Lock to Delete node, then revert it and create
  * a new node.
  *
- * 2. For Release Snapshot, only one thread can be do Delete, granted above
- *
  */
 const Snapshot* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary) {
   int64_t unix_time = 0;
   env_->GetCurrentTime(&unix_time);  // Ignore error
-  SnapshotImpl* s = NULL;
-  SnapshotImpl* head = NULL;
-  const SnapshotImpl* ns = NULL;
-  int64_t n_ref = 0;
+  SnapshotImpl *s = nullptr;
+  SnapshotImpl *head = nullptr;
+  const SnapshotImpl *ns = nullptr;
+  int32_t old_ref = INT32_MAX;
 
   // returns null if the underlying memtable does not support snapshot.
   if (!is_snapshot_supported_) return nullptr;
@@ -1554,11 +1661,11 @@ const Snapshot* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary) {
   if (!snap_lists_[idx].empty()) {
     head = snap_lists_[idx].newest();
     if (head->number_ == versions_->LastSequence()) {
-      if (0 == (n_ref = head->ref_.fetch_add(1, std::memory_order_seq_cst))) {
-        head->ref_.fetch_sub(1, std::memory_order_seq_cst);
-      } else if (0 < n_ref) {
-        assert(head->ref_.load() > 0);
-        if (head->ref_.load() <= 0) assert(0);
+      head->ref(&old_ref);
+      if (0 == old_ref) {
+        // if old ref is 0, don't ref
+        head->unref(nullptr);
+      } else if (old_ref > 0) {
         ns = head;
         need_create = false;
       } else {
@@ -1568,7 +1675,6 @@ const Snapshot* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary) {
   }
 
   if (need_create) {
-//    s = new SnapshotImpl;
     s = MOD_NEW_OBJECT(ModId::kSnapshotImpl, SnapshotImpl);
     ns = snap_lists_[idx].New(s, versions_->LastSequence(), unix_time,
                               is_write_conflict_boundary, idx);
@@ -1579,30 +1685,31 @@ const Snapshot* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary) {
   return ns;
 }
 
-void DBImpl::ReleaseSnapshot(const Snapshot* s) {
-  bool to_del = 0;
+void DBImpl::ReleaseSnapshot(const Snapshot *s) {
   int64_t n_ref = 0;
+  bool destroy = false;
 
   SnapshotImpl* casted_s =
       const_cast<SnapshotImpl*>(reinterpret_cast<const SnapshotImpl*>(s));
 
-  assert(casted_s->ref_.load() >= 1);
+  int32_t old_ref = INT32_MAX;
+  {
+    std::unique_lock lock(casted_s->destroy_mutex_);
+    if (casted_s->unref(&old_ref)) {
+      destroy = true;
+    }
+    assert(old_ref >= 1);
 
-
-  if (1 == (n_ref = casted_s->ref_.fetch_sub(1, std::memory_order_seq_cst))) {
-    uint32_t pos = casted_s->pos();
-    assert(pos < MAX_SNAP);
-    // only one thread comes here
-    snap_mutex[pos].Lock();
-    assert(casted_s->ref_.load() == 0);
-    snap_lists_[pos].Delete(casted_s);
-    to_del = true;
-    snap_mutex[pos].Unlock();
-  } else {
-    assert(n_ref > 1);
+    if (1 == old_ref) {
+      uint32_t pos = casted_s->pos();
+      assert(pos < MAX_SNAP);
+      snap_mutex[pos].Lock();
+      snap_lists_[pos].Delete(casted_s);
+      snap_mutex[pos].Unlock();
+    }
   }
 
-  if (to_del) {
+  if (destroy) {
     MOD_DELETE_OBJECT(SnapshotImpl, casted_s);
   }
 }
@@ -2361,7 +2468,8 @@ int DBImpl::do_manual_checkpoint(int32_t &start_manifest_file_num) {
   return ret;
 }
 
-int DBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
+int DBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
+                                   MetaSnapshotSet &meta_snapshots,
                                    int32_t &last_manifest_file_num,
                                    uint64_t &last_manifest_file_size,
                                    uint64_t &last_wal_file_num,
@@ -2373,7 +2481,10 @@ int DBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
   // TODO: is it OK to switch default cfd?
   GlobalContext* global_ctx = nullptr;
 
-  if (nullptr == (global_ctx = versions_->get_global_ctx())) {
+  if (backup_id == 0) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "Invalid backup id", K(backup_id), K(ret));
+  } else if (nullptr == (global_ctx = versions_->get_global_ctx())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, global ctx must not nullptr", K(ret));
   } else {
@@ -2381,61 +2492,62 @@ int DBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
     global_ctx->all_sub_table_->get_sub_table(0, sub_table);
     WriteContext context;
     context.all_sub_table_ = global_ctx->all_sub_table_;
-    if (FAILED(versions_->create_backup_snapshot(meta_snapshot))) {
-      SE_LOG(WARN, "Failed to create the backup snapshot", K(ret));
-    } else if (FAILED(SwitchMemtable(sub_table, &context,
-        true /* force create new wal file*/).code())) {
-      SE_LOG(WARN, "Failed to switch memtable", K(ret));
+    if (FAILED(versions_->create_backup_snapshot(meta_snapshots))) {
+      SE_LOG(WARN, "Failed to create the backup snapshot", K(backup_id), K(ret));
     } else {
-      last_manifest_file_num = StorageLogger::get_instance().current_manifest_file_number();
-      last_manifest_file_size = StorageLogger::get_instance().current_manifest_file_size();
-      last_wal_file_num = logfile_number_;
-      last_binlog_pos = global_binlog_pos_;
-      SE_LOG(INFO, "Create a backup snapshot", K(ret),
-             K(last_manifest_file_num), K(last_manifest_file_size),
-             K(last_wal_file_num), K(last_binlog_pos.file_name_),
-             K(last_binlog_pos.offset_));
+      if (FAILED(SwitchMemtable(sub_table, &context, true /* force create new wal file*/).code())) {
+        SE_LOG(WARN, "Failed to switch memtable", K(backup_id), K(ret));
+      } else {
+        last_manifest_file_num = StorageLogger::get_instance().current_manifest_file_number();
+        last_manifest_file_size = StorageLogger::get_instance().current_manifest_file_size();
+        last_wal_file_num = logfile_number_;
+        last_binlog_pos = global_binlog_pos_;
+
+        int64_t commit_seq = 0;
+        AccquireBackupSnapshotLogEntry log_entry(backup_id);
+        if (FAILED(StorageLogger::get_instance().begin(storage::SeEvent::ACCQUIRE_BACKUP_SNAPSHOT))) {
+          SE_LOG(WARN, "fail to begin create backup snapshot log", K(backup_id), K(ret));
+        } else if (FAILED(StorageLogger::get_instance().write_log(storage::REDO_LOG_ACCQUIRE_BACKUP_SNAPSHOT,
+                                                                  log_entry))) {
+          SE_LOG(WARN, "fail to write create backup snapshot log", K(backup_id), K(ret));
+        } else if (FAILED(StorageLogger::get_instance().commit(commit_seq))) {
+          SE_LOG(WARN, "fail to commit create backup snapshot log", K(backup_id), K(ret));
+        } else {
+          SE_LOG(INFO,
+                 "Create a backup snapshot",
+                 K(backup_id),
+                 K(ret),
+                 K(last_manifest_file_num),
+                 K(last_manifest_file_size),
+                 K(last_wal_file_num),
+                 K(last_binlog_pos.file_name_),
+                 K(last_binlog_pos.offset_));
+        }
+      }
+
+      if (FAILED(ret)) {
+        StorageManager::cleanup_backup_snapshot(meta_snapshots);
+      }
     }
   }
 
   mutex_.Unlock();
+
   return ret;
 }
 
-int DBImpl::record_incremental_extent_ids(const int32_t first_manifest_file_num,
+int DBImpl::record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
+                                          const int32_t first_manifest_file_num,
                                           const int32_t last_manifest_file_num,
-                                          const uint64_t last_manifest_file_size)
-{
+                                          const uint64_t last_manifest_file_size) {
   int ret = Status::kOk;
-  if (FAILED(StorageLogger::get_instance().record_incremental_extent_ids(
-      first_manifest_file_num,
-      last_manifest_file_num,
-      last_manifest_file_size))) {
+  if (FAILED(StorageLogger::get_instance().record_incremental_extent_ids(backup_tmp_dir_path,
+                                                                         first_manifest_file_num,
+                                                                         last_manifest_file_num,
+                                                                         last_manifest_file_size))) {
     SE_LOG(WARN, "Failed to record incremental extent ids", K(ret),
         K(first_manifest_file_num), K(last_manifest_file_num), K(last_manifest_file_size));
   }
-  return ret;
-}
-
-int DBImpl::release_backup_snapshot(MetaSnapshotMap &meta_snapshot)
-{
-  int ret = Status::kOk;
-  ColumnFamilyData *cfd = nullptr;
-  for (auto sn : meta_snapshot) {
-    cfd = sn.first;
-    if (IS_NULL(cfd)) {
-      SE_LOG(ERROR, "The cfd is nullptr, unexpected", KP(cfd));
-    } else {
-      cfd->release_meta_snapshot(sn.second);
-      mutex_.Lock();
-      if (cfd->Unref()) {
-        MOD_DELETE_OBJECT(ColumnFamilyData, cfd);
-      }
-      mutex_.Unlock();
-    }
-  }
-  meta_snapshot.clear();
-  SE_LOG(INFO, "Release the backup snapshot", K(ret));
   return ret;
 }
 

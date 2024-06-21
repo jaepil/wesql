@@ -276,7 +276,7 @@ class CompactionTest : public testing::Test {
     }
     ColumnFamilyData *sub_table = nullptr;
     storage_manager_ = ALLOC_OBJECT(StorageManager, alloc_, context_->env_options_, context_->icf_options_, context_->mutable_cf_options_);
-    storage_manager_->init(env_, cache_.get());
+    storage_manager_->init();
 
     assert(s.ok());
     wb_ = ALLOC_OBJECT(WriteBufferManager, alloc_, context_->db_options_.db_write_buffer_size);

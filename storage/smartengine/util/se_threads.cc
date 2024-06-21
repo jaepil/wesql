@@ -136,13 +136,11 @@ void SeBackgroundThread::run()
     assert(ret == 0 || ret == ETIMEDOUT);
     const bool local_stop = m_stop;
     const bool local_save_stats = m_save_stats;
-    bool release = false;
     reset();
     // backup snapshot timer is set
     if (counter_ > 0) {
       counter_--;
       if (counter_ <= 0) {
-        release = true;
         assert(0 == counter_);
       }
     }
@@ -171,20 +169,6 @@ void SeBackgroundThread::run()
       if (!s.ok()) {
         se_handle_io_error(s, SE_IO_ERROR_BG_THREAD);
       }
-    }
-
-    // release the backup snapshot
-    if (release) {
-      //common::Status s = se_db->release_backup_snapshot();
-      //if (!s.ok()) {
-        //// FIXME if failed
-        //sql_print_error("ERROR: release the backup_snapshot failed\n");
-      //} else {
-        //if (unlink(backup_snapshot_file_.c_str()) != 0) {
-           //sql_print_error("ERROR: delete the backup snapshot file failed %s\n", backup_snapshot_file_.c_str());
-           //s = common::Status::IOError();
-        //}
-      //}
     }
 
     // Set the next timestamp for mysql_cond_timedwait() (which ends up calling

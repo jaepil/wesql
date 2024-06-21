@@ -104,7 +104,7 @@ struct SuperVersion {
   MemTable* mem;
   MemTableListVersion* imm;
   // current storage manager meta
-  const Snapshot* current_meta_;
+  Snapshot *current_meta_;
   common::MutableCFOptions mutable_cf_options;
   // Version number of the current SuperVersion
   uint64_t version_number;
@@ -129,9 +129,9 @@ struct SuperVersion {
   // objects needs to be done in the mutex
   void Cleanup();
   void Init(ColumnFamilyData *column_family_data,
-            MemTable* new_mem,
-            MemTableListVersion* new_imm,
-            const Snapshot* current_meta = nullptr);
+            MemTable *new_mem,
+            MemTableListVersion *new_imm,
+            Snapshot *current_meta = nullptr);
   int64_t get_delete_mem_count() const { return to_delete.size(); }
   // The value of dummy is not actually used. kSVInUse takes its address as a
   // mark in the thread local storage to indicate the SuperVersion is in use
@@ -378,11 +378,10 @@ public:
     task_picker_.set_delete_compaction_trigger(value);
   }
 
+  Snapshot *get_backup_meta_snapshot(monitor::InstrumentedMutex *db_mutex = nullptr);
   // manage the storage manager meta versions
-  const Snapshot* get_meta_snapshot(
-        monitor::InstrumentedMutex* db_mutex = nullptr);
-  void release_meta_snapshot(const Snapshot* snapshot,
-        monitor::InstrumentedMutex* db_mutex = nullptr);
+  Snapshot *get_meta_snapshot(monitor::InstrumentedMutex *db_mutex = nullptr);
+  void release_meta_snapshot(Snapshot *snapshot, monitor::InstrumentedMutex *db_mutex = nullptr);
 
   //TODO(Zhao Dongsheng), this function is inproper.
   storage::StorageManager* get_storage_manager()
@@ -462,35 +461,37 @@ public:
   int deserialize(const char *buf, int64_t buf_len, int64_t &pos);
   int64_t get_serialize_size() const;
   //use for ldb tools to dump checkpoint
-  int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
-                           char *str_buf, int64_t string_buf_len, int64_t &str_pos);
+  int deserialize_and_dump(const char *buf,
+                           int64_t buf_len,
+                           int64_t &pos,
+                           char *str_buf,
+                           int64_t string_buf_len,
+                           int64_t &str_pos);
   DECLARE_TO_STRING()
 
 #ifndef NDEBUG
   void test_set_index_id(const int64_t index_id) { sub_table_meta_.index_id_ = index_id; }
 #endif 
+
  private:
+  friend class VersionSet;
   friend class ColumnFamilySet;
   int release_memtable_resource();
-  template <typename type>
-  void delete_object(type *&obj)
-  {
-    MOD_DELETE_OBJECT(type, obj);
-  }
+  template <typename type> void delete_object(type *&obj) { MOD_DELETE_OBJECT(type, obj); }
 
   bool is_inited_;
   bool has_release_mems_;
   uint32_t id_;
   std::string name_;
-  std::atomic<int> refs_;  // outstanding references to ColumnFamilyData
-  bool dropped_;           // true if client dropped it
+  std::atomic<int> refs_; // outstanding references to ColumnFamilyData
+  bool dropped_;          // true if client dropped it
   // true if client stopped all the BackGround flush, compaction and recyle
   std::atomic<bool> bg_stopped_;
   const InternalKeyComparator internal_comparator_;
 
   const common::ColumnFamilyOptions initial_cf_options_;
   const common::ImmutableCFOptions ioptions_;
-  //TODO:yuanfeng init env options
+  // TODO:yuanfeng init env options
   util::EnvOptions env_options_;
   common::MutableCFOptions mutable_cf_options_;
 
@@ -498,11 +499,11 @@ public:
 
   std::unique_ptr<InternalStats, memory::ptr_destruct_delete<InternalStats>> internal_stats_;
 
-  WriteBufferManager* write_buffer_manager_;
+  WriteBufferManager *write_buffer_manager_;
 
-  MemTable* mem_;
+  MemTable *mem_;
   MemTableList imm_;
-  SuperVersion* super_version_;
+  SuperVersion *super_version_;
 
   // An ordinal representing the current SuperVersion. Updated by
   // InstallSuperVersion(), i.e. incremented every time super_version_
@@ -516,10 +517,10 @@ public:
   // pointers for a circular linked list. we use it to support iterations over
   // all column families that are alive (note: dropped column families can also
   // be alive as long as client holds a reference)
-  ColumnFamilyData* next_;
-  ColumnFamilyData* prev_;
+  ColumnFamilyData *next_;
+  ColumnFamilyData *prev_;
 
-  ColumnFamilySet* column_family_set_;
+  ColumnFamilySet *column_family_set_;
 
   // If true --> this ColumnFamily is currently present in DBImpl::flush_queue_
   bool pending_flush_;
@@ -531,7 +532,7 @@ public:
   // If true --> this subtable is currently present in DBImpl::dump_qeueue_
   bool pending_dump_;
 
-  //If true --> this subtable is currently present in shrink extent space
+  // If true --> this subtable is currently present in shrink extent space
   bool pending_shrink_;
 
   // There are 2 compaction priorities which are high and low.
@@ -713,7 +714,8 @@ class ColumnFamilySet {
   // 1. DB mutex locked
   // 2. accessed from a single-threaded write thread
   std::unordered_map<std::string, uint32_t> column_families_;
-  std::unordered_map<int64_t, ColumnFamilyData*> column_family_data_;
+  std::unordered_map<int64_t, ColumnFamilyData *> column_family_data_;
+  // TODO(ljc): should use std::set here
   std::unordered_map<int64_t, int64_t> dropped_column_family_data_;
 
   uint32_t max_column_family_;

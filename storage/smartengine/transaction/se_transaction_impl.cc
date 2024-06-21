@@ -162,9 +162,8 @@ void SeTransactionImpl::rollback()
     m_rollback_only = false;
   }
   if (m_backup_running) {
-    if (nullptr != backup_instance) {
-      backup_instance->release_snapshots(se_db);
-    }
+    util::BackupSnapshot *backup_instance = util::BackupSnapshot::get_instance();
+    backup_instance->release_current_backup_snapshot(se_db);
     se_hotbackup_name = se_backup_status[4];
     m_backup_running = false;
   }

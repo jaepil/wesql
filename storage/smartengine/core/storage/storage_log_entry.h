@@ -41,10 +41,11 @@ enum SeEvent
   MODIFY_INDEX = 7,
   DUMP = 8,
   SHRINK_EXTENT_SPACE = 9,
+  ACCQUIRE_BACKUP_SNAPSHOT = 10,
+  RELEASE_BACKUP_SNAPSHOT = 11,
 };
 
-enum ManifestRedoLogType
-{
+enum ManifestRedoLogType {
   REDO_LOG_BEGIN = 0,
   REDO_LOG_COMMIT = 1,
   REDO_LOG_ADD_SSTABLE = 2,
@@ -52,11 +53,14 @@ enum ManifestRedoLogType
   REDO_LOG_MODIFY_SSTABLE = 4,
   REDO_LOG_MODIFY_EXTENT_META = 5,
   REDO_LOG_MODIFY_TABLE_SCHEMA = 6,
+  REDO_LOG_ACCQUIRE_BACKUP_SNAPSHOT = 7,
+  REDO_LOG_RELEASE_BACKUP_SNAPSHOT = 8,
 };
 
 bool is_trans_log(int64_t log_type);
 bool is_partition_log(int64_t log_type);
 bool is_extent_log(int64_t log_type);
+bool is_backup_snapshot_log(int64_t log_type);
 
 //for compatibility, the variables in this struct must not been deleted or moved.
 //new variables should only been added at the end.
@@ -164,6 +168,30 @@ struct ModifyExtentMetaLogEntry : public ManifestLogEntry
   ModifyExtentMetaLogEntry(const ExtentMeta &extent_meta);
   virtual ~ModifyExtentMetaLogEntry() override;
   DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_EXTENT_META_LOG_ENTRY_VERSION)
+  DECLARE_TO_STRING()
+};
+
+struct AccquireBackupSnapshotLogEntry : public ManifestLogEntry
+{
+  static const int64_t ACQUIRE_SNAPSHOT_LOG_ENTRY_VERSION = 1;
+
+  uint64_t backup_id_;
+
+  AccquireBackupSnapshotLogEntry(BackupSnapshotId backup_id);
+  virtual ~AccquireBackupSnapshotLogEntry() override;
+  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(ACQUIRE_SNAPSHOT_LOG_ENTRY_VERSION)
+  DECLARE_TO_STRING()
+};
+
+struct ReleaseBackupSnapshotLogEntry : public ManifestLogEntry
+{
+  static const int64_t RELEASE_SNAPSHOT_LOG_ENTRY_VERSION = 1;
+
+  uint64_t backup_id_;
+
+  explicit ReleaseBackupSnapshotLogEntry(BackupSnapshotId backup_id);
+  virtual ~ReleaseBackupSnapshotLogEntry() override;
+  DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(RELEASE_SNAPSHOT_LOG_ENTRY_VERSION)
   DECLARE_TO_STRING()
 };
 

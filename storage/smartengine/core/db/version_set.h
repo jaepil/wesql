@@ -168,15 +168,48 @@ public:
   const util::EnvOptions& env_options() { return env_options_; }
 
   // hot backup
-  int create_backup_snapshot(MetaSnapshotMap &meta_snapshot);
+  int create_backup_snapshot(MetaSnapshotSet &meta_snapshot);
 
   const common::ImmutableDBOptions* get_db_options() const { return db_options_; }
 
   int add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_replay, ColumnFamilyData *&sub_table);
   int remove_sub_table(ColumnFamilyData *sub_table, bool write_log, bool is_replay);
   int modify_table_schema(ColumnFamilyData *sub_table, const table::TableSchema &table_schema);
+
+  int write_checkpoint_block(util::WritableFile &checkpoint_writer,
+                             int64_t &meta_block_count,
+                             CheckpointBlockHeader *block_header,
+                             char *buf,
+                             int64_t &offset,
+                             void *pointer,
+                             int pointer_type);
+  int write_subtable(util::WritableFile &checkpoint_writer,
+                     int64_t &sub_table_meta_block_count,
+                     storage::CheckpointBlockHeader *block_header,
+                     char *buf,
+                     int64_t &offset,
+                     SubTable *sub_table);
+  int write_meta_snapshot(util::WritableFile &checkpoint_writer,
+                          int64_t &meta_snapshot_meta_block_count,
+                          CheckpointBlockHeader *block_header,
+                          char *buf,
+                          int64_t &offset,
+                          SnapshotImpl *meta_snapshot);
+
+  int write_backup_snapshots(util::WritableFile &checkpoint_writer, storage::CheckpointHeader &header, char *buf);
+  int write_current_checkpoint(util::WritableFile &checkpoint_writer, storage::CheckpointHeader &header, char *buf);
   int do_checkpoint(util::WritableFile *checkpoint_writer, storage::CheckpointHeader *header);
+  int load_all_sub_table(util::RandomAccessFile &checkpoint_reader,
+                         storage::CheckpointHeader &header,
+                         char *buf,
+                         int64_t buf_size);
+  int load_backup_snapshots(util::RandomAccessFile &checkpoint_reader,
+                            storage::CheckpointHeader &header,
+                            char *buf,
+                            int64_t buf_size);
   int load_checkpoint(util::RandomAccessFile *checkpoint_reader, storage::CheckpointHeader *header);
+
+  int replay_backup_snapshot_log(int64_t log_type, char *log_data, int64_t log_len);
   int replay(int64_t log_type, char *log_data, int64_t log_len);
   int recover_M02L0();
 
@@ -184,9 +217,15 @@ public:
   void TEST_inject_write_checkpoint_failed();
   bool TEST_is_write_checkpoint_failed();
 #endif
-private:
-  int write_big_subtable(util::WritableFile *checkpoint_writer, ColumnFamilyData *sub_table);
-  int read_big_subtable(util::RandomAccessFile *checkpoint_reader,int64_t block_size, int64_t &file_offset);
+ private:
+  int write_big_block(util::WritableFile &checkpoint_writer, void *pointer, int pointer_type);
+  int write_big_meta_snapshot(util::WritableFile &checkpoint_writer, SnapshotImpl &meta_snapshot);
+  int write_big_subtable(util::WritableFile &checkpoint_writer, ColumnFamilyData &sub_table);
+  int read_big_subtable(util::RandomAccessFile *checkpoint_reader, int64_t block_size, int64_t &file_offset);
+  int read_big_meta_snapshot(util::RandomAccessFile &checkpoint_reader,
+                             int64_t block_size,
+                             int64_t &file_offset,
+                             MetaSnapshotSet &backup_snapshot);
   int reserve_checkpoint_block_header(char *buf,
                                       int64_t buf_size,
                                       int64_t &offset,
@@ -196,7 +235,10 @@ private:
   int replay_modify_subtable_log(const char *log_data, int64_t log_len);
   int replay_modify_table_schema_log(const char *log_data, int64_t log_len);
 
-private:
+  int replay_accquire_snapshot_log(const char *log_data, int64_t log_length);
+  int replay_release_snapshot_log(const char *log_data, int64_t log_length);
+
+ private:
   static const int64_t DEFAULT_BUFFER_SIZE = 2 * 1024 * 1024; //2MB
 
 private:

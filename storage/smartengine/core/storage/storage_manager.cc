@@ -16,18 +16,18 @@
 
 #include "storage/storage_manager.h"
 #include "cache/persistent_cache.h"
+#include "db/db_impl.h"
 #include "db/internal_stats.h"
 #include "db/table_cache.h"
 #include "monitoring/query_perf_context.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/multi_version_extent_meta_layer.h"
-#include "table/merging_iterator.h"
 #include "table/internal_iterator.h"
+#include "table/merging_iterator.h"
 #include "table/sstable_scan_iterator.h"
 #include "util/sync_point.h"
 
-/* clang-format off */
 namespace smartengine
 {
 using namespace cache;
@@ -37,6 +37,21 @@ using namespace monitor;
 using namespace db;
 using namespace util;
 using namespace table;
+
+namespace {
+
+struct RecycleBackupMetaSnapshotArgs
+{
+  util::autovector<storage::ExtentLayerVersion *> recyle_extent_layer_versions_;
+
+  RecycleBackupMetaSnapshotArgs(util::autovector<storage::ExtentLayerVersion *> &&recyle_extent_layer_versions) :
+      recyle_extent_layer_versions_(std::move(recyle_extent_layer_versions)) {}
+
+  ~RecycleBackupMetaSnapshotArgs() {}
+};
+
+} // namespace
+
 namespace storage
 {
 StorageManager::StorageManager(const util::EnvOptions &env_options,
@@ -46,8 +61,6 @@ StorageManager::StorageManager(const util::EnvOptions &env_options,
       env_options_(env_options),
       immutable_cfoptions_(imm_cf_options),
       mutable_cf_options_(mutable_cf_options),
-      env_(nullptr),
-      table_cache_(nullptr),
       column_family_id_(0),
       bg_recycle_count_(0),
       internalkey_comparator_(nullptr),
@@ -58,9 +71,7 @@ StorageManager::StorageManager(const util::EnvOptions &env_options,
       waiting_delete_versions_(),
       extent_stats_updated_(false),
       extent_stats_(),
-      lob_extent_mgr_(nullptr)
-{
-}
+      lob_extent_mgr_(nullptr) {}
 
 StorageManager::~StorageManager()
 {
@@ -95,16 +106,12 @@ void StorageManager::destroy()
   }
 }
 
-int StorageManager::init(util::Env *env, cache::Cache *cache)
-{
+int StorageManager::init() {
   int ret = Status::kOk;
 
   if (is_inited_) {
     ret = Status::kInitTwice;
     SE_LOG(WARN, "StorageManager has been inited", K(ret));
-  } else if (IS_NULL(env) || IS_NULL(cache)) {
-    ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(env), KP(cache));
   } else if (IS_NULL(internalkey_comparator_ = MOD_NEW_OBJECT(ModId::kStorageMgr,
                                                               db::InternalKeyComparator,
                                                               immutable_cfoptions_.user_comparator))) {
@@ -118,16 +125,13 @@ int StorageManager::init(util::Env *env, cache::Cache *cache)
   } else if (FAILED(init_extent_layer_versions(internalkey_comparator_))) {
     SE_LOG(WARN, "fail to init extent layer versions", K(ret));
   } else {
-    env_ = env;
-		table_cache_ = cache;
     is_inited_ = true;
   }
 
   return ret;
 }
 
-int StorageManager::apply(const ChangeInfo &change_info, bool for_recovery)
-{
+int StorageManager::apply(const ChangeInfo &change_info, bool for_recovery) {
   int ret = Status::kOk;
 
   std::lock_guard<std::mutex> guard(meta_mutex_);
@@ -438,22 +442,84 @@ void StorageManager::print_raw_meta_unsafe()
 
 }
 
-
-const db::SnapshotImpl *StorageManager::acquire_meta_snapshot()
-{
+db::SnapshotImpl *StorageManager::accquire_meta_snapshot() {
   std::lock_guard<std::mutex> meta_mutex_guard(meta_mutex_);
-  return acquire_meta_snapshot_unsafe();
+  return accquire_meta_snapshot_unsafe();
 }
 
-void StorageManager::release_meta_snapshot(const db::SnapshotImpl *meta_snapshot)
-{
+db::SnapshotImpl *StorageManager::accquire_backup_meta_snapshot() {
+  std::lock_guard<std::mutex> meta_mutex_guard(meta_mutex_);
+  current_meta_->backup_ref();
+  return current_meta_;
+}
+
+void StorageManager::release_meta_snapshot(db::SnapshotImpl *meta_snapshot) {
   std::lock_guard<std::mutex> meta_mutex_guard(meta_mutex_);
   release_meta_snapshot_unsafe(meta_snapshot);
   if (waiting_delete_versions_.size() > 0) {
     RecycleArgs *args = MOD_NEW_OBJECT(ModId::kStorageMgr, RecycleArgs, this);
-    env_->Schedule(StorageManager::async_recycle, args, Env::Priority::RECYCLE_EXTENT, nullptr);
+    util::Env::Default()->Schedule(StorageManager::async_recycle, args, Env::Priority::RECYCLE_EXTENT, nullptr);
     ++bg_recycle_count_;
   }
+}
+
+void StorageManager::release_backup_meta_snapshot(db::SnapshotImpl *meta_snapshot) {
+  util::autovector<ExtentLayerVersion *> recyle_extent_layer_versions;
+  destroy_backup_meta_snapshot(meta_snapshot, recyle_extent_layer_versions);
+  if (recyle_extent_layer_versions.size() > 0) {
+    RecycleBackupMetaSnapshotArgs *args = MOD_NEW_OBJECT(ModId::kStorageMgr,
+                                                         RecycleBackupMetaSnapshotArgs,
+                                                         std::move(recyle_extent_layer_versions));
+    util::Env::Default()->Schedule(StorageManager::async_recycle_meta_snapshot, args,
+                                   Env::Priority::RECYCLE_EXTENT, nullptr);
+  }
+}
+
+int StorageManager::cleanup_backup_snapshot(MetaSnapshotSet &meta_snapshots)
+{
+  int ret = Status::kOk;
+  SnapshotImpl *meta_snapshot = nullptr;
+
+  for (auto sn : meta_snapshots) {
+    if (IS_NULL(meta_snapshot = dynamic_cast<SnapshotImpl *>(sn))) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(ERROR, "The snapshot is nullptr", K(ret));
+      break;
+    } else {
+      StorageManager::release_backup_meta_snapshot(meta_snapshot);
+    }
+  }
+  meta_snapshots.clear();
+  return ret;
+}
+
+int StorageManager::recycle_backup_snapshot(MetaSnapshotSet &meta_snapshots)
+{
+  int ret = Status::kOk;
+  SnapshotImpl *meta_snapshot = nullptr;
+  for (auto &sn : meta_snapshots) {
+    if (IS_NULL(meta_snapshot = dynamic_cast<SnapshotImpl *>(sn))) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(ERROR, "The snapshot is nullptr, unexpected");
+      break;
+    } else {
+      util::autovector<ExtentLayerVersion *> recyle_extent_layer_versions;
+      StorageManager::destroy_backup_meta_snapshot(meta_snapshot, recyle_extent_layer_versions);
+      if (recyle_extent_layer_versions.size() > 0) {
+        if (FAILED(StorageManager::recycle_meta_snapshot(true, recyle_extent_layer_versions))) {
+          SE_LOG(ERROR, "fail to recycle meta snapshot");
+          break;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+void StorageManager::async_recycle_meta_snapshot(void *args) {
+  RecycleBackupMetaSnapshotArgs *recycle_args = reinterpret_cast<RecycleBackupMetaSnapshotArgs *>(args);
+  recycle_meta_snapshot(false, recycle_args->recyle_extent_layer_versions_);
+  MOD_DELETE_OBJECT(RecycleBackupMetaSnapshotArgs, recycle_args);
 }
 
 void StorageManager::async_recycle(void *args)
@@ -472,7 +538,6 @@ int StorageManager::recycle()
   --bg_recycle_count_;
   return recycle_unsafe(false /*recovery*/);
 }
-
 
 int StorageManager::serialize(char *buf, int64_t buf_length, int64_t &pos) const
 {
@@ -523,7 +588,6 @@ int StorageManager::deserialize(const char *buf, int64_t buf_length, int64_t &po
   int64_t max_level = 0;
   int64_t current_level = 0;
   int64_t level_extent_layer_count = 0;
-  util::autovector<ExtentId> extent_ids;
   ExtentLayerVersion *current_extent_layer_version = nullptr;
   ExtentLayer *current_extent_layer = nullptr;
 
@@ -769,8 +833,7 @@ int StorageManager::init_extent_layer_versions(db::InternalKeyComparator *intern
   return ret;
 }
 
-int StorageManager::normal_apply(const ChangeInfo &change_info)
-{
+int StorageManager::normal_apply(const ChangeInfo &change_info) {
   int ret = Status::kOk;
   ExtentLayerVersion *new_extent_layer_versions[MAX_TIER_COUNT] = {nullptr};
   int64_t level = 0;
@@ -1350,8 +1413,7 @@ int64_t StorageManager::one_layer_approximate_size(const db::ColumnFamilyData *c
   return cost_size;
 }
 
-int StorageManager::update_current_meta_snapshot(ExtentLayerVersion **new_extent_layer_versions)
-{
+int StorageManager::update_current_meta_snapshot(ExtentLayerVersion **new_extent_layer_versions) {
   int ret = Status::kOk;
   ExtentLayerVersion *new_extent_layer_version = nullptr;
   db::SnapshotImpl *new_current_meta = nullptr;
@@ -1383,7 +1445,7 @@ int StorageManager::update_current_meta_snapshot(ExtentLayerVersion **new_extent
           release_meta_snapshot_unsafe(current_meta_);
         }
         current_meta_ = new_current_meta;
-        acquire_meta_snapshot_unsafe();
+        accquire_meta_snapshot_unsafe();
         calc_extent_stats_unsafe();
       }
     }
@@ -1492,69 +1554,109 @@ int StorageManager::get_level_usage_percent(const Snapshot *current_meta,
   return ret;
 }
 
-const db::SnapshotImpl *StorageManager::acquire_meta_snapshot_unsafe()
-{
-  if (current_meta_->ref()) {
+db::SnapshotImpl *StorageManager::accquire_meta_snapshot_unsafe() {
+  if (current_meta_->ref(nullptr)) {
     //first ref,add to meta snapshot list
     meta_snapshot_list_.New(current_meta_, current_meta_->GetSequenceNumber(), 0, false, 0);
   }
   return current_meta_;
 }
 
-void StorageManager::release_meta_snapshot_unsafe(const db::SnapshotImpl *meta_snapshot)
-{
-  db::SnapshotImpl *snapshot = const_cast<db::SnapshotImpl *>(meta_snapshot);
-  if (snapshot->unref()) {
-    //remove current meta from snapshot list
-    meta_snapshot_list_.Delete(snapshot);
-    snapshot->destroy(waiting_delete_versions_);
-    MOD_DELETE_OBJECT(SnapshotImpl, snapshot);
+void StorageManager::destroy_meta_snapshot(
+    db::SnapshotImpl *meta_snapshot,
+    util::autovector<storage::ExtentLayerVersion *> &recyle_extent_layer_versions) {
+  int32_t old_ref = INT32_MAX;
+  bool destroy = false;
+  {
+    std::unique_lock lock(meta_snapshot->destroy_mutex_);
+    if (meta_snapshot->unref(&old_ref)) {
+      destroy = true;
+    }
+    if (1 == old_ref) {
+      meta_snapshot_list_.Delete(meta_snapshot);
+    }
   }
+  if (destroy) {
+    meta_snapshot->destroy(recyle_extent_layer_versions);
+    MOD_DELETE_OBJECT(SnapshotImpl, meta_snapshot);
+  }
+}
+
+void StorageManager::destroy_backup_meta_snapshot(
+    db::SnapshotImpl *meta_snapshot,
+    util::autovector<storage::ExtentLayerVersion *> &recyle_extent_layer_versions) {
+  bool destroy = false;
+  {
+    std::unique_lock lock(meta_snapshot->destroy_mutex_);
+    destroy = meta_snapshot->backup_unref();
+  }
+  if (destroy) {
+    meta_snapshot->destroy(recyle_extent_layer_versions);
+    MOD_DELETE_OBJECT(SnapshotImpl, meta_snapshot);
+  }
+}
+
+void StorageManager::release_meta_snapshot_unsafe(db::SnapshotImpl *meta_snapshot) {
+  destroy_meta_snapshot(meta_snapshot, waiting_delete_versions_);
 }
 
 int StorageManager::recycle_unsafe(bool for_recovery)
 {
   int ret = Status::kOk;
-  ExtentLayerVersion *extent_layer_version = nullptr;
-  ExtentLayer *extent_layer = nullptr;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "StorageManager should been inited first", K(ret));
+  } else if (FAILED(recycle_lob_extent(for_recovery))) {
+    SE_LOG(WARN, "fail to recycle large object extent", K(ret));
+  } else if (FAILED(recycle_extent_layer_versions(for_recovery, waiting_delete_versions_))) {
+    SE_LOG(WARN, "fail to recycle extent layer versions");
   } else {
-    for (uint32_t i = 0; SUCCED(ret) && i < waiting_delete_versions_.size(); ++i) {
-      if (IS_NULL(extent_layer_version = waiting_delete_versions_.at(i))) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "unexpected error, extent layer version should not been nullptr", K(ret), K(i));
-      } else if (FAILED(recycle_extent_layer_version(extent_layer_version, for_recovery))) {
-        SE_LOG(WARN, "fail to recycle extent layer version", K(ret), KP(extent_layer_version));
-      } else if (FAILED(recycle_lob_extent(for_recovery))) {
-        SE_LOG(WARN, "fail to recycle large object extent", K(ret));
-      } else {
-        SE_LOG(DEBUG, "success to recycle extent layer version", KP(extent_layer_version));
-      }
-    }
-
-    //clear the recycled version
-    if (SUCCED(ret)) {
-      waiting_delete_versions_.clear();
-    }
+    SE_LOG(DEBUG, "success to recycle extent layer versions");
   }
 
   return ret;
 }
 
-int StorageManager::recycle_extent_layer_version(ExtentLayerVersion *extent_layer_version, bool for_recovery)
-{
+int StorageManager::recycle_meta_snapshot(bool for_recovery,
+                                          util::autovector<ExtentLayerVersion *> &extent_layer_versions) {
   int ret = Status::kOk;
-  ExtentLayer *extent_layer = nullptr;
-  ExtentMeta *extent_meta = nullptr;
 
-  SE_LOG(INFO, "begin to recycle extent layer version", KP(extent_layer_version));
-  if (!is_inited_) {
-    ret = Status::kNotInit;
-    SE_LOG(WARN, "StorageManager should been inited first", K(ret));
-  } else if (IS_NULL(extent_layer_version)) {
+  if (FAILED(recycle_extent_layer_versions(for_recovery, extent_layer_versions))) {
+    SE_LOG(WARN, "fail to recycle extent layer versions");
+  } else {
+    SE_LOG(DEBUG, "success to recycle extent layer versions");
+  }
+
+  return ret;
+}
+
+int StorageManager::recycle_extent_layer_versions(bool for_recovery,
+                                                  util::autovector<ExtentLayerVersion *> &waiting_delete_versions) {
+  int ret = Status::kOk;
+  ExtentLayerVersion *extent_layer_version = nullptr;
+
+  for (uint32_t i = 0; SUCCED(ret) && i < waiting_delete_versions.size(); ++i) {
+    if (IS_NULL(extent_layer_version = waiting_delete_versions.at(i))) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(WARN, "unexpected error, extent layer version should not been nullptr", K(ret), K(i));
+    } else if (FAILED(recycle_extent_layer_version(extent_layer_version, for_recovery))) {
+      SE_LOG(WARN, "fail to recycle extent layer version", K(ret), KP(extent_layer_version));
+    } else {
+      SE_LOG(DEBUG, "success to recycle extent layer version", KP(extent_layer_version));
+    }
+  }
+
+  if (SUCCED(ret)) {
+    waiting_delete_versions.clear();
+  }
+  return ret;
+}
+
+int StorageManager::recycle_extent_layer_version(ExtentLayerVersion *extent_layer_version, bool for_recovery) {
+  int ret = Status::kOk;
+
+  if (IS_NULL(extent_layer_version)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(extent_layer_version));
   } else {
@@ -1575,7 +1677,6 @@ int StorageManager::recycle_extent_layer_version(ExtentLayerVersion *extent_laye
     }
 
     if (SUCCED(ret)) {
-      SE_LOG(INFO, "success to recycle extent layer version", KP(extent_layer_version));
       MOD_DELETE_OBJECT(ExtentLayerVersion, extent_layer_version);
     }
   }
@@ -1583,15 +1684,11 @@ int StorageManager::recycle_extent_layer_version(ExtentLayerVersion *extent_laye
   return ret;
 }
 
-int StorageManager::recycle_extent_layer(ExtentLayer *extent_layer, bool for_recovery)
-{
+int StorageManager::recycle_extent_layer(ExtentLayer *extent_layer, bool for_recovery) {
   int ret = Status::kOk;
   ExtentMeta *extent_meta = nullptr;
 
-  if (UNLIKELY(!is_inited_)) {
-    ret = Status::kNotInit;
-    SE_LOG(WARN, "StorageManager should been inited first", K(ret));
-  } else if (IS_NULL(extent_layer)) {
+  if (IS_NULL(extent_layer)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(extent_layer));
   } else {
@@ -1642,21 +1739,17 @@ int StorageManager::recycle_lob_extent(bool for_recovery)
   return ret;
 }
 
-int StorageManager::do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery)
-{
+int StorageManager::do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery) {
   int ret = Status::kOk;
-
-  if (!is_inited_) {
-    ret = Status::kNotInit;
-    SE_LOG(WARN, "StorageManager should been inited first", K(ret));
-  } else if (IS_NULL(extent_meta)) {
+  if (IS_NULL(extent_meta)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(extent_meta));
   } else if (extent_meta->unref()) {
     SE_LOG(INFO, "recycle the extent", K(*extent_meta));
     if (!for_recovery) {
+      cache::Cache *table_cache = GlobalContext::get_cache();
       //evict from table cache
-      db::TableCache::evict(table_cache_, extent_meta->extent_id_.id());
+      db::TableCache::evict(table_cache, extent_meta->extent_id_.id());
       //evict from persistent cache
       if (cache::PersistentCache::get_instance().is_enabled()) {
         if (FAILED(cache::PersistentCache::get_instance().evict(extent_meta->extent_id_))) {
@@ -1772,7 +1865,9 @@ int StorageManager::release_extent_resource(bool for_recovery)
   } else {
     release_meta_snapshot_unsafe(current_meta_);
     current_meta_ = nullptr;
-    if (storage::MAX_TIER_COUNT != waiting_delete_versions_.size()) {
+    if (0 == waiting_delete_versions_.size()) {
+      SE_LOG(INFO, "meta snapshot must be referenced by a backup snapshot, can't release now");
+    } else if (storage::MAX_TIER_COUNT != waiting_delete_versions_.size()) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "unexpected error, expect all the MAX_TIER_COUNT extent layer version should been recycle", K(ret),
           "wait_delete_version_size", waiting_delete_versions_.size());
@@ -1844,5 +1939,3 @@ int StorageManager::deserialize_extent_layer(const char *buf, int64_t buf_len, i
 
 } //namespace storage
 } //namespace smartengine
-
-/* clang-format on */

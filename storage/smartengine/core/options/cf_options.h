@@ -27,7 +27,7 @@ namespace common {
 // of DB. Raw pointers defined in this struct do not have ownership to the data
 // they point to. Options contains shared_ptr to these data.
 struct ImmutableCFOptions {
-  ImmutableCFOptions();
+  ImmutableCFOptions() = delete;
   explicit ImmutableCFOptions(const Options& options);
   ImmutableCFOptions(const ImmutableDBOptions& db_options,
                      const ColumnFamilyOptions& cf_options);

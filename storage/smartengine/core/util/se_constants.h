@@ -43,6 +43,7 @@ static const int64_t MAX_TIER_COUNT = 3;
 #define INT32_MAX 0x7FFFFFFF
 #endif
 
+#define IS_FALSE(expr) (UNLIKELY(false == (expr)))
 #define IS_NULL(expr) (UNLIKELY(nullptr == (expr)))
 #define IS_NOTNULL(expr) (UNLIKELY(nullptr != (expr)))
 #define SUCCED(expr) (LIKELY(common::Status::kOk == (ret = (expr))))

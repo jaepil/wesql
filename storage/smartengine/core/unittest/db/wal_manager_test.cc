@@ -56,7 +56,7 @@ class WalManagerTest : public testing::Test {
 
     versions_.reset(new VersionSet(dbname_, &db_options_, env_options_,
                                    table_cache_.get(), &write_buffer_manager_));
-    GlobalContext *global_ctx = new GlobalContext();
+    GlobalContext *global_ctx = new GlobalContext({}, {});
     DBOptions dboption;
     db::FileNumber next_file_number(0);
     global_ctx->env_ = env_.get();

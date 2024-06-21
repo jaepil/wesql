@@ -292,9 +292,6 @@ int ExtentMetaManager::clear_free_extent_meta()
     if (IS_NULL(extent_meta = iterator->second)) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "extent meta must not nullptr", K(ret), K(iterator->first));
-    } else if (0 != extent_meta->refs_ && 1 != extent_meta->refs_) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(ERROR, "unexpected error, extent meta refs must been 0 or 1 when recovery", K(ret), KP(extent_meta), K(*extent_meta));
     } else if (0 == extent_meta->refs_) {
       SE_LOG(INFO, "clear free extent meta from extent space mgr", K(iterator->first), K(iterator->second));
       iterator = extent_meta_map_.erase(iterator);

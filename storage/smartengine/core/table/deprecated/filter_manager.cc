@@ -213,7 +213,7 @@ int FilterManager::build_filter(const std::string &request_key,
   TEST_SYNC_POINT_CALLBACK("FilterManager::BuildFilter:Start", quota_);
   Cache::Handle *table_handle;
   // Get snapshot to prevent recycle during filter building process.
-  const Snapshot *meta_snapshot = get_meta_snapshot();
+  Snapshot *meta_snapshot = get_meta_snapshot();
   // Set no_io to true to react correctly to recycle_extents which evicts table
   // reader
   // from table cache. It is possible the extent refered by max_element.fd_ has
@@ -281,16 +281,15 @@ int FilterManager::build_filter(const std::string &request_key,
   return ret;
 }
 
-const Snapshot *FilterManager::get_meta_snapshot() {
+Snapshot *FilterManager::get_meta_snapshot() {
   InstrumentedMutexLock l(db_mutex_);
   return cfd_->get_meta_snapshot(db_mutex_);
 }
 
-void FilterManager::release_meta_snapshot(const Snapshot *meta_snapshot) {
+void FilterManager::release_meta_snapshot(Snapshot *meta_snapshot) {
   InstrumentedMutexLock l(db_mutex_);
   cfd_->release_meta_snapshot(meta_snapshot, db_mutex_);
 }
-
 
 void FilterManager::append_to_request_queue(const Slice &request_key,
                                             int32_t level,

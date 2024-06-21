@@ -70,9 +70,7 @@ ColumnFamilyHandleImpl::~ColumnFamilyHandleImpl() {
 uint32_t ColumnFamilyHandleImpl::GetID() const { return cfd()->GetID(); }
 
 /** now engine use subtable_id intead of name, name is useless */
-const std::string& ColumnFamilyHandleImpl::GetName() const {
-  return cfd()->GetName();
-}
+const std::string &ColumnFamilyHandleImpl::GetName() const { return cfd()->GetName(); }
 
 Status ColumnFamilyHandleImpl::GetDescriptor(ColumnFamilyDescriptor* desc) {
   // accessing mutable cf-options requires db mutex.
@@ -186,10 +184,9 @@ void SuperVersion::Cleanup() {
 }
 
 void SuperVersion::Init(ColumnFamilyData *cfd,
-                        MemTable* new_mem,
-                        MemTableListVersion* new_imm,
-                        const Snapshot* current_meta)
-{
+                        MemTable *new_mem,
+                        MemTableListVersion *new_imm,
+                        Snapshot *current_meta) {
   cfd_ = cfd;
   mem = new_mem;
   imm = new_imm;
@@ -271,20 +268,22 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
   } else if (UNLIKELY(!args.is_valid()) || IS_NULL(global_ctx) || UNLIKELY(!global_ctx->is_valid()) || IS_NULL(column_family_set)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(args), KP(global_ctx), KP(column_family_set));
-  } else if (IS_NULL(internal_stats = MOD_NEW_OBJECT(memory::ModId::kSubTable, InternalStats,
-          global_ctx->env_, this))) {
+  } else if (IS_NULL(internal_stats = MOD_NEW_OBJECT(memory::ModId::kSubTable,
+                                                     InternalStats,
+                                                     GlobalContext::get_env(),
+                                                     this))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for internal_stats", K(ret));
   } else if (IS_NULL(table_cache = MOD_NEW_OBJECT(memory::ModId::kSubTable,
                                                   TableCache,
                                                   ioptions_,
-                                                  global_ctx->cache_))) {
+                                                  GlobalContext::get_cache()))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for table_cache", K(ret));
-  } else if (IS_NULL(local_sv= MOD_NEW_OBJECT(memory::ModId::kSubTable, ThreadLocalPtr, &SuperVersionUnrefHandle))) {
+  } else if (IS_NULL(local_sv = MOD_NEW_OBJECT(memory::ModId::kSubTable, ThreadLocalPtr, &SuperVersionUnrefHandle))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for local_sv", K(ret));
-  } else if (FAILED(storage_manager_.init(global_ctx->env_, global_ctx->cache_))) {
+  } else if (FAILED(storage_manager_.init())) {
     SE_LOG(WARN, "fail to init storage manager", K(ret));
   } else {
     sub_table_meta_.index_id_ = args.index_id_;
@@ -466,8 +465,7 @@ MemTable* ColumnFamilyData::ConstructNewMemtable(
       mutable_cf_options, write_buffer_manager_, earliest_seq);
 }
 
-void ColumnFamilyData::CreateNewMemtable(
-    const MutableCFOptions& mutable_cf_options, SequenceNumber earliest_seq) {
+void ColumnFamilyData::CreateNewMemtable(const MutableCFOptions &mutable_cf_options, SequenceNumber earliest_seq) {
   if (mem_ != nullptr) {
     auto ptr = mem_->Unref();
     MOD_DELETE_OBJECT(MemTable, ptr);
@@ -605,28 +603,33 @@ bool ColumnFamilyData::ReturnThreadLocalSuperVersion(SuperVersion* sv) {
   return false;
 }
 
-const Snapshot* ColumnFamilyData::get_meta_snapshot(
-    InstrumentedMutex* db_mutex) {
+Snapshot *ColumnFamilyData::get_backup_meta_snapshot(InstrumentedMutex *db_mutex) {
   // the caller be sure mutex is locked
   if (db_mutex != nullptr) {
     db_mutex->AssertHeld();
   }
-  return storage_manager_.acquire_meta_snapshot();
+  return storage_manager_.accquire_backup_meta_snapshot();
+}
+
+Snapshot *ColumnFamilyData::get_meta_snapshot(InstrumentedMutex *db_mutex) {
+  // the caller be sure mutex is locked
+  if (db_mutex != nullptr) {
+    db_mutex->AssertHeld();
+  }
+  return storage_manager_.accquire_meta_snapshot();
 }
 
 // need db mutex locked outside
-void ColumnFamilyData::release_meta_snapshot(const Snapshot* s,
-        monitor::InstrumentedMutex* db_mutex) {
+void ColumnFamilyData::release_meta_snapshot(Snapshot *s, monitor::InstrumentedMutex *db_mutex) {
   if (db_mutex != nullptr) {
     db_mutex->Unlock();
   }
   TEST_SYNC_POINT("ColumnFamilyData::release_meta_snapshot:Unlock");
-  storage_manager_.release_meta_snapshot(reinterpret_cast<const SnapshotImpl *>(s));
+  storage_manager_.release_meta_snapshot(reinterpret_cast<SnapshotImpl *>(s));
   if (db_mutex != nullptr) {
     db_mutex->Lock();
   }
 }
-
 
 int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_options,
                                                const Snapshot &current_meta,
@@ -698,7 +701,7 @@ int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_o
 int ColumnFamilyData::recover_m0_to_l0() {
   int ret = Status::kOk;
   const ExtentLayer *dump_layer = nullptr;
-  const Snapshot *current_snapshot = nullptr;
+  Snapshot *current_snapshot = nullptr;
   const ExtentMeta *lob_extent_meta = nullptr;
   LayerPosition layer_position(0, storage::LayerPosition::INVISIBLE_LAYER_INDEX);
   int64_t dummy_log_seq = 0;
@@ -876,7 +879,7 @@ int ColumnFamilyData::set_compaction_check_info(monitor::InstrumentedMutex *mute
   int64_t delete_extents_size = 0;
   int64_t l1_usage_percent = 100;
   int64_t l2_usage_percent = 100;
-  const Snapshot* snapshot = get_meta_snapshot(mutex);
+  Snapshot *snapshot = get_meta_snapshot(mutex);
   StorageManager *storage_manager = get_storage_manager();
   if (IS_NULL(storage_manager) || IS_NULL(snapshot)) {
     ret = Status::kErrorUnexpected;
@@ -950,8 +953,12 @@ int ColumnFamilyData::deserialize(const char *buf, int64_t buf_len, int64_t &pos
   return ret;
 }
 
-int ColumnFamilyData::deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
-                                           char *str_buf, int64_t str_buf_len, int64_t &str_pos)
+int ColumnFamilyData::deserialize_and_dump(const char *buf,
+                                           int64_t buf_len,
+                                           int64_t &pos,
+                                           char *str_buf,
+                                           int64_t str_buf_len,
+                                           int64_t &str_pos)
 {
   int ret = Status::kOk;
   int64_t size = 0;

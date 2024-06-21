@@ -1351,10 +1351,10 @@ Status DB::Open(const Options &options,
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for GlobalContext", K(ret));
   } else {
+    GlobalContext::env_ = impl->env_;
+    GlobalContext::cache_ = impl->table_cache_.get();
     gctx->options_ = options;
     gctx->env_options_ = impl->env_options_;
-    gctx->env_ = impl->env_;
-    gctx->cache_ = impl->table_cache_.get();
     gctx->write_buf_mgr_ = impl->write_buffer_manager_;
     gctx->reset_thread_local_all_sub_table();
     gctx->db_dir_ = impl->directories_.GetDbDir();

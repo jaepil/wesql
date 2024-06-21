@@ -13,15 +13,15 @@
 #ifndef STORAGE_ROCKSDB_INCLUDE_DB_H_
 #define STORAGE_ROCKSDB_INCLUDE_DB_H_
 
-#include <stdint.h>
+#include <cstdint>
+#include <list>
 #include <map>
 #include <memory>
-#include <string>
-#include <list>
-#include <vector>
-#include <unordered_map>
-#include <vector>
 #include <mutex>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 #include "db/async_callback.h"
 #include "db/binlog_position.h"
 #include "options/options.h"
@@ -33,10 +33,11 @@
 #undef DeleteFile
 #endif
 
-namespace smartengine
-{
-namespace common
-{
+namespace smartengine {
+
+using BackupSnapshotId = uint64_t;
+
+namespace common {
 struct Options;
 struct DBOptions;
 struct ColumnFamilyOptions;
@@ -55,6 +56,7 @@ struct TableSchema;
 namespace util
 {
 class Env;
+class BackupSnapshotImpl;
 } // namespace util
 
 namespace storage
@@ -176,7 +178,46 @@ typedef std::unordered_map<std::string,
     TablePropertiesCollection;
 
 // for hotbackup
-typedef std::unordered_map<db::ColumnFamilyData *, const db::Snapshot *> MetaSnapshotMap;
+typedef std::unordered_map<db::ColumnFamilyData *, db::Snapshot *> MetaSnapshotMap;
+typedef std::unordered_set<db::Snapshot *> MetaSnapshotSet;
+
+class DB;
+class BackupSnapshotMap
+{
+public:
+  constexpr static int kMaxBackupSnapshotNum = 5;
+
+  bool find_backup_snapshot(BackupSnapshotId backup_id);
+
+  bool get_next_backup_snapshot(BackupSnapshotId prev_backup_id,
+                                BackupSnapshotId &backup_id,
+                                MetaSnapshotSet *&meta_snapshots);
+
+  bool add_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &&meta_snapshots);
+
+  bool remove_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &to_clean, bool &existed);
+
+  int release_backup_snapshot(BackupSnapshotId backup_id);
+
+  int do_pending_release();
+
+  // set in_use_ to true to avoid erase a backup snapshot which is in use from this map 
+  void set_in_use(bool in_use);
+
+  BackupSnapshotId get_latest_backup_id();
+
+  size_t get_backup_snapshot_count();
+
+private:
+  friend class util::BackupSnapshotImpl;
+  void clear();
+
+private:
+  std::mutex mutex_;
+  bool in_use_; // used by checkpoint at now
+  std::map<BackupSnapshotId, MetaSnapshotSet> backup_snapshots_;
+  std::vector<BackupSnapshotId> pending_release_backups_;
+};
 
 // A DB is a persistent ordered map from keys to values.
 // A DB is safe for concurrent access from multiple threads without
@@ -250,9 +291,8 @@ class DB {
   virtual common::Status Write(const common::WriteOptions& options,
                                WriteBatch* updates) = 0;
 
-  virtual common::Status WriteAsync(const common::WriteOptions& options,
-                                    WriteBatch* updates,
-                                    common::AsyncCallback* call_back) {
+  virtual common::Status
+  WriteAsync(const common::WriteOptions &options, WriteBatch *updates, common::AsyncCallback *call_back) {
     return common::Status::NotSupported(
         "This type of db do not support WriteAsync");
   }
@@ -719,7 +759,8 @@ class DB {
   virtual common::Status EnableFileDeletions(bool force = true) = 0;
 
   // for hotbackup
-  virtual int create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
+  virtual int create_backup_snapshot(BackupSnapshotId backup_id,
+                                     MetaSnapshotSet &meta_snapshots,
                                      int32_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
                                      uint64_t &last_wal_file_num,
@@ -727,14 +768,11 @@ class DB {
   {
     return common::Status::kNotSupported;
   }
-  virtual int record_incremental_extent_ids(const int32_t first_manifest_file_num,
+
+  virtual int record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
+                                            const int32_t first_manifest_file_num,
                                             const int32_t last_manifest_file_num,
                                             const uint64_t last_manifest_file_size)
-  {
-    return common::Status::kNotSupported;
-  }
-
-  virtual int release_backup_snapshot(MetaSnapshotMap &meta_snapshot)
   {
     return common::Status::kNotSupported;
   }

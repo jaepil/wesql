@@ -622,7 +622,7 @@ bool InternalStats::HandleNumExtentsAtLevel(std::string* value, Slice suffix,
     smartengine::storage::StorageManager* storage_manager =
                                             cfd_->get_storage_manager();
     // db_mutex is locked outside
-    const Snapshot* sn = cfd_->get_meta_snapshot();
+    Snapshot *sn = cfd_->get_meta_snapshot();
     if (nullptr == sn) {
       return false;
     } 
@@ -665,7 +665,7 @@ bool InternalStats::HandleLevelStats(std::string* value, Slice suffix,
   smartengine::storage::StorageManager *storage_manager =
                                     cfd_->get_storage_manager();
   // db_mutex is locked outside
-  const Snapshot *sn = cfd_->get_meta_snapshot();
+  Snapshot *sn = cfd_->get_meta_snapshot();
   if (nullptr == sn) {
     return false;
   }
@@ -1183,7 +1183,7 @@ void InternalStats::dump_cfmap_stats(
   // count the extents
   storage::StorageManager* storage_manager = cfd_->get_storage_manager();
   // locked outside
-  const Snapshot *sn = cfd_->get_meta_snapshot();  
+  Snapshot *sn = cfd_->get_meta_snapshot();
   if (nullptr == sn) {
     return;
   }

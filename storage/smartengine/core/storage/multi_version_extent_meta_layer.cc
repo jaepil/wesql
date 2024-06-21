@@ -767,7 +767,7 @@ void ExtentLayerVersion::merge_extent_stats(const ExtentStats &extent_stats)
 {
   extent_stats_.merge(extent_stats);
 }
-int ExtentLayerVersion::serialize(char *buf, int64_t buf_length, int64_t &pos) const
+int ExtentLayerVersion::serialize(char *buf, int64_t buf_len, int64_t &pos) const
 {
   int ret = Status::kOk;
   int64_t size = get_serialize_size();
@@ -777,17 +777,17 @@ int ExtentLayerVersion::serialize(char *buf, int64_t buf_length, int64_t &pos) c
   const ExtentLayer *extent_layer = nullptr;
   util::autovector<ExtentId> extent_ids;
 
-  if (IS_NULL(buf) || buf_length < 0 || pos >= buf_length) {
+  if (IS_NULL(buf) || buf_len < 0 || pos + size > buf_len) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_length), K(pos));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len), K(pos), K(size));
   } else {
     *((int64_t *)(buf + pos)) = size;
     pos += sizeof(size);
     *((int64_t *)(buf + pos)) = version;
     pos += sizeof(version);
-    if (FAILED(util::serialize(buf, buf_length, pos, level_))) {
+    if (FAILED(util::serialize(buf, buf_len, pos, level_))) {
       SE_LOG(WARN, "fail to serialize level", K(ret), K_(level));
-    } else if (FAILED(util::serialize(buf, buf_length, pos, extent_layer_count))) {
+    } else if (FAILED(util::serialize(buf, buf_len, pos, extent_layer_count))) {
       SE_LOG(WARN, "fail to serialize extent layer count", K(ret), K(extent_layer_count));
     } else {
       //serialize normal extent layer
@@ -795,7 +795,7 @@ int ExtentLayerVersion::serialize(char *buf, int64_t buf_length, int64_t &pos) c
         if (IS_NULL(extent_layer = extent_layer_arr_.at(layer_index))) {
           ret = Status::kErrorUnexpected;
           SE_LOG(WARN, "unexpected error, extent layer must not nullptr", K(ret), K(layer_index));
-        } else if (FAILED(extent_layer->serialize(buf, buf_length, pos))) {
+        } else if (FAILED(extent_layer->serialize(buf, buf_len, pos))) {
           SE_LOG(WARN, "fail to serialize the extent layer", K(ret));
         }
       }
@@ -803,9 +803,9 @@ int ExtentLayerVersion::serialize(char *buf, int64_t buf_length, int64_t &pos) c
 
     if (SUCCED(ret)) {
       //serialize dump extent layer
-      if (FAILED(util::serialize(buf, buf_length, pos, dump_extent_layer_count))) {
+      if (FAILED(util::serialize(buf, buf_len, pos, dump_extent_layer_count))) {
         SE_LOG(WARN, "fail to serialize dump extent layer count", K(ret), K(dump_extent_layer_count));
-      } else if (nullptr != dump_extent_layer_ && FAILED(dump_extent_layer_->serialize(buf, buf_length, pos))) {
+      } else if (nullptr != dump_extent_layer_ && FAILED(dump_extent_layer_->serialize(buf, buf_len, pos))) {
         SE_LOG(WARN, "fail to serialize dump extent layer", K(ret));
       }
     }

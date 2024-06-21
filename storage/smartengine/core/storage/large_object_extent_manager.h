@@ -20,8 +20,7 @@
 #include "util/serialization.h"
 #include "util/types.h"
 
-namespace smartengine
-{
+namespace smartengine {
 namespace storage
 {
 struct ChangeInfo;
@@ -32,6 +31,7 @@ class LargeObjectExtentMananger
 public:
   LargeObjectExtentMananger();
   ~LargeObjectExtentMananger();
+
   void destroy();
   int init();
 
@@ -44,7 +44,8 @@ public:
   int deserialize_and_dump(const char *buf, int64_t buf_len, int64_t &pos,
                            char *str_buf, int64_t str_buf_len, int64_t &str_pos);
   DECLARE_SERIALIZATION()
-private:
+
+ private:
   int add_extent(ExtentMeta *extent_meta);
   int delete_extent(ExtentMeta *extent_meta);
   int update(common::SequenceNumber sequence_number);
@@ -52,14 +53,17 @@ private:
   int recycle_extent(ExtentMeta *extent_meta, bool for_recovery);
   int get_all_extent_ids(std::vector<ExtentId> &extent_ids) const;
   int build_lob_extent(std::vector<ExtentId> &extent_ids);
-private:
-    static const int64_t LARGE_OBJECT_EXTENT_MANAGER_VERSION = 1;
-private:
+
+ private:
+  static const int64_t LARGE_OBJECT_EXTENT_MANAGER_VERSION = 1;
+
+ private:
   bool is_inited_;
   std::unordered_map<int64_t, ExtentMeta*> lob_extent_;
+  // TODO(ljc): can remove this
   std::vector<ExtentMeta *> delete_lob_extent_;
   std::unordered_map<common::SequenceNumber, std::vector<ExtentMeta *>> lob_extent_wait_to_recycle_;
 };
 
 } //namespace storage
-} //namespace smartengine
+} // namespace smartengine

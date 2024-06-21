@@ -80,8 +80,6 @@ extern SeDictionaryManager dict_manager;
 
 extern SeBinlogManager binlog_manager;
 
-extern util::BackupSnapshot *backup_instance;
-
 extern int se_inplace_populate_indexes;
 
 extern ulong purge_acquire_lock_timeout;
@@ -229,6 +227,20 @@ void se_post_recover();
 void se_post_engine_recover();
 
 void se_post_ddl(THD *thd);
+
+int se_checkpoint(THD *thd);
+
+int se_create_backup_snapshot(THD *thd,
+                              uint64_t *backup_snapshot_id,
+                              std::string &binlog_file,
+                              uint64_t *binlog_file_offset);
+
+int se_incremental_backup(THD *thd);
+
+int se_release_backup_snapshot(THD *thd, uint64_t backup_snapshot_id);
+
+int se_list_backup_snapshots(THD *thd, std::vector<uint64_t> &backup_ids);
+
 } // namespace smartengine
 
 #endif // end of SMARTENGINE_HTON_H_

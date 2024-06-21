@@ -122,18 +122,6 @@ int StorageLoggerBuffer::read_log(ManifestLogEntryHeader &log_entry_header, char
   return ret;
 }
 
-CheckpointBlockHeader::CheckpointBlockHeader()
-    : type_(0),
-      block_size_(0),
-      entry_count_(0),
-      data_offset_(0),
-      data_size_(0)
-{
-  memset(reserve_, 0, 2 * sizeof(int64_t));
-}
-CheckpointBlockHeader::~CheckpointBlockHeader()
-{
-}
 void CheckpointBlockHeader::reset()
 {
   type_ = 0;
@@ -215,19 +203,6 @@ int StorageLogger::TransContext::append_log(int64_t trans_id,
   return ret;
 }
 
-CheckpointHeader::CheckpointHeader()
-    : start_log_id_(0),
-      extent_count_(0),
-      sub_table_count_(0),
-      extent_meta_block_count_(0),
-      sub_table_meta_block_count_(0),
-      extent_meta_block_offset_(0),
-      sub_table_meta_block_offset_(0)
-{
-}
-CheckpointHeader::~CheckpointHeader()
-{
-}
 //DEFINE_COMPACTIPLE_SERIALIZATION(CheckpointHeader, extent_count_, partition_group_count_);
 DEFINE_TO_STRING(CheckpointHeader, KV_(start_log_id), KV_(extent_count), KV_(sub_table_count),
                  KV_(extent_meta_block_count), KV_(sub_table_meta_block_count), KV_(extent_meta_block_offset),
@@ -801,37 +776,44 @@ int StorageLogger::load_checkpoint(memory::ArenaAllocator &arena)
   std::string checkpoint_name;
   uint64_t log_number = 0;
   int64_t file_offset = 0;
-//  unique_ptr<char[]> b(new char[DEFAULT_BUFFER_SIZE]);
-//  char *header_buffer = b.get();
-  char *header_buffer = (char *)memory::base_malloc(DEFAULT_BUFFER_SIZE, memory::ModId::kStorageLogger);
+  char *header_buffer = nullptr;
   CheckpointHeader *header = nullptr;
   Slice result;
-//  std::unique_ptr<util::RandomAccessFile> checkpoint_reader;
   util::RandomAccessFile *checkpoint_reader = nullptr;
   EnvOptions opt_env_opts = env_options_;
   opt_env_opts.use_direct_reads = false;
   opt_env_opts.arena = &arena;
-  memset(header_buffer, 0, DEFAULT_BUFFER_SIZE);
-  header = reinterpret_cast<CheckpointHeader *>(header_buffer);
 
   if (!is_inited_) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "StorageLogger should been inited first", K(ret));
-  } else if (FAILED(parse_current_checkpoint_file(checkpoint_name, log_number))) {
-    SE_LOG(WARN, "fail to parse current checkpoint file", K(ret));
-  } else if (FAILED(env_->NewRandomAccessFile(db_name_ + "/" + checkpoint_name, checkpoint_reader, opt_env_opts).code())) {
-    SE_LOG(WARN, "fail to create checkpoint reader", K(ret));
-  } else if (FAILED(checkpoint_reader->Read(file_offset, DEFAULT_BUFFER_SIZE, &result, header_buffer).code())) {
-    SE_LOG(WARN, "fail to read checkpoint header", K(ret), K(file_offset));
-  } else if (FAILED(ExtentMetaManager::get_instance().load_checkpoint(checkpoint_reader, header))) {
-    SE_LOG(WARN, "fail to load extent meta checkpoint", K(ret));
-  } else if (FAILED(version_set_->load_checkpoint(checkpoint_reader, header))) {
-    SE_LOG(WARN, "fail to load partition group meta checkpoint", K(ret));
+  } else if (IS_NULL(header_buffer = static_cast<char *>(
+                         memory::base_malloc(DEFAULT_BUFFER_SIZE, memory::ModId::kStorageLogger)))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for header buffer", K(ret));
   } else {
-    SE_LOG(INFO, "success to load checkpoint", K(checkpoint_name.c_str()), K(log_number));
+    memset(header_buffer, 0, DEFAULT_BUFFER_SIZE);
+    header = reinterpret_cast<CheckpointHeader *>(header_buffer);
+
+    if (FAILED(parse_current_checkpoint_file(checkpoint_name, log_number))) {
+      SE_LOG(WARN, "fail to parse current checkpoint file", K(ret));
+    } else if (FAILED(env_->NewRandomAccessFile(db_name_ + "/" + checkpoint_name, checkpoint_reader, opt_env_opts)
+                          .code())) {
+      SE_LOG(WARN, "fail to create checkpoint reader", K(ret));
+    } else if (FAILED(checkpoint_reader->Read(file_offset, DEFAULT_BUFFER_SIZE, &result, header_buffer).code())) {
+      SE_LOG(WARN, "fail to read checkpoint header", K(ret), K(file_offset));
+    } else if (FAILED(ExtentMetaManager::get_instance().load_checkpoint(checkpoint_reader, header))) {
+      SE_LOG(WARN, "fail to load extent meta checkpoint", K(ret));
+    } else if (FAILED(version_set_->load_checkpoint(checkpoint_reader, header))) {
+      SE_LOG(WARN, "fail to load partition group meta checkpoint", K(ret));
+    } else {
+      SE_LOG(INFO, "success to load checkpoint", K(checkpoint_name.c_str()), K(log_number));
+    }
+    FREE_OBJECT(RandomAccessFile, arena, checkpoint_reader);
   }
-  FREE_OBJECT(RandomAccessFile, arena, checkpoint_reader);
-  memory::base_free(header_buffer);
+  if (header_buffer) {
+    memory::base_free(header_buffer);
+  }
   return ret;
 }
 
@@ -914,6 +896,12 @@ int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
                   if (FAILED(ExtentMetaManager::get_instance().replay(log_entry_header.log_entry_type_, log_data, log_len))) {
                     SE_LOG(WARN, "fail to replay extent meta log", K(ret), K(log_entry_header));
                   }
+                } else if (is_backup_snapshot_log(log_entry_header.log_entry_type_)) {
+                  if (FAILED(version_set_->replay_backup_snapshot_log(log_entry_header.log_entry_type_,
+                                                                      log_data,
+                                                                      log_len))) {
+                    SE_LOG(WARN, "fail to replay backup snapshot log", K(ret), K(log_entry_header));
+                  }
                 } else {
                   ret = Status::kNotSupported;
                   SE_LOG(WARN, "not support log type", K(ret), K(log_entry_header));
@@ -945,7 +933,6 @@ int StorageLogger::internal_write_checkpoint()
 {
   int ret = Status::kOk;
   CheckpointHeader *header = nullptr;
-//  std::unique_ptr<WritableFile> checkpoint_writer;
   WritableFile *checkpoint_writer = nullptr;
   int64_t checkpoint_file_number = log_file_number_++;
   int64_t manifest_file_number = log_file_number_++;
@@ -1259,12 +1246,11 @@ int StorageLogger::get_commited_trans(std::unordered_set<int64_t> &commited_tran
   return ret;
 }
 
-int StorageLogger::record_incremental_extent_ids(const int32_t first_manifest_file_num,
+int StorageLogger::record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
+                                                 const int32_t first_manifest_file_num,
                                                  const int32_t last_manifest_file_num,
-                                                 const uint64_t last_manifest_file_size)
-{
+                                                 const uint64_t last_manifest_file_size) {
   int ret = Status::kOk;
-  const std::string backup_tmp_dir_path = db_name_ + util::BACKUP_TMP_DIR;
   std::vector<int32_t> manifest_file_nums;
   std::unordered_set<int64_t> commited_trans_ids;
 
@@ -1277,9 +1263,7 @@ int StorageLogger::record_incremental_extent_ids(const int32_t first_manifest_fi
                                               last_manifest_file_num,
                                               manifest_file_nums))) {
     SE_LOG(WARN, "Failed to check manifest files for backup", K(ret));
-  } else if (FAILED(get_commited_trans_for_backup(backup_tmp_dir_path,
-                                                  manifest_file_nums,
-                                                  commited_trans_ids))) {
+  } else if (FAILED(get_commited_trans_for_backup(backup_tmp_dir_path, manifest_file_nums, commited_trans_ids))) {
     SE_LOG(WARN, "Failed to get commited transactions for backup", K(ret));
   } else if (FAILED(read_manifest_for_backup(backup_tmp_dir_path,
                                              backup_tmp_dir_path + util::BACKUP_EXTENT_IDS_FILE,

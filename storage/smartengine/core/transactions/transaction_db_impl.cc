@@ -383,28 +383,28 @@ int TransactionDBImpl::do_manual_checkpoint(int32_t &manifest_file_num) {
   return db_impl_->do_manual_checkpoint(manifest_file_num);
 }
 
-int TransactionDBImpl::create_backup_snapshot(MetaSnapshotMap &meta_snapshot,
+int TransactionDBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
+                                              MetaSnapshotSet &meta_snapshots,
                                               int32_t &last_manifest_file_num,
                                               uint64_t &last_manifest_file_size,
                                               uint64_t &last_wal_file_num,
                                               BinlogPosition &last_binlog_pos)
 {
-  return db_impl_->create_backup_snapshot(meta_snapshot,
+  return db_impl_->create_backup_snapshot(backup_id,
+                                          meta_snapshots,
                                           last_manifest_file_num,
                                           last_manifest_file_size,
                                           last_wal_file_num,
                                           last_binlog_pos);
 }
 
-int TransactionDBImpl::release_backup_snapshot(MetaSnapshotMap &meta_snapshot) {
-  return db_impl_->release_backup_snapshot(meta_snapshot);
-}
-
-int TransactionDBImpl::record_incremental_extent_ids(const int32_t first_manifest_file_num,
+int TransactionDBImpl::record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
+                                                     const int32_t first_manifest_file_num,
                                                      const int32_t last_manifest_file_num,
                                                      const uint64_t last_manifest_file_size)
 {
-  return db_impl_->record_incremental_extent_ids(first_manifest_file_num,
+  return db_impl_->record_incremental_extent_ids(backup_tmp_dir_path,
+                                                 first_manifest_file_num,
                                                  last_manifest_file_num,
                                                  last_manifest_file_size);
 }
