@@ -521,6 +521,8 @@ int ExtentWriter::inner_append_block(const Slice &block, const BlockInfo &block_
   } else if (FAILED(index_block_writer_.append(last_key, new_block_info))) {
     SE_LOG(WARN, "fail to write block index", K(ret));
   } else {
+    extent_info_.raw_data_size_ += block_info.handle_.raw_size_;
+    extent_info_.data_size_ += block_info.handle_.size_;
     extent_info_.update(last_key, new_block_info);
     last_key_.assign(last_key.data(), last_key.size());
   }
@@ -634,7 +636,8 @@ int ExtentWriter::write_data_block()
       }
 
       // update extent stats
-      extent_info_.data_size_ = buf_.size();
+      extent_info_.raw_data_size_ += raw_block.size();
+      extent_info_.data_size_ += compressed_block.size();
       extent_info_.update(Slice(last_key_), block_info_);
 
       // clear previous block status

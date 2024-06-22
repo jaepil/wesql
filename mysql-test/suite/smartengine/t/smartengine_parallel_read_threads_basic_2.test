@@ -47,7 +47,7 @@ while ($i < $max) {
 eval commit;
 --enable_query_log
 --replace_column 3 #
-select table_name, subtable_name, subtable_id, sum(extents) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
+select table_name, subtable_name, subtable_id, sum(extent_count) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
 select count(*) from t1;
 select count(*) from t1 where id > 0;
 
@@ -61,7 +61,7 @@ select count(*) from t1 where id > 0;
 
 set global smartengine_force_flush_memtable_now=1;
 --replace_column 3 #
-select table_name, subtable_name, subtable_id, sum(extents) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
+select table_name, subtable_name, subtable_id, sum(extent_count) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
 select count(*) from t1;
 select count(*) from t1 where id > 0;
 

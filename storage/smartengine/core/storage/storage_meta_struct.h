@@ -78,6 +78,7 @@ public:
   common::SequenceNumber smallest_seqno_;
   common::SequenceNumber largest_seqno_;
   int32_t refs_;
+  int32_t raw_data_size_;
   int32_t data_size_;
   int32_t num_data_blocks_;
   int32_t num_entries_;

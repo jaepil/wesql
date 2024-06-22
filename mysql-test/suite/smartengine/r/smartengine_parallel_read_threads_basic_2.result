@@ -10,8 +10,8 @@ count(*)
 select count(*) from t1 where id > 0;
 count(*)
 1000
-select table_name, subtable_name, subtable_id, sum(extents) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
-table_name	subtable_name	subtable_id	sum(extents) > 0
+select table_name, subtable_name, subtable_id, sum(extent_count) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
+table_name	subtable_name	subtable_id	sum(extent_count) > 0
 test.t1	PRIMARY	#	1
 select count(*) from t1;
 count(*)
@@ -34,8 +34,8 @@ select count(*) from t1 where id > 0;
 count(*)
 1999
 set global smartengine_force_flush_memtable_now=1;
-select table_name, subtable_name, subtable_id, sum(extents) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
-table_name	subtable_name	subtable_id	sum(extents) > 0
+select table_name, subtable_name, subtable_id, sum(extent_count) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
+table_name	subtable_name	subtable_id	sum(extent_count) > 0
 test.t1	PRIMARY	#	1
 select count(*) from t1;
 count(*)

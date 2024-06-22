@@ -115,7 +115,7 @@ dump_options()
   echo "CXXFLAGS=$CXXFLAGS"
 }
 
-compiler="clang"
+compiler="gcc"
 build_type="debug"
 dest_dir=$HOME/tmp_run
 server_suffix="wesql-dev"

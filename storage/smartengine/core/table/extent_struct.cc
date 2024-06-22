@@ -69,6 +69,7 @@ ExtentInfo::ExtentInfo()
       largest_key_(),
       smallest_seq_(common::kMaxSequenceNumber),
       largest_seq_(0),
+      raw_data_size_(0),
       data_size_(0),
       data_block_count_(0),
       row_count_(0),
@@ -84,6 +85,7 @@ ExtentInfo::ExtentInfo(const ExtentInfo &extent_info)
       largest_key_(extent_info.largest_key_),
       smallest_seq_(extent_info.smallest_seq_),
       largest_seq_(extent_info.largest_seq_),
+      raw_data_size_(extent_info.raw_data_size_),
       data_size_(extent_info.data_size_),
       data_block_count_(extent_info.data_block_count_),
       row_count_(extent_info.row_count_),
@@ -102,6 +104,7 @@ ExtentInfo &ExtentInfo::operator=(const ExtentInfo &extent_info)
   largest_key_ = extent_info.largest_key_;
   smallest_seq_ = extent_info.smallest_seq_;
   largest_seq_ = extent_info.largest_seq_;
+  raw_data_size_ = extent_info.raw_data_size_;
   data_size_ = extent_info.data_size_;
   data_block_count_ = extent_info.data_block_count_;
   row_count_ = extent_info.row_count_;
@@ -120,6 +123,7 @@ void ExtentInfo::reset()
   largest_key_.Clear();
   smallest_seq_ = common::kMaxSequenceNumber;
   largest_seq_ = 0;
+  raw_data_size_ = 0;
   data_size_ = 0;
   data_block_count_ = 0;
   row_count_ = 0;
@@ -141,8 +145,8 @@ void ExtentInfo::update(const common::Slice &largest_key, const BlockInfo &block
 }
 
 DEFINE_TO_STRING(ExtentInfo, KV_(table_space_id), KV_(extent_space_type), KV_(extent_id),
-      KV_(smallest_key), KV_(largest_key), KV_(smallest_seq), KV_(largest_seq), KV_(data_size),
-      KV_(data_block_count), KV_(row_count), KV_(delete_row_count), KV_(index_block_handle))
+      KV_(smallest_key), KV_(largest_key), KV_(smallest_seq), KV_(largest_seq), KV_(raw_data_size),
+      KV_(data_size), KV_(data_block_count), KV_(row_count), KV_(delete_row_count), KV_(index_block_handle))
 
 } // namespace table
 } // namespace smartengine

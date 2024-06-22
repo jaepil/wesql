@@ -1517,11 +1517,12 @@ enum {
   TABLE_SPACE_ID,
   LEVEL,
   LAYER,
-  EXTENTS,
-  DATA,
-  INDEX,
+  EXTENT_COUNT,
+  RAW_DATA_SIZE,
+  COMPRESSED_DATA_SIZE,
+  RAW_INDEX_SIZE,
+  COMPRESSED_INDEX_SIZE,
   ACCESS_COUNT,
-  //CACHED_SIZE,
   READ,
   WRITE
 };
@@ -1535,9 +1536,11 @@ static ST_FIELD_INFO se_i_s_se_subtable_fields_info[] = {
     SE_FIELD_INFO("TABLE_SPACE_ID", sizeof(int64_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
     SE_FIELD_INFO("LEVEL", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
     SE_FIELD_INFO("LAYER", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
-    SE_FIELD_INFO("EXTENTS", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
-    SE_FIELD_INFO("DATA", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
-    SE_FIELD_INFO("INDEX", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
+    SE_FIELD_INFO("EXTENT_COUNT", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
+    SE_FIELD_INFO("RAW_DATA_SIZE", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
+    SE_FIELD_INFO("COMPRESSED_DATA_SIZE", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
+    SE_FIELD_INFO("RAW_INDEX_SIZE", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
+    SE_FIELD_INFO("COMPRESSED_INDEX_SIZE", sizeof(int32_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
     SE_FIELD_INFO("ACCESS_COUNT", sizeof(int64_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
     //SE_FIELD_INFO("CACHED_SIZE", sizeof(int64_t), MYSQL_TYPE_LONGLONG, 0),
     SE_FIELD_INFO("READ", sizeof(int64_t), MYSQL_TYPE_LONGLONG, MY_I_S_UNSIGNED),
@@ -1567,9 +1570,11 @@ static int se_i_s_se_subtable_fill_table(
   // free the handle and release the cfd reference
   smartengine::db::SuperVersion *sv = nullptr;
   smartengine::storage::StorageManager *storage_manager = nullptr;
-  uint64_t extents_number = 0;
-  uint64_t data_size = 0;
-  uint64_t index_size = 0;
+  uint64_t extent_count = 0;
+  uint64_t raw_data_size = 0;
+  uint64_t compressed_data_size = 0;
+  uint64_t raw_index_size = 0;
+  uint64_t compressed_index_size = 0;
   uint64_t layers = 0;
   int64_t pos = 0;
   smartengine::util::Arena arena;
@@ -1604,16 +1609,20 @@ static int se_i_s_se_subtable_fill_table(
       iter.reset(storage_manager->get_single_level_iterator(
           read_options, &arena, sv->current_meta_, level));
       if (iter != nullptr) {
-        extents_number = 0;
-        data_size = 0;
-        index_size = 0;
+        extent_count = 0;
+        raw_data_size = 0;
+        compressed_data_size = 0;
+        raw_index_size = 0;
+        compressed_index_size = 0;
         iter->SeekToFirst();
         // iterate one level to get all the extents info
         while (smartengine::common::Status::kOk == ret && iter->Valid()) {
           smartengine::common::Slice extent_meta_buf = iter->key();
-          extents_number++;
-          data_size += ((storage::ExtentMeta*)extent_meta_buf.data())->data_size_;
-          index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.size_;
+          ++extent_count;
+          raw_data_size += ((storage::ExtentMeta*)extent_meta_buf.data())->raw_data_size_; 
+          compressed_data_size += ((storage::ExtentMeta*)extent_meta_buf.data())->data_size_;
+          raw_index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.raw_size_; 
+          compressed_index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.size_;
           iter->Next();
         }
         tables->table->field[SMARTENGINE_SUBTABLE_FIELD::TABLE_NAME]->store(
@@ -1633,11 +1642,11 @@ static int se_i_s_se_subtable_fill_table(
           layers = 1;
         }
         tables->table->field[SMARTENGINE_SUBTABLE_FIELD::LAYER]->store(layers, true);
-        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::EXTENTS]->store(extents_number,
-                                                                 true);
-        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::DATA]->store(data_size, true);
-        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::INDEX]->store(index_size,
-                                                               true);
+        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::EXTENT_COUNT]->store(extent_count, true);
+        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::RAW_DATA_SIZE]->store(raw_data_size, true);
+        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::COMPRESSED_DATA_SIZE]->store(compressed_data_size, true);
+        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::RAW_INDEX_SIZE]->store(raw_index_size, true);
+        tables->table->field[SMARTENGINE_SUBTABLE_FIELD::COMPRESSED_INDEX_SIZE]->store(compressed_index_size, true);
         internal_stats = st->internal_stats();
         if (internal_stats != nullptr) {
           tables->table->field[SMARTENGINE_SUBTABLE_FIELD::ACCESS_COUNT]->store(

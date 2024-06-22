@@ -58,6 +58,7 @@ struct ExtentInfo
   db::InternalKey largest_key_;
   common::SequenceNumber smallest_seq_;
   common::SequenceNumber largest_seq_;
+  int32_t raw_data_size_;
   int32_t data_size_;
   int32_t data_block_count_;
   int32_t row_count_;

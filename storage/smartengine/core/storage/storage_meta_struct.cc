@@ -81,6 +81,7 @@ ExtentMeta::ExtentMeta()
       smallest_seqno_(0),
       largest_seqno_(0),
       refs_(0),
+      raw_data_size_(0),
       data_size_(0),
       num_data_blocks_(0),
       num_entries_(0),
@@ -99,6 +100,7 @@ ExtentMeta::ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info, const
       smallest_seqno_(extent_info.smallest_seq_),
       largest_seqno_(extent_info.largest_seq_),
       refs_(0),
+      raw_data_size_(extent_info.raw_data_size_),
       data_size_(extent_info.data_size_),
       num_data_blocks_(extent_info.data_block_count_),
       num_entries_(extent_info.row_count_),
@@ -117,6 +119,7 @@ ExtentMeta::ExtentMeta(const ExtentMeta &extent_meta)
       smallest_seqno_(extent_meta.smallest_seqno_),
       largest_seqno_(extent_meta.largest_seqno_),
       refs_(0),
+      raw_data_size_(extent_meta.raw_data_size_),
       data_size_(extent_meta.data_size_),
       num_data_blocks_(extent_meta.num_data_blocks_),
       num_entries_(extent_meta.num_entries_),
@@ -140,6 +143,7 @@ ExtentMeta& ExtentMeta::operator=(const ExtentMeta &extent_meta)
   extent_id_ = extent_meta.extent_id_;
   smallest_seqno_ = extent_meta.smallest_seqno_;
   largest_seqno_ = extent_meta.largest_seqno_;
+  raw_data_size_ = extent_meta.raw_data_size_;
   data_size_ = extent_meta.data_size_;
   num_data_blocks_ = extent_meta.num_data_blocks_;
   num_entries_ = extent_meta.num_entries_;
@@ -161,6 +165,7 @@ void ExtentMeta::reset()
   smallest_seqno_ = 0;
   largest_seqno_ = 0;
   refs_ = 0;
+  raw_data_size_ = 0;
   data_size_ = 0;
   num_data_blocks_ = 0;
   num_entries_ = 0;
@@ -192,6 +197,7 @@ int ExtentMeta::deep_copy(ExtentMeta *&extent_meta) const
     extent_meta->smallest_seqno_ = smallest_seqno_;
     extent_meta->largest_seqno_ = largest_seqno_;
     extent_meta->refs_ = refs_;
+    extent_meta->raw_data_size_ = raw_data_size_;
     extent_meta->data_size_ = data_size_;
     extent_meta->num_data_blocks_ = num_data_blocks_;
     extent_meta->num_entries_ = num_entries_;
@@ -227,6 +233,7 @@ int ExtentMeta::deep_copy(memory::SimpleAllocator &allocator, ExtentMeta *&exten
     extent_meta->smallest_seqno_ = smallest_seqno_;
     extent_meta->largest_seqno_ = largest_seqno_;
     extent_meta->refs_ = refs_;
+    extent_meta->raw_data_size_ = raw_data_size_;
     extent_meta->data_size_ = data_size_;
     extent_meta->num_data_blocks_ = num_data_blocks_;
     extent_meta->num_entries_ = num_entries_;
@@ -244,14 +251,14 @@ int64_t ExtentMeta::get_deep_copy_size() const
   return sizeof(ExtentMeta);
 }
 DEFINE_COMPACTIPLE_SERIALIZATION(ExtentMeta, attr_, smallest_key_, largest_key_,
-    extent_id_, smallest_seqno_, largest_seqno_, data_size_, num_data_blocks_,
+    extent_id_, smallest_seqno_, largest_seqno_, raw_data_size_, data_size_, num_data_blocks_,
     num_entries_, num_deletes_, table_space_id_, extent_space_type_, index_block_handle_,
     table_schema_)
 
 DEFINE_TO_STRING(ExtentMeta, KV_(attr), KV_(smallest_key), KV_(largest_key), KV_(extent_id),
-    KV_(smallest_seqno), KV_(largest_seqno), KV_(refs), KV_(data_size), KV_(num_data_blocks),
-    KV_(num_entries), KV_(num_deletes), KV_(table_space_id), KV_(extent_space_type),
-    KV_(index_block_handle), KV_(table_schema))
+    KV_(smallest_seqno), KV_(largest_seqno), KV_(refs), KV_(raw_data_size), KV_(data_size),
+    KV_(num_data_blocks), KV_(num_entries), KV_(num_deletes), KV_(table_space_id),
+    KV_(extent_space_type), KV_(index_block_handle), KV_(table_schema))
 
 } //namespace storage
 } //namespace smartengine
