@@ -18,6 +18,7 @@
 #include "cache/cache_entry.h"
 #include "db/pinned_iterators_manager.h"
 #include "db/table_cache.h"
+#include "table/block_struct.h"
 #include "util/aio_wrapper.h"
 
 namespace smartengine
@@ -183,6 +184,8 @@ struct BlockDataHandle
     need_do_cleanup_ = false;
     is_boundary_ = false;
   }
+
+  util::AIOHandle *get_aio_handle() { return has_prefetched_ ? &aio_handle_ : nullptr; }
 
   storage::ExtentId extent_id_;
   BlockInfo block_info_;

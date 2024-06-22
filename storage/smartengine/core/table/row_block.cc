@@ -37,7 +37,7 @@ RowBlock::~RowBlock()
 void RowBlock::destroy()
 {
   if (IS_NOTNULL(data_)) {
-    memory::base_free(const_cast<char *>(data_));
+    memory::base_memalign_free(const_cast<char *>(data_));
     data_ = 0;
     size_ = 0;
     compress_type_ = common::kNoCompression;

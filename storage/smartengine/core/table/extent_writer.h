@@ -154,7 +154,7 @@ private:
   const db::InternalKeyComparator *internal_key_comparator_;
   cache::Cache *block_cache_;
   cache::RowCache *row_cache_;
-  util::CompressHelper compress_helper_;
+  util::CompressorHelper compressor_helper_;
   BlockInfo block_info_;
   ExtentInfo extent_info_;
   std::vector<ExtentInfo> writed_extent_infos_;

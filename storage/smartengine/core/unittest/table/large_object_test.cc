@@ -7,6 +7,7 @@ static const std::string test_dir = smartengine::util::test::TmpDir() + "/large_
 namespace smartengine
 {
 using namespace common;
+using namespace db;
 
 namespace table
 {
@@ -41,6 +42,7 @@ TEST_F(LargeObjectTest, large_object)
   common::Options options;
   CreateAndReopenWithCF({"summer"}, options); 
 
+  // Prepare data
   std::vector<std::string> random_strs;
   random_strs.push_back(generate_random_string(storage::MAX_EXTENT_SIZE));
   random_strs.push_back(generate_random_string(storage::MAX_EXTENT_SIZE * 2));
@@ -52,25 +54,26 @@ TEST_F(LargeObjectTest, large_object)
 
   ASSERT_OK(Flush(1));
 
+  // Check data through get
   ReopenWithColumnFamilies({"default", "summer"}, options);
   ASSERT_EQ(random_strs[0], Get(1, "0"));
   ASSERT_EQ(random_strs[1], Get(1, "1"));
   ASSERT_EQ(random_strs[2], Get(1, "2"));
+  ASSERT_EQ(0, memory::AllocMgr::get_instance()->get_allocated_size(memory::ModId::kLargeObject));
 
+  // Check data through scan
   ReopenWithColumnFamilies({"default", "summer"}, options);
   int64_t row_count = 0;
   util::Arena arena;
   InternalIterator *internal_iterator = NewInternalIterator(&arena, get_column_family_handle(1));
   ASSERT_TRUE(nullptr != internal_iterator);
-  db::Iterator *scan_iterator = db::NewDBIterator(options.env,
-                                                  ReadOptions(),
-                                                  ImmutableCFOptions(options),
-                                                  util::BytewiseComparator(),
-                                                  internal_iterator,
-                                                  kMaxSequenceNumber,
-                                                  kMaxSequenceNumber,
-                                                  kMaxSequenceNumber);
+  db::ArenaWrappedDBIter *scan_iterator = db::NewArenaWrappedDbIterator(options.env,
+                                                                   ReadOptions(),
+                                                                   ImmutableCFOptions(options),
+                                                                   util::BytewiseComparator(),
+                                                                   kMaxSequenceNumber);
   ASSERT_TRUE(nullptr != scan_iterator);
+  scan_iterator->SetIterUnderDBIter(internal_iterator);
   scan_iterator->SeekToFirst();
   while (scan_iterator->Valid()) {
     ASSERT_EQ(random_strs[row_count], scan_iterator->value().ToString());
@@ -80,7 +83,8 @@ TEST_F(LargeObjectTest, large_object)
   ASSERT_EQ(3, row_count);
 
   // Release the super version.
-  internal_iterator->~InternalIterator();
+  MOD_DELETE_OBJECT(ArenaWrappedDBIter, scan_iterator);
+  ASSERT_EQ(0, memory::AllocMgr::get_instance()->get_allocated_size(memory::ModId::kLargeObject));
 
   // Compress large object with ZSTD
   options.compression_per_level.push_back(kZSTD);
@@ -95,6 +99,7 @@ TEST_F(LargeObjectTest, large_object)
   ASSERT_EQ(random_strs[0], Get(1, "3"));
   ASSERT_EQ(random_strs[1], Get(1, "4"));
   ASSERT_EQ(random_strs[2], Get(1, "5"));
+  ASSERT_EQ(0, memory::AllocMgr::get_instance()->get_allocated_size(memory::ModId::kLargeObject));
 
   // Check data through get
   ReopenWithColumnFamilies({"default", "summer"}, options);
@@ -104,19 +109,18 @@ TEST_F(LargeObjectTest, large_object)
   ASSERT_EQ(random_strs[0], Get(1, "3"));
   ASSERT_EQ(random_strs[1], Get(1, "4"));
   ASSERT_EQ(random_strs[2], Get(1, "5")); 
+  ASSERT_EQ(0, memory::AllocMgr::get_instance()->get_allocated_size(memory::ModId::kLargeObject));
 
   // Check data through scan
   internal_iterator = NewInternalIterator(&arena, get_column_family_handle(1));
   ASSERT_TRUE(nullptr != internal_iterator);
-  scan_iterator = db::NewDBIterator(options.env,
-                                                  ReadOptions(),
-                                                  ImmutableCFOptions(options),
-                                                  util::BytewiseComparator(),
-                                                  internal_iterator,
-                                                  kMaxSequenceNumber,
-                                                  kMaxSequenceNumber,
-                                                  kMaxSequenceNumber);
+  scan_iterator = db::NewArenaWrappedDbIterator(options.env,
+                                                ReadOptions(),
+                                                ImmutableCFOptions(options),
+                                                util::BytewiseComparator(),
+                                                kMaxSequenceNumber);
   ASSERT_TRUE(nullptr != scan_iterator);
+  scan_iterator->SetIterUnderDBIter(internal_iterator);
   row_count = 0;
   scan_iterator->SeekToFirst();
   while (scan_iterator->Valid()) {
@@ -127,7 +131,8 @@ TEST_F(LargeObjectTest, large_object)
   ASSERT_EQ(6, row_count);
 
   // Release the super version.
-  internal_iterator->~InternalIterator();
+  MOD_DELETE_OBJECT(ArenaWrappedDBIter, scan_iterator);
+  ASSERT_EQ(0, memory::AllocMgr::get_instance()->get_allocated_size(memory::ModId::kLargeObject));
 }
 
 } // namespace table

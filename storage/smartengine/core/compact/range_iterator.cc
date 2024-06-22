@@ -375,6 +375,7 @@ int ExtSEIterator::create_block_iter(const MetaDescriptor &meta) {
     current_data_block_handle_.extent_id_ = cur_rep_.extent_id_;
     current_data_block_handle_.block_info_ = meta.block_info_;
     current_data_block_handle_.aio_handle_.aio_req_ = cur_rep_.aio_handle_->aio_req_;
+    current_data_block_handle_.has_prefetched_ = true;
 
     ret = compaction_->create_data_block_iterator(cur_rep_.extent_reader_,
                                                   current_data_block_handle_,

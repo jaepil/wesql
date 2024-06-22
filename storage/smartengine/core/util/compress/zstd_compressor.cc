@@ -42,12 +42,12 @@ ZSTDCompressor::~ZSTDCompressor()
 
 void ZSTDCompressor::destroy()
 {
-  if (nullptr != cctx_) {
+  if (IS_NOTNULL(cctx_)) {
     ZSTD_freeCCtx(cctx_);
     cctx_ = nullptr;
   }
 
-  if (nullptr != dctx_) {
+  if (IS_NOTNULL(dctx_)) {
     ZSTD_freeDCtx(dctx_);
     dctx_ = nullptr;
   }
@@ -99,13 +99,11 @@ int ZSTDCompressor::inner_uncompress(const char *compressed_data,
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "Failed to create zstd decompress context", K(ret));
   } else {
-    //uncompressed_ret = ZSTD_decompressDCtx(dctx_,
-    //                                       raw_buf,
-    //                                       raw_buf_size,
-    //                                       compressed_data,
-    //                                       compressed_data_size);
-    uncompressed_ret = ZSTD_decompress(raw_buf, raw_buf_size, compressed_data, compressed_data_size);
-    SE_LOG(INFO, "decompress info", K(compressed_data_size), K(raw_buf_size));
+    uncompressed_ret = ZSTD_decompressDCtx(dctx_,
+                                           raw_buf,
+                                           raw_buf_size,
+                                           compressed_data,
+                                           compressed_data_size);
     if (ZSTD_isError(uncompressed_ret)) {
       ret = Status::kCorruption;
       SE_LOG(WARN, "Failed to uncompress data by Zstd", K(ret), K(uncompressed_ret));

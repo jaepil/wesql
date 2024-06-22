@@ -26,43 +26,35 @@ namespace util
 {
 class Compressor;
 
-class CompressHelper
+// CompressHelper is not thread-safe.
+class CompressorHelper
 {
 public:
-  CompressHelper();
-  ~CompressHelper();
+  CompressorHelper();
+  ~CompressorHelper();
 
-  int init(common::CompressionType compress_type);
-  void destroy();
+  void reset();
+
   int compress(const common::Slice &raw_data,
+               common::CompressionType expected_compress_type,
                common::Slice &compressed_data,
                common::CompressionType &actual_compress_type);
-  
+
+  int uncompress(const common::Slice &compressed_data,
+                 common::CompressionType compress_type,
+                 char *raw_buf,
+                 int64_t raw_data_size,
+                 common::Slice &raw_data);
 private:
-  int actual_compress(const common::Slice &raw_data, common::Slice &compressed_data, common::CompressionType &actual_compress_type);
+  int setup_compressor(common::CompressionType compress_type);
+  int actual_compress(const common::Slice &raw_data,
+                      common::CompressionType expected_compress_type,
+                      common::Slice &compressed_data,
+                      common::CompressionType &actual_compress_type);
 
 private:
-  bool is_inited_;
-  common::CompressionType compress_type_;
   util::Compressor *compressor_;
   util::AutoBufferWriter compress_buf_;
-};
-
-class UncompressHelper
-{
-public:
-  static int uncompress(const common::Slice &compresed_data,
-                        const common::CompressionType compress_type,
-                        const int64_t mod_id,
-                        const int64_t raw_data_size,
-                        common::Slice &raw_data);
-
-private:
-  static int actual_uncompress(const common::Slice &compressed_data,
-                               const common::CompressionType compress_type,
-                               const int64_t mod_id,
-                               const int64_t raw_data_size,
-                               common::Slice &raw_data);
 };
 
 } // namespace util

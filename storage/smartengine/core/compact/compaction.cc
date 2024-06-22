@@ -318,15 +318,20 @@ bool GeneralCompaction::check_do_reuse(const MetaDescriptor &meta) const {
 int GeneralCompaction::copy_data_block(const MetaDescriptor &data_block_desc)
 {
   int ret = Status::kOk;
+  char *block_buf = nullptr;
   Slice data_block;
-  ExtentReader *extent_reader = nullptr;
+  ExtSEIterator::ReaderRep &reader_rep = reader_reps_[data_block_desc.type_.sequence_];
 
   if (!write_extent_opened_ && FAILED(open_extent())) {
     COMPACTION_LOG(WARN, "fail to open extent to write", K(ret));
-  } else if (IS_NULL(extent_reader = reader_reps_[data_block_desc.type_.sequence_].extent_reader_)) {
+  } else if (IS_NULL(reader_rep.extent_reader_) || IS_NULL(reader_rep.aio_handle_)) {
     ret = Status::kErrorUnexpected;
-    COMPACTION_LOG(WARN, "the extent reader must not be nullptr", K(ret), K(data_block_desc));
-  } else if (FAILED(extent_reader->read_persistent_data_block(data_block_desc.block_info_.handle_, data_block))) {
+    COMPACTION_LOG(WARN, "the extent reader and aio handle must not be nullptr", K(ret),
+        KP(reader_rep.extent_reader_), KP(reader_rep.aio_handle_), K(data_block_desc));
+  } else if (IS_NULL(block_buf = reinterpret_cast<char *>(base_malloc(data_block_desc.block_info_.handle_.size_, ModId::kCompaction)))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for block buf", K(ret), "handle", data_block_desc.block_info_.handle_);
+  } else if (FAILED(reader_rep.extent_reader_->get_data_block(data_block_desc.block_info_.handle_, reader_rep.aio_handle_, block_buf, data_block))) {
     COMPACTION_LOG(WARN, "fail to get data block", K(ret), K(data_block_desc));
   } else if (FAILED(extent_writer_->append_block(data_block,
                                                  data_block_desc.value_,
@@ -343,8 +348,9 @@ int GeneralCompaction::copy_data_block(const MetaDescriptor &data_block_desc)
   }
   
   // TODO(Zhao Dongsheng) : The memory of data block can be reused for performance optimization.
-  if (IS_NOTNULL(data_block.data())) {
-    base_free(const_cast<char *>(data_block.data()));
+  if (IS_NOTNULL(block_buf)) {
+    base_free(const_cast<char *>(block_buf));
+    block_buf = nullptr;
   }
 
   return ret;
@@ -465,7 +471,7 @@ int GeneralCompaction::create_data_block_iterator(ExtentReader *extent_reader,
   } else if (IS_NULL(block_iterator = MOD_NEW_OBJECT(ModId::kCompaction, RowBlockIterator))) {
     ret = Status::kMemoryLimit;
     COMPACTION_LOG(WARN, "fail to allocate memory for data block iterator", K(ret));
-  } else if (FAILED(extent_reader->setup_data_block_iterator(block_handle, block_iterator))) {
+  } else if (FAILED(extent_reader->setup_data_block_iterator(false /*use_cache*/, block_handle, block_iterator))) {
     COMPACTION_LOG(WARN, "fail to setup data block iterator", K(ret));
   } else {
     // TODO(Zhao Dongsheng) : Does the cache migration mechanism only apply to data

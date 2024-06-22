@@ -34,6 +34,7 @@ private:
   int dump_all_data_block(table::RowBlock *index_block);
   int dump_data_block(const table::BlockInfo &block_info);
   int summry(const table::Footer &footer, table::RowBlock *index_block);
+  int read_block(const table::BlockHandle &handle, table::RowBlock *&block);
 
 private:
   db::InternalKeyComparator internal_comparator_;
@@ -41,8 +42,11 @@ private:
 };
 
 class SSTDumpTool {
- public:
+public:
   int Run(int argc, char** argv);
+
+private:
+  void print_help();
 };
 
 }  // namespace tools

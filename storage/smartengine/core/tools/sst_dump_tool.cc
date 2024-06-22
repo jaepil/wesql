@@ -8,6 +8,7 @@
 
 #include "tools/sst_dump_tool.h"
 #include "table/index_block_reader.h"
+#include "util/crc32c.h"
 #include "util/status.h"
 
 #ifndef __STDC_FORMAT_MACROS
@@ -50,20 +51,10 @@ int ExtentDumper::init(const std::string &file_path, const int32_t extent_offset
   } else if (-1 == (fd = ::open(file_path.c_str(), O_RDONLY | O_DIRECT))) {
     ret = Status::kIOError;
     SE_LOG(WARN, "fail to open the data file", K(ret), K(file_path));
+  } else if (FAILED(extent_.init(ExtentId(0, extent_offset), 1, fd))) {
+    SE_LOG(WARN, "fail to init extent", K(ret), K(extent_offset), K(fd));
   } else {
-    storage::ExtentIOInfo io_info;
-    io_info.fd_ = fd;
-    io_info.extent_id_ = ExtentId(0, extent_offset); // The zero is a dummy file number.
-    io_info.extent_size_ = MAX_EXTENT_SIZE;
-    io_info.unique_id_ = 1; // for valid check
-
-    if (FAILED(extent_.init(io_info.extent_id_, io_info.unique_id_, io_info.fd_))) {
-      SE_LOG(WARN, "fail to init readable extent", K(ret), K(io_info));
-    } else {
-#ifndef NDEBUG
-      SE_LOG(INFO, "success to init ExtentDumper", K(io_info));
-#endif
-    }
+    // succeed
   }
 
   return ret;
@@ -77,12 +68,8 @@ int ExtentDumper::dump()
 
   if (FAILED(read_footer(footer))) {
     SE_LOG(WARN, "fail to read footer", K(ret));
-  } else if (FAILED(BlockIOHelper::read_and_uncompress_block(&extent_,
-                                                             footer.index_block_handle_,
-                                                             memory::ModId::kDefaultMod,
-                                                             nullptr,
-                                                             index_block))) {
-    fprintf(stderr, "fail to read index block: ret = %d\n", ret);
+  } else if (FAILED(read_block(footer.index_block_handle_, index_block))) {
+    SE_LOG(WARN, "fail to read index block", K(ret), K(footer));
   } else if (FAILED(dump_index_block(index_block))) {
     SE_LOG(WARN, "fail to dump index block", K(ret));
   } else if (FAILED(dump_all_data_block(index_block))) {
@@ -200,8 +187,8 @@ int ExtentDumper::dump_data_block(const BlockInfo &block_info)
   int64_t row_count = 1;
   
 
-  if (FAILED(BlockIOHelper::read_and_uncompress_block(&extent_, block_info.handle_, memory::ModId::kDefaultMod, nullptr, data_block))) {
-    fprintf(stderr, "fail to read data block: ret = %d\n", ret);
+  if (FAILED(read_block(block_info.handle_, data_block))) {
+    SE_LOG(WARN, "fail to read block", K(ret), K(block_info));
   } else if (FAILED(data_block_iterator.setup(&internal_comparator_, data_block, false))) {
     fprintf(stderr, "fail to setup data block iterator: ret = %d\n", ret);
   } else {
@@ -222,6 +209,11 @@ int ExtentDumper::dump_data_block(const BlockInfo &block_info)
         data_block_iterator.Next();
       }
     }
+  }
+
+  // resource clean
+  if (IS_NOTNULL(data_block)) {
+    MOD_DELETE_OBJECT(RowBlock, data_block);
   }
 
   return ret;
@@ -291,9 +283,87 @@ int ExtentDumper::summry(const Footer &footer, RowBlock *index_block)
   return ret;
 }
 
-namespace
+int ExtentDumper::read_block(const BlockHandle &handle, RowBlock *&block)
 {
-void print_help()
+  int ret = Status::kOk;
+  CompressorHelper compressor_helper;
+  char *io_buf = nullptr;
+  char *raw_buf = nullptr;
+  Slice block_content;
+  Slice raw_block_content;
+  uint32_t actual_checksum = 0; // the checksum actually stored in the block info.
+  uint32_t expect_checksum = 0; // the checksum expected based on block data.
+
+  if (UNLIKELY(!handle.is_valid())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret));
+  } else if (IS_NULL(io_buf = reinterpret_cast<char *>(base_memalign(DIOHelper::DIO_ALIGN_SIZE, handle.size_, ModId::kDefaultMod)))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for io buf", K(ret), K(handle));
+  } else if (FAILED(extent_.read(nullptr, handle.offset_, handle.size_, io_buf, block_content))) {
+    SE_LOG(WARN, "fail to read block", K(ret), K(handle));
+  } else if (UNLIKELY(io_buf != block_content.data()) ||
+             UNLIKELY(handle.size_ != block_content.size())) {
+    ret = Status::kCorruption;
+    SE_LOG(WARN, "the data may be corrupted", K(ret), K(handle), KP(io_buf),
+        KP(block_content.data()), K(block_content.size()));
+  } else {
+    // verify checksum
+    actual_checksum = crc32c::Unmask(handle.checksum_);
+    expect_checksum = crc32c::Value(block_content.data(), block_content.size());
+
+    if (actual_checksum != expect_checksum) {
+      ret = Status::kCorruption;
+      SE_LOG(WARN, "the block checksum mismatch", K(ret), K(actual_checksum), K(expect_checksum));
+    } else {
+      if (kNoCompression == handle.compress_type_) {
+        raw_block_content.assign(block_content.data(), block_content.size());
+      } else {
+        if (IS_NULL(raw_buf = reinterpret_cast<char *>(base_memalign(
+            DIOHelper::DIO_ALIGN_SIZE, handle.raw_size_, ModId::kDefaultMod)))) {
+          ret = Status::kMemoryLimit;
+          SE_LOG(WARN, "fail to allocate memory for raw buf", K(ret), K(handle));
+        } else if (FAILED(compressor_helper.uncompress(block_content,
+                                                       static_cast<CompressionType>(handle.compress_type_),
+                                                       raw_buf,
+                                                       handle.raw_size_,
+                                                       raw_block_content))) {
+          SE_LOG(WARN, "fail to uncompress block", K(ret));
+        } else {
+          base_memalign_free(io_buf);
+          io_buf = nullptr; 
+        }
+      }
+
+      if (SUCCED(ret)) {  
+        if (IS_NULL(block = MOD_NEW_OBJECT(ModId::kDefaultMod,
+                                           RowBlock,
+                                           raw_block_content.data(),
+                                           raw_block_content.size(),
+                                           kNoCompression))) {
+          ret = Status::kMemoryLimit;
+          SE_LOG(WARN, "fail to allocate block", K(ret), K(raw_block_content));
+        }
+      }
+    }
+  }
+
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(io_buf)) {
+      base_memalign_free(io_buf);
+      io_buf = nullptr;
+    }
+
+    if (IS_NOTNULL(raw_buf)) {
+      base_memalign_free(raw_buf);
+      raw_buf = nullptr;
+    }
+  }
+
+  return ret;
+}
+
+void SSTDumpTool::print_help()
 {
   fprintf(stderr,
           R"(sst_dump --file=<data_file> --extent=<extent_index> [--command=raw]
@@ -307,8 +377,6 @@ void print_help()
         raw: Dump all the contents of extent
 )");
 }
-
-}  // namespace
 
 int SSTDumpTool::Run(int argc, char** argv) {
   const char* file_path = nullptr;
@@ -360,5 +428,6 @@ int SSTDumpTool::Run(int argc, char** argv) {
 
   return 0;
 }
+
 }  // namespace tools
 }  // namespace smartengine

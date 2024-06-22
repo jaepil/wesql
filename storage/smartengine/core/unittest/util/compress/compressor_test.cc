@@ -320,126 +320,87 @@ TEST_F(CompressorTest, LongText)
   SE_LOG(INFO, "=============Case:long_text==================");
 }
 
-TEST_F(CompressorTest, compress_helper_init)
-{
-  int ret = Status::kOk;
-  CompressHelper compress_helper;
-
-  // invalid  
-  ret = compress_helper.init((CompressionType)(100));
-  ASSERT_EQ(Status::kNotSupported, ret);
-
-  // kNoCompression
-  ret = compress_helper.init(common::kNoCompression);
-  ASSERT_EQ(Status::kOk, ret);
-
-  for (int64_t i =0; i < COMPRESSOR_TYPE_COUNT; ++i) {
-    compress_helper.destroy();
-    ret = compress_helper.init(compressor_arr[i]);
-    ASSERT_EQ(Status::kOk, ret);
-  }
-
-  // init twice
-  ret = compress_helper.init(kNoCompression);
-  ASSERT_EQ(Status::kInitTwice, ret);
-}
-
-TEST_F(CompressorTest, compress_helper_compress)
-{
-  int ret = Status::kOk;
-  CompressHelper compress_helper;
-  const char *data = "smartengine";
-  Slice raw_data(data, strlen(data));
-  Slice compressed_data;
-  CompressionType compress_type;
-
-  // not init
-  ret = compress_helper.compress(Slice(), compressed_data, compress_type);
-  ASSERT_EQ(Status::kNotInit, ret);
-
-  // init compress_helper
-  ret = compress_helper.init(common::kNoCompression);
-  ASSERT_EQ(Status::kOk, ret);
-
-  // invalid argument
-  ret = compress_helper.compress(Slice(), compressed_data, compress_type);
-  ASSERT_EQ(Status::kInvalidArgument, ret);
-
-  // not compress
-  compress_type = kLZ4Compression;
-  ret = compress_helper.compress(raw_data, compressed_data, compress_type);
-  ASSERT_EQ(Status::kOk, ret);
-  ASSERT_TRUE(raw_data == compressed_data);
-  ASSERT_EQ(kNoCompression, compress_type);
-
-  // kLZ4Compression, but not compress
-  compress_helper.destroy();
-  compress_type = kLZ4Compression;
-  ret = compress_helper.init(kLZ4Compression);
-  ASSERT_EQ(Status::kOk, ret);
-  ret = compress_helper.compress(raw_data, compressed_data, compress_type);
-  ASSERT_EQ(Status::kOk, ret);
-  ASSERT_TRUE(raw_data == compressed_data);
-  ASSERT_EQ(kNoCompression, compress_type);
-
-  // kLZ4Compression, actual compress
-  const char *repeat_data = "aaaaaaaaaaaaaaaaaaa";
-  compress_type = kNoCompression;
-  raw_data.assign(repeat_data, strlen(repeat_data));
-  ret = compress_helper.compress(raw_data, compressed_data, compress_type);
-  ASSERT_EQ(kLZ4Compression, compress_type);
-}
-
-TEST_F(CompressorTest, uncompressor_helper_basic)
-{
-  int ret = Status::kOk;
-  CompressionType compress_type = common::kNoCompression;
-  const char *data = "ppl_and_summer";
-  Slice compressed_data;
-  Slice raw_data;
-
-  // invalid compressed data
-  ret = UncompressHelper::uncompress(Slice(), compress_type, memory::ModId::kCompressor, 100, raw_data);
-  ASSERT_EQ(Status::kInvalidArgument, ret);
-
-  // invalid raw data size
-  compressed_data.assign(data, strlen(data));
-  ret = UncompressHelper::uncompress(compressed_data, compress_type, memory::ModId::kCompressor, compressed_data.size() - 1, raw_data);
-  ASSERT_EQ(Status::kInvalidArgument, ret);
-  compress_type = kNoCompression;
-  ret = UncompressHelper::uncompress(compressed_data, compress_type, memory::ModId::kCompressor, compressed_data.size() + 10, raw_data);
-  ASSERT_EQ(Status::kCorruption, ret);
-
-  // kNoCompression
-  ret = UncompressHelper::uncompress(compressed_data, compress_type, memory::ModId::kCompressor, compressed_data.size(), raw_data);
-  ASSERT_EQ(Status::kOk, ret);
-  ASSERT_TRUE(compressed_data == raw_data);
-}
-
-TEST_F(CompressorTest, compress_and_uncompress_helper)
+TEST_F(CompressorTest, compressor_helper_compress)
 {
   int ret = Status::kOk;
   const char *data = "ppl_summer_le_ppl_summer_le_ppl_summer_le";
   Slice raw_data(data, strlen(data));
   Slice compressed_data;
-  Slice uncompressed_data;
-  CompressionType compress_type;
-  CompressHelper compress_helper;
+  CompressionType actual_compress_type;
+  CompressorHelper compressor_helper;
 
+  // invalid argument
+  ret = compressor_helper.compress(Slice(), kZSTD, compressed_data, actual_compress_type); 
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+  ret = compressor_helper.compress(raw_data, (CompressionType)100, compressed_data, actual_compress_type);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+
+  // success compress
   for (int64_t i = 0; i < COMPRESSOR_TYPE_COUNT; ++i) {
-    compress_helper.destroy();
-    compress_type = common::kNoCompression;
-    ret = compress_helper.init(compressor_arr[i]);
+    ret = compressor_helper.compress(raw_data, compressor_arr[i], compressed_data, actual_compress_type);
     ASSERT_EQ(Status::kOk, ret);
+    ASSERT_EQ(compressor_arr[i], actual_compress_type);
+    ASSERT_TRUE(compressed_data.size() < raw_data.size());
+  }
 
-    ret = compress_helper.compress(raw_data, compressed_data, compress_type);
+  // not compress
+  const char *not_compress_data = "abcd";
+  raw_data.assign(not_compress_data, strlen(not_compress_data));
+  for (int64_t i = 0; i < COMPRESSOR_TYPE_COUNT; ++i) {
+    ret = compressor_helper.compress(raw_data, compressor_arr[i], compressed_data, actual_compress_type);
     ASSERT_EQ(Status::kOk, ret);
-    ASSERT_EQ(compressor_arr[i], compress_type);
+    ASSERT_EQ(kNoCompression, actual_compress_type);
+    ASSERT_TRUE(raw_data == compressed_data);
+  }
 
-    ret = UncompressHelper::uncompress(compressed_data, compress_type, memory::ModId::kCompressor, raw_data.size(), uncompressed_data);
+  // check compressor memory leak
+  compressor_helper.reset();
+  ASSERT_EQ(0, memory::AllocMgr::get_instance()->get_hold_size(memory::ModId::kCompressor));
+
+}
+
+TEST_F(CompressorTest, compressor_helper_uncompress)
+{
+  int ret = Status::kOk;
+  const char *data = "aaaaaaaaaaaaaaaaaaa";
+  Slice raw_data(data, strlen(data));
+  char *raw_buf = new char [raw_data.size()]; 
+  Slice compressed_data;
+  Slice uncompressed_data;
+  CompressionType actual_compress_type;
+  CompressorHelper compressor_helper;
+  
+  // invalid argument
+  ret = compressor_helper.uncompress(Slice(), kZlibCompression, raw_buf, raw_data.size(), uncompressed_data);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+  Slice fake_compressed_data(data, strlen(data));
+  ret = compressor_helper.uncompress(fake_compressed_data, common::kNoCompression, raw_buf, raw_data.size(), uncompressed_data);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+  ret = compressor_helper.uncompress(fake_compressed_data, (CompressionType)100, raw_buf, raw_data.size(), uncompressed_data);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+  ret = compressor_helper.uncompress(fake_compressed_data, kZSTD, nullptr, raw_data.size(), uncompressed_data);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+  ret= compressor_helper.uncompress(fake_compressed_data, kZlibCompression, raw_buf, 0, uncompressed_data);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+  ret = compressor_helper.uncompress(fake_compressed_data, kLZ4Compression, raw_buf, -1, uncompressed_data);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+  ret = compressor_helper.uncompress(fake_compressed_data, kLZ4Compression, raw_buf, 1, uncompressed_data);
+  ASSERT_EQ(Status::kInvalidArgument, ret);
+
+  // compress and uncompress
+  for (int64_t i = 0; i < COMPRESSOR_TYPE_COUNT; ++i) {
+    ret = compressor_helper.compress(raw_data, compressor_arr[i], compressed_data, actual_compress_type);
+    ASSERT_EQ(Status::kOk, ret);
+    ASSERT_EQ(compressor_arr[i], actual_compress_type);
+    ASSERT_TRUE(compressed_data.size() < raw_data.size());
+  
+    ret = compressor_helper.uncompress(compressed_data, actual_compress_type, raw_buf, raw_data.size(), uncompressed_data);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_TRUE(raw_data == uncompressed_data);
   }
+
+  compressor_helper.reset();
+  ASSERT_EQ(0, memory::AllocMgr::get_instance()->get_hold_size(memory::ModId::kCompressor));
 }
 
 } //namespace util

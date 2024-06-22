@@ -100,28 +100,5 @@ struct BlockInfo
   DECLARE_COMPACTIPLE_SERIALIZATION(BLOCK_INFO_VERSION)
 };
 
-class BlockIOHelper
-{
-public:
-  // The read result block don't include block trailer
-  static int read_block(storage::IOExtent *extent,
-                        const BlockHandle &handle,
-                        util::AIOHandle *aio_handle,
-                        common::Slice &block);
-
-  static int read_and_uncompress_block(storage::IOExtent *extent,
-                                       const BlockHandle &handle,
-                                       const int64_t mod_id,
-                                       util::AIOHandle *aio_handle,
-                                       common::Slice &block);
-
-  static int read_and_uncompress_block(storage::IOExtent *extent,
-                                       const BlockHandle &handle,
-                                       const int64_t mod_id,
-                                       util::AIOHandle *aio_handle,
-                                       RowBlock *&block);
-
-};
-
 } // namespace table
 } // namespace smartengine

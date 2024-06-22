@@ -520,10 +520,10 @@ int BlockPrefetchHelper::init_data_block_iter(RowBlockIterator &data_block_iter)
   } else if (IS_NULL(extent_reader)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "current table reader is nullptr", K(ret));
-  } else if (FAILED(extent_reader->setup_data_block_iterator(block_handle,
-                                                             scan_param_->scan_add_blocks_limit_,
+  } else if (FAILED(extent_reader->setup_data_block_iterator(scan_param_->scan_add_blocks_limit_,
                                                              add_blocks_,
-                                                             data_block_iter))) {
+                                                             block_handle,
+                                                             &data_block_iter))) {
   
     SE_LOG(WARN, "failed to new data block iterator", K(ret));
   } else {

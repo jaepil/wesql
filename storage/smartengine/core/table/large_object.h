@@ -19,6 +19,7 @@
 #include "options/advanced_options.h"
 #include "storage/storage_common.h"
 #include "util/autovector.h"
+#include "util/compress/compressor_helper.h"
 #include "util/serialization.h"
 
 namespace smartengine
@@ -38,13 +39,21 @@ public:
   LargeValue();
   ~LargeValue();
 
-  void reset();
+  void destroy();
+  void reuse();
   int convert_to_normal_format(const common::Slice &large_object_value, common::Slice &normal_value);
 
   DECLARE_COMPACTIPLE_SERIALIZATION(LARGE_VALUE_VERSION)
 private:
+  int prepare_buf(int64_t size, int64_t raw_size, common::CompressionType compress_type);
+
+private:
+  // The follow variables are not persistent.
+  util::CompressorHelper compressor_helper_;
   char *data_buf_;
+  int64_t data_buf_size_;
   char *raw_data_buf_;
+  int64_t raw_data_buf_size_;
 };
 
 struct LargeObject

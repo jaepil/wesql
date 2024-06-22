@@ -120,7 +120,7 @@ public:
    // retrieve data from extents for large object
    int ret = Status::kOk;
    Slice result;
-   large_value_.reset();
+   large_value_.reuse();
    if (FAILED(large_value_.convert_to_normal_format(plain_value, result))) {
     SE_LOG(WARN, "fail to covert large value to normal format", K(ret));
    }
@@ -933,7 +933,7 @@ Iterator* NewDBIterator(Env* env,
                             max_sequential_skip);
   } else {
     db_iter = MOD_NEW_OBJECT(memory::ModId::kDbIter,
-                            DBIter,
+                             DBIter,
                              env,
                              read_options,
                              cf_options,
@@ -955,6 +955,7 @@ ArenaWrappedDBIter::~ArenaWrappedDBIter() {
   }
 }
 
+// TODO(Zhao Dongsheng) : The interfaces SetDBIter and SetIterUnderDBIter are confused.
 void ArenaWrappedDBIter::SetDBIter(DBIter* iter) { db_iter_ = iter; }
 
 void ArenaWrappedDBIter::SetIterUnderDBIter(InternalIterator* iter) {

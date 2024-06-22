@@ -75,7 +75,7 @@ private:
   bool is_inited_;
   ColumnSchema column_schema_;
   common::CompressionType compress_type_;
-  util::CompressHelper compress_helper_;
+  util::CompressorHelper compressor_helper_;
   int32_t column_count_;
   int32_t null_column_count_;
   util::AutoBufferWriter buf_;
@@ -96,6 +96,7 @@ public:
 
 private:
   bool is_inited_;
+  char *raw_unit_buf_; // buffer to store uncompressed unit data
   common::Slice raw_unit_data_;
   int64_t column_count_;
   int64_t column_cursor_;

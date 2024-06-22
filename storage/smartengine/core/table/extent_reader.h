@@ -70,15 +70,17 @@ public:
   int prefetch_index_block(BlockDataHandle<RowBlock> &handle);
   int prefetch_data_block(BlockDataHandle<RowBlock> &handle);
   int do_io_prefetch(const int64_t offset, const int64_t size, util::AIOHandle *aio_handle);
-  int read_persistent_data_block(const BlockHandle &handle, common::Slice &block);
+  int get_data_block(const BlockHandle &handle, util::AIOHandle *aio_handle, char *buf, common::Slice &block);
   int setup_index_block_iterator(RowBlockIterator *index_block_iterator);
-  // Setup data block iterator whose data block is read bypass data block cache.
-  int setup_data_block_iterator(BlockDataHandle<RowBlock> &data_block_handle, RowBlockIterator *data_block_iterator);
-  // Setup data block iterator whose data block is read through data block cache.
-  int setup_data_block_iterator(BlockDataHandle<RowBlock> &data_block_handle,
-                                const int64_t scan_add_blocks_limit,
+  int setup_data_block_iterator(const bool use_cache,
+                                BlockDataHandle<RowBlock> &data_block_handle,
+                                RowBlockIterator *data_block_iterator);
+  // setup data block iterator for scan.
+  int setup_data_block_iterator(const int64_t scan_add_blocks_limit,
                                 int64_t &added_blocks,
-                                RowBlockIterator &data_block_iterator);
+                                BlockDataHandle<RowBlock> &data_block_handle,
+                                RowBlockIterator *data_block_iterator);
+
   int check_block_in_cache(const BlockHandle &handle, bool &in_cache);
   int approximate_key_offet(const common::Slice &key, int64_t &offset);
   int64_t get_data_size() const { return extent_meta_->data_size_; }
@@ -86,15 +88,17 @@ public:
   int64_t get_usable_size() const;
 
 private:
-  int init_extent(const storage::ExtentMeta &extent_meta, bool use_full_prefetch_extent);
   int check_in_bloom_filter(const common::Slice &user_key, const BlockInfo &block_info, bool &may_exist);
   int inner_get(const common::Slice &key,
                 const BlockInfo &block_info,
                 GetContext *get_context,
                 bool &found);
-  int read_data_block(BlockDataHandle<RowBlock> &data_block_handle,
-                      const int64_t scan_add_blocks_limit,
-                      int64_t &added_blocks);
+  int get_data_block_through_cache(BlockDataHandle<RowBlock> &data_block_handle);
+  int get_data_block_bypass_cache(BlockDataHandle<RowBlock> &data_block_handle);
+  int read_index_block(const BlockHandle &handle, RowBlock *&row_block);
+  int read_data_block(const BlockInfo &block_info, util::AIOHandle *aio_handle, RowBlock *&row_block);
+  int read_block(const BlockHandle &handle, util::AIOHandle *aio_handle, char *buf, common::Slice &block);
+  int read_and_uncompress_block(const BlockHandle &handle, util::AIOHandle *aio_handle, char *buf, common::Slice &block);
   int convert_to_row_block(const common::Slice &column_block,
                            const BlockInfo &block_info,
                            common::Slice &row_block);

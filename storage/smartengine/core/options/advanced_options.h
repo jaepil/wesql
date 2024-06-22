@@ -48,6 +48,15 @@ enum CompressionType {
   kDisableCompressionOption = 0xff,
 };
 
+//TODO (Zhao Dongsheng): Clean up the enumeration values in 'CompressionType'.
+inline bool is_valid_compression_type(CompressionType compress_type)
+{
+  return (kNoCompression == compress_type) ||
+         (kLZ4Compression == compress_type) ||
+         (kZlibCompression == compress_type) ||
+         (kZSTD == compress_type);
+}
+
 // Compression options for different compression algorithms like Zlib
 struct CompressionOptions {
   int window_bits;

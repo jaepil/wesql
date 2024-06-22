@@ -31,31 +31,43 @@ LargeValue::LargeValue() : raw_size_(0),
                            size_(0),
                            compress_type_(common::kNoCompression),
                            extents_(),
+                           compressor_helper_(),
                            data_buf_(nullptr),
-                           raw_data_buf_(nullptr)
+                           data_buf_size_(0),
+                           raw_data_buf_(nullptr),
+                           raw_data_buf_size_(0)
 {}
 
-LargeValue::~LargeValue() {}
+LargeValue::~LargeValue()
+{
+  destroy();
+}
 
-void LargeValue::reset()
+void LargeValue::destroy()
+{
+  if (IS_NOTNULL(data_buf_)) {
+    base_memalign_free(data_buf_);
+    data_buf_ = nullptr;
+    data_buf_size_ = 0;
+  }
+
+  if (IS_NOTNULL(raw_data_buf_)) {
+    base_memalign_free(raw_data_buf_);
+    raw_data_buf_ = nullptr;
+    raw_data_buf_size_ = 0;
+  }
+}
+
+void LargeValue::reuse()
 {
   raw_size_ = 0;
   size_ = 0;
   compress_type_ = common::kNoCompression;
   extents_.clear();
-  if (IS_NOTNULL(data_buf_)) {
-    memory::base_memalign_free(data_buf_);
-    data_buf_ = nullptr;
-  }
-  if (IS_NOTNULL(raw_data_buf_)) {
-    memory::base_free(raw_data_buf_);
-    raw_data_buf_ = nullptr;
-  }
 }
 
 int LargeValue::convert_to_normal_format(const Slice &large_object_value, Slice &normal_value)
 {
-  assert(IS_NULL(data_buf_) && IS_NULL(raw_data_buf_));
   int ret = Status::kOk;
   storage::IOExtent *extent = nullptr;
   Slice dummy_read_result;
@@ -64,10 +76,8 @@ int LargeValue::convert_to_normal_format(const Slice &large_object_value, Slice 
 
   if (FAILED(this->deserialize(large_object_value.data(), large_object_value.size(), pos))) {
     SE_LOG(WARN, "fail to deserialize large object value", K(ret));
-  } else if (IS_NULL(data_buf_ = reinterpret_cast<char *>(memory::base_memalign(
-      util::DIOHelper::DIO_ALIGN_SIZE, storage::MAX_EXTENT_SIZE * extents_.size(), memory::ModId::kLargeObject)))) {
-    ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for large value data buf", K(ret), K_(size), "extent_count", extents_.size());
+  } else if (FAILED(prepare_buf(storage::MAX_EXTENT_SIZE * extents_.size(), raw_size_, static_cast<CompressionType>(compress_type_)))) {
+    SE_LOG(WARN, "fail to prepare buf for large object", K(ret));
   } else {
     // Read stored large value
     for (uint32_t i = 0; SUCCED(ret) && i < extents_.size(); ++i) {
@@ -86,13 +96,53 @@ int LargeValue::convert_to_normal_format(const Slice &large_object_value, Slice 
       if (kNoCompression == compress_type_) {
         assert(size_ == raw_size_);
         normal_value.assign(data_buf_, size_);
-      } else if (FAILED(UncompressHelper::uncompress(Slice(data_buf_, size_),
-                                                     static_cast<CompressionType>(compress_type_),
-                                                     ModId::kLargeObject,
-                                                     raw_size_,
-                                                     normal_value))) {
+      } else if (FAILED(compressor_helper_.uncompress(Slice(data_buf_, size_),
+                                                      static_cast<CompressionType>(compress_type_),
+                                                      raw_data_buf_,
+                                                      raw_size_,
+                                                      normal_value))) {
+        SE_LOG(WARN, "fail to uncompress large value", K(ret));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int LargeValue::prepare_buf(int64_t size, int64_t raw_size, CompressionType compress_type)
+{
+  int ret = Status::kOk;
+
+  // prepare data buf
+  if (size > data_buf_size_) {
+    if (IS_NOTNULL(data_buf_)) {
+      base_memalign_free(data_buf_);
+      data_buf_ = nullptr;
+      data_buf_size_ = 0;
+    }
+
+    if (IS_NULL(data_buf_ = reinterpret_cast<char *>(base_memalign(DIOHelper::DIO_ALIGN_SIZE, size, ModId::kLargeObject)))) {
+      ret = Status::kMemoryLimit;
+      SE_LOG(WARN, "fail to allocate memory for data buf", K(ret), K(size));
+    } else {
+      data_buf_size_ = size;
+    }
+  }
+
+  // prepare raw data buf
+  if (SUCCED(ret) && (kNoCompression != compress_type)) {
+    if (raw_size > raw_data_buf_size_) {
+      if (IS_NOTNULL(raw_data_buf_)) {
+        base_memalign_free(raw_data_buf_);
+        raw_data_buf_ = nullptr;
+        raw_data_buf_size_ = 0;
+      }
+
+      if (IS_NULL(raw_data_buf_ = reinterpret_cast<char *>(base_memalign(DIOHelper::DIO_ALIGN_SIZE, raw_size, ModId::kLargeObject)))) {
+        ret = Status::kMemoryLimit;
+        SE_LOG(WARN, "fail to allocate memory for raw data buf", K(ret), K(raw_size));
       } else {
-        raw_data_buf_ = const_cast<char *>(normal_value.data());
+        raw_data_buf_size_ = raw_size;
       }
     }
   }

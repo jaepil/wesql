@@ -88,7 +88,7 @@ ColumnUnitWriter::ColumnUnitWriter()
     : is_inited_(false),
       column_schema_(),
       compress_type_(kNoCompression),
-      compress_helper_(),
+      compressor_helper_(),
       column_count_(0),
       null_column_count_(0),
       buf_(ModId::kColumnUnitWriter)
@@ -106,8 +106,6 @@ int ColumnUnitWriter::init(const ColumnSchema &column_schema, const CompressionT
   } else if (UNLIKELY(!column_schema.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "Invalid argument", K(ret), K(column_schema));
-  } else if (FAILED(compress_helper_.init(compress_type))) {
-    SE_LOG(WARN, "fail to init compress helper", K(ret));
   } else if (FAILED(buf_.reserve(DEFAULT_COLUMN_UNIT_BUFFER_SIZE))) {
     SE_LOG(WARN, "Fail to reserve buffer", K(ret));
   } else {
@@ -155,19 +153,20 @@ int ColumnUnitWriter::append(const Column *column)
 int ColumnUnitWriter::build(Slice &unit_data, ColumnUnitInfo &unit_info)
 {
   int ret = Status::kOk;
-  CompressionType compress_type = common::kNoCompression;
+  CompressionType actual_compress_type = common::kNoCompression;
   Slice raw_unit(buf_.data(), buf_.size());
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "SeColumnUnitWriter isn't inited", K(ret));
-  } else if (FAILED(compress_helper_.compress(raw_unit,
-                                              unit_data,
-                                              compress_type))) {
-    SE_LOG(WARN, "Failed to compress unit", K(ret), "data_size", buf_.size());
+  } else if (FAILED(compressor_helper_.compress(raw_unit,
+                                                compress_type_,
+                                                unit_data,
+                                                actual_compress_type))) {
+    SE_LOG(WARN, "fail to compress unit data", K(ret), K(raw_unit), KE_(compress_type), KE(actual_compress_type));
   } else {
     unit_info.column_type_ = column_schema_.type_;
-    unit_info.compress_type_ = compress_type;
+    unit_info.compress_type_ = actual_compress_type;
     unit_info.column_count_ = column_count_;
     unit_info.null_column_count_ = null_column_count_;
     unit_info.raw_data_size_ = raw_unit.size();
@@ -234,6 +233,7 @@ int ColumnUnitWriter::write_normal_column(const Column *column)
 
 ColumnUnitReader::ColumnUnitReader()
     : is_inited_(false),
+      raw_unit_buf_(nullptr),
       raw_unit_data_(),
       column_count_(0),
       column_cursor_(0),
@@ -250,6 +250,7 @@ ColumnUnitReader::~ColumnUnitReader()
 int ColumnUnitReader::init(const Slice &unit_data, const ColumnUnitInfo &unit_info, const ColumnSchema &column_schema, int64_t column_count)
 {
   int ret = Status::kOk;
+  CompressorHelper compressor_helper;
   assert(unit_info.column_type_ == column_schema.type_);
 
   if (UNLIKELY(is_inited_)) {
@@ -260,24 +261,33 @@ int ColumnUnitReader::init(const Slice &unit_data, const ColumnUnitInfo &unit_in
     SE_LOG(WARN, "invalid argument", K(ret), K(unit_info), K(column_schema), K(column_count));
   } else if (FAILED(ColumnFactory::get_instance().alloc_column(column_schema, column_))) {
     SE_LOG(WARN, "fail to allocate column", K(ret), K(column_schema), K(unit_info));
-  } else if (FAILED(UncompressHelper::uncompress(unit_data,
-                                                 static_cast<common::CompressionType>(unit_info.compress_type_),
-                                                 ModId::kColumnUnitReader,
-                                                 unit_info.raw_data_size_,
-                                                 raw_unit_data_))) {
-    SE_LOG(WARN, "fail to uncompress unit data", K(ret), K(unit_info));
   } else {
-    column_count_ = column_count;
-    column_cursor_ = 0;
-    pos_ = 0;
-    column_schema_ = column_schema;
-    is_inited_ = true;
+    if (kNoCompression == unit_info.compress_type_) {
+      raw_unit_data_.assign(unit_data.data(), unit_data.size());
+    } else {
+      if (IS_NULL(raw_unit_buf_ = reinterpret_cast<char *>(base_malloc(unit_info.raw_data_size_, ModId::kColumnUnitReader)))) {
+        ret = Status::kMemoryLimit;
+        SE_LOG(WARN, "fail to allocate memory for unit data", K(ret), K(unit_info));
+      } else if (FAILED(compressor_helper.uncompress(unit_data,
+                                                     static_cast<CompressionType>(unit_info.compress_type_),
+                                                     raw_unit_buf_,
+                                                     unit_info.raw_data_size_,
+                                                     raw_unit_data_))) {
+        SE_LOG(WARN, "fail to uncompress unit data", K(ret));
+      } 
+    }
+
+    if (SUCCED(ret)) {
+      column_count_ = column_count;
+      column_cursor_ = 0;
+      pos_ = 0;
+      column_schema_ = column_schema;
+      is_inited_ = true;
+    }
   }
 
   if (FAILED(ret)) {
-    if (IS_NOTNULL(column_)) {
-      ColumnFactory::get_instance().free_column(column_);
-    }
+    destroy();
   }
 
   return ret;
@@ -285,9 +295,14 @@ int ColumnUnitReader::init(const Slice &unit_data, const ColumnUnitInfo &unit_in
 
 void ColumnUnitReader::destroy()
 {
-  if (nullptr != column_) {
+  if (IS_NOTNULL(column_)) {
     ColumnFactory::get_instance().free_column(column_) ;   
     column_ = nullptr;
+  }
+
+  if (IS_NOTNULL(raw_unit_buf_)) {
+    base_free(raw_unit_buf_);
+    raw_unit_buf_ = nullptr;
   }
 }
 

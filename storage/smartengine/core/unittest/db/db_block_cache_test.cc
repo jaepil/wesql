@@ -662,7 +662,7 @@ TEST_F(DBBlockCacheTest, CompressedCache) {
 int main(int argc, char** argv) {
   smartengine::port::InstallStackTraceHandler();
   ::testing::InitGoogleTest(&argc, argv);
-  std::string log_path = smartengine::test::TmpDir() + "/db_block_cache_test1.log";
-  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::WARN_LEVEL);
+  std::string log_path = smartengine::test::TmpDir() + "/db_block_cache_test.log";
+  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::INFO_LEVEL);
   return RUN_ALL_TESTS();
 }

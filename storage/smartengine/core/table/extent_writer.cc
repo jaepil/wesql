@@ -116,7 +116,7 @@ ExtentWriter::ExtentWriter()
       internal_key_comparator_(nullptr),
       block_cache_(nullptr),
       row_cache_(nullptr),
-      compress_helper_(),
+      compressor_helper_(),
       block_info_(),
       extent_info_(),
       writed_extent_infos_(),
@@ -145,8 +145,6 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
   } else if (UNLIKELY(!args.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(args));
-  } else if (FAILED(compress_helper_.init(args.compress_type_))) {
-    SE_LOG(WARN, "fail to init compress helper", K(ret), K(args));
   } else if (FAILED(index_block_writer_.init())) {
     SE_LOG(WARN, "fail to init index block writer", K(ret));
   } else if (FAILED(bloom_filter_writer_.init(BloomFilter::DEFAULT_PER_KEY_BITS, BloomFilter::DEFAULT_PROBE_NUM))) {
@@ -595,7 +593,7 @@ int ExtentWriter::write_data_block()
   int ret = Status::kOk;
   Slice raw_block;
   Slice compressed_block;
-  CompressionType compress_type = common::kNoCompression;
+  CompressionType actual_compress_type = common::kNoCompression;
   RowBlock *migrating_block = nullptr;
   char *migrating_block_buf = nullptr;
 
@@ -608,21 +606,23 @@ int ExtentWriter::write_data_block()
     SE_LOG(WARN, "fail to build data block", K(ret));
   } else if (FAILED(bloom_filter_writer_.build(block_info_.bloom_filter_))) {
     SE_LOG(WARN, "fail to build bloom filter", K(ret));
-  } else if (FAILED(compress_helper_.compress(raw_block, compressed_block, compress_type))) {
-    SE_LOG(WARN, "fail to compress data block", K(ret));
+  } else if (FAILED(compressor_helper_.compress(raw_block,
+                                                compress_type_,
+                                                compressed_block,
+                                                actual_compress_type))) {
+    SE_LOG(WARN, "fail to compressed block", K(ret), K(raw_block));
   } else {
     block_info_.handle_.offset_ = buf_.size();
     block_info_.handle_.size_ = compressed_block.size();
     block_info_.handle_.raw_size_ = raw_block.size();
-    block_info_.handle_.compress_type_ = compress_type;
+    block_info_.handle_.compress_type_ = actual_compress_type;
     calculate_block_checksum(compressed_block, block_info_.handle_.checksum_);
 
     if (FAILED(buf_.write(compressed_block))) {
       SE_LOG(WARN, "fail to write block body", K(ret));
     } else if (FAILED(index_block_writer_.append(last_key_, block_info_))) {
       SE_LOG(WARN, "fail to append block index entry", K(ret),
-          KE(compress_type), K(raw_block), K(compressed_block),
-          "expect_compress_type", (int)compress_type_);
+          K(raw_block), K(compressed_block), KE_(compress_type), KE(actual_compress_type));
     } else {
       //TODO(Zhao Dongsheng): column format block can't migrate.
       // Collect handle of block that needs to be migrated.
@@ -658,7 +658,7 @@ int ExtentWriter::write_index_block()
   int ret = Status::kOk;
   Slice raw_block;
   Slice compressed_block;
-  CompressionType compress_type = common::kNoCompression;
+  CompressionType actual_compress_type = common::kNoCompression;
   BlockHandle handle;
 
   if (UNLIKELY(!is_inited_)) {
@@ -669,13 +669,13 @@ int ExtentWriter::write_index_block()
     SE_LOG(WARN, "index block mustn't be empty", K(ret));
   } else if (FAILED(index_block_writer_.build(raw_block))) {
     SE_LOG(WARN, "fail to build index block", K(ret));
-  } else if (FAILED(compress_helper_.compress(raw_block, compressed_block, compress_type))) {
+  } else if (FAILED(compressor_helper_.compress(raw_block, compress_type_, compressed_block, actual_compress_type))) {
     SE_LOG(WARN, "fail to compress index block", K(ret));
   } else {
     handle.offset_ = buf_.size();
     handle.size_ = compressed_block.size();
     handle.raw_size_ = raw_block.size();
-    handle.compress_type_ = compress_type;
+    handle.compress_type_ = actual_compress_type;
     calculate_block_checksum(compressed_block, handle.checksum_);
 
     if (FAILED(buf_.write(compressed_block))) {
@@ -840,8 +840,11 @@ int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject 
       util::DIOHelper::DIO_ALIGN_SIZE, storage::MAX_EXTENT_SIZE, memory::ModId::kLargeObject)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for large object value", K(ret));
-  } else if (FAILED(compress_helper_.compress(value, compressed_value, actual_compress_type))) {
-    SE_LOG(WARN, "fail to compress large object value", K(ret));
+  } else if (FAILED(compressor_helper_.compress(value,
+                                                compress_type_,
+                                                compressed_value,
+                                                actual_compress_type))) {
+    SE_LOG(WARN, "fail to compress large object value", K(ret), K(value), KE_(compress_type));
   } else {
     large_object.value_.compress_type_ = actual_compress_type;
     large_object.value_.raw_size_ = value.size();
