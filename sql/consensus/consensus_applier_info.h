@@ -73,7 +73,7 @@ class Consensus_applier_info : public Rpl_info {
   ulong parallel_workers;
   ulong recovery_parallel_workers;
 
-  int commit_positions(uint64 event_consensus_index);
+  int commit_positions(uint64 event_consensus_index, bool to_flush);
   int rollback_positions();
 
   bool mts_finalize_recovery();

@@ -171,10 +171,11 @@ void Consensus_applier_info::set_nullable_fields(MY_BITMAP *nullable_fields) {
   bitmap_clear_all(nullable_fields);
 }
 
-int Consensus_applier_info::commit_positions(uint64 event_consensus_index) {
+int Consensus_applier_info::commit_positions(uint64 event_consensus_index,
+                                             bool to_flush) {
   saved_consensus_apply_index = get_consensus_apply_index();
   set_consensus_apply_index(event_consensus_index);
-  return flush_info(true);
+  return to_flush ? flush_info(true) : 0;
 }
 
 int Consensus_applier_info::rollback_positions() {

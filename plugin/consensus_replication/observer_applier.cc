@@ -212,47 +212,9 @@ static int consensus_applier_on_checkpoint_routine(
   return 0;
 }
 
-static int consensus_applier_before_commit(Binlog_applier_param *param) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
-
-  DBUG_TRACE;
-  THD *thd = param->rli->info_thd;
-  int error = 0;
-
-  assert(!is_mts_worker(thd));
-  mysql_mutex_assert_owner(&param->rli->data_lock);
-
-  if (thd->consensus_context.consensus_replication_applier &&
-      !thd->get_transaction()->xid_state()->check_in_xa(false)) {
-    Consensus_applier_info *applier_info =
-        consensus_log_manager.get_applier_info();
-    error = applier_info->commit_positions(consensus_log_manager.get_apply_index());
-  }
-
-  return error;
-}
-
-static int consensus_applier_after_commit(Binlog_applier_param *param,
-                                          bool on_rollback) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
-
-  DBUG_TRACE;
-  THD *thd = param->rli->info_thd;
-  int error = 0;
-
-  assert(!is_mts_worker(thd));
-  mysql_mutex_assert_owner(&param->rli->data_lock);
-
-  if (thd->consensus_context.consensus_replication_applier && on_rollback) {
-    Consensus_applier_info *applier_info =
-        consensus_log_manager.get_applier_info();
-    error = applier_info->rollback_positions();
-  }
-  return error;
-}
-
 static int consensus_applier_on_commit_positions(Binlog_applier_param *param,
-                                                 Slave_job_group *ptr_g) {
+                                                 Slave_job_group *ptr_g,
+                                                 bool check_xa) {
   if (!plugin_is_consensus_replication_enabled()) return 0;
 
   DBUG_TRACE;
@@ -262,17 +224,47 @@ static int consensus_applier_on_commit_positions(Binlog_applier_param *param,
   if (thd->consensus_context.consensus_replication_applier) {
     Consensus_applier_info *applier_info =
         consensus_log_manager.get_applier_info();
+
     if (!ptr_g) {
       mysql_mutex_assert_owner(&param->rli->data_lock);
       error = applier_info->commit_positions(
-          consensus_log_manager.get_apply_index());
+          consensus_log_manager.get_apply_index(),
+          check_xa ? (!thd->get_transaction()->xid_state()->check_in_xa(false))
+                   : true);
     } else {
+      // When the slave worker thread is restarted, it will reload the worker's
+      // information from the table.
       Consensus_applier_worker *applier_worker =
           applier_info->get_worker(ptr_g->worker_id);
       if (applier_worker != nullptr) {
         error = applier_worker->commit_positions(ptr_g->consensus_index);
       }
     }
+
+    thd->set_trans_pos(param->rli->get_group_relay_log_name(),
+                       param->rli->get_group_relay_log_pos());
+  }
+  return error;
+}
+
+
+static int consensus_applier_on_rollback_positions(
+    Binlog_applier_param *param) {
+  if (!plugin_is_consensus_replication_enabled()) return 0;
+
+  DBUG_TRACE;
+  THD *thd = param->rli->info_thd;
+  int error = 0;
+
+  if (thd->consensus_context.consensus_replication_applier) {
+    mysql_mutex_assert_owner(&param->rli->data_lock);
+
+    Consensus_applier_info *applier_info =
+        consensus_log_manager.get_applier_info();
+    error = applier_info->rollback_positions();
+
+    thd->set_trans_pos(param->rli->get_group_relay_log_name(),
+                       param->rli->get_group_relay_log_pos());
   }
   return error;
 }
@@ -359,8 +351,7 @@ Binlog_applier_observer cr_binlog_applier_observer = {
     consensus_applier_on_mts_groups_assigned,
     consensus_applier_on_stmt_done,
     consensus_applier_on_commit_positions,
-    consensus_applier_before_commit,
-    consensus_applier_after_commit,
+    consensus_applier_on_rollback_positions,
     consensus_applier_on_checkpoint_routine,
     consensus_applier_reader_before_open,
     consensus_applier_reader_before_read_event,
