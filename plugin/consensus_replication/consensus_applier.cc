@@ -334,6 +334,11 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
     return -1;
   }
 
+  MYSQL_BIN_LOG *binlog = consensus_log_manager.get_binlog();
+  mysql_mutex_lock(binlog->get_log_lock());
+  binlog->switch_and_seek_log(log_name, log_pos, true);
+  mysql_mutex_unlock(binlog->get_log_lock());
+
   return 0;
 }
 

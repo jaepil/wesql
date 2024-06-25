@@ -302,6 +302,9 @@ int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
 
   mysql_mutex_assert_owner(&LOCK_log);
 
+  /* LOCK_sync to guarantee that no thread is calling binlog sync */
+  mysql_mutex_lock(&LOCK_sync);
+
   if (rli) mysql_mutex_lock(&rli->data_lock);
 
   if (!is_active(file_name)) {
@@ -344,7 +347,6 @@ int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
   sql_print_information("MYSQL_BIN_LOG::truncate_log, truncate files %s to %d",
                         file_name, offset);
 
-  mysql_mutex_lock(&LOCK_sync);
   // truncate not cross binlog file.
   if (m_binlog_file->truncate(offset)) {
     sql_print_error("Failed to truncate the binlog file.");
@@ -352,9 +354,9 @@ int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
     goto err;
   }
   atomic_binlog_end_pos = offset;
-  mysql_mutex_unlock(&LOCK_sync);
 
 err:
+  mysql_mutex_unlock(&LOCK_sync);
   if (rli) {
     mysql_mutex_unlock(&rli->data_lock);
     if (!error) rli->notify_relay_log_truncated();

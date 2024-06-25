@@ -9,8 +9,6 @@ include/stop_mysqld.inc [server 2]
 include/stop_mysqld.inc [server 3]
 SET DEBUG_SYNC= 'now SIGNAL 6001_commit';
 ERROR HY000: The cluster's leadership has already change, please relocate consensus leader and retry.
-# restart
-# restart
 select * from t1;
 id
 6000

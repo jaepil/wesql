@@ -10,8 +10,9 @@
 
 #include "my_loglevel.h"
 #include "mysql/components/services/log_builtins.h"
-#include "sql/log.h"
 #include "sql/debug_sync.h"  // DEBUG_SYNC
+#include "sql/log.h"
+#include "sql/rpl_commit_stage_manager.h"
 #include "sql/sql_lex.h"
 
 static int consensus_binlog_manager_binlog_recovery(
@@ -126,7 +127,7 @@ static int consensus_binlog_manager_after_purge_file(
   return consensus_binlog_after_purge_file(param->binlog, log_file_name);
 }
 
-static int consensus_binlog_manager_before_commit(Binlog_manager_param *param) {
+static int consensus_binlog_manager_before_flush(Binlog_manager_param *param) {
   DBUG_TRACE;
   int error = 0;
 
@@ -197,7 +198,8 @@ static int consensus_binlog_manager_after_write(Binlog_manager_param *) {
   return 0;
 }
 
-static int consensus_binlog_manager_after_sync(Binlog_manager_param *param) {
+static int consensus_binlog_manager_after_flush(Binlog_manager_param *param,
+                                                bool &delay_update_binlog_pos) {
   DBUG_TRACE;
 
   /* If the plugin is not enabled, return success. */
@@ -206,42 +208,82 @@ static int consensus_binlog_manager_after_sync(Binlog_manager_param *param) {
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
+  delay_update_binlog_pos = true;
+  return 0;
+}
+
+static int consensus_binlog_manager_after_sync(Binlog_manager_param *param,
+                                               bool &delay_update_binlog_pos) {
+  DBUG_TRACE;
+
+  /* If the plugin is not enabled, return success. */
+  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
+
+  delay_update_binlog_pos = true;
+  return 0;
+}
+
+static int consensus_binlog_manager_after_enrolling_stage(
+    Binlog_manager_param *param, int stage) {
+  DBUG_TRACE;
+
+  /* If the plugin is not enabled, return success. */
+  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
+
+  /* No action is required for other stages */
+  if (Commit_stage_manager::StageID(stage) !=
+      Commit_stage_manager::COMMIT_STAGE)
+    return 0;
+
   DEBUG_SYNC(param->thd, "consensus_replication_after_sync");
   DBUG_EXECUTE_IF("consensus_replication_crash_after_sync", { DBUG_SUICIDE(); });
 
-  /* Check server status */
-  mysql_mutex_lock(consensus_log_manager.get_log_term_lock());
-  if (consensus_log_manager.get_status() !=
-          Consensus_Log_System_Status::BINLOG_WORKING ||
-      rpl_consensus_log_get_term() !=
-          consensus_log_manager.get_current_term() ||
-      rpl_consensus_get_term() != consensus_log_manager.get_current_term()) {
-    for (THD *head = param->thd; head; head = head->next_to_commit) {
-      head->mark_transaction_to_rollback(true);
-      head->consensus_context.consensus_error =
-          Consensus_binlog_context_info::CSS_LEADERSHIP_CHANGE;
-    }
-  }
-  mysql_mutex_unlock(consensus_log_manager.get_log_term_lock());
-
-  // set last index and write log done out of order is supported
   uint64 group_max_log_index = 0;
   for (THD *head = param->thd; head; head = head->next_to_commit) {
-    // find last sync log index
     if (head->consensus_context.consensus_index > group_max_log_index) {
       group_max_log_index = head->consensus_context.consensus_index;
     }
   }
-  if (group_max_log_index > 0) {
+
+  /* The group log may potentially be truncated. */
+  mysql_mutex_lock(consensus_log_manager.get_consensuslog_truncate_lock());
+  if (group_max_log_index > 0 &&
+      group_max_log_index < consensus_log_manager.get_current_index()) {
     consensus_log_manager.set_sync_index_if_greater(group_max_log_index);
+  }
+  mysql_mutex_unlock(consensus_log_manager.get_consensuslog_truncate_lock());
+
+  /* The group log may potentially be truncated. If not,
+   * group_max_log_index is not more than sync_index. */
+  if (group_max_log_index > 0 &&
+      group_max_log_index <= consensus_log_manager.get_sync_index()) {
     if (!opt_initialize) rpl_consensus_write_log_done(group_max_log_index);
   }
 
   for (THD *head = param->thd; head; head = head->next_to_commit) {
     /* whether consensus layer allow to commit */
     if (head->consensus_context.consensus_error ==
-        Consensus_binlog_context_info::CSS_NONE)
+        Consensus_binlog_context_info::CSS_NONE) {
       consensus_before_commit(head);
+    }
+
+    /* updates the binlog end position */
+    if (head->consensus_context.consensus_error ==
+        Consensus_binlog_context_info::CSS_NONE) {
+      const char *binlog_file = nullptr;
+      my_off_t pos = 0;
+
+      head->get_trans_fixed_pos(&binlog_file, &pos);
+      if (binlog_file != nullptr && pos > 0) {
+        param->binlog->update_binlog_end_pos(binlog_file, pos);
+      }
+    }
   }
 
   /* after waitCommitIndexUpdate */
@@ -277,8 +319,9 @@ static int consensus_binlog_manager_before_finish_in_engines(
     thd->consensus_context.status_locked = false;
   }
 
-  if (finish_commit && thd->consensus_context.consensus_error !=
-                           Consensus_binlog_context_info::CSS_NONE) {
+  if (thd->commit_error != THD::CE_COMMIT_ERROR &&
+      thd->consensus_context.consensus_error !=
+          Consensus_binlog_context_info::CSS_NONE) {
     thd->mark_transaction_to_rollback(true);
     thd->commit_error = THD::CE_COMMIT_ERROR;
 
@@ -420,10 +463,12 @@ Binlog_manager_observer cr_binlog_mananger_observer = {
     consensus_binlog_manager_gtid_recovery,
     consensus_binlog_manager_new_file,
     consensus_binlog_manager_after_purge_file,
-    consensus_binlog_manager_before_commit,
+    consensus_binlog_manager_before_flush,
     consensus_binlog_manager_write_transaction,
     consensus_binlog_manager_after_write,
+    consensus_binlog_manager_after_flush,
     consensus_binlog_manager_after_sync,
+    consensus_binlog_manager_after_enrolling_stage,
     consensus_binlog_manager_before_finish_in_engines,
     consensus_binlog_manager_after_finish_commit,
     consensus_binlog_manager_before_rotate,

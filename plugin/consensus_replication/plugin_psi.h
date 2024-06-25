@@ -28,20 +28,16 @@
 #ifdef HAVE_PSI_INTERFACE
 /*
   Register the psi keys for mutexes, conditions, threads and rwlocks
-
 */
 void register_all_consensus_replication_psi_keys();
 #endif /* HAVE_PSI_INTERFACE */
 
 /* clang-format off */
 extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_index;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_sequence_stage1_lock;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_sequence_stage2_lock;
 extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_term_lock;
+extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_truncate_lock;
 extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_apply_thread_lock;
 extern PSI_mutex_key key_CONSENSUSLOG_LOCK_Consensus_stage_change;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_recover_hash_lock;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_commit_pos;
 
 extern PSI_mutex_key key_fifo_cache_cleaner;
 

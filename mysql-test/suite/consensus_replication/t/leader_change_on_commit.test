@@ -31,12 +31,8 @@ SET DEBUG_SYNC= 'now SIGNAL 6001_commit';
 --error 7500
 reap;
 
---connection con2
---let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.2.expect
---source include/start_mysqld.inc
---connection con3
---let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.3.expect
---source include/start_mysqld.inc
+--exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.2.expect
+--exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.3.expect
 
 --connection con1
 --enable_reconnect
@@ -46,6 +42,7 @@ select * from t1;
 
 --disconnect con1
 --disconnect con2
+--disconnect con3
 
 # cleanup
 connection default;

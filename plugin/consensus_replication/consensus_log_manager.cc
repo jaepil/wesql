@@ -175,6 +175,8 @@ int ConsensusLogManager::init(uint64 max_fifo_cache_size_arg,
                     &LOCK_consensuslog_commit);
   mysql_mutex_init(key_CONSENSUSLOG_LOCK_ConsensusLog_term_lock,
                    &LOCK_consensuslog_term, MY_MUTEX_INIT_FAST);
+  mysql_mutex_init(key_CONSENSUSLOG_LOCK_ConsensusLog_truncate_lock,
+                   &LOCK_consensuslog_truncate, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_CONSENSUSLOG_LOCK_ConsensusLog_apply_thread_lock,
                    &LOCK_consensus_applier_catchup, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_CONSENSUSLOG_LOCK_Consensus_stage_change,
@@ -474,6 +476,7 @@ int ConsensusLogManager::cleanup() {
     mysql_rwlock_destroy(&LOCK_consensuslog_status);
     mysql_rwlock_destroy(&LOCK_consensuslog_commit);
     mysql_mutex_destroy(&LOCK_consensuslog_term);
+    mysql_mutex_destroy(&LOCK_consensuslog_truncate);
     mysql_mutex_destroy(&LOCK_consensus_applier_catchup);
     mysql_mutex_destroy(&LOCK_consensus_state_change);
     mysql_cond_destroy(&COND_consensus_applier_catchup);
@@ -767,7 +770,8 @@ int ConsensusLogManager::truncate_log(uint64 consensus_index) {
   sql_print_information("Consensus truncate log, index is %llu",
                         consensus_index);
   prefetch_manager->stop_prefetch_threads();
-  mysql_rwlock_wrlock(&LOCK_consensuslog_status);
+  mysql_rwlock_rdlock(&LOCK_consensuslog_status);
+  mysql_mutex_lock(&LOCK_consensuslog_truncate);
   MYSQL_BIN_LOG *log =
       status == BINLOG_WORKING ? binlog : &(rli_info->relay_log);
   mysql_mutex_lock(log->get_log_lock());
@@ -802,6 +806,7 @@ int ConsensusLogManager::truncate_log(uint64 consensus_index) {
     mysql_mutex_unlock(&rli->data_lock);
   }
 
+  mysql_mutex_unlock(&LOCK_consensuslog_truncate);
   mysql_rwlock_unlock(&LOCK_consensuslog_status);
   if (error) {
     sql_print_error(
@@ -959,24 +964,6 @@ int ConsensusLogManager::wait_leader_degraded(uint64 term, uint64 index) {
 
   // make sure that the transactions are committed in engines
   ha_flush_logs();
-
-  if (!opt_cluster_log_type_instance && index < get_sync_index()) {
-    uint64 next_index = 0;
-    uint64 log_pos = 0;
-    char log_name[FN_REFLEN];
-
-    mysql_mutex_lock(binlog->get_log_lock());
-    next_index = consensus_log_manager.get_next_trx_index(index, false);
-    if (consensus_log_manager.get_log_position(next_index, false, log_name,
-                                               &log_pos)) {
-      mysql_rwlock_unlock(&LOCK_consensuslog_status);
-      sql_print_error("Cannot find applier start index %llu.", next_index);
-      error = 1;
-      goto end;
-    }
-    binlog->switch_and_seek_log(log_name, log_pos, true);
-    mysql_mutex_unlock(binlog->get_log_lock());
-  }
 
   // open relay log system
   mysql_mutex_lock(&rli_info->mi->data_lock);

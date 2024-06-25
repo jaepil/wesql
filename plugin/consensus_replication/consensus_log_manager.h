@@ -166,12 +166,15 @@ class ConsensusLogManager {
   void set_enable_rotate(bool arg) { enable_rotate = arg; }
 
   // for concurrency
-  mysql_mutex_t *get_log_term_lock() { return &LOCK_consensuslog_term; }
+  inline mysql_mutex_t *get_log_term_lock() { return &LOCK_consensuslog_term; }
+  inline mysql_rwlock_t *get_consensuslog_status_lock() {
+    return &LOCK_consensuslog_status;
+  }
   inline mysql_rwlock_t *get_consensuslog_commit_lock() {
     return &LOCK_consensuslog_commit;
   }
-  inline mysql_rwlock_t *get_consensuslog_status_lock() {
-    return &LOCK_consensuslog_status;
+  inline mysql_mutex_t *get_consensuslog_truncate_lock() {
+    return &LOCK_consensuslog_truncate;
   }
 
   mysql_mutex_t *get_apply_thread_lock() {
@@ -256,6 +259,8 @@ class ConsensusLogManager {
   std::atomic<uint64> current_index;  // last log index in the log system
   std::atomic<uint64>
       current_state_degrade_term;   // the term when degrade
+
+  mysql_mutex_t LOCK_consensuslog_truncate;
   std::atomic<uint64> cache_index;  // last cache log entry
   std::atomic<uint64> sync_index;   // last log entry
 
@@ -278,13 +283,14 @@ class ConsensusLogManager {
                                     // coordinator stop condition
 
   mysql_rwlock_t LOCK_consensuslog_status;  // protect consensus log
-  mysql_rwlock_t LOCK_consensuslog_commit;  // protect consensus commit
   Consensus_Log_System_Status
       status;             // leader: binlog system is working,
                           // follower or candidator: relaylog system is working
   MYSQL_BIN_LOG *binlog;  // the MySQL binlog object
   Relay_log_info *rli_info;  // the MySQL relay log info object, include
                              // relay_log, protected by LOCK_consensuslog_status
+
+  mysql_rwlock_t LOCK_consensuslog_commit;  // protect consensus commit
 
   std::atomic<bool> consensus_state_change_is_running;
   std::deque<ConsensusStateChange> consensus_state_change_queue;
