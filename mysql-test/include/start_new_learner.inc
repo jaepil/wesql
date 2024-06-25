@@ -52,11 +52,12 @@ EOF
 
 --disable_abort_on_error
 --disable_query_log
+--disable_result_log
 --let $mysql_errno= 9999
 --let $wait_counter= 300
 while ($mysql_errno)
 {
-  connect (check_learner,localhost,root,,,$learner_port,);
+  connect (check_learner,127.0.0.1,root,,,$learner_port,);
   if ($mysql_errno == 1045){
     --let mysql_errno=0
   }
@@ -64,7 +65,6 @@ while ($mysql_errno)
     --let mysql_errno=0
   }
   if ($mysql_errno){
-		--echo mysql_errno: $mysql_errno
     --sleep 0.1
     --dec $wait_counter
     if (!$wait_counter){
@@ -77,5 +77,6 @@ if(!$mysql_errno)
 {
   --disconnect check_learner
 }
+--enable_result_log
 --enable_query_log
 --enable_abort_on_error

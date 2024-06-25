@@ -20,10 +20,10 @@ insert into t1 values(4);
 insert into t1 values(5);
 flush logs;
 
---connect (learner,127.0.0.1,root,,mysql,$learner_port)
+connect (learner,127.0.0.1,root,,mysql,$learner_port);
 --connection learner
 --echo # kill learner
---shutdown_server 0
+--source include/shutdown_mysqld.inc
 --disconnect learner
 
 --connection leader

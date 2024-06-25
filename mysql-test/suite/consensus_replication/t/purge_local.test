@@ -16,6 +16,7 @@ flush local logs;
 insert into t1 values (1);
 #purge consensus_log before 100000000;
 call dbms_consensus.purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 
@@ -28,6 +29,7 @@ insert into t1 values (1);
 call dbms_consensus.purge_log(100000000);
 #purge force consensus_log before 100000000;
 call dbms_consensus.force_purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 --connection f2
@@ -36,6 +38,7 @@ show consensus logs;
 call dbms_consensus.purge_log(100000000);
 #purge force consensus_log before 100000000;
 call dbms_consensus.force_purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 
@@ -62,10 +65,12 @@ insert into t1 values (1);
 
 #purge local consensus_log before 100000000;
 call dbms_consensus.local_purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 #purge force consensus_log before 100000000;
 call dbms_consensus.force_purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 
@@ -74,10 +79,12 @@ show consensus logs;
 --echo # for f1: purge local should fail
 #purge local consensus_log before 100000000;
 call dbms_consensus.local_purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 #purge force consensus_log before 100000000;
 call dbms_consensus.force_purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 
@@ -85,6 +92,7 @@ show consensus logs;
 --echo # for f2: purge local should success
 #purge local consensus_log before 100000000;
 call dbms_consensus.local_purge_log(100000000);
+--sleep 5
 --replace_column 1 # 2 # 3 #
 show consensus logs;
 
