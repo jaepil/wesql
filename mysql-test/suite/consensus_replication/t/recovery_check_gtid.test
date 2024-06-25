@@ -359,7 +359,11 @@ set debug = 'd, crash_after_flush_binlog';
 --error 2013
 insert into t values (1004);
 
+--source include/wait_leader_change.inc
+
 connection default;
+--source include/wait_until_disconnected.inc
+--exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --enable_reconnect
 --source include/wait_until_connected_again.inc
 --disable_reconnect
