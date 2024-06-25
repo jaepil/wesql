@@ -355,7 +355,7 @@ SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 set debug = 'd, crash_after_flush_binlog';
 
 # Write file to make mysql-test-run.pl restart the server
---exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--exec echo "wait" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --error 2013
 insert into t values (1004);
 

@@ -149,14 +149,14 @@ ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-10	
+MASTER_UUID:1-9	
 set debug = 'd, consensus_replication_crash_after_commit';
 insert into t values (1005);
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-11	
+MASTER_UUID:1-10	
 set debug = 'd, crash_create_non_critical_before_update_index';
 insert into t values(1006);
 flush logs;
@@ -164,7 +164,7 @@ ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-12	
+MASTER_UUID:1-11	
 set debug = 'd, crash_create_critical_before_update_index';
 insert into t values(1007);
 flush logs;
@@ -172,7 +172,7 @@ ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-13	
+MASTER_UUID:1-12	
 set debug = 'd, crash_create_after_update_index';
 insert into t values(1008);
 flush logs;
@@ -180,7 +180,7 @@ ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-14	
+MASTER_UUID:1-13	
 set debug = 'd, crash_create_before_rename_index_file';
 insert into t values(1009);
 flush logs;
@@ -188,7 +188,7 @@ ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-15	
+MASTER_UUID:1-14	
 set debug = 'd, crash_create_after_rename_index_file';
 insert into t values(1010);
 flush logs;
@@ -196,17 +196,16 @@ ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-16	
+MASTER_UUID:1-15	
 set debug = 'd, crash_after_flush_engine_log';
 insert into t values(1012);
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-16	
+MASTER_UUID:1-15	
 select * from t;
 id
-1004
 1005
 1006
 1007
@@ -218,38 +217,38 @@ create table t_large(id int primary key, data longblob);
 SET @@GLOBAL.DEBUG= '+d,crash_during_large_event_binlog_flush';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-18	
+MASTER_UUID:1-17	
 insert into t_large values (1, repeat("a", 2048576));
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SET @@GLOBAL.DEBUG= '+d, crash_during_large_event_binlog_flush_slow';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-18	
+MASTER_UUID:1-17	
 insert into t_large values (2, repeat("b", 2048576));
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-18	
+MASTER_UUID:1-17	
 SET @@GLOBAL.DEBUG= 'd, disable_se_persists_gtid';
 SET @@GLOBAL.DEBUG= '+d, crash_during_large_event_receive';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-18	
+MASTER_UUID:1-17	
 insert into t_large values (3, repeat("c", 2048576));
 insert into t_large values (4, repeat("c", 1));
 SET @@GLOBAL.DEBUG= 'd, disable_se_persists_gtid';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-20	
+MASTER_UUID:1-19	
 SET @@GLOBAL.DEBUG= '+d,crash_during_large_event_receive_slow';
 insert into t_large values (5, repeat("d", 2048576));
 insert into t_large values (6, repeat("d", 1));
 SET @@GLOBAL.DEBUG= 'd, disable_se_persists_gtid';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-22	
+MASTER_UUID:1-21	
 select id from t_large;
 id
 3
@@ -267,13 +266,13 @@ xa end '2001';
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-24	
+MASTER_UUID:1-23	
 xa prepare '2001';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-24	
+MASTER_UUID:1-23	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '2002';
@@ -282,13 +281,13 @@ xa end '2002';
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-24	
+MASTER_UUID:1-23	
 xa prepare '2002';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-24	
+MASTER_UUID:1-23	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '2003';
@@ -297,13 +296,13 @@ xa end '2003';
 set debug = 'd, consensus_replication_crash_after_sync';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-24	
+MASTER_UUID:1-23	
 xa prepare '2003';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-24	
+MASTER_UUID:1-23	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '2004';
@@ -312,13 +311,13 @@ xa end '2004';
 set debug = 'd, consensus_replication_crash_after_commit';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-24	
+MASTER_UUID:1-23	
 xa prepare '2004';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-25	
+MASTER_UUID:1-24	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	2004
@@ -334,13 +333,13 @@ xa end '3001';
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-26	
+MASTER_UUID:1-25	
 xa prepare '3001';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-26	
+MASTER_UUID:1-25	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '3002';
@@ -349,13 +348,13 @@ xa end '3002';
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-26	
+MASTER_UUID:1-25	
 xa prepare '3002';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-26	
+MASTER_UUID:1-25	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '3003';
@@ -364,13 +363,13 @@ xa end '3003';
 set debug = 'd, consensus_replication_crash_after_sync';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-26	
+MASTER_UUID:1-25	
 xa prepare '3003';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-26	
+MASTER_UUID:1-25	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '3004';
@@ -379,13 +378,13 @@ xa end '3004';
 set debug = 'd, consensus_replication_crash_after_commit';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-26	
+MASTER_UUID:1-25	
 xa prepare '3004';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-27	
+MASTER_UUID:1-26	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	3004
@@ -403,26 +402,26 @@ xa prepare '4001';
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-29	
+MASTER_UUID:1-28	
 xa commit '4001';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-29	
+MASTER_UUID:1-28	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	4001
 set debug = 'd, consensus_replication_crash_after_sync';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-29	
+MASTER_UUID:1-28	
 xa commit '4001';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-29	
+MASTER_UUID:1-28	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	4001
@@ -434,13 +433,13 @@ xa prepare '4002';
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-31	
+MASTER_UUID:1-30	
 xa commit '4002';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-31	
+MASTER_UUID:1-30	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	4002
@@ -452,13 +451,13 @@ xa prepare '4003';
 set debug = 'd, consensus_replication_crash_after_commit';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-33	
+MASTER_UUID:1-32	
 xa commit '4003';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-34	
+MASTER_UUID:1-33	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 select * from t;
@@ -477,26 +476,26 @@ xa prepare '5001';
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-35	
+MASTER_UUID:1-34	
 xa rollback '5001';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-35	
+MASTER_UUID:1-34	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	5001
 set debug = 'd, consensus_replication_crash_after_sync';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-35	
+MASTER_UUID:1-34	
 xa rollback '5001';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-35	
+MASTER_UUID:1-34	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	5001
@@ -508,13 +507,13 @@ xa prepare '5002';
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-37	
+MASTER_UUID:1-36	
 xa rollback '5002';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-37	
+MASTER_UUID:1-36	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	5002
@@ -526,13 +525,13 @@ xa prepare '5003';
 set debug = 'd, consensus_replication_crash_after_commit';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-39	
+MASTER_UUID:1-38	
 xa rollback '5003';
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 select * from t;
@@ -550,52 +549,52 @@ xa end '5501';
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 XA COMMIT "5501" ONE PHASE;
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 xa begin '5502';
 insert into t values (5502);
 xa end '5502';
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 XA COMMIT "5502" ONE PHASE;
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 xa begin '5503';
 insert into t values (5503);
 xa end '5503';
 set debug = 'd, consensus_replication_crash_after_sync';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 XA COMMIT "5503" ONE PHASE;
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 xa begin '5504';
 insert into t values (5504);
 xa end '5504';
 set debug = 'd, consensus_replication_crash_after_commit';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-40	
+MASTER_UUID:1-39	
 XA COMMIT "5504" ONE PHASE;
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-41	
+MASTER_UUID:1-40	
 select * from t;
 id
 3004
@@ -621,14 +620,14 @@ SET DEBUG_SYNC = "now WAIT_FOR prepare_6001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-47
+MASTER_UUID:1-46
 drop table t2;
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-47	
+MASTER_UUID:1-46	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '6001';
@@ -641,14 +640,14 @@ SET DEBUG_SYNC = "now WAIT_FOR commit_6001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-48
+MASTER_UUID:1-47
 drop table t2;
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-48	
+MASTER_UUID:1-47	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	6001
@@ -669,14 +668,14 @@ SET DEBUG_SYNC = "now WAIT_FOR prepare_7001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-49
+MASTER_UUID:1-48
 drop table t2;
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-49	
+MASTER_UUID:1-48	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '7001';
@@ -689,14 +688,14 @@ SET DEBUG_SYNC = "now WAIT_FOR commit_7001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-50
+MASTER_UUID:1-49
 drop table t2;
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-50	
+MASTER_UUID:1-49	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	7001
@@ -711,14 +710,14 @@ SET DEBUG_SYNC = "now WAIT_FOR rollback_7002_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-52
+MASTER_UUID:1-51
 drop table t2;
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-52	
+MASTER_UUID:1-51	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	7002
@@ -735,14 +734,14 @@ SET DEBUG_SYNC = "now WAIT_FOR prepare_8001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-53
+MASTER_UUID:1-52
 insert into t1 values (8002);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-53	
+MASTER_UUID:1-52	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '8001';
@@ -755,14 +754,14 @@ SET DEBUG_SYNC = "now WAIT_FOR commit_8001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-54
+MASTER_UUID:1-53
 insert into t1 values (8003);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-54	
+MASTER_UUID:1-53	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	8001
@@ -786,14 +785,14 @@ SET DEBUG_SYNC = "now WAIT_FOR rollback_8002_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-56
+MASTER_UUID:1-55
 insert into t1 values (8005);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-56	
+MASTER_UUID:1-55	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	8002
@@ -815,14 +814,14 @@ SET DEBUG_SYNC = "now WAIT_FOR prepare_9001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-57
+MASTER_UUID:1-56
 insert into t1 values (9002);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-57
+MASTER_UUID:1-56
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '9001';
@@ -835,14 +834,14 @@ SET DEBUG_SYNC = "now WAIT_FOR commit_9001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-58
+MASTER_UUID:1-57
 insert into t1 values (9003);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-58	
+MASTER_UUID:1-57	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	9001
@@ -857,14 +856,14 @@ SET DEBUG_SYNC = "now WAIT_FOR rollback_9002_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-60
+MASTER_UUID:1-59
 insert into t1 values (9005);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-60	
+MASTER_UUID:1-59	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	9002
@@ -878,14 +877,14 @@ SET DEBUG_SYNC = "now WAIT_FOR prepare_9003_ready";
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-61
+MASTER_UUID:1-60
 insert into t1 values (9007);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-61	
+MASTER_UUID:1-60	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '9003';
@@ -898,14 +897,14 @@ SET DEBUG_SYNC = "now WAIT_FOR commit_9003_ready";
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-62
+MASTER_UUID:1-61
 insert into t1 values (9008);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-62	
+MASTER_UUID:1-61	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	9003
@@ -920,14 +919,14 @@ SET DEBUG_SYNC = "now WAIT_FOR rollback_9004_ready";
 set debug = 'd, crash_commit_after_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-64
+MASTER_UUID:1-63
 insert into t1 values (9010);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-64	
+MASTER_UUID:1-63	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	4	0	9004
@@ -944,14 +943,14 @@ SET DEBUG_SYNC = "now WAIT_FOR prepare_10001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-65
+MASTER_UUID:1-64
 insert into t1 values (10002);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-65	
+MASTER_UUID:1-64	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 xa begin '10001';
@@ -964,14 +963,14 @@ SET DEBUG_SYNC = "now WAIT_FOR commit_10001_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-66
+MASTER_UUID:1-65
 insert into t1 values (10003);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-66	
+MASTER_UUID:1-65	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	5	0	10001
@@ -986,14 +985,14 @@ SET DEBUG_SYNC = "now WAIT_FOR rollback_10002_ready";
 set debug = 'd, crash_commit_before_log';
 SELECT @@GLOBAL.GTID_EXECUTED;
 @@GLOBAL.GTID_EXECUTED
-MASTER_UUID:1-68
+MASTER_UUID:1-67
 insert into t1 values (10005);
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 @@GLOBAL.GTID_EXECUTED	@@GLOBAL.GTID_OWNED
-MASTER_UUID:1-68	
+MASTER_UUID:1-67	
 xa recover;
 formatID	gtrid_length	bqual_length	data
 1	5	0	10002
