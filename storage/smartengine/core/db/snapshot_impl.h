@@ -23,7 +23,7 @@ class SnapshotList;
 // Snapshots are kept in a doubly-linked list in the DB.
 // Each SnapshotImpl corresponds to a particular sequence number.
 class SnapshotImpl : public Snapshot {
- public:
+public:
   SnapshotImpl();
   virtual ~SnapshotImpl() override;
   int init(storage::ExtentLayerVersion **extent_layer_versions, common::SequenceNumber seq_num);
@@ -59,14 +59,14 @@ class SnapshotImpl : public Snapshot {
   int64_t extent_layer_versions_get_serialize_size() const;
 
   int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
-  int deserialize(char *buf, int64_t buf_len, int64_t &pos);
+  int deserialize(char *buf, int64_t buf_len, int64_t &pos, const util::Comparator *cmp);
   int64_t get_serialize_size() const;
 
   DECLARE_TO_STRING()
- private:
+private:
   static const int64_t META_SNAPSHOT_VERSION = 1;
 
- public:
+public:
   SequenceNumber number_; // const after creation
   ExtentLayerVersion *extent_layer_versions_[storage::MAX_TIER_COUNT];
 
@@ -76,7 +76,7 @@ class SnapshotImpl : public Snapshot {
   int32_t ref_;        // protected by ref_mutex_
   int32_t backup_ref_; // protected by ref_mutex_
 
- private:
+private:
   friend class SnapshotList;
 
   // SnapshotImpl is kept in a doubly-linked circular list

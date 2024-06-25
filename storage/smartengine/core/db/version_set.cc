@@ -773,7 +773,7 @@ int VersionSet::read_big_meta_snapshot(util::RandomAccessFile &checkpoint_reader
     } else if (IS_NULL(meta_snapshot = MOD_NEW_OBJECT(memory::ModId::kStorageMgr, db::SnapshotImpl))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for new current meta", K(ret));
-    } else if (FAILED(meta_snapshot->deserialize(buf, buf_size, pos))) {
+    } else if (FAILED(meta_snapshot->deserialize(buf, buf_size, pos, global_ctx_->options_.comparator))) {
       SE_LOG(WARN, "fail to deserialize meta snapshot", K(ret));
     } else {
       backup_snapshot.emplace(meta_snapshot);
@@ -836,7 +836,7 @@ int VersionSet::load_backup_snapshots(util::RandomAccessFile &checkpoint_reader,
             if (IS_NULL(meta_snapshot = MOD_NEW_OBJECT(memory::ModId::kStorageMgr, db::SnapshotImpl))) {
               ret = Status::kMemoryLimit;
               SE_LOG(WARN, "fail to allocate memory for new current meta", K(ret));
-            } else if (FAILED(meta_snapshot->deserialize(buf, buf_size, pos))) {
+            } else if (FAILED(meta_snapshot->deserialize(buf, buf_size, pos, global_ctx_->options_.comparator))) {
               SE_LOG(WARN, "fail to deserialize meta snapshot", K(ret));
             } else {
               backup_snapshot.emplace(meta_snapshot);

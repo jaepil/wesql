@@ -15,7 +15,8 @@ using namespace common;
 using namespace storage;
 namespace db {
 
-SnapshotImpl::SnapshotImpl() : number_(0), ref_(0), backup_ref_(0) {
+SnapshotImpl::SnapshotImpl() : number_(0), ref_(0), backup_ref_(0)
+{
   for (int64_t level = 0; level < storage::MAX_TIER_COUNT; ++level) {
     extent_layer_versions_[level] = nullptr;
   }
@@ -157,7 +158,8 @@ int64_t SnapshotImpl::extent_layer_versions_get_serialize_size() const {
   return size;
 }
 
-int SnapshotImpl::deserialize(char *buf, int64_t buf_len, int64_t &pos) {
+int SnapshotImpl::deserialize(char *buf, int64_t buf_len, int64_t &pos, const util::Comparator *cmp)
+{
   int ret = Status::kOk;
   int64_t size = 0;
   int64_t version = 0;
@@ -166,10 +168,12 @@ int SnapshotImpl::deserialize(char *buf, int64_t buf_len, int64_t &pos) {
   if (IS_NULL(buf) || buf_len < 0 || pos >= buf_len) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len), K(pos));
+  } else if (IS_NULL(cmp)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "cmp is null", K(ret));
   } else {
     for (int32_t level = 0; SUCCED(ret) && level < MAX_TIER_COUNT; ++level) {
-      if (IS_NULL(extent_layer_version =
-                      MOD_NEW_OBJECT(memory::ModId::kStorageMgr, ExtentLayerVersion, level, nullptr))) {
+      if (IS_NULL(extent_layer_version = MOD_NEW_OBJECT(memory::ModId::kStorageMgr, ExtentLayerVersion, level, cmp))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for ExtentLayerVersion", K(ret), K(level));
       } else {

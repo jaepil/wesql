@@ -185,7 +185,7 @@ class DB;
 class BackupSnapshotMap
 {
 public:
-  constexpr static int kMaxBackupSnapshotNum = 5;
+  constexpr static int kMaxBackupSnapshotNum = 60000;
 
   bool find_backup_snapshot(BackupSnapshotId backup_id);
 

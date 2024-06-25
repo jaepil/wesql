@@ -39,6 +39,7 @@ MACRO(PREPARE_BUNDLED_OJBSTORE)
   SET(OBJSTORE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/extra/aws-sdk-cpp")
 
   set(BUILD_ONLY "s3;core" CACHE STRING "AWS sdk components to build")
+  set(ENABLE_TESTING OFF  CACHE BOOL "AWS sdk building unit and integration tests")
   set(AUTORUN_UNIT_TESTS OFF CACHE BOOL "AWS sdk auto run unittests")
   set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build aws sdk static library")
   set(CMAKE_BUILD_TYPE Release CACHE STRING "AWS sdk build type")

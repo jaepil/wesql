@@ -84,9 +84,11 @@ struct BackupSnapshotInfo {
   int64_t meta_snapshot_meta_block_offset_{0};
 };
 
-constexpr size_t kMaxBackupSnapshotReservedNum = 32;
+constexpr size_t kMaxBackupSnapshotReservedNum = 65000;
 
 static_assert(db::BackupSnapshotMap::kMaxBackupSnapshotNum <= kMaxBackupSnapshotReservedNum);
+
+constexpr int64_t CHECKPOINT_HEADER_SIZE = 2 * 1024 * 1024;
 
 struct CheckpointHeader
 {
@@ -107,6 +109,8 @@ struct CheckpointHeader
   //DECLARE_COMPACTIPLE_SERIALIZATION(CHECKPOINT_HEADER_VERSION);
   DECLARE_TO_STRING()
 };
+
+static_assert(sizeof(CheckpointHeader) <= CHECKPOINT_HEADER_SIZE);
 
 class StorageLogger
 {
