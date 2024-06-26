@@ -734,12 +734,13 @@ int se_create_backup_snapshot(THD *thd,
     my_printf_error(ER_UNKNOWN_ERROR, "SE: binlog_file_offset is null\n", MYF(0));
   } else if (FAILED(backup_instance->lock_one_step())) {
     SE_LOG(WARN, "fail to accquire exclusive lock", K(ret));
-    // TODO(ljc): maybe we don't need to do a checkpoint before accquire backup snapshot
-  } else if (SUCCED(backup_instance->get_backup_status(backup_status)) &&
-             0 != strcasecmp(backup_status, se_backup_status[0])) {
-    ret = Status::kInvalidArgument;
-    my_printf_error(ER_UNKNOWN_ERROR, "SE: should execute command: %s before this command\n", MYF(0),
-                    se_backup_status[0]);
+    // TODO(ljc):
+    // 1. add an argument in handler interface to judge whether we need do checkpoint.
+    // 2. combine se_checkpoint and se_create_backup_snapshot to one handler interface.
+  } else if (SUCCED(backup_instance->get_backup_status(backup_status)) && backup_status != se_backup_status[0] &&
+             FAILED(backup_instance->init(se_db))) {
+    // server layer can accuire backup snapshot without doing checkpoint, if so, we should init backup snapshot here
+    SE_LOG(WARN, "Failed to init backup snapshot", K(ret));
   } else if (FAILED(backup_instance->accquire_backup_snapshot(se_db, backup_snapshot_id, binlog_pos))) {
     my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to acquire snapshots for backup", MYF(0));
   } else {
@@ -768,7 +769,9 @@ int se_incremental_backup(THD *thd) {
   } else if (SUCCED(backup_instance->get_backup_status(backup_status)) &&
              0 != strcasecmp(backup_status, se_backup_status[1])) {
     ret = Status::kInvalidArgument;
-    my_printf_error(ER_UNKNOWN_ERROR, "SE: should execute command: %s before this command\n", MYF(0),
+    my_printf_error(ER_UNKNOWN_ERROR,
+                    "SE: should execute command: %s before this command\n",
+                    MYF(0),
                     se_backup_status[1]);
   } else if (FAILED(backup_instance->record_incremental_extent_ids(se_db))) {
     my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to record incremental extent ids for backup", MYF(0));
@@ -794,15 +797,7 @@ int release_current_backup_snapshot(THD *thd, uint64_t backup_snapshot_id) {
     ret = Status::kInvalidArgument;
     my_printf_error(ER_UNKNOWN_ERROR, "SE: backup_snapshot_id is 0\n", MYF(0));
   } else if (backup_snapshot_id == backup_instance->current_backup_id()) {
-    // release current backup snapshot
-    const char* backup_status = nullptr;
-    backup_instance->get_backup_status(backup_status);
-
-    if (0 != strcasecmp(backup_status, se_backup_status[2])) {
-      ret = Status::kInvalidArgument;
-      my_printf_error(ER_UNKNOWN_ERROR, "SE: should execute command: %s before this command\n", MYF(0),
-                      se_backup_status[2]);
-    } else if (FAILED(backup_instance->release_current_backup_snapshot(se_db))) {
+    if (FAILED(backup_instance->release_current_backup_snapshot(se_db))) {
       my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to release backup snapshot, backup id: %ld", MYF(0),
                       backup_snapshot_id);
     } else {
