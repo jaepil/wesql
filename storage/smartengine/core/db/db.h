@@ -193,7 +193,7 @@ public:
                                 BackupSnapshotId &backup_id,
                                 MetaSnapshotSet *&meta_snapshots);
 
-  bool add_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &&meta_snapshots);
+  bool add_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &meta_snapshots);
 
   bool remove_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &to_clean, bool &existed);
 

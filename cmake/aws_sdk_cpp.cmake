@@ -74,8 +74,6 @@ MACRO (MYSQL_CHECK_OBJSTORE)
   ELSEIF(WITH_OBJSTOR STREQUAL "system")
     MESSAGE(STATUS "WITH_OBJSTOR is system, use system aws s3 lib")
     FIND_SYSTEM_OBJSTORE()
-    # avoid error when add_dependencies(aws-sdk-cpp-ext-proj) in the main project
-    ADD_CUSTOM_TARGET(aws-sdk-cpp-ext-proj COMMAND "")
     SET(OBJSTORE_LIBRARY ${AWSSDK_LINK_LIBRARIES})
     SET(OBJSTORE_PLATFORM_DEPS ${OBJSTORE_PLATFORM_DEPS})
   ELSE()

@@ -38,26 +38,14 @@ ENDMACRO()
 MACRO(PREPARE_BUNDLED_OJBSTORE)
   SET(OBJSTORE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/extra/aws-sdk-cpp")
 
-  INCLUDE(ExternalProject)
-  ExternalProject_Add(
-    aws-sdk-cpp-ext-proj
-    SOURCE_DIR "${PROJECT_SOURCE_DIR}/../../../extra/aws-sdk-cpp"
-    #GIT_REPOSITORY "https://github.com/aws/aws-sdk-cpp.git"
-    #GIT_TAG "1.11.283"
-    #UPDATE_COMMAND "" #git submodule update --init --recursive
-    # TODO: build with static lib
-    CMAKE_ARGS
-      -DBUILD_ONLY=s3
-      -DBUILD_SHARED_LIBS=ON
-      -DCMAKE_INSTALL_PREFIX=${OBJSTORE_INSTALL_PREFIX}
-      -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-      -DENABLE_TESTING=OFF
-      -DAUTORUN_UNIT_TESTS=OFF
-    BUILD_ALWAYS      TRUE
-    TEST_COMMAND      ""
-  )
+  set(BUILD_ONLY "s3" CACHE STRING "AWS sdk components to build")
+  set(ENABLE_TESTING OFF  CACHE BOOL "AWS sdk building unit and integration tests")
+  set(AUTORUN_UNIT_TESTS OFF CACHE BOOL "AWS sdk auto run unittests")
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build aws sdk static library")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "AWS sdk build type")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-shadow -Wno-error=non-virtual-dtor -Wno-error=extra-semi -Wno-error=undef -Wno-error=cast-qual -Wno-error=overloaded-virtual")
 
+  add_subdirectory(${PROJECT_SOURCE_DIR}/../../../extra/aws-sdk-cpp ${OBJSTORE_INSTALL_PREFIX})
   # compilation result installation is later phase, mkdir include path in advance avoid compile error.
   FILE(MAKE_DIRECTORY "${OBJSTORE_INSTALL_PREFIX}/include")
 ENDMACRO()
@@ -79,16 +67,14 @@ MACRO (MYSQL_CHECK_OBJSTORE)
     # Set the variables for the project
     SET(OBJSTORE_INCLUDE_DIR "${OBJSTORE_INSTALL_PREFIX}/include")
     SET(OBJSTORE_LIBRARY_PATH "${OBJSTORE_INSTALL_PREFIX}/lib64")
-    SET(OBJSTORE_LIBRARY "aws-cpp-sdk-s3;aws-cpp-sdk-core")
-    SET(OBJSTORE_PLATFORM_DEPS "pthread;curl")
+    SET(OBJSTORE_LIBRARY ${OBJSTORE_LIBRARIES})
+    SET(OBJSTORE_PLATFORM_DEPS ${OBJSTORE_PLATFORM_DEPS})
     # Prepare include and ld path
     INCLUDE_DIRECTORIES(${OBJSTORE_INCLUDE_DIR})
     LINK_DIRECTORIES(${OBJSTORE_LIBRARY_PATH})
   ELSEIF(WITH_OBJSTOR STREQUAL "system")
     MESSAGE(STATUS "WITH_OBJSTOR is system, use system aws s3 lib")
     FIND_SYSTEM_OBJSTORE()
-    # avoid error when add_dependencies(aws-sdk-cpp-ext-proj) in the main project
-    ADD_CUSTOM_TARGET(aws-sdk-cpp-ext-proj COMMAND "")
     SET(OBJSTORE_LIBRARY ${AWSSDK_LINK_LIBRARIES})
     SET(OBJSTORE_PLATFORM_DEPS ${OBJSTORE_PLATFORM_DEPS})
   ELSE()
@@ -118,13 +104,11 @@ MACRO (MYSQL_BUILD_OBJSTORE)
       PRIVATE
       ${OBJSTORE_LIBRARIES}
       ${OBJSTORE_PLATFORM_DEPS})
-    ADD_DEPENDENCIES(myobjstore_objlib aws-sdk-cpp-ext-proj)
   ENDIF()
   TARGET_LINK_LIBRARIES(myobjstore
     PRIVATE
     ${OBJSTORE_LIBRARIES}
     ${OBJSTORE_PLATFORM_DEPS})
-  ADD_DEPENDENCIES(myobjstore aws-sdk-cpp-ext-proj)
 
   # shut up the compile warning when encountering aws-sdk-cpp header files.
   SET_SOURCE_FILES_PROPERTIES(${OBJSTORE_SRC}/objstore/s3.cc ${OBJSTORE_SRC}/objstore/objstore.cc PROPERTIES COMPILE_FLAGS

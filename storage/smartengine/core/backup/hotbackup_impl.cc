@@ -42,6 +42,8 @@ int BackupSnapshot::init(DB *db, const char *backup_tmp_dir_path)
   return Status::kNotSupported;
 }
 
+int BackupSnapshot::create_tmp_dir(DB *db) { return Status::kNotSupported; }
+
 int BackupSnapshot::lock_instance() { return Status::kNotSupported; }
 
 int BackupSnapshot::unlock_instance() { return Status::kNotSupported; }
@@ -299,9 +301,6 @@ int BackupSnapshotImpl::accquire_backup_snapshot(DB *db, BackupSnapshotId *backu
                                  last_manifest_file_size_,
                                  false /**use_fsync*/).code())) { // copy last MANIFEST file
         SE_LOG(WARN, "Failed to copy last manifest file", K(ret));
-      } else if (IS_FALSE(backup_snapshot_map_.add_backup_snapshot(cur_backup_id_, std::move(cur_meta_snapshots_)))) {
-        ret = Status::kErrorUnexpected;
-        SE_LOG(WARN, "backup snapshot id already exists", K(ret), K(cur_backup_id_));
       } else {
         SE_LOG(INFO,
                "Success to copy last MANIFEST file and acquire snapshots",

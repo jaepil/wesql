@@ -737,16 +737,24 @@ int se_create_backup_snapshot(THD *thd,
     // TODO(ljc):
     // 1. add an argument in handler interface to judge whether we need do checkpoint.
     // 2. combine se_checkpoint and se_create_backup_snapshot to one handler interface.
-  } else if (SUCCED(backup_instance->get_backup_status(backup_status)) && backup_status != se_backup_status[0] &&
-             FAILED(backup_instance->init(se_db))) {
-    // server layer can accuire backup snapshot without doing checkpoint, if so, we should init backup snapshot here
-    SE_LOG(WARN, "Failed to init backup snapshot", K(ret));
-  } else if (FAILED(backup_instance->accquire_backup_snapshot(se_db, backup_snapshot_id, binlog_pos))) {
-    my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to acquire snapshots for backup", MYF(0));
   } else {
-    binlog_file = binlog_pos.file_name_;
-    *binlog_file_offset = binlog_pos.offset_;
-    backup_instance->set_backup_status(se_backup_status[1]);
+    if (SUCCED(backup_instance->get_backup_status(backup_status)) && backup_status != se_backup_status[0]) {
+      // server layer can accuire backup snapshot without doing checkpoint, if so, we should init backup snapshot here
+      if (FAILED(backup_instance->init(se_db))) {
+        SE_LOG(WARN, "Failed to init backup snapshot", K(ret));
+      } else if (FAILED(backup_instance->create_tmp_dir(se_db))) {
+        SE_LOG(WARN, "Failed to create tmp dir for backup", K(ret));
+      }
+    }
+    if (SUCCED(ret)) {
+      if (FAILED(backup_instance->accquire_backup_snapshot(se_db, backup_snapshot_id, binlog_pos))) {
+        my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to acquire snapshots for backup", MYF(0));
+      } else {
+        binlog_file = binlog_pos.file_name_;
+        *binlog_file_offset = binlog_pos.offset_;
+        backup_instance->set_backup_status(se_backup_status[1]);
+      }
+    }
   }
 
   if (Status::kInitTwice != ret) {

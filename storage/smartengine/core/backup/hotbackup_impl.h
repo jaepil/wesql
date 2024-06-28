@@ -48,6 +48,8 @@ public:
 public:
   // Check backup job and do init
   virtual int init(db::DB *db, const char *backup_tmp_dir_path = nullptr) override;
+  // Create backup tmp dir
+  virtual int create_tmp_dir(db::DB *db) override;
   // Get backup status
   virtual int get_backup_status(const char *&status) override;
   // Set backup status
@@ -78,7 +80,6 @@ private:
   BackupSnapshotImpl();
 
 private:
-  int create_tmp_dir(db::DB *db);
   int link_sst_files(db::DB *db);
   template<typename DataFileChecker, typename WalFileChecker>
   int link_files(db::DB *db, DataFileChecker *data_file_checker, WalFileChecker *wal_file_checker);
@@ -136,12 +137,15 @@ struct DataDirFileChecker
   {}
   inline bool operator()(const util::FileType &type, const uint64_t &file_num)
   {
-    return (type == util::kTableFile)
-        || (type == util::kDescriptorFile && file_num < last_manifest_file_num_ && file_num >= first_manifest_file_num_)
-        || (type == util::kCheckpointFile && file_num <= last_manifest_file_num_ && file_num >= first_manifest_file_num_ - 1)
-        || (type == kCurrentFile)
+    // TODO(ljc): now we just copy all checkpoint files, and may need to read current checkpoint file to get
+    // checkpoint file number in the future.
+    // clang-format off
+    return (type == util::kTableFile) 
+        || (type == util::kDescriptorFile && file_num < last_manifest_file_num_ && file_num >= first_manifest_file_num_) 
+        || (type == util::kCheckpointFile && file_num <= last_manifest_file_num_) 
+        || (type == kCurrentFile) 
         || (type == kCurrentCheckpointFile);
-
+    // clang-format on
   }
   uint64_t first_manifest_file_num_;
   uint64_t last_manifest_file_num_;

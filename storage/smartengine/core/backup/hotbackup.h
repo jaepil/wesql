@@ -38,6 +38,8 @@ public:
   static BackupSnapshot *get_instance();
   // Check backup job and do init
   virtual int init(db::DB *db, const char *backup_tmp_dir_path = nullptr);
+  // Create backup tmp dir
+  virtual int create_tmp_dir(db::DB *db);
   // lock backup instance for tools like xtrabackup
   virtual int lock_instance();
   virtual int unlock_instance();

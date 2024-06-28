@@ -859,7 +859,7 @@ int VersionSet::load_backup_snapshots(util::RandomAccessFile &checkpoint_reader,
       ret = Status::kCorruption;
       SE_LOG(WARN, "invalid meta snapshot count", K(ret), K(backup_snapshot.size()), K(meta_snapshot_count));
     }
-    if (SUCCED(ret) && IS_FALSE(backup_snapshots->add_backup_snapshot(backup_id, std::move(backup_snapshot)))) {
+    if (SUCCED(ret) && IS_FALSE(backup_snapshots->add_backup_snapshot(backup_id, backup_snapshot))) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "backup snapshot id already exist", K(ret), K(backup_id));
     }
@@ -1145,7 +1145,7 @@ int VersionSet::replay_accquire_snapshot_log(const char *log_data, int64_t log_l
       SE_LOG(WARN, "fail to create backup snapshot", K(ret));
     } else {
       db::BackupSnapshotMap &backup_snapshots = BackupSnapshotImpl::get_instance()->get_backup_snapshot_map();
-      if (IS_FALSE(backup_snapshots.add_backup_snapshot(backup_id, std::move(meta_snapshots)))) {
+      if (IS_FALSE(backup_snapshots.add_backup_snapshot(backup_id, meta_snapshots))) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, backup snapshot already exist", K(ret), K(backup_id));
       } else {

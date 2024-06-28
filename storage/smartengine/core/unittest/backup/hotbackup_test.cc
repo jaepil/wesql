@@ -211,11 +211,12 @@ TEST_F(HotbackupTest, normal)
 {
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   BackupSnapshotId backup_id = 0;
+  db::BinlogPosition binlog_pos;
 
   ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
 
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
 
@@ -231,6 +232,7 @@ TEST_F(HotbackupTest, incremental_extent)
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   BackupSnapshotId backup_id = 0;
+  db::BinlogPosition binlog_pos;
   int32_t dummy_file_num = 0;
   std::string backup_path = dbname_ + backup_dir_;
 
@@ -254,7 +256,7 @@ TEST_F(HotbackupTest, incremental_extent)
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
@@ -288,6 +290,7 @@ TEST_F(HotbackupTest, create_backups_and_recover) {
   BackupSnapshotId backup_id = 0;
   BackupSnapshotId backup_id2 = 0;
   BackupSnapshotId backup_id3 = 0;
+  db::BinlogPosition binlog_pos;
   int32_t dummy_file_num = 0;
   std::string backup_path = dbname_ + backup_dir_;
 
@@ -311,7 +314,7 @@ TEST_F(HotbackupTest, create_backups_and_recover) {
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
 
   ASSERT_OK(Put(1, "a", "aaa"));
@@ -323,7 +326,7 @@ TEST_F(HotbackupTest, create_backups_and_recover) {
 
   // create the second backup snapshot
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
 
   ASSERT_OK(Put(1, "c", "ccc"));
@@ -335,7 +338,7 @@ TEST_F(HotbackupTest, create_backups_and_recover) {
 
   // create the third backup snapshot
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id3));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id3, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
 
   backup_snapshot->unlock_instance();
@@ -387,6 +390,7 @@ TEST_F(HotbackupTest, delete_cf)
   CreateColumnFamilies({"hotbackup", "delete_cf"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   BackupSnapshotId backup_id = 0;
+  db::BinlogPosition binlog_pos;
   int32_t dummy_file_num = 0;
   std::string backup_path = dbname_ + backup_dir_;
 
@@ -425,7 +429,7 @@ TEST_F(HotbackupTest, delete_cf)
   // delete sst file
   ExtentSpaceManager::get_instance().recycle_dropped_table_space();
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_,
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
@@ -458,6 +462,7 @@ TEST_F(HotbackupTest, delete_cf_before_and_after_create_snapshot) {
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   BackupSnapshotId backup_id = 0;
   BackupSnapshotId backup_id2 = 0;
+  BinlogPosition binlog_pos;
   int32_t dummy_file_num = 0;
   std::string backup_path = dbname_ + backup_dir_;
   std::string backup_path2 = dbname_ + backup_dir2_;
@@ -492,7 +497,7 @@ TEST_F(HotbackupTest, delete_cf_before_and_after_create_snapshot) {
   ASSERT_OK(Put(2, "b", "bb"));
   ASSERT_OK(Flush(2));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
 
   // get meta snapshot of cf 2
   ColumnFamilyHandleImpl *cfh = dynamic_cast<ColumnFamilyHandleImpl *>(get_column_family_handle(2));
@@ -583,7 +588,7 @@ TEST_F(HotbackupTest, delete_cf_before_and_after_create_snapshot) {
   ASSERT_OK(Delete(1, "l"));
   ASSERT_OK(Flush(1));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path2_, backup_tmp_dir_path2_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path2_ + BACKUP_EXTENTS_FILE);
@@ -645,6 +650,7 @@ TEST_F(HotbackupTest, large_object)
 
   BackupSnapshotId backup_id = 0;
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BinlogPosition binlog_pos;
 
   ASSERT_OK(Put(1, "1", Slice(lob_value, lob_size)));
   ASSERT_OK(Put(1, "2", Slice(lob_value, lob_size)));
@@ -663,7 +669,7 @@ TEST_F(HotbackupTest, large_object)
   ASSERT_OK(Put(1, "4", Slice(lob_value, lob_size)));
   ASSERT_OK(Flush(1));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
@@ -693,6 +699,7 @@ TEST_F(HotbackupTest, multi_checkpoint)
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
   int32_t dummy_file_num = 0;
   std::string backup_path = dbname_ + backup_dir_;
 
@@ -717,7 +724,7 @@ TEST_F(HotbackupTest, multi_checkpoint)
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
@@ -752,6 +759,7 @@ TEST_F(HotbackupTest, delete_manifest_before_acquire)
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
 
   ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
   ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
@@ -768,7 +776,7 @@ TEST_F(HotbackupTest, delete_manifest_before_acquire)
   ASSERT_OK(Put(1, "f", "ff"));
   // delete manifest file before acquire
   ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kNotFound, backup_snapshot->record_incremental_extent_ids(db_));
 
   backup_snapshot->unlock_instance();
@@ -779,6 +787,7 @@ TEST_F(HotbackupTest, checkpoint_contain_dropped_cf) {
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
   std::string backup_path = dbname_ + backup_dir_;
   std::string str;
   str.assign(3 * 1024 * 1024, 'a');
@@ -823,7 +832,7 @@ TEST_F(HotbackupTest, checkpoint_contain_dropped_cf) {
 
   DropColumnFamily(2);
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
@@ -860,6 +869,7 @@ TEST_F(HotbackupTest, delete_manifest_after_accquire) {
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
   std::string backup_path = dbname_ + backup_dir_;
 
   ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
@@ -879,7 +889,7 @@ TEST_F(HotbackupTest, delete_manifest_after_accquire) {
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   // delete manifest file after acquire
   ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
@@ -912,6 +922,7 @@ TEST_F(HotbackupTest, create_multiple_backup_snapshots) {
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
   std::string backup_path = dbname_ + backup_dir_;
 
   ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
@@ -933,7 +944,7 @@ TEST_F(HotbackupTest, create_multiple_backup_snapshots) {
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "gg"));
   ASSERT_OK(Put(1, "h", "hh"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
@@ -961,7 +972,7 @@ TEST_F(HotbackupTest, create_multiple_backup_snapshots) {
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "ggg"));
   ASSERT_OK(Put(1, "h", "hhh"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id2, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path2_, backup_tmp_dir_path2_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path2_ + BACKUP_EXTENTS_FILE);
@@ -989,7 +1000,7 @@ TEST_F(HotbackupTest, create_multiple_backup_snapshots) {
   ASSERT_OK(Flush(1));
   ASSERT_OK(Put(1, "g", "gggg"));
   ASSERT_OK(Put(1, "h", "hhhh"));
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id3));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id3, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path3_, backup_tmp_dir_path3_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path3_ + BACKUP_EXTENTS_FILE);
@@ -1072,6 +1083,7 @@ TEST_F(HotbackupTest, amber_test)
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   int32_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
 
   ASSERT_OK(Put(1, "1", "11", wo));
   ASSERT_OK(Put(1, "2", "22", wo));
@@ -1084,7 +1096,7 @@ TEST_F(HotbackupTest, amber_test)
   ASSERT_OK(Put(1, "b", "bb", wo));
   ASSERT_OK(Flush(1));
 
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
 
   ASSERT_OK(Put(1, "c", "cc", wo));
   ASSERT_OK(Put(1, "d", "dd", wo));
@@ -1119,6 +1131,7 @@ TEST_F(HotbackupTest, lost_wal)
   CreateColumnFamilies({"lost_wal"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
   std::string backup_path = dbname_ + backup_dir_;
 
   //step 1: insert base data 
@@ -1152,7 +1165,7 @@ TEST_F(HotbackupTest, lost_wal)
 
 
   //step 4: remaining steps of xtrabackup
-  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, 
                backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,

@@ -109,7 +109,7 @@ bool BackupSnapshotMap::get_next_backup_snapshot(BackupSnapshotId prev_backup_id
   return true;
 }
 
-bool BackupSnapshotMap::add_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &&meta_snapshots)
+bool BackupSnapshotMap::add_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &meta_snapshots)
 {
   std::unique_lock lock(mutex_);
   if (backup_snapshots_.find(backup_id) != backup_snapshots_.end()) {
@@ -149,6 +149,9 @@ int BackupSnapshotMap::release_backup_snapshot(BackupSnapshotId backup_id)
   if (backup_id == 0) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "Invalid backup id", K(backup_id), K(ret));
+  } else if (IS_FALSE(BackupSnapshotImpl::get_instance()->get_backup_snapshot_map().find_backup_snapshot(backup_id))) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "backup snapshot id not found", K(backup_id), K(ret));
   } else if (FAILED(StorageLogger::get_instance().begin(storage::SeEvent::RELEASE_BACKUP_SNAPSHOT))) {
     SE_LOG(WARN, "fail to begin release backup snapshot log", K(backup_id), K(ret));
   } else if (FAILED(StorageLogger::get_instance().write_log(storage::REDO_LOG_RELEASE_BACKUP_SNAPSHOT, log_entry))) {
@@ -2492,7 +2495,13 @@ int DBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
     global_ctx->all_sub_table_->get_sub_table(0, sub_table);
     WriteContext context;
     context.all_sub_table_ = global_ctx->all_sub_table_;
-    if (FAILED(versions_->create_backup_snapshot(meta_snapshots))) {
+
+    db::BackupSnapshotMap &backup_snapshot_map = BackupSnapshotImpl::get_instance()->get_backup_snapshot_map();
+
+    if (backup_snapshot_map.find_backup_snapshot(backup_id)) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(WARN, "backup snapshot id already exists", K(backup_id), K(ret));
+    } else if (FAILED(versions_->create_backup_snapshot(meta_snapshots))) {
       SE_LOG(WARN, "Failed to create the backup snapshot", K(backup_id), K(ret));
     } else {
       if (FAILED(SwitchMemtable(sub_table, &context, true /* force create new wal file*/).code())) {
@@ -2512,6 +2521,9 @@ int DBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
           SE_LOG(WARN, "fail to write create backup snapshot log", K(backup_id), K(ret));
         } else if (FAILED(StorageLogger::get_instance().commit(commit_seq))) {
           SE_LOG(WARN, "fail to commit create backup snapshot log", K(backup_id), K(ret));
+        } else if (IS_FALSE(backup_snapshot_map.add_backup_snapshot(backup_id, meta_snapshots))) {
+          ret = Status::kErrorUnexpected;
+          SE_LOG(WARN, "backup snapshot id already exists", K(ret), K(backup_id));
         } else {
           SE_LOG(INFO,
                  "Create a backup snapshot",
