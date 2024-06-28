@@ -1390,6 +1390,11 @@ err:
   return true;
 }
 
+void binlog_update_end_pos(MYSQL_BIN_LOG *binlog, const char *file,
+                               my_off_t pos) {
+  binlog->update_binlog_end_pos(file, pos);
+}
+
 my_off_t binlog_file_get_current_pos(MYSQL_BIN_LOG::Binlog_ofile *binlog_file) {
   return binlog_file->position();
 }

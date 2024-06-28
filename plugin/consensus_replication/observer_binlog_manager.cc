@@ -281,7 +281,7 @@ static int consensus_binlog_manager_after_enrolling_stage(
 
       head->get_trans_fixed_pos(&binlog_file, &pos);
       if (binlog_file != nullptr && pos > 0) {
-        param->binlog->update_binlog_end_pos(binlog_file, pos);
+        binlog_update_end_pos(param->binlog, binlog_file, pos);
       }
     }
   }
