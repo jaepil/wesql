@@ -43,9 +43,10 @@ void cleanup_objstore_provider(ObjectStore *objstore) {
 ObjectStore *create_object_store(const std::string_view &provider,
                                  const std::string_view region,
                                  const std::string_view *endpoint,
-                                 bool use_https) {
+                                 bool use_https,
+                                 const std::string_view bucket_dir) {
   if (provider == "aws") {
-    return create_s3_objstore(region, endpoint, use_https);
+    return create_s3_objstore(region, endpoint, use_https, bucket_dir);
   } else if (provider == "local") {
     return create_local_objstore(region, endpoint, use_https);
   } else {
