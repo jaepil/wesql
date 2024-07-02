@@ -1223,13 +1223,16 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
     m_slice_pipeline_head = nullptr;
     // Upload the local archived binlog slice to the object store.
     if (binlog_objstore) {
+      size_t len;
       std::string archived_binlog_keyid{};
       char binlog_slice_ext[11] = {0};
       archived_binlog_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
       archived_binlog_keyid.append(FN_DIRSEP);
       archived_binlog_keyid.append(m_binlog_archive_relative_file_name);
       archived_binlog_keyid.append(".");
-      sprintf(binlog_slice_ext, "%010llu", m_binlog_last_event_pos);
+      len = snprintf(binlog_slice_ext, sizeof(binlog_slice_ext), "%010llu",
+                     m_binlog_last_event_pos);
+      assert(len > 0);
       archived_binlog_keyid.append(binlog_slice_ext);
       objstore::Status ss = binlog_objstore->put_object_from_file(
           std::string_view(opt_objstore_bucket), archived_binlog_keyid,

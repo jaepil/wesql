@@ -120,7 +120,7 @@ static int compare_log_name(const char *log_1, const char *log_2);
 static void exec_binlog_error_action_abort(THD *thd, const char *err_string);
 static time_t calculate_auto_purge_lower_time_bound();
 static int convert_str_to_datetime(const char *str, ulong &my_time);
-static void convert_datetime_to_str(char *str, time_t ts);
+static size_t convert_datetime_to_str(char *str, time_t ts);
 /**
  * @brief Creates a consistent archive object and starts the consistent snapshot
  * archive thread.
@@ -2816,12 +2816,14 @@ static int convert_str_to_datetime(const char *str, ulong &my_time) {
   return 0;
 }
 
-static void convert_datetime_to_str(char *str, time_t ts) {
+static size_t convert_datetime_to_str(char *str, time_t ts) {
   struct tm *res;
+  size_t len;
   DBUG_TRACE;
   struct tm tm_tmp;
   gmtime_r(&ts, (res = &tm_tmp));
-  snprintf(str, iso8601_size, "%04d-%02d-%02d %02d:%02d:%02d", res->tm_year + 1900,
-              res->tm_mon + 1, res->tm_mday, res->tm_hour, res->tm_min,
-              res->tm_sec);
+  len = snprintf(str, iso8601_size, "%04d-%02d-%02d %02d:%02d:%02d",
+                 res->tm_year + 1900, res->tm_mon + 1, res->tm_mday,
+                 res->tm_hour, res->tm_min, res->tm_sec);
+  return len;
 }

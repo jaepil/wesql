@@ -1063,13 +1063,16 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(const char *log_fil
           file_ostream.truncate(slice_pos);
           file_ostream.close();
           // Upload truncated binlog slice, use new end_pos.
+          size_t len;
           std::string new_binlog_slice_keyid;
           char binlog_slice_ext[11] = {0};
           new_binlog_slice_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
           new_binlog_slice_keyid.append(FN_DIRSEP);
           new_binlog_slice_keyid.append(binlog_relative_file);
           new_binlog_slice_keyid.append(".");
-          sprintf(binlog_slice_ext, "%010llu", log_pos);
+          len = snprintf(binlog_slice_ext, sizeof(binlog_slice_ext), "%010llu",
+                         log_pos);
+          assert(len > 0);
           new_binlog_slice_keyid.append(binlog_slice_ext);
           ss = recovery_objstore->put_object_from_file(
               std::string_view(opt_objstore_bucket), new_binlog_slice_keyid,
