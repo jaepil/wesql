@@ -16,12 +16,14 @@
 
 #pragma once
 
+#include "schema/table_schema.h"
 #include "table/column_struct.h"
 #include "table/column_unit.h"
-#include "table/schema_struct.h"
 
 namespace smartengine
 {
+using namespace schema;
+
 namespace table
 {
 struct BlockInfo;
@@ -39,7 +41,7 @@ public:
 private:
   int init_column_unit_readers(const common::Slice &block_data,
                                const std::vector<ColumnUnitInfo> &unit_infos,
-                               const std::vector<ColumnSchema> &column_schemas,
+                               const ColumnSchemaArray &column_schemas,
                                int64_t column_count);
   int get_next_columns(ColumnArray &columns);
   int transform_to_row(const ColumnArray &columns);

@@ -33,6 +33,7 @@ using namespace common;
 using namespace db;
 using namespace memory;
 using namespace monitor;
+using namespace schema;
 using namespace storage;
 using namespace util;
 
@@ -41,10 +42,8 @@ namespace table
 ExtentWriterArgs::ExtentWriterArgs()
     : index_id_(0),
       table_space_id_(0),
-      block_size_(0),
       block_restart_interval_(0),
       extent_space_type_(storage::FILE_EXTENT_SPACE),
-      use_column_format_(false),
       table_schema_(),
       internal_key_comparator_(nullptr),
       output_position_(),
@@ -56,10 +55,8 @@ ExtentWriterArgs::ExtentWriterArgs()
 
 ExtentWriterArgs::ExtentWriterArgs(const int64_t index_id,
                                     const int64_t table_space_id,
-                                    const int64_t block_size,
                                     const int64_t block_restart_interval,
                                     const int32_t extent_space_type,
-                                    const bool use_column_format,
                                     const TableSchema &table_schema,
                                     const InternalKeyComparator *internal_key_comparator,
                                     const LayerPosition &output_position,
@@ -69,10 +66,8 @@ ExtentWriterArgs::ExtentWriterArgs(const int64_t index_id,
                                     ChangeInfo *change_info)
     : index_id_(index_id),
       table_space_id_(table_space_id),
-      block_size_(block_size),
       block_restart_interval_(block_restart_interval),
       extent_space_type_(extent_space_type),
-      use_column_format_(use_column_format),
       table_schema_(table_schema),
       internal_key_comparator_(internal_key_comparator),
       output_position_(output_position),
@@ -89,27 +84,26 @@ bool ExtentWriterArgs::is_valid() const
 {
   //TODO(Zhao Dongsheng) : check compress type valid and row cache maybe nullptr
   //and block cache also can be nullptr.
-  return index_id_ >= 0 && table_space_id_ >= 0 &&
-         block_size_ > 0 && block_restart_interval_ >= 0 &&
+  return index_id_ >= 0 &&
+         table_space_id_ >= 0 &&
+         block_restart_interval_ >= 0 &&
          is_valid_extent_space_type(extent_space_type_) &&
-         (!use_column_format_ || table_schema_.is_valid()) &&
-         IS_NOTNULL(internal_key_comparator_) && output_position_.is_valid() &&
+         table_schema_.is_valid() &&
+         IS_NOTNULL(internal_key_comparator_) &&
+         output_position_.is_valid() &&
          IS_NOTNULL(change_info_);
 }
 
 DEFINE_TO_STRING(ExtentWriterArgs, KV_(index_id), KV_(table_space_id),
-    KV_(block_size), KV_(block_restart_interval), KV_(extent_space_type),
-    KV_(use_column_format), KV_(table_schema), KVP_(internal_key_comparator),
-    KV_(output_position), KVP_(block_cache), KVP_(row_cache), KVE_(compress_type),
-    KVP_(change_info))
+    KV_(block_restart_interval), KV_(extent_space_type), KV_(table_schema),
+    KVP_(internal_key_comparator), KV_(output_position), KVP_(block_cache),
+    KVP_(row_cache), KVE_(compress_type), KVP_(change_info))
 
 ExtentWriter::ExtentWriter()
     : is_inited_(false),
       index_id_(-1),
       table_space_id_(-1),
-      block_size_(0),
       extent_space_type_(FILE_EXTENT_SPACE),
-      use_column_format_(false),
       table_schema_(),
       compress_type_(common::kNoCompression),
       layer_position_(),
@@ -160,15 +154,13 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     index_id_ = args.index_id_;
     table_space_id_ = args.table_space_id_;
     extent_space_type_ = args.extent_space_type_;
-    use_column_format_ = args.use_column_format_;
     table_schema_ = args.table_schema_;
     compress_type_ = args.compress_type_;
     layer_position_ = args.output_position_;
-    block_size_ = args.block_size_;
     internal_key_comparator_ = args.internal_key_comparator_;
     block_cache_ = args.block_cache_;
     row_cache_ = args.row_cache_;
-    block_info_.max_column_count_ = table_schema_.column_schemas_.size();
+    block_info_.max_column_count_ = table_schema_.get_column_schemas().size();
     block_info_.probe_num_ = BloomFilter::DEFAULT_PROBE_NUM;
     block_info_.per_key_bits_ = BloomFilter::DEFAULT_PER_KEY_BITS;
     change_info_ = args.change_info_;
@@ -190,7 +182,7 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
 void ExtentWriter::destroy()
 {
   if (is_inited_) {
-    if (use_column_format_) {
+    if (table_schema_.use_column_format()) {
       ColumnBlockWriter *column_block_writer = reinterpret_cast<ColumnBlockWriter *>(data_block_writer_);
       MOD_DELETE_OBJECT(ColumnBlockWriter, column_block_writer);
     } else {
@@ -310,7 +302,7 @@ int ExtentWriter::init_data_block_writer(const ExtentWriterArgs &args)
 {
   int ret = Status::kOk;
 
-  if (args.use_column_format_) {
+  if (args.table_schema_.use_column_format()) {
     ColumnBlockWriter *column_block_writer = nullptr;
     if (IS_NULL(column_block_writer = MOD_NEW_OBJECT(ModId::kColumnBlockWriter, ColumnBlockWriter))) {
       ret = Status::kMemoryLimit;
@@ -546,16 +538,17 @@ int ExtentWriter::check_key_order(const Slice &key)
 bool ExtentWriter::need_switch_block_for_row(const uint32_t key_size, const uint32_t value_size) const
 {
   bool res = false;
+  int32_t block_size = table_schema_.get_block_size();
   const int64_t BLOCK_LOW_WATER_PERCENT = 90;
   // optimize the repeated compute for block_low_water_size if need
-  const int64_t block_low_water_size = ((block_size_ * 90) + 99) / 100;
+  const int64_t block_low_water_size = ((block_size * 90) + 99) / 100;
 
-  if (data_block_writer_->current_size() >= block_size_) {
+  if (data_block_writer_->current_size() >= block_size) {
     // block is full
     res = true;
   } else {
     if (data_block_writer_->current_size() >= block_low_water_size
-        && data_block_writer_->future_size(key_size, value_size) > block_size_) {
+        && data_block_writer_->future_size(key_size, value_size) > block_size) {
       // block is almost full
       res = true;
     }
@@ -626,7 +619,7 @@ int ExtentWriter::write_data_block()
     } else {
       //TODO(Zhao Dongsheng): column format block can't migrate.
       // Collect handle of block that needs to be migrated.
-      if (migrate_flag_ && !use_column_format_) {
+      if (migrate_flag_ && !table_schema_.use_column_format()) {
         // TODO(Zhao Dongsheng): The blocks currently being migrated to 
         // the block cache are uncompresed. And, ignore the migrate ret?
         if (FAILED(collect_migrating_block(raw_block, block_info_.handle_, kNoCompression))) {
@@ -644,7 +637,7 @@ int ExtentWriter::write_data_block()
       data_block_writer_->reuse();
       bloom_filter_writer_.reuse();
       block_info_.reset();
-      block_info_.max_column_count_ = table_schema_.column_schemas_.size();
+      block_info_.max_column_count_ = table_schema_.get_column_schemas().size();
       block_info_.probe_num_ = BloomFilter::DEFAULT_PROBE_NUM;
       block_info_.per_key_bits_ = BloomFilter::DEFAULT_PER_KEY_BITS;
     }

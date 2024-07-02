@@ -46,11 +46,15 @@ struct WriteOptions;
 struct FlushOptions;
 } // namespace common
 
+namespace schema
+{
+class TableSchema;
+} // namespace schema
+
 namespace table
 {
 struct TableProperties;
 struct ExternalSstFileInfo;
-struct TableSchema;
 } // namespace table
 
 namespace util
@@ -246,7 +250,7 @@ class DB {
   // family from flushing and compacting.
   virtual common::Status DropColumnFamily(ColumnFamilyHandle* column_family) = 0;
 
-  virtual int modify_table_schema(ColumnFamilyHandle *subtable_handle, const table::TableSchema &table_schema) = 0;
+  virtual int modify_table_schema(ColumnFamilyHandle *subtable_handle, const schema::TableSchema &table_schema) = 0;
   // Set the database entry for "key" to "value".
   // If "key" already exists, it will be overwritten.
   // Returns OK on success, and a non-OK status on error.

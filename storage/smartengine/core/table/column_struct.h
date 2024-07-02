@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "table/schema_struct.h"
+#include "schema/column_schema.h"
 
 namespace smartengine
 {
@@ -29,7 +29,7 @@ class Column
 {
 public:
   Column();
-  Column(const ColumnSchema &schema);
+  Column(const schema::ColumnSchema &schema);
   virtual ~Column();
 
   virtual void reuse();
@@ -41,7 +41,7 @@ public:
   virtual char *buf() { return buf_; }
   virtual const char *buf() const { return buf_; }
   virtual int64_t size() const { return buf_size_; }
-  virtual uint8_t type() const { return schema_.type_; }
+  virtual uint8_t type() const { return schema_.get_type(); }
 
   DECLARE_VIRTUAL_TO_STRING()
 protected:
@@ -52,7 +52,7 @@ protected:
                   int64_t &pos,
                   int64_t &value);
 public:
-  ColumnSchema schema_;
+  schema::ColumnSchema schema_;
   char *buf_;
   int64_t buf_size_;
 };
@@ -62,7 +62,7 @@ class RecordHeader : public Column
 {
 public:
   RecordHeader();
-  RecordHeader(const ColumnSchema &schema);
+  RecordHeader(const schema::ColumnSchema &schema);
   virtual ~RecordHeader() override;
 
   virtual void reuse() override;
@@ -80,7 +80,7 @@ class NullBitmap : public Column
 {
 public:
   NullBitmap();
-  NullBitmap(const ColumnSchema &schema);
+  NullBitmap(const schema::ColumnSchema &schema);
   virtual ~NullBitmap() override;
 
   virtual void reuse() override;
@@ -99,7 +99,7 @@ class UnpackInfo : public Column
 {
 public:
   UnpackInfo();
-  UnpackInfo(const ColumnSchema &schema);
+  UnpackInfo(const schema::ColumnSchema &schema);
   virtual ~UnpackInfo() override;
 
   virtual void reuse() override;
@@ -119,7 +119,7 @@ class DataColumn : public Column
 {
 public:
   DataColumn();
-  DataColumn(const ColumnSchema &schema);
+  DataColumn(const schema::ColumnSchema &schema);
   virtual ~DataColumn() override;
 
   virtual void reuse() override;
@@ -167,7 +167,7 @@ class ColumnFactory
 public:
   static ColumnFactory &get_instance();
 
-  int alloc_column(const ColumnSchema &column_schema, Column *&column);
+  int alloc_column(const schema::ColumnSchema &column_schema, Column *&column);
   int free_column(Column *&column);
 
 private:

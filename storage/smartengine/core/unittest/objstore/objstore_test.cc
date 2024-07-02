@@ -39,7 +39,7 @@ public:
 
     provider_ = GetParam();
 
-    auto s = env_->InitObjectStore(provider_, region_, nullptr, false, bucket_);
+    auto s = env_->InitObjectStore(provider_, region_, nullptr, false, bucket_, "");
     ASSERT_OK(s);
     s = env_->GetObjectStore(obs);
     ASSERT_OK(s);
@@ -193,7 +193,7 @@ TEST_P(ObjstoreTest, reinitAwsApi)
   env_->GetObjectStore(obs);
   ASSERT_TRUE(obs == nullptr);
 
-  auto s = env_->InitObjectStore(provider_, region_, nullptr, false, bucket_);
+  auto s = env_->InitObjectStore(provider_, region_, nullptr, false, bucket_, "");
   ASSERT_OK(s);
   s = env_->GetObjectStore(obs);
   ASSERT_OK(s);

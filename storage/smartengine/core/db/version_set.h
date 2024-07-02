@@ -174,7 +174,7 @@ public:
 
   int add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_replay, ColumnFamilyData *&sub_table);
   int remove_sub_table(ColumnFamilyData *sub_table, bool write_log, bool is_replay);
-  int modify_table_schema(ColumnFamilyData *sub_table, const table::TableSchema &table_schema);
+  int modify_table_schema(ColumnFamilyData *sub_table, const schema::TableSchema &table_schema);
 
   int write_checkpoint_block(util::WritableFile &checkpoint_writer,
                              int64_t &meta_block_count,

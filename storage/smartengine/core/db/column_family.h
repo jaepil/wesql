@@ -34,11 +34,10 @@ namespace monitor
 {
 class InstrumentedMutex;
 } // namespace monitor
-
-namespace table
+namespace schema
 {
-struct TableSchema;
-} // namespace table
+class TableSchema;
+} // namespace schema
 
 namespace db
 {
@@ -177,7 +176,7 @@ public:
 
   int64_t GetID() const { return sub_table_meta_.index_id_; }
   int64_t get_table_space_id() const { return sub_table_meta_.table_space_id_; }
-  table::TableSchema get_table_schema() const;
+  schema::TableSchema get_table_schema() const;
   // thread-safe
   // TODO(Zhao Dongsheng), deprecated?
   const std::string& GetName() const { return name_; }
@@ -413,9 +412,7 @@ public:
                         const util::autovector<MemTable *> *flushed_memtables = nullptr,
                         util::autovector<MemTable *> *to_delete = nullptr);
 
-  int modify_table_schema(const table::TableSchema &table_schema);
-
-  bool use_column_format() const;
+  int modify_table_schema(const schema::TableSchema &table_schema);
 
   int recover_extent_space();
 

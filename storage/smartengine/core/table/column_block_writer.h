@@ -17,11 +17,12 @@
 #pragma once
 
 #include "options/advanced_options.h"
+#include "schema/table_schema.h"
 #include "table/block_struct.h"
 #include "table/block_writer.h"
 #include "table/column_struct.h"
 #include "table/column_unit.h"
-#include "table/schema_struct.h"
+
 namespace smartengine
 {
 namespace table
@@ -33,7 +34,7 @@ public:
   ColumnBlockWriter();
   virtual ~ColumnBlockWriter() override;
 
-  int init(const TableSchema &table_schema, common::CompressionType compress_type);
+  int init(const schema::TableSchema &table_schema, common::CompressionType compress_type);
   void destroy();
   virtual void reuse() override;
   virtual int append(const common::Slice &key, const common::Slice &value) override;
@@ -43,8 +44,8 @@ public:
   virtual bool is_empty() const override { return (0 == row_count_); }
 
 private:
-  int init_columns(const ColumnSchemaArray &column_schemas);
-  int init_column_unit_writers(const ColumnSchemaArray &col_schemas, const common::CompressionType compress_type);
+  int init_columns(const schema::ColumnSchemaArray &column_schemas);
+  int init_column_unit_writers(const schema::ColumnSchemaArray &col_schemas, const common::CompressionType compress_type);
   int convert_to_columns(const common::Slice &key, const common::Slice &value, ColumnArray &columns);
   int write_columns(const ColumnArray &columns);
 
@@ -53,7 +54,7 @@ private:
 
 private:
   bool is_inited_;
-  TableSchema table_schema_;
+  schema::TableSchema table_schema_;
   common::CompressionType compress_type_;
   ColumnParseCtx parse_ctx_;
   ColumnArray columns_;

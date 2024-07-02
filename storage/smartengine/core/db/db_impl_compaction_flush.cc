@@ -1639,7 +1639,7 @@ Status DBImpl::build_compaction_job(ColumnFamilyData *cfd,
   context.task_type_ = cf_job.task_info_.task_type_;
   context.enable_thread_tracking_ = immutable_db_options_.enable_thread_tracking;
   context.need_check_snapshot_ = cf_job.need_check_snapshot_;
-  storage::ColumnFamilyDesc cf_desc((int32_t)cfd->GetID(), cfd->GetName(), cfd->use_column_format(), cfd->get_table_schema());
+  storage::ColumnFamilyDesc cf_desc(cfd->GetID(), cfd->GetName(), cfd->get_table_schema());
   const CompactionTasksPicker &task_picker = cfd->get_task_picker();
   CompactionTasksPicker::TaskInfo &task_info = cf_job.task_info_;
   if (FAILED(job->init(context, cf_desc, snapshot))) {

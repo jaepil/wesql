@@ -105,8 +105,10 @@ static int se_init_func(void *const p)
   se_hton->flush_logs = se_flush_wal;
   se_hton->is_supported_system_table = se_is_supported_system_table;
   se_hton->flags = HTON_TEMPORARY_NOT_SUPPORTED |
-                        HTON_SUPPORTS_EXTENDED_KEYS | HTON_CAN_RECREATE |
-                        HTON_SUPPORTS_ATOMIC_DDL;
+                   HTON_SUPPORTS_EXTENDED_KEYS |
+                   HTON_CAN_RECREATE |
+                   HTON_SUPPORTS_ATOMIC_DDL |
+                   HTON_SUPPORTS_ENGINE_ATTRIBUTE;
 
   se_hton->post_recover = se_post_recover;
   se_hton->post_engine_recover = se_post_engine_recover;

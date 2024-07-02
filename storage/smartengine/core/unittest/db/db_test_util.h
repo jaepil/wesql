@@ -170,10 +170,13 @@ class SpecialEnv : public util::EnvWrapper {
   virtual bool IsObjectStoreInited() const override { return target()->IsObjectStoreInited(); }
 
 
-   virtual common::Status InitObjectStore(const std::string_view provider, const std::string_view region,
-                                         const std::string_view *endpoint, bool use_https,
-                                         const std::string_view bucket) override {
-    return target()->InitObjectStore(provider, region, endpoint, use_https, bucket);
+   virtual common::Status InitObjectStore(const std::string_view provider,
+                                          const std::string_view region,
+                                          const std::string_view *endpoint,
+                                          bool use_https,
+                                          const std::string_view bucket,
+                                          const std::string_view bucket_subdir_for_test) override {
+    return target()->InitObjectStore(provider, region, endpoint, use_https, bucket, bucket_subdir_for_test);
   }
 
   virtual common::Status DestroyObjectStore() override {
@@ -713,6 +716,10 @@ class DBTestBase : public testing::Test {
 
   std::string Get(int cf, const std::string& k,
                   const Snapshot* snapshot = nullptr);
+  
+  int modify_table_schema(const schema::TableSchema &table_schema);
+
+  int modify_table_schema(int cf, const schema::TableSchema &table_schema);
 
   table::InternalIterator *NewInternalIterator(util::Arena *arena, ColumnFamilyHandle *column_family);
 

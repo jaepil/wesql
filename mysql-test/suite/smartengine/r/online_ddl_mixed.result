@@ -144,11 +144,11 @@ ALTER TABLE tt COMMENT "comment1 on tt", ALGORITHM=INSTANT;
 ERROR 0A000: ALGORITHM=INSTANT is not supported for this operation. Try ALGORITHM=COPY/INPLACE.
 ALTER TABLE tt COMMENT "comment1 on tt", ALGORITHM=INPLACE;
 ALTER TABLE tt COMMENT "comment1 on tt", KEY_BLOCK_SIZE=1000, ALGORITHM=INPLACE;
-ERROR 0A000: ALGORITHM=INPLACE is not supported. Reason: SEDDL: only supports to change comment of table. Try ALGORITHM=COPY.
+ERROR 0A000: ALGORITHM=INPLACE is not supported. Reason: SEDDL: only supports to change comment or engine attribute of table. Try ALGORITHM=COPY.
 ALTER TABLE tt CHARACTER SET=latin1, ALGORITHM=INSTANT;
-ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: SEDDL: only supports to change comment of table. Try ALGORITHM=COPY/INPLACE.
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: SEDDL: only supports to change comment or engine attribute of table. Try ALGORITHM=COPY/INPLACE.
 ALTER TABLE tt CHARACTER SET=latin1, ALGORITHM=INPLACE;
-ERROR 0A000: ALGORITHM=INPLACE is not supported. Reason: SEDDL: only supports to change comment of table. Try ALGORITHM=COPY.
+ERROR 0A000: ALGORITHM=INPLACE is not supported. Reason: SEDDL: only supports to change comment or engine attribute of table. Try ALGORITHM=COPY.
 ALTER TABLE tt MODIFY COLUMN col_to_extend VARCHAR(80), ALGORITHM=INSTANT;
 ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: Cannot change column type INPLACE. Try ALGORITHM=COPY/INPLACE.
 ALTER TABLE tt MODIFY COLUMN col_to_extend VARCHAR(80), ALGORITHM=INPLACE;

@@ -5,6 +5,7 @@ namespace smartengine
 {
 using namespace common;
 using namespace memory;
+using namespace schema;
 using namespace util;
 
 namespace table
@@ -165,7 +166,7 @@ int ColumnUnitWriter::build(Slice &unit_data, ColumnUnitInfo &unit_info)
                                                 actual_compress_type))) {
     SE_LOG(WARN, "fail to compress unit data", K(ret), K(raw_unit), KE_(compress_type), KE(actual_compress_type));
   } else {
-    unit_info.column_type_ = column_schema_.type_;
+    unit_info.column_type_ = column_schema_.get_type();
     unit_info.compress_type_ = actual_compress_type;
     unit_info.column_count_ = column_count_;
     unit_info.null_column_count_ = null_column_count_;
@@ -251,7 +252,7 @@ int ColumnUnitReader::init(const Slice &unit_data, const ColumnUnitInfo &unit_in
 {
   int ret = Status::kOk;
   CompressorHelper compressor_helper;
-  assert(unit_info.column_type_ == column_schema.type_);
+  assert(unit_info.column_type_ == column_schema.get_type());
 
   if (UNLIKELY(is_inited_)) {
     ret = Status::kNotInit;

@@ -106,13 +106,12 @@ TEST(InMemExtent, sim) {
   ret = ExtentSpaceManager::get_instance().create_table_space(0);
   ASSERT_EQ(Status::kOk, ret);
   StorageLogger::get_instance().begin(storage::SeEvent::FLUSH);
+  schema::TableSchema table_schema;
   ExtentWriterArgs writer_args(0 /*column_family_id*/,
                                0 /*table_space_id*/,
-                               16 * 1024 /**block_size*/,
                                16 /*block_restart_interval*/,
                                storage::FILE_EXTENT_SPACE,
-                               false /*use_column_format*/,
-                               table::TableSchema(),
+                               table_schema,
                                &internal_comparator,
                                output_layer_position,
                                nullptr /*block_cache*/,

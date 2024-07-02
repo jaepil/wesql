@@ -19,7 +19,6 @@
 
 #include "db/recovery_point.h"
 #include "storage/storage_meta_struct.h"
-#include "table/schema_struct.h"
 #include "util/serialization.h"
 #include "util/to_string.h"
 
@@ -145,11 +144,10 @@ struct ModifyTableSchemaLogEntry : public ManifestLogEntry
 {
   static const int64_t MODIFY_TABLE_SCHEMA_LOG_ENTRY_VERSION = 1;
 
-  int64_t index_id_;
-  table::TableSchema table_schema_;
+  schema::TableSchema table_schema_;
 
   ModifyTableSchemaLogEntry();
-  ModifyTableSchemaLogEntry(const int64_t index_id, const table::TableSchema &table_schema);
+  ModifyTableSchemaLogEntry(const schema::TableSchema &table_schema);
   virtual ~ModifyTableSchemaLogEntry() override;
 
   DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(MODIFY_TABLE_SCHEMA_LOG_ENTRY_VERSION)

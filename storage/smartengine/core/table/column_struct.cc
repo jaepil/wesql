@@ -19,6 +19,7 @@
 #ifdef MYSQL_SERVER
 #include "my_byteorder.h"
 #endif
+#include "schema/record_format.h"
 #include "util/data_buffer.h"
 #include "util/se_constants.h"
 
@@ -26,6 +27,7 @@ namespace smartengine
 {
 using namespace common;
 using namespace memory;
+using namespace schema;
 using namespace util;
 
 namespace table
@@ -69,7 +71,7 @@ int Column::parse(ColumnParseCtx &parse_ctx)
   } else if (FAILED(do_parse(parse_ctx))) {
     SE_LOG(WARN, "fail to do parse", K(ret));
   } else {
-    if (PRIMARY_COLUMN != schema_.type_) {
+    if (PRIMARY_COLUMN != schema_.get_type()) {
       buf_ = parse_ctx.buf_ + origin_pos;
       buf_size_ = parse_ctx.pos_ - origin_pos;
     }
@@ -91,10 +93,10 @@ int Column::do_parse(ColumnParseCtx &parse_ctx)
 }
 
 int Column::parse_bytes(int64_t bytes,
-                          char *buf,
-                          int64_t buf_size,
-                          int64_t &pos,
-                          int64_t &value)
+                        char *buf,
+                        int64_t buf_size,
+                        int64_t &pos,
+                        int64_t &value)
 {
   int ret = common::Status::kOk;
 
@@ -142,7 +144,7 @@ RecordHeader::RecordHeader(const ColumnSchema &schema)
       col_cnt_(0),
       null_bitmap_size_(0)
 {
-  assert(RECORD_HEADER == schema_.type_);
+  assert(RECORD_HEADER == schema_.get_type());
 }
 
 RecordHeader::~RecordHeader()
@@ -171,7 +173,7 @@ int RecordHeader::do_parse(ColumnParseCtx &parse_ctx)
   if (!parse_ctx.is_valid()) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(parse_ctx));
-  } else if ((RECORD_HEADER != schema_.type_) || !schema_.is_valid()) {
+  } else if ((RECORD_HEADER != schema_.get_type()) || !schema_.is_valid()) {
     ret = common::Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected column schema", K(ret), K_(schema));
   } else {
@@ -196,12 +198,12 @@ int RecordHeader::do_parse(ColumnParseCtx &parse_ctx)
           SE_LOG(DEBUG, "success to parse column count and null bitmap size", K_(col_cnt), K_(null_bitmap_size));
         }
       } else {
-        col_cnt_ = schema_.original_column_count_;
-        null_bitmap_size_ = schema_.original_null_bitmap_size_;
+        col_cnt_ = schema_.get_original_column_count();
+        null_bitmap_size_ = schema_.get_original_null_bitmap_size();
       }
     } else {
-      col_cnt_ = schema_.column_count_;
-      null_bitmap_size_ = schema_.null_bitmap_size_;
+      col_cnt_ = schema_.get_column_count();
+      null_bitmap_size_ = schema_.get_null_bitmap_size();
     }
   }
 
@@ -222,7 +224,7 @@ NullBitmap::NullBitmap(const ColumnSchema &schema)
       null_bitmap_size_(0),
       null_bitmap_(nullptr)
 {
-  assert(NULL_BITMAP == schema_.type_);
+  assert(NULL_BITMAP == schema_.get_type());
 }
 
 NullBitmap::~NullBitmap()
@@ -257,7 +259,7 @@ int NullBitmap::do_parse(ColumnParseCtx &parse_ctx)
   if (!parse_ctx.is_valid()) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(parse_ctx));
-  } else if ((NULL_BITMAP != schema_.type_) || !schema_.is_valid()) {
+  } else if ((NULL_BITMAP != schema_.get_type()) || !schema_.is_valid()) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected column schema", K(ret), K_(schema));
   } else {
@@ -287,7 +289,7 @@ UnpackInfo::UnpackInfo(const ColumnSchema &schema)
       unpack_info_size_(0),
       unpack_info_(nullptr)
 {
-  assert(UNPACK_INFO == schema_.type_);
+  assert(UNPACK_INFO == schema_.get_type());
 }
 
 UnpackInfo::~UnpackInfo()
@@ -317,7 +319,7 @@ int UnpackInfo::do_parse(ColumnParseCtx &parse_ctx)
   if (!parse_ctx.is_valid()) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(parse_ctx));
-  } else if ((UNPACK_INFO == schema_.type_) || !schema_.is_valid()) {
+  } else if ((UNPACK_INFO == schema_.get_type()) || !schema_.is_valid()) {
     SE_LOG(WARN, "unexpected column schema", K(ret), K_(schema));
   } else {
     flag_ = (uint8_t)(parse_ctx.buf_ + parse_ctx.pos_)[0];
@@ -409,7 +411,7 @@ int DataColumn::do_parse(ColumnParseCtx &parse_ctx)
   if (!parse_ctx.is_valid()) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(parse_ctx));
-  } else if (!is_data_column(schema_.type_) || !schema_.is_valid()) {
+  } else if (!is_data_column(schema_.get_type()) || !schema_.is_valid()) {
     SE_LOG(WARN, "unexpected column schema", K(ret), K_(schema));
   } else if (schema_.is_primary()) {
     //assert(0 == parse_ctx.pos_);
@@ -427,7 +429,7 @@ int DataColumn::do_parse(ColumnParseCtx &parse_ctx)
 #endif
   } else {
     if ((0 != parse_ctx.rec_hdr_->null_bitmap_size_)
-        && parse_ctx.null_bitmap_->check_null(schema_.null_offset_, schema_.null_mask_)) {
+        && parse_ctx.null_bitmap_->check_null(schema_.get_null_offset(), schema_.get_null_mask())) {
       is_null_ = true;
       data_ = nullptr;
       data_size_ = 0;
@@ -444,7 +446,7 @@ int DataColumn::do_parse(ColumnParseCtx &parse_ctx)
   }
 
   if (SUCCED(ret)) {
-    if (PRIMARY_COLUMN != schema_.type_) {
+    if (PRIMARY_COLUMN != schema_.get_type()) {
       ++parse_ctx.parsed_data_col_cnt_;
     }
   }
@@ -458,8 +460,8 @@ int DataColumn::parse_column_data_size(char *buf,
 {
   int ret = common::Status::kOk;
   if (schema_.is_fixed()) {
-    data_size_ = schema_.data_size_;
-  } else if (FAILED(parse_bytes(schema_.data_size_bytes_,
+    data_size_ = schema_.get_data_size();
+  } else if (FAILED(parse_bytes(schema_.get_data_size_bytes(),
                                 buf,
                                 buf_size,
                                 pos,
@@ -537,7 +539,7 @@ int ColumnFactory::alloc_column(const ColumnSchema &column_schema, Column *&colu
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(column_schema));
   } else {
-    switch(column_schema.type_) {
+    switch(column_schema.get_type()) {
       case RECORD_HEADER:
         if (IS_NULL(column = MOD_NEW_OBJECT(ModId::kColumn,
                                             RecordHeader,

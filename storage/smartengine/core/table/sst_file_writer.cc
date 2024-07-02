@@ -139,11 +139,8 @@ Status SstFileWriter::Open(const std::string& file_path) {
       r->ioptions.table_factory);
   ExtentWriterArgs writer_args(cf_id,
                                cfd->get_table_space_id(),
-                               tmp_factory->table_options().block_size,
                                tmp_factory->table_options().block_restart_interval,
-                               r->ioptions.env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE
-                                                                      : storage::FILE_EXTENT_SPACE,
-                               cfd->use_column_format(),
+                               r->ioptions.env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
                                cfd->get_table_schema(),
                                &(r->internal_comparator),
                                output_layer_position,

@@ -388,7 +388,7 @@ ColumnFamilyData::~ColumnFamilyData()
   destroy();
 }
 
-table::TableSchema ColumnFamilyData::get_table_schema() const
+schema::TableSchema ColumnFamilyData::get_table_schema() const
 {
   std::lock_guard<std::mutex> guard(subtable_structure_mutex_);
   return sub_table_meta_.table_schema_;
@@ -839,24 +839,12 @@ int ColumnFamilyData::apply_change_info(storage::ChangeInfo &change_info,
   return ret;
 }
 
-int ColumnFamilyData::modify_table_schema(const table::TableSchema &table_schema)
+int ColumnFamilyData::modify_table_schema(const schema::TableSchema &table_schema)
 {
-  int ret = Status::kOk;
-
   std::lock_guard<std::mutex> guard(subtable_structure_mutex_);
   sub_table_meta_.table_schema_ = table_schema;
-#ifndef NDEBUG
-  SE_LOG(INFO, "success to modify table schema in subtable", K(table_schema), K_(sub_table_meta_.table_schema));
-#endif
 
-  return ret;
-}
-
-bool ColumnFamilyData::use_column_format() const
-{
-  std::lock_guard<std::mutex> guard(subtable_structure_mutex_);
-  return (sub_table_meta_.index_id_ == sub_table_meta_.table_schema_.primary_index_id_)
-         && (sub_table_meta_.table_schema_.use_column_format());
+  return Status::kOk;
 }
 
 int ColumnFamilyData::recover_extent_space()

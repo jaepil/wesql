@@ -440,6 +440,9 @@ set(SOURCES
         options/options.cc
         options/options_helper.cc
         port/stack_trace.cc
+        schema/column_schema.cc
+        schema/engine_attribute.cc
+        schema/table_schema.cc
         storage/change_info.cc
         storage/data_file.cc
         storage/extent_meta_manager.cc
@@ -476,7 +479,6 @@ set(SOURCES
         table/row_block.cc
         table/row_block_iterator.cc
         table/row_block_writer.cc
-        table/schema_struct.cc
         table/sst_file_writer.cc
         table/table_properties.cc
         table/two_level_iterator.cc
@@ -744,6 +746,9 @@ set(TESTS
         unittest/memtable/art_test.cc
         unittest/memtable/inlineskiplist_test.cc
         unittest/memtable/skiplist_test.cc
+        unittest/schema/column_schema_test.cc
+        unittest/schema/engine_attribute_test.cc
+        unittest/schema/table_schema_test.cc
         unittest/table/parallel_read_test.cc
         #unittest/transactions/optimistic_transaction_test.cc
         #unittest/transactions/transaction_test.cc

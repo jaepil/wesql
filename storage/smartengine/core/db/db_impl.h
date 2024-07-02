@@ -203,7 +203,7 @@ class DBImpl : public DB {
 
   virtual common::Status DropColumnFamily(ColumnFamilyHandle *column_family) override;
 
-  virtual int modify_table_schema(ColumnFamilyHandle *index_handle, const table::TableSchema &table_schema) override;  
+  virtual int modify_table_schema(ColumnFamilyHandle *subtable_handle, const schema::TableSchema &table_schema) override;  
 
   virtual Iterator* NewIterator(const common::ReadOptions& options,
                                 ColumnFamilyHandle* column_family) override;

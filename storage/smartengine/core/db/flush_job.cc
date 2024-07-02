@@ -163,11 +163,8 @@ int BaseFlush::flush_data(const LayerPosition &output_layer_position,
       cfd_->ioptions()->table_factory);
   ExtentWriterArgs writer_args(cfd_->GetID(),
                                cfd_->get_table_space_id(),
-                               tmp_factory->table_options().block_size,
                                tmp_factory->table_options().block_restart_interval,
-                               cfd_->ioptions()->env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE
-                                                                            : storage::FILE_EXTENT_SPACE,
-                               cfd_->use_column_format(),
+                               cfd_->ioptions()->env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
                                cfd_->get_table_schema(),
                                &cfd_->internal_comparator(),
                                output_layer_position,
@@ -781,7 +778,7 @@ int FlushJob::build_mt_ext_compaction(
       }
     }
   }
-  storage::ColumnFamilyDesc cf_desc(cfd_->GetID(), cfd_->GetName(), cfd_->use_column_format(), cfd_->get_table_schema());
+  storage::ColumnFamilyDesc cf_desc(cfd_->GetID(), cfd_->GetName(), cfd_->get_table_schema());
   compaction_ = ALLOC_OBJECT(MtExtCompaction, arena_, compaction_context_, cf_desc, arena_);
   MemTable *last_mem = mems_.back();
   if (IS_NULL(compaction_)) {

@@ -92,7 +92,7 @@ ExtentMeta::ExtentMeta()
 {
 }
 
-ExtentMeta::ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info, const table::TableSchema &table_schema)
+ExtentMeta::ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info, const schema::TableSchema &table_schema)
     : attr_(attr),
       smallest_key_(extent_info.smallest_key_),
       largest_key_(extent_info.largest_key_),

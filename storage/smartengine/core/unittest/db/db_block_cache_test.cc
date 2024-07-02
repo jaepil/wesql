@@ -166,7 +166,7 @@ TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache)
 {
   set_trace_count();
   ReadOptions read_options;
-  auto table_options = GetTableOptions();
+  BlockBasedTableOptions table_options;
   auto options = GetOptions(table_options);
   InitTable(options);
   table_options.cache_index_and_filter_blocks = false;
@@ -176,6 +176,10 @@ TEST_F(DBBlockCacheTest, TestWithoutCompressedBlockCache)
       new table::ExtentBasedTableFactory(table_options));
   Reopen(options);
 
+  schema::TableSchema table_schema;
+  table_schema.set_index_id(0);
+  table_schema.get_engine_attribute().set_block_size(1);
+  ASSERT_OK(modify_table_schema(table_schema));
   std::vector<Iterator *> iterators(kNumBlocks - 1);
   Iterator* iter = nullptr;
   for (int64_t i = 0; i < kNumBlocks; i++) {

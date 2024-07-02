@@ -1499,30 +1499,25 @@ Status DBImpl::DropColumnFamily(ColumnFamilyHandle *column_family)
   return ret;
 }
 
-int DBImpl::modify_table_schema(ColumnFamilyHandle *index_handle, const table::TableSchema &table_schema)
+int DBImpl::modify_table_schema(ColumnFamilyHandle *subtable_handle, const schema::TableSchema &table_schema)
 {
   int ret = Status::kOk;
   int64_t dummy_commit_lsn = 0;
-  ColumnFamilyData *index = nullptr;
+  ColumnFamilyData *subtable = nullptr;
 
-  if (IS_NULL(index_handle) || !table_schema.is_valid()) {
+  /**The subtable_handle has acquired a refrence of subtable, can use it safely.*/
+  // TODO (Zhao Dongsheng) : Is it unnecessary to lock here?
+  InstrumentedMutexLock guard(&mutex_);
+  if (IS_NULL(subtable_handle) || UNLIKELY(!table_schema.is_valid())) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(index_handle), K(table_schema));
-  } else if (IS_NULL(index = reinterpret_cast<ColumnFamilyHandleImpl *>(index_handle)->cfd())) {
+    SE_LOG(WARN, "invalid argument", K(ret), KP(subtable_handle), K(table_schema));
+  } else if (IS_NULL(subtable = reinterpret_cast<ColumnFamilyHandleImpl *>(subtable_handle)->cfd())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "subtable must not been nullptr", K(ret));
-  } else if (FAILED(StorageLogger::get_instance().begin(storage::SeEvent::MODIFY_INDEX))) {
-    SE_LOG(WARN, "fail to begin trans", K(ret));
+  } else if (FAILED(versions_->modify_table_schema(subtable, table_schema))) {
+    SE_LOG(WARN, "fail to modify table schema", K(ret), "index_id", subtable->GetID(), K(table_schema));
   } else {
-    InstrumentedMutexLock guard(&mutex_);
-    /**The subtable_handle has acquired a refrence of subtable, can use it safely.*/
-    if (FAILED(versions_->modify_table_schema(index, table_schema))) {
-      SE_LOG(WARN, "fail to modify table schema", K(ret), "index_id", index->GetID(), K(table_schema));
-    } else if (FAILED(StorageLogger::get_instance().commit(dummy_commit_lsn))) {
-      SE_LOG(WARN, "fail to commit trans", K(ret));
-    } else {
-      SE_LOG(INFO, "success to modify table schema", "index_id", index->GetID(), K(table_schema));
-    }
+    // succeed
   }
 
   return ret;

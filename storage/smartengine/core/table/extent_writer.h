@@ -16,11 +16,11 @@
 
 #pragma once
 
+#include "schema/table_schema.h"
 #include "table/bloom_filter.h"
 #include "table/extent_struct.h"
 #include "table/index_block_writer.h"
 #include "table/row_block_writer.h"
-#include "table/schema_struct.h"
 #include "util/compress/compressor_helper.h"
 #include "util/data_buffer.h"
 
@@ -47,11 +47,9 @@ struct ExtentWriterArgs
 public:
   int64_t index_id_;
   int64_t table_space_id_;
-  int64_t block_size_;
   int64_t block_restart_interval_;
   int32_t extent_space_type_;
-  bool use_column_format_;
-  TableSchema table_schema_;
+  schema::TableSchema table_schema_;
   const db::InternalKeyComparator *internal_key_comparator_;
   storage::LayerPosition output_position_;
   cache::Cache *block_cache_;
@@ -62,11 +60,9 @@ public:
   ExtentWriterArgs();
   ExtentWriterArgs(const int64_t index_id,
                    const int64_t table_space_id,
-                   const int64_t block_size,
                    const int64_t block_restart_interval,
                    const int32_t extent_space_type_,
-                   const bool use_column_format,
-                   const TableSchema &table_schema,
+                   const schema::TableSchema &table_schema,
                    const db::InternalKeyComparator *internal_key_comparator,
                    const storage::LayerPosition &output_position,
                    cache::Cache *block_cache,
@@ -145,10 +141,8 @@ private:
   bool is_inited_;
   int64_t index_id_;
   int64_t table_space_id_;
-  int64_t block_size_;
   int32_t extent_space_type_;
-  bool use_column_format_;
-  TableSchema table_schema_;
+  schema::TableSchema table_schema_;
   common::CompressionType compress_type_;
   storage::LayerPosition layer_position_;
   const db::InternalKeyComparator *internal_key_comparator_;

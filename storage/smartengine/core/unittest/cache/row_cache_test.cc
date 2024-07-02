@@ -174,6 +174,6 @@ TEST_F(RowCacheTest, lru_cache_test) {
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   std::string log_path = smartengine::test::TmpDir() + "/row_cache_test.log";
-  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::WARN_LEVEL);
+  smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::DEBUG_LEVEL);
   return RUN_ALL_TESTS();
 }

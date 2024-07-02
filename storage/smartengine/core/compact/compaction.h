@@ -115,22 +115,18 @@ struct CompactionContext
 struct ColumnFamilyDesc {
   int32_t column_family_id_;
   std::string column_family_name_;
-  bool use_column_format_;
-  table::TableSchema table_schema_;
+  schema::TableSchema table_schema_;
 
   ColumnFamilyDesc() : column_family_id_(0),
                        column_family_name_("default"),
-                       use_column_format_(false),
                        table_schema_()
   {}
 
   ColumnFamilyDesc(int32_t index_id,
                    const std::string &index_name,
-                   const bool use_column_format,
-                   const table::TableSchema &table_schema)
+                   const schema::TableSchema &table_schema)
       : column_family_id_(index_id),
         column_family_name_(index_name),
-        use_column_format_(use_column_format),
         table_schema_(table_schema)
   {}
 };

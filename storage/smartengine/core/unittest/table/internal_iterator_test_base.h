@@ -343,14 +343,12 @@ void InternalIteratorTestBase::open_extent_writer()
   /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
   ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
       context_->icf_options_.table_factory);
+  schema::TableSchema table_schema;
   ExtentWriterArgs args(cf_desc_.column_family_id_,
                         mini_tables_.table_space_id_,
-                        tmp_factory->table_options().block_size,
                         tmp_factory->table_options().block_restart_interval,
-                        context_->icf_options_.env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE
-                                                                          : storage::FILE_EXTENT_SPACE,
-                        false /*use_column_format*/,
-                        table::TableSchema(),
+                        context_->icf_options_.env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
+                        table_schema,
                         &internal_comparator_,
                         output_layer_position,
                         tmp_factory->table_options().block_cache.get(),

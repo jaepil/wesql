@@ -142,11 +142,8 @@ int GeneralCompaction::open_extent() {
         context_.cf_options_->table_factory);
     ExtentWriterArgs writer_args(cf_desc_.column_family_id_,
                                  context_.table_space_id_,
-                                 tmp_factory->table_options().block_size,
                                  tmp_factory->table_options().block_restart_interval,
-                                 context_.cf_options_->env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE
-                                                                                  : storage::FILE_EXTENT_SPACE,
-                                 cf_desc_.use_column_format_,
+                                 context_.cf_options_->env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
                                  cf_desc_.table_schema_,
                                  context_.internal_comparator_,
                                  output_layer_position,

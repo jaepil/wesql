@@ -23,6 +23,7 @@
 #include "memory/base_malloc.h"
 #include "memory/mod_info.h"
 #include "memtable/memtable.h"
+#include "schema/table_schema.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_log_entry.h"
 #include "storage/storage_logger.h"
@@ -30,12 +31,13 @@
 #include "util/sync_point.h"
 
 namespace smartengine {
-using namespace storage;
 using namespace cache;
-using namespace table;
-using namespace util;
 using namespace common;
 using namespace monitor;
+using namespace schema;
+using namespace storage;
+using namespace table;
+using namespace util;
 
 namespace {
 enum ObjType {
@@ -429,14 +431,15 @@ int VersionSet::modify_table_schema(ColumnFamilyData *sub_table, const TableSche
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(sub_table), K(table_schema));
   } else {
-    ModifyTableSchemaLogEntry log_entry(sub_table->GetID(), table_schema);
+    se_assert(sub_table->GetID() == table_schema.get_index_id());
+    ModifyTableSchemaLogEntry log_entry(table_schema);
     
     if (FAILED(StorageLogger::get_instance().write_log(REDO_LOG_MODIFY_TABLE_SCHEMA, log_entry))) {
       SE_LOG(WARN, "fail to write modify table schema log", K(ret), K(log_entry));
     } else if (FAILED(sub_table->modify_table_schema(table_schema))) {
-      SE_LOG(WARN, "fail to modify table schema", K(ret), "index_id", sub_table->GetID(), K(table_schema));
+      SE_LOG(WARN, "fail to modify table schema", K(ret), K(table_schema));
     } else {
-      SE_LOG(INFO, "success to modify table schema", "index_id", sub_table->GetID(), K(table_schema));
+      SE_LOG(INFO, "success to modify table schema", K(table_schema));
     }
   }
 
@@ -1328,7 +1331,7 @@ int VersionSet::replay_modify_table_schema_log(const char *log_data, int64_t log
     SE_LOG(WARN, "invalid argument", K(ret), KP(log_data), K(log_length));
   } else if (FAILED(log_entry.deserialize(log_data, log_length, pos))) {
     SE_LOG(WARN, "fail to deserialize table schema log entry", K(ret));
-  } else if (IS_NULL(subtable = column_family_set_->GetColumnFamily(log_entry.index_id_))) {
+  } else if (IS_NULL(subtable = column_family_set_->GetColumnFamily(log_entry.table_schema_.get_index_id()))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "subtable must not be nullptr", K(ret), K(log_entry));
   } else if (FAILED(subtable->modify_table_schema(log_entry.table_schema_))) {

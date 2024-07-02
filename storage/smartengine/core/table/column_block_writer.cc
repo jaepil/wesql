@@ -6,6 +6,7 @@ namespace smartengine
 {
 using namespace common;
 using namespace memory;
+using namespace schema;
 
 namespace table
 {
@@ -51,9 +52,9 @@ int ColumnBlockWriter::init(const TableSchema &table_schema, const CompressionTy
   } else if (UNLIKELY(!table_schema.is_valid())) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(table_schema));
-  } else if (FAILED(init_columns(table_schema.column_schemas_))) {
+  } else if (FAILED(init_columns(table_schema.get_column_schemas()))) {
     SE_LOG(WARN, "fail to init columns", K(ret));
-  } else if (FAILED(init_column_unit_writers(table_schema.column_schemas_, compress_type))) {
+  } else if (FAILED(init_column_unit_writers(table_schema.get_column_schemas(), compress_type))) {
     SE_LOG(WARN, "fail to init column unit writers", K(ret));
   } else {
     table_schema_ = table_schema;
@@ -61,7 +62,7 @@ int ColumnBlockWriter::init(const TableSchema &table_schema, const CompressionTy
     is_inited_ = true;
 
 #ifndef NDEBUG
-    SE_LOG(INFO, "success to init ColumnBlockWriter", "column_size", table_schema.column_schemas_.size());
+    SE_LOG(INFO, "success to init ColumnBlockWriter", "column_size", table_schema.get_column_schemas().size());
 #endif
   }
 
@@ -247,7 +248,7 @@ int ColumnBlockWriter::convert_to_columns(const Slice &key, const Slice &value, 
   columns.clear();
   parse_ctx_.reset();
   /**TODO: Zhao Dongsheng, the undecoded_col_cnt_ name should change?*/
-  parse_ctx_.undecoded_col_cnt_ = table_schema_.packed_column_count_;
+  parse_ctx_.undecoded_col_cnt_ = table_schema_.get_packed_column_count();
   parse_ctx_.setup_buf(const_cast<char *>(value.data()), value.size(), pos);
 
   if (UNLIKELY(key.empty())) {

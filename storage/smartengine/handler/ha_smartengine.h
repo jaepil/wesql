@@ -47,7 +47,6 @@
 #include "./se_utils.h"
 #include "plugin/se_status_vars.h"
 #include "util/se_buff.h"
-#include "table/schema_struct.h"
 
 namespace smartengine
 {
@@ -531,7 +530,7 @@ private:
   */
   void update_stats(void);
 
-  void get_instant_ddl_info_if_needed(const TABLE *curr_table, const dd::Table *curr_dd_table, InstantDDLInfo &instant_ddl_info);
+  int get_instant_ddl_info_if_needed(const TABLE *curr_table, const dd::Table *curr_dd_table, InstantDDLInfo &instant_ddl_info);
 
   bool init_with_fields() ;
  
@@ -1007,15 +1006,17 @@ private:
   int build_table_schema(const TABLE *table,
                          const dd::Table *dd_table,
                          const SeTableDef *table_def,
-                         table::TableSchema &table_schema);
+                         LEX_CSTRING engine_attribute_str,
+                         schema::TableSchema &table_schema);
 
   int build_column_schemas(const TABLE *table,
                            const std::vector<READ_FIELD> &field_decoders,
-                           std::vector<table::ColumnSchema> &col_schemas);
+                           schema::ColumnSchemaArray &col_schemas);
 
   int pushdown_table_schema(const TABLE *table,
                             const dd::Table *dd_table,
-                            const SeTableDef *table_def);
+                            const SeTableDef *table_def,
+                            LEX_CSTRING engine_attribute_str);
 
 private:
   typedef struct System_status_var SSV; 

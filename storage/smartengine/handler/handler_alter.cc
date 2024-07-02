@@ -56,7 +56,7 @@
 #include "transactions/transaction_db_impl.h"
 #include "db/db_impl.h"
 #include "write_batch/write_batch_with_index.h"
-#include "table/schema_struct.h"
+#include "schema/record_format.h"
 
 namespace smartengine
 {
@@ -132,8 +132,9 @@ static  bool se_need_rebuild(const Alter_inplace_info *ha_alter_info);
 
 /** Get instant ddl information from Data Dictionary
 @param[in]	dd_table	dd table  */
-void ha_smartengine::get_instant_ddl_info_if_needed(const TABLE *curr_table, const dd::Table *curr_dd_table, InstantDDLInfo &instant_ddl_info)
+int ha_smartengine::get_instant_ddl_info_if_needed(const TABLE *curr_table, const dd::Table *curr_dd_table, InstantDDLInfo &instant_ddl_info)
 {
+  int ret = HA_EXIT_SUCCESS;
   instant_ddl_info.clearup();
 
   for (const auto col : curr_dd_table->columns()) {
@@ -171,6 +172,8 @@ void ha_smartengine::get_instant_ddl_info_if_needed(const TABLE *curr_table, con
   if (curr_dd_table->se_private_data().exists(dd_table_key_strings[DD_TABLE_NULL_BYTES])) {
     curr_dd_table->se_private_data().get(dd_table_key_strings[DD_TABLE_NULL_BYTES], &instant_ddl_info.m_null_bytes);
   }
+
+  return ret;
 }
 
 /** Get the error message format string.
@@ -234,12 +237,13 @@ my_core::enum_alter_inplace_result ha_smartengine::check_if_supported_inplace_al
     DBUG_RETURN(HA_ALTER_INPLACE_NOT_SUPPORTED);
   }
 
-  if (ha_alter_info->handler_flags &
-      my_core::Alter_inplace_info::CHANGE_CREATE_OPTION) {
-    // Only support used_fields with HA_CREATE_USED_COMMENT flag
-    if (ha_alter_info->create_info->used_fields & ~(HA_CREATE_USED_COMMENT)) {
+  if (ha_alter_info->handler_flags & my_core::Alter_inplace_info::CHANGE_CREATE_OPTION) {
+    // Only support used_fields with HA_CREATE_USED_COMMENT and HA_CREATE_USED_ENGINE_ATTRIBUTE flag.
+    // The DDL like "ALTER TABLE tt COMMENT "comment1 on tt", KEY_BLOCK_SIZE=1000, ALGORITHM=INPLACE;"
+    // is not supported.
+    if (ha_alter_info->create_info->used_fields & (~(HA_CREATE_USED_COMMENT | HA_CREATE_USED_ENGINE_ATTRIBUTE))) {
       ha_alter_info->unsupported_reason = "SEDDL: only supports to change "
-                                          "comment of table";
+                                          "comment or engine attribute of table";
       DBUG_RETURN(HA_ALTER_INPLACE_NOT_SUPPORTED);
     }
   }
@@ -397,6 +401,7 @@ static bool se_need_rebuild(const Alter_inplace_info *ha_alter_info)
   Alter_inplace_info::HA_ALTER_FLAGS alter_inplace_flags =
       ha_alter_info->handler_flags & ~(SE_INPLACE_IGNORE);
 
+  // TODO (Zhao Dongsheng) : change engine attribute need rebuild?
   if (alter_inplace_flags == Alter_inplace_info::CHANGE_CREATE_OPTION &&
       !(ha_alter_info->create_info->used_fields &
         (HA_CREATE_USED_ROW_FORMAT | HA_CREATE_USED_KEY_BLOCK_SIZE |
@@ -1144,7 +1149,7 @@ int ha_smartengine::convert_new_record_from_old_record(
   int ret = HA_EXIT_SUCCESS;
 
   new_storage_record.length(0);
-  new_storage_record.fill(table::RecordFormat::RECORD_HEADER_SIZE, 0);
+  new_storage_record.fill(schema::RecordFormat::RECORD_HEADER_SIZE, 0);
 
   String null_bytes_str;
   null_bytes_str.length(0);
@@ -1190,7 +1195,7 @@ int ha_smartengine::convert_new_record_from_old_record(
 
     if (encoder_arr[i].maybe_null()) {
       char *const data =
-          (char *)new_storage_record.ptr() + table::RecordFormat::RECORD_HEADER_SIZE;
+          (char *)new_storage_record.ptr() + schema::RecordFormat::RECORD_HEADER_SIZE;
       if (field->is_null()) {
         data[encoder_arr[i].m_null_offset] |= encoder_arr[i].m_null_mask;
         continue;
@@ -2926,7 +2931,7 @@ int ha_smartengine::dd_commit_instant_table(const TABLE *old_table,
 
     /**after instant add column, the primary key has not changed, so it is safe to
     use the m_tbl_def which  is old version.*/
-    if (FAILED(pushdown_table_schema(new_table, new_dd_table, m_tbl_def.get()))) {
+    if (FAILED(pushdown_table_schema(new_table, new_dd_table, m_tbl_def.get(), new_dd_table->engine_attribute()))) {
       XHANDLER_LOG(WARN, "fail to pushdown table schema", K(ret));
     } else {
       XHANDLER_LOG(INFO, "success to push down table schema");
@@ -3308,7 +3313,8 @@ int ha_smartengine::commit_inplace_alter_table_common(
   //TODO: Zhao Dongsheng the whole function should been refined...
   if (common::Status::kOk != pushdown_table_schema(altered_table,
                                                    new_dd_table,
-                                                   ctx0->m_new_tdef.get())) {
+                                                   ctx0->m_new_tdef.get(),
+                                                   new_dd_table->engine_attribute())) {
     XHANDLER_LOG(WARN, "fail to push down table schema");
     DBUG_RETURN(HA_EXIT_FAILURE);
   }

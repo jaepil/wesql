@@ -10,6 +10,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/db_test_util.h"
+#include "storage/storage_logger.h"
 #include "table/table.h"
 
 namespace smartengine {
@@ -66,7 +67,7 @@ DBTestBase::DBTestBase(const std::string path, bool use_objstore)
   options.env = env_;
   if (env_->IsObjectStoreSupported() && use_objstore) {
     std::string_view endpoint = "";
-    EXPECT_EQ(common::Status::kOk, env_->InitObjectStore("local", "test", &endpoint, false, "").code());
+    EXPECT_EQ(common::Status::kOk, env_->InitObjectStore("local", "test", &endpoint, false, "", "").code());
   }
   auto delete_options = options;
   delete_options.wal_dir = alternative_wal_dir_;
@@ -282,7 +283,6 @@ void DBTestBase::CreateColumnFamilies(const std::vector<std::string>& cfs,
     ColumnFamilyHandle *handle = nullptr;
     ColumnFamilyDescriptor cfd(cf, cf_opts);
     ASSERT_TRUE(0 == dbfull()->TEST_create_subtable(cfd, cfi, handle));
-    ASSERT_TRUE(0 == dbfull()->TEST_modify_table_schema(handle));
     ASSERT_TRUE(nullptr != handle);
     ASSERT_TRUE(cfi == handle->GetID());
     cfh_map_.emplace(cfi, handle);
@@ -434,8 +434,6 @@ common::Status DBTestBase::open_create_default_subtable(const common::Options& o
       if (FAILED(dbfull()->TEST_create_subtable(cf, kDefaultColumnFamilyId, handle))) {
         SE_LOG(ERROR, "Failed to create sub table!", K(ret));
         MOD_DELETE_OBJECT(ColumnFamilyHandle, handle);
-      } else if (FAILED(dbfull()->TEST_modify_table_schema(handle))) {
-        SE_LOG(WARN, "fail to modify table schema", K(ret));
       } else {
         cfh_map_.emplace(kDefaultColumnFamilyId, handle);
         //dbfull()->SetDefaultColumnFamily(handle);
@@ -552,6 +550,50 @@ std::string DBTestBase::Get(int cf, const std::string& k,
     result = s.ToString();
   }
   return result;
+}
+
+int DBTestBase::modify_table_schema(const schema::TableSchema &table_schema)
+{
+  int ret = Status::kOk;
+  int64_t dummy_commit_lsn = 0;
+
+  if (FAILED(storage::StorageLogger::get_instance().begin(storage::MODIFY_INDEX))) {
+    SE_LOG(WARN, "fail to start slog transaction", K(ret));
+  } else {
+    if (FAILED(db_->modify_table_schema(db_->DefaultColumnFamily(), table_schema))) {
+      SE_LOG(WARN, "fail to modify table schema", K(ret), K(table_schema));
+    } else if (FAILED(storage::StorageLogger::get_instance().commit(dummy_commit_lsn))) {
+      SE_LOG(WARN, "fail to commit slog transaction", K(ret));
+    }
+
+    if (FAILED(ret)) {
+      storage::StorageLogger::get_instance().abort();
+    }
+  }
+
+  return ret;
+}
+
+int DBTestBase::modify_table_schema(int cf, const schema::TableSchema &table_schema)
+{
+  int ret = Status::kOk;
+  int64_t dummy_commit_lsn = 0;
+
+  if (FAILED(storage::StorageLogger::get_instance().begin(storage::MODIFY_INDEX))) {
+    SE_LOG(WARN, "fail to start slog transaction", K(ret));
+  } else {
+    if (FAILED(db_->modify_table_schema(get_column_family_handle(cf), table_schema))) {
+      SE_LOG(WARN, "fail to modify table schema", K(ret), K(table_schema));
+    } else if (FAILED(storage::StorageLogger::get_instance().commit(dummy_commit_lsn))) {
+      SE_LOG(WARN, "fail to commit slog transaction", K(ret));
+    }
+
+    if (FAILED(ret)) {
+      storage::StorageLogger::get_instance().abort();
+    }
+  }
+
+  return ret;
 }
 
 InternalIterator *DBTestBase::NewInternalIterator(Arena *arena, ColumnFamilyHandle *column_family)

@@ -38,7 +38,7 @@ int ColumnBlockIterator::init(const Slice &block, const BlockInfo &block_info, c
   } else if (IS_NULL(block.data()) || UNLIKELY(0 == block.size())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "Invalid argument", K(ret), KP(block.data()), K(block.size()));
-  } else if (FAILED(init_column_unit_readers(block, block_info.unit_infos_, table_schema.column_schemas_, block_info.row_count_))) {
+  } else if (FAILED(init_column_unit_readers(block, block_info.unit_infos_, table_schema.get_column_schemas(), block_info.row_count_))) {
     SE_LOG(WARN, "fail to init column unit readers", K(ret), K(block_info));
   } else {
     block_data_ = block.data();
@@ -87,7 +87,7 @@ int ColumnBlockIterator::get_next_row(Slice &key, Slice &value)
 
 int ColumnBlockIterator::init_column_unit_readers(const Slice &block_data,
                                                   const std::vector<ColumnUnitInfo> &unit_infos,
-                                                  const std::vector<ColumnSchema> &column_schemas,
+                                                  const ColumnSchemaArray &column_schemas,
                                                   int64_t column_count)
 {
   int ret = Status::kOk;
@@ -133,7 +133,7 @@ int ColumnBlockIterator::get_next_columns(ColumnArray &columns)
   Column *column = nullptr;
   columns.clear();
   parse_ctx_.reset();
-  parse_ctx_.undecoded_col_cnt_ = table_schema_.packed_column_count_;
+  parse_ctx_.undecoded_col_cnt_ = table_schema_.get_packed_column_count();
 
   for (uint32_t i = 0; SUCCED(ret) && i < readers_.size(); ++i) {
     if (FAILED(readers_[i]->get_next_column(parse_ctx_, column))) {

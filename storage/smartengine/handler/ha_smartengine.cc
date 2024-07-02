@@ -64,7 +64,8 @@
 #include "plugin/se_system_vars.h"
 #include "transaction/se_transaction_factory.h"
 #include "write_batch/write_batch_with_index.h"
-#include "table/schema_struct.h"
+#include "schema/record_format.h"
+#include "storage/storage_logger.h"
 
 #ifdef HAVE_ASAN
 #ifndef HAVE_purify
@@ -337,8 +338,8 @@ int ha_smartengine::create(const char *const name,
   }
   */
 
-  if (common::Status::kOk != pushdown_table_schema(table_arg, table_def, m_tbl_def.get())) {
-    XHANDLER_LOG(ERROR, "fail to push down table schema");
+  if (common::Status::kOk != pushdown_table_schema(table_arg, table_def, m_tbl_def.get(), create_info->engine_attribute)) {
+    XHANDLER_LOG(WARN, "fail to push down table schema");
     goto error;
   }
 
@@ -2394,19 +2395,19 @@ int ha_smartengine::convert_record_to_storage_format(
   m_storage_record.length(0);
 
   // reserve RECORD_HEADER_SIZE bytes for future use
-  m_storage_record.fill(table::RecordFormat::RECORD_HEADER_SIZE, 0);
+  m_storage_record.fill(schema::RecordFormat::RECORD_HEADER_SIZE, 0);
   int field_number_len = 0;
   // store instant ddl flag and field numbers if necessary
   if (m_instant_ddl_info.have_instantly_added_columns()) {
     char *const begin_point = (char *)m_storage_record.ptr();
-    begin_point[0] |= table::RecordFormat::RECORD_INSTANT_DDL_FLAG;
+    begin_point[0] |= schema::RecordFormat::RECORD_INSTANT_DDL_FLAG;
     char field_number_str[2];
     char nullable_bytes_str[2];
     int2store(field_number_str, table->s->fields);
     int2store(nullable_bytes_str, m_null_bytes_in_rec);
-    m_storage_record.append(field_number_str, table::RecordFormat::RECORD_FIELD_NUMBER_SIZE);
-    m_storage_record.append(nullable_bytes_str, table::RecordFormat::RECORD_NULL_BITMAP_SIZE_BYTES);
-    field_number_len = table::RecordFormat::RECORD_FIELD_NUMBER_SIZE + table::RecordFormat::RECORD_NULL_BITMAP_SIZE_BYTES;
+    m_storage_record.append(field_number_str, schema::RecordFormat::RECORD_FIELD_NUMBER_SIZE);
+    m_storage_record.append(nullable_bytes_str, schema::RecordFormat::RECORD_NULL_BITMAP_SIZE_BYTES);
+    field_number_len = schema::RecordFormat::RECORD_FIELD_NUMBER_SIZE + schema::RecordFormat::RECORD_NULL_BITMAP_SIZE_BYTES;
   }
 
   /* All NULL bits are initially 0 */
@@ -2432,7 +2433,7 @@ int ha_smartengine::convert_record_to_storage_format(
     Field *const field = table->field[i];
     if (m_encoder_arr[i].maybe_null()) {
       char *const data = (char *)m_storage_record.ptr() +
-                         table::RecordFormat::RECORD_HEADER_SIZE +
+                         schema::RecordFormat::RECORD_HEADER_SIZE +
                          field_number_len; /*0 or RECORD_FIELD_NUMBER_SIZE*/
       if (field->is_null()) {
         data[m_encoder_arr[i].m_null_offset] |= m_encoder_arr[i].m_null_mask;
@@ -3611,85 +3612,86 @@ bool ha_smartengine::use_read_free_rpl()
 int ha_smartengine::build_table_schema(const TABLE *table,
                                        const dd::Table *dd_table,
                                        const SeTableDef *table_def,
-                                       table::TableSchema &table_schema)
+                                       LEX_CSTRING engine_attribute_str,
+                                       schema::TableSchema &table_schema)
 {
   int ret = common::Status::kOk;
   int tmp_ret = HA_EXIT_SUCCESS;
   std::shared_ptr<SeKeyDef> primary_index;
   uint32_t null_bitmap_size = 0;
+  uint32_t packed_column_count = 0;
   bool has_unpack_info = false;
   SeFieldEncoder *field_encoders = nullptr;
   std::vector<READ_FIELD> field_decoders;
   InstantDDLInfo instant_ddl_info;
-  table::ColumnSchema column_schema;
+  schema::ColumnSchema column_schema;
   
   if (IS_NULL(table) || IS_NULL(dd_table) || IS_NULL(table_def)) {
     ret = common::Status::kInvalidArgument;
-    XHANDLER_LOG(WARN, "invalid argument", K(ret), KP(table), KP(dd_table), KP(table_def));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(table), KP(dd_table), KP(table_def));
+  } else if (HA_EXIT_SUCCESS != (tmp_ret = get_instant_ddl_info_if_needed(table, dd_table, instant_ddl_info))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "fail to get instant ddl info", K(ret));
   } else if (IS_NULL((primary_index = table_def->m_key_descr_arr[pk_index(table, table_def)]).get())) {
     ret = common::Status::kErrorUnexpected;
-    XHANDLER_LOG(WARN, "primary index must not been nullptr", K(ret),
+    SE_LOG(WARN, "primary index must not been nullptr", K(ret),
         "primary key index", pk_index(table, table_def));
+  } else if (HA_EXIT_SUCCESS != (tmp_ret = setup_field_converters(table,
+                                                                  primary_index,
+                                                                  field_encoders,
+                                                                  packed_column_count,
+                                                                  null_bitmap_size,
+                                                                  has_unpack_info))) {
+    ret = common::Status::kErrorUnexpected;
+    SE_LOG(WARN, "fail to setup field converters", K(ret));
+  } else if (HA_EXIT_SUCCESS != (tmp_ret = setup_read_decoders(table,
+                                                               field_encoders,
+                                                               instant_ddl_info,
+                                                               true /**force_decode_all_fields*/,
+                                                               field_decoders))) {
+    ret = common::Status::kErrorUnexpected;
+    SE_LOG(WARN, "fail to setup field decoders", K(ret));
+  } else if (FAILED(table_schema.get_engine_attribute().parse(std::string(engine_attribute_str.str, engine_attribute_str.length)))) {
+    SE_LOG(WARN, "fail to parse engine attribute", K(ret));
   } else {
-    get_instant_ddl_info_if_needed(table, dd_table, instant_ddl_info);
-    if (HA_EXIT_SUCCESS != (tmp_ret = setup_field_converters(table,
-                                                             primary_index,
-                                                             field_encoders,
-                                                             table_schema.packed_column_count_,
-                                                             null_bitmap_size,
-                                                             has_unpack_info))) {
-      ret = common::Status::kErrorUnexpected;
-      XHANDLER_LOG(WARN, "fail to setup field converters", K(ret));
-    } else if (HA_EXIT_SUCCESS != (tmp_ret = setup_read_decoders(table,
-                                                                 field_encoders,
-                                                                 instant_ddl_info,
-                                                                 true /**force_decode_all_fields*/,
-                                                                 field_decoders))) {
-      ret = common::Status::kErrorUnexpected;
-      XHANDLER_LOG(WARN, "fail to setup field decoders", K(ret));
-    } else {
-      /**primary key column*/
-      //TODO:Zhao Dongsheng, we think that primary column is unfixed now,
-      //and used 4 Bytes space to store data size
-      column_schema.type_ = table::ColumnType::PRIMARY_COLUMN;
-      column_schema.data_size_bytes_ = 4;
-      table_schema.column_schemas_.push_back(column_schema);
-
-      /**Record header column*/
-      column_schema.reset();
-      column_schema.type_ = table::ColumnType::RECORD_HEADER;
-      column_schema.column_count_ = table->s->fields;
-      column_schema.null_bitmap_size_ = null_bitmap_size;
-      if (instant_ddl_info.have_instantly_added_columns()) {
-        column_schema.set_instant();
-        column_schema.original_column_count_ = instant_ddl_info.m_instant_cols;
-        column_schema.original_null_bitmap_size_ = instant_ddl_info.m_null_bytes;
-      }
-      table_schema.column_schemas_.push_back(column_schema);
-
-      /**Null bitmap column*/
-      if (null_bitmap_size > 0) {
-        column_schema.reset();
-        column_schema.type_ = table::ColumnType::NULL_BITMAP;
-        table_schema.column_schemas_.push_back(column_schema);
-      }
-
-      /**Unpack info column*/
-      if (has_unpack_info) {
-        column_schema.reset();
-        column_schema.type_ = table::ColumnType::UNPACK_INFO;
-        table_schema.set_unpack();
-      }
+    table_schema.set_primary_index_id(primary_index->get_cf()->GetID());
+    table_schema.set_packed_column_count(packed_column_count);
       
-      /**Use column format*/
-      if (se_parse_column_format_from_comment(table->s->comment.str)) {
-        XHANDLER_LOG(INFO, "The subtable use column format", K(table_schema.primary_index_id_));
-        table_schema.set_column_format();
-      }
+    /**primary key column*/
+    //TODO:Zhao Dongsheng, we think that primary column is unfixed now,
+    //and used 4 Bytes space to store data size
+    column_schema.set_type(schema::ColumnType::PRIMARY_COLUMN);
+    column_schema.set_data_size_bytes(4);
+    table_schema.get_column_schemas().push_back(column_schema);
 
-      if (FAILED(build_column_schemas(table, field_decoders, table_schema.column_schemas_))) {
-        XHANDLER_LOG(WARN, "fail to build column schemas", K(ret));
-      }
+    /**Record header column*/
+    column_schema.reset();
+    column_schema.set_type(schema::ColumnType::RECORD_HEADER);
+    column_schema.set_column_count(table->s->fields);
+    column_schema.set_null_bitmap_size(null_bitmap_size);
+    if (instant_ddl_info.have_instantly_added_columns()) {
+      column_schema.set_instant();
+      column_schema.set_original_column_count(instant_ddl_info.m_instant_cols);
+      column_schema.set_original_null_bitmap_size(instant_ddl_info.m_null_bytes);
+    }
+    table_schema.get_column_schemas().push_back(column_schema);
+
+    /**Null bitmap column*/
+    if (null_bitmap_size > 0) {
+      column_schema.reset();
+      column_schema.set_type(schema::ColumnType::NULL_BITMAP);
+      table_schema.get_column_schemas().push_back(column_schema);
+    }
+
+    /**Unpack info column*/
+    if (has_unpack_info) {
+      column_schema.reset();
+      column_schema.set_type(schema::ColumnType::UNPACK_INFO);
+      table_schema.set_unpack();
+    }
+      
+    if (FAILED(build_column_schemas(table, field_decoders, table_schema.get_column_schemas()))) {
+      SE_LOG(WARN, "fail to build column schemas", K(ret));
     }
   }
 
@@ -3703,45 +3705,45 @@ int ha_smartengine::build_table_schema(const TABLE *table,
 
 int ha_smartengine::build_column_schemas(const TABLE *table,
                                          const std::vector<READ_FIELD> &field_decoders,
-                                         table::ColumnSchemaArray &column_schemas)
+                                         schema::ColumnSchemaArray &column_schemas)
 {
   int ret = common::Status::kOk;
   SeFieldEncoder *field_encoder = nullptr;
   Field *field = nullptr;
-  table::ColumnSchema column_schema;
+  schema::ColumnSchema column_schema;
 
   if (IS_NULL(table)) {
     ret = common::Status::kInvalidArgument;
-    XHANDLER_LOG(WARN, "invalid argument", K(ret), KP(table));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(table));
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < field_decoders.size(); ++i) {
       column_schema.reset();
       if (IS_NULL(field_encoder = field_decoders[i].m_field_enc)) {
         ret = common::Status::kErrorUnexpected;
-        XHANDLER_LOG(WARN, "field encoder must not been nullptr", K(ret), K(i));
+        SE_LOG(WARN, "field encoder must not been nullptr", K(ret), K(i));
       } else if (IS_NULL(field = table->field[field_encoder->m_field_index])) {
         ret = common::Status::kErrorUnexpected;
-        XHANDLER_LOG(WARN, "field must not been nullptr", K(ret), K(i),
+        SE_LOG(WARN, "field must not been nullptr", K(ret), K(i),
             "field_index", field_encoder->m_field_index);
       } else {
         if (field_encoder->maybe_null()) {
           column_schema.set_nullable();
-          column_schema.null_offset_ = field_encoder->m_null_offset;
-          column_schema.null_mask_ = field_encoder->m_null_mask;
+          column_schema.set_null_offset(field_encoder->m_null_offset);
+          column_schema.set_null_mask(field_encoder->m_null_mask);
         }
 
         if (MYSQL_TYPE_BLOB == field_encoder->m_field_type || MYSQL_TYPE_JSON == field_encoder->m_field_type) {
-          column_schema.type_ = table::ColumnType::BLOB_COLUMN;
+          column_schema.set_type(schema::ColumnType::BLOB_COLUMN);
           Field_blob *blob_field = reinterpret_cast<Field_blob *>(field);
-          column_schema.data_size_bytes_ = blob_field->pack_length() - portable_sizeof_char_ptr;
+          column_schema.set_data_size_bytes(blob_field->pack_length() - portable_sizeof_char_ptr);
         } else if (MYSQL_TYPE_VARCHAR == field_encoder->m_field_type) {
-          column_schema.type_ = table::ColumnType::VARCHAR_COLUMN;
+          column_schema.set_type(schema::ColumnType::VARCHAR_COLUMN);
           Field_varstring *varstr_field = reinterpret_cast<Field_varstring *>(field);
-          column_schema.data_size_bytes_ = varstr_field->get_length_bytes();
+          column_schema.set_data_size_bytes(varstr_field->get_length_bytes());
         } else {
-          column_schema.type_ = table::ColumnType::FIXED_COLUMN;
+          column_schema.set_type(schema::ColumnType::FIXED_COLUMN);
           column_schema.set_fixed();
-          column_schema.data_size_ = field_encoder->m_pack_length_in_rec;
+          column_schema.set_data_size(field_encoder->m_pack_length_in_rec);
         }
 
         column_schemas.push_back(column_schema);
@@ -3754,30 +3756,47 @@ int ha_smartengine::build_column_schemas(const TABLE *table,
 
 int ha_smartengine::pushdown_table_schema(const TABLE *table,
                                           const dd::Table *dd_table,
-                                          const SeTableDef *table_def)
+                                          const SeTableDef *table_def,
+                                          LEX_CSTRING engine_attribute_str)
 {
   int ret = common::Status::kOk;
   db::ColumnFamilyHandle *subtable_handle = nullptr;
-  table::TableSchema table_schema;
+  schema::TableSchema table_schema;
+  int64_t dummy_commit_lsn = 0;
 
   if (IS_NULL(table) || IS_NULL(dd_table) || IS_NULL(table_def)) {
     ret = common::Status::kInvalidArgument;
-    XHANDLER_LOG(WARN, "invalid argument", K(ret), KP(table), KP(dd_table), KP(table_def));
-  } else if (IS_NULL(subtable_handle = table_def->m_key_descr_arr[pk_index(table, table_def)]->get_cf())) {
-    ret = common::Status::kErrorUnexpected;
-    XHANDLER_LOG(WARN, "the subtable handle must not been nullptr", K(ret), KP(subtable_handle));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(table), KP(dd_table), KP(table_def));
+  } else if (FAILED(build_table_schema(table,
+                                       dd_table,
+                                       table_def,
+                                       engine_attribute_str,
+                                       table_schema))) {
+    SE_LOG(WARN, "fail to build table schema", K(ret));
+  } else if (FAILED(storage::StorageLogger::get_instance().begin(storage::SeEvent::MODIFY_INDEX))) {
+    SE_LOG(WARN, "fail to begin slog trans", K(ret));
   } else {
-    table_schema.primary_index_id_ = subtable_handle->GetID();
+    for (uint32_t i = 0; SUCCED(ret) && i < table_def->m_key_count; ++i) {
+      if (IS_NULL(subtable_handle = table_def->m_key_descr_arr[i]->get_cf())) {
+        ret = common::Status::kErrorUnexpected;
+        SE_LOG(WARN, "the subtable handle must not be nullptr", K(ret), K(i));
+      } else {
+        table_schema.set_index_id(subtable_handle->GetID());
+        if (FAILED(se_db->modify_table_schema(subtable_handle, table_schema))) {
+          SE_LOG(WARN, "fail to modify table schema", K(ret), K(i), K(table_schema));
+        } else {
+          SE_LOG(INFO, "success to push down table schema", "index_id", subtable_handle->GetID());
+        }
+      }
+    }
 
-    if (FAILED(build_table_schema(table,
-                                  dd_table,
-                                  table_def,
-                                  table_schema))) {
-      XHANDLER_LOG(WARN, "fail to build table schema", K(ret));
-    } else if (FAILED(se_db->modify_table_schema(subtable_handle, table_schema))) {
-      XHANDLER_LOG(WARN, "fail to modify table schema", K(ret));
+    if (SUCCED(ret)) {
+      if (FAILED(storage::StorageLogger::get_instance().commit(dummy_commit_lsn))) {
+        SE_LOG(WARN, "fail to commit slog transaction", K(ret));
+        storage::StorageLogger::get_instance().abort();
+      }
     } else {
-      XHANDLER_LOG(INFO, "success to modify table schema", K(table_schema));
+      storage::StorageLogger::get_instance().abort();
     }
   }
 

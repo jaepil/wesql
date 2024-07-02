@@ -13,16 +13,18 @@
 
 #include "db/db_impl.h"
 #include "monitoring/thread_status_updater.h"
+#include "storage/storage_logger.h"
 
-using namespace smartengine;
+
+namespace smartengine
+{
 using namespace common;
 using namespace util;
 using namespace monitor;
 using namespace table;
 using namespace storage;
-
-namespace smartengine {
-namespace db {
+namespace db
+{
 
 uint64_t DBImpl::TEST_GetLevel0TotalSize() {
   InstrumentedMutexLock l(&mutex_);
@@ -142,16 +144,23 @@ int DBImpl::TEST_create_subtable(const ColumnFamilyDescriptor &cf, int32_t tid, 
 int DBImpl::TEST_modify_table_schema(ColumnFamilyHandle *index_handle)
 {
   int ret = Status::kOk;
+  int64_t dummy_commit_lsn = 0;
+  schema::TableSchema table_schema;
+  table_schema.set_index_id(index_handle->GetID());
+  table_schema.set_primary_index_id(0);
 
-  // Fake table schema for valid check.
-  table::TableSchema table_schema;
-  table::ColumnSchema column_schema;
-  column_schema.type_ = table::ColumnType::PRIMARY_COLUMN;
-  column_schema.data_size_bytes_ = 4;
-  table_schema.column_schemas_.push_back(column_schema);
+  if (FAILED(StorageLogger::get_instance().begin(MODIFY_INDEX))) {
+    SE_LOG(WARN, "fail to begin slog trans", K(ret));
+  } else {
+    if (FAILED(modify_table_schema(index_handle, table_schema))) {
+      SE_LOG(WARN, "fail to modify table schema", K(ret), K(table_schema));
+    } else if (FAILED(StorageLogger::get_instance().commit(dummy_commit_lsn))) {
+      SE_LOG(WARN, "fail to commit slog trans", K(ret));
+    }
 
-  if (FAILED(modify_table_schema(index_handle, table_schema))) {
-    SE_LOG(WARN, "fail to modify table schema", K(ret), K(table_schema));
+    if (FAILED(ret)) {
+      StorageLogger::get_instance().abort();
+    }
   }
 
   return ret;

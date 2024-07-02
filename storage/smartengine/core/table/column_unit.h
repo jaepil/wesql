@@ -18,7 +18,6 @@
 
 #include "options/advanced_options.h"
 #include "table/column_struct.h"
-#include "table/schema_struct.h"
 #include "util/compress/compressor_helper.h"
 #include "util/data_buffer.h"
 
@@ -58,7 +57,7 @@ public:
   ColumnUnitWriter();
   ~ColumnUnitWriter();
 
-  int init(const ColumnSchema &col_schema, const common::CompressionType compress_type);
+  int init(const schema::ColumnSchema &col_schema, const common::CompressionType compress_type);
   void reuse();
   int append(const Column *column);
   int build(common::Slice &unit_data, ColumnUnitInfo &unit_info);
@@ -73,7 +72,7 @@ private:
 
 private:
   bool is_inited_;
-  ColumnSchema column_schema_;
+  schema::ColumnSchema column_schema_;
   common::CompressionType compress_type_;
   util::CompressorHelper compressor_helper_;
   int32_t column_count_;
@@ -89,7 +88,10 @@ public:
   ~ColumnUnitReader();
 
   // TODO(Zhao Dongsheng) : store ColumnSchema in ColumnUnitInfo?
-  int init(const common::Slice &unit_data, const ColumnUnitInfo &unit_info, const ColumnSchema &column_schema, int64_t column_count);
+  int init(const common::Slice &unit_data,
+           const ColumnUnitInfo &unit_info,
+           const schema::ColumnSchema &column_schema,
+           int64_t column_count);
   void destroy();
   int get_next_column(ColumnParseCtx &parse_ctx, Column *&column);
   bool reach_end() const { return column_count_ == column_cursor_; }
@@ -101,7 +103,7 @@ private:
   int64_t column_count_;
   int64_t column_cursor_;
   int64_t pos_;
-  ColumnSchema column_schema_;
+  schema::ColumnSchema column_schema_;
   Column *column_;
 };
 typedef std::vector<ColumnUnitReader *> ColumnUnitReaderArray; 
