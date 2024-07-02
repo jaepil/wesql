@@ -371,7 +371,8 @@ int ConsensusLogManager::recovery_applier_status() {
   char log_name[FN_REFLEN];
 
   // Load mts recovery end index for snapshot recovery
-  if ((consistent_snapshot_recovery || opt_cluster_recover_from_snapshot) &&
+  if (!opt_cluster_log_type_instance &&
+      (consistent_snapshot_recovery || opt_cluster_recover_from_snapshot) &&
       mts_recovery_max_consensus_index()) {
     return -1;
   }
@@ -379,7 +380,8 @@ int ConsensusLogManager::recovery_applier_status() {
   set_status(BINLOG_WORKING);
 
   // Get applier start index from consensus_applier_info
-  if (!opt_initialize) next_index = get_applier_start_index();
+  if (!opt_initialize && !opt_cluster_log_type_instance)
+    next_index = get_applier_start_index();
 
   if (!opt_initialize && !opt_cluster_log_type_instance &&
       !consensus_log_manager.get_start_without_log()) {
@@ -392,8 +394,7 @@ int ConsensusLogManager::recovery_applier_status() {
   }
 
   // Reached this, the applier start index of consensus is set
-  if (!opt_cluster_log_type_instance &&
-      gtid_init_after_consensus_setup(
+  if (gtid_init_after_consensus_setup(
           next_index, (!consensus_log_manager.get_start_without_log() &&
                        next_index > 0 && consistent_snapshot_recovery)
                           ? log_name
@@ -411,7 +412,8 @@ int ConsensusLogManager::recovery_applier_status() {
     }
   }
 
-  if (opt_cluster_recover_from_snapshot || opt_cluster_recover_from_backup) {
+  if (!opt_initialize && !opt_cluster_log_type_instance &&
+      (opt_cluster_recover_from_snapshot || opt_cluster_recover_from_backup)) {
     if (opt_cluster_archive_recovery && opt_archive_log_index_name != nullptr) {
       uint64 recover_status = consensus_info->get_recover_status();
       if (recover_status != RELAY_LOG_WORKING ||

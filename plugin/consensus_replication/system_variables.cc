@@ -756,14 +756,3 @@ SYS_VAR *consensus_replication_system_vars[] = {
     MYSQL_SYSVAR(archive_recovery_stop_datetime),
     nullptr,
 };
-
-#if 0 // def WESQL_CLUSTER
-    {"consensus_fifo_cache_used_size", (char *)&show_fifo_cache_size, SHOW_FUNC,
-     SHOW_SCOPE_GLOBAL},
-    {"first_index_in_consensus_fifo_cache",
-     (char *)&show_first_index_in_fifo_cache, SHOW_FUNC, SHOW_SCOPE_GLOBAL},
-    {"consensus_fifo_cache_log_count", (char *)&show_log_count_in_fifo_cache,
-     SHOW_FUNC, SHOW_SCOPE_GLOBAL},
-    {"consensus_easy_pool_size", (char *)&show_easy_pool_alloc_byte, SHOW_FUNC,
-     SHOW_SCOPE_GLOBAL},
-#endif

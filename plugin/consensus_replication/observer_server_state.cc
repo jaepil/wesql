@@ -104,7 +104,7 @@ int consensus_replication_after_server_shutdown(Server_state_param *) {
     /* Stop consensus state change */
     consensus_log_manager.stop_consensus_state_change_thread();
     /* Stop consensus relica */
-    end_consensus_replica();
+    if (!opt_cluster_log_type_instance) end_consensus_replica();
     /* Stop consensus service */
     rpl_consensus_shutdown();
     rpl_consensus_cleanup();

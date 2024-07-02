@@ -48,8 +48,6 @@ The following options may be given as the first argument:
  library, for example exit() from libc.so
  -a, --ansi          Use ANSI SQL syntax instead of MySQL syntax. This mode
  will also set transaction isolation level 'serializable'.
- --appliedindex-force-delay[=#] 
- force set a smaller appliedindex
  --authentication-policy=name 
  Defines policies around how user account can be
  configured with Multi Factor authentication methods
@@ -101,6 +99,15 @@ The following options may be given as the first argument:
  System. Attempt to specify a network namespace for a
  platform that doesn't support it results in error during
  socket creation.
+ --binlog-archive    Indicate if consistent snapshot archive enable.
+ (Defaults to on; use --skip-binlog-archive to disable.)
+ --binlog-archive-expire-seconds=# 
+ If non-zero, persistent binlog will be purged after
+ binlog_archive_expire_seconds seconds. If zero, only the
+ latest binlog will be retained.
+ --binlog-archive-slice-max-size=# 
+ Binary log events will be persistent archived
+ automatically when the size exceeds this value.
  --binlog-cache-size=# 
  The size of the transactional cache for updates to
  transactional engines for the binary log. If you often
@@ -147,7 +154,8 @@ The following options may be given as the first argument:
  replayed in a deterministic manner using SQL. If
  NDBCLUSTER is enabled and binlog-format is MIXED, the
  format switches to row-based and back implicitly for each
- query accessing an NDBCLUSTER table.
+ query accessing an NDBCLUSTER table. This option is
+ deprecated and will be removed in a future version.
  --binlog-group-commit-sync-delay=# 
  The number of microseconds the server waits for the
  binary log group commit sync queue to fill before
@@ -260,17 +268,9 @@ The following options may be given as the first argument:
  --caching-sha2-password-public-key-path=name 
  A fully qualified path to the public RSA key used for
  authentication.
- --ccl-max-waiting-count=# 
- max waiting count in one ccl rule or bucket
- --ccl-queue-bucket-count=# 
- How many groups when use ccl queue
- --ccl-queue-bucket-size=# 
- The max concurrency allowed when use ccl queue
- --ccl-wait-timeout=# 
- Timeout in seconds to wait when concurrency control.
  --character-set-client-handshake 
- Don't ignore client side character set value sent during
- handshake.
+ Deprecated. Don't ignore client side character set value
+ sent during handshake.
  (Defaults to on; use --skip-character-set-client-handshake to disable.)
  --character-set-filesystem=name 
  Set the filesystem character set.
@@ -285,48 +285,8 @@ The following options may be given as the first argument:
  proxy user mapping should be done according to GRANT
  PROXY privilege definition.
  -r, --chroot=name   Chroot mysqld daemon during startup.
- --consensus-replication-cluster-current-term=# 
- Consensus cluster nodes current term  information
- --consensus-replication-archive-recover 
- archive recover from the backup or snapshot
- --consensus-replication-cluster-dump-meta Consensus cluster dump meta
- --consensus-replication-cluster-force-change-meta 
- Consensus cluster force to change meta
- --consensus-replication-cluster-force-recover-index=# 
- Consensus cluster restore from leader set apply index
- point
- --consensus-replication-cluster-force-reset-meta 
- Consensus cluster force to reset meta
- --consensus-replication-cluster-force-single-mode 
- Consensus cluster force to use single mode
- --consensus-replication-cluster-id=#      cluster id
- --consensus-replication-cluster-info=name Consensus cluster nodes ip-port information
- --consensus-replication-cluster-learner-node 
- Consensus cluster learner node type
- --consensus-replication-cluster-log-type-node 
- Consensus cluster log type instance
- --consensus-replication-cluster-mts-recover-use-index 
- Consensus cluster use idex to recover mts
- (Defaults to on; use --skip-cluster-mts-recover-use-index to disable.)
- --consensus-replication-cluster-purged-gtid=name 
- Consensus cluster set the purged gtid
- --consensus-replication-cluster-recover-backup 
- recover from the backup created with xtrabackup
- --consensus-replication-cluster-recover-new-cluster 
- recover new cluster from the snapshot of cloud storage or
- the backup created with xtrabackup
- --consensus-replication-cluster-recover-snapshot 
- recover from the backup of cloud storage
- --consensus-replication-start-index=# 
- Consensus cluster start valid index
  --collation-server=name 
  Set the default collation.
- --commit-pos-watcher 
- background thread checking and updating binlog commit
- position
- (Defaults to on; use --skip-commit-pos-watcher to disable.)
- --commit-pos-watcher-interval[=#] 
- interval(us) for background thread commit_pos_watcher
  --completion-type=name 
  The transaction completion type, one of NO_CHAIN, CHAIN,
  RELEASE
@@ -340,122 +300,164 @@ The following options may be given as the first argument:
  memory counter
  --connection-memory-limit=# 
  Maximum amount of memory connection can consume
- --consensus-auto-leader-transfer 
+ --consensus-replication[=name] 
+ Enable or disable consensus_replication plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --consensus-replication-appliedindex-force-delay=# 
+ force set a smaller appliedindex
+ --consensus-replication-archive-log-bin-index=name 
+ File that holds the names for archived binary log files.
+ --consensus-replication-archive-recovery 
+ archive recovery from the backup
+ --consensus-replication-archive-recovery-stop-datetime=name 
+ Stop recovery the archive binlog at first event having a
+ datetime equal or posterior to the argument; the argument
+ must be a date and time in the local time zone, in any
+ format accepted by the MySQL server for DATETIME and
+ TIMESTAMP types, for example: 2004-12-25 11:25:56 (you
+ should probably use quotes for your shell to set it
+ properly).
+ --consensus-replication-auto-leader-transfer 
  whether to enable auto leader transfer in consensus layer
- (Defaults to on; use --skip-consensus-auto-leader-transfer to disable.)
- --consensus-auto-leader-transfer-check-seconds[=#] 
+ (Defaults to on; use --skip-consensus-replication-auto-leader-transfer to disable.)
+ --consensus-replication-auto-leader-transfer-check-seconds=# 
  the interval between a leader check its health for a
  transfer
- --consensus-auto-reset-match-index 
+ --consensus-replication-auto-reset-match-index 
  enable auto reset match index when consensus follower has
  fewer logs
- (Defaults to on; use --skip-consensus-auto-reset-match-index to disable.)
- --consensus-check-commit-index-interval[=#] 
+ (Defaults to on; use --skip-consensus-replication-auto-reset-match-index to disable.)
+ --consensus-replication-check-commit-index-interval=# 
  check interval for slave calling checkCommitIndex
- --consensus-check-large-event 
- check consensus large event or not
- (Defaults to on; use --skip-consensus-check-large-event to disable.)
- --consensus-checksum 
+ --consensus-replication-checksum 
  Checksum when consensus receive log. Disabled by default.
- --consensus-configure-change-timeout=# 
+ --consensus-replication-cluster-id=# 
+ consensus cluster id
+ --consensus-replication-cluster-info=name 
+ Consensus cluster nodes ip-port information
+ --consensus-replication-configure-change-timeout=# 
  Consensus configure change timeout (ms). Default 1 min
- --consensus-disable-election 
+ --consensus-replication-current-term=# 
+ Consensus cluster nodes current term  information
+ --consensus-replication-disable-election 
  Disable consensus election and stepdown. Disabled by
  default.
- --consensus-disable-fifo-cache 
+ --consensus-replication-disable-fifo-cache 
  disable consensus fifo cache (run with weak consensus
  mode)
- --consensus-dynamic-easyindex 
+ --consensus-replication-dynamic-easyindex 
  Enable dynamic easy addr cidx. Enabled by default.
- (Defaults to on; use --skip-consensus-dynamic-easyindex to disable.)
- --consensus-election-timeout=# 
+ (Defaults to on; use --skip-consensus-replication-dynamic-easyindex to disable.)
+ --consensus-replication-election-timeout=# 
  Consensus election timeout
- --consensus-enabled enable consensus cluster instead of replicas
- (Defaults to on; use --skip-consensus-enabled to disable.)
- --consensus-flow-control[=name] 
+ --consensus-replication-enabled 
+ enable consensus cluster
+ (Defaults to on; use --skip-consensus-replication-enabled to disable.)
+ --consensus-replication-flow-control=name 
  consensus flow control (<-1: no log send, -1: only send
  log during heartbeat, 0: no flow control, >0: [TODO] flow
  control).
- --consensus-force-recovery 
- for innodb_force_recovery
- --consensus-force-sync-epoch-diff[=#] 
+ --consensus-replication-force-change-meta 
+ Consensus cluster force to change meta
+ --consensus-replication-force-recover-index=# 
+ Consensus cluster restore from leader set apply index
+ point
+ --consensus-replication-force-reset-meta 
+ Consensus cluster force to reset meta
+ --consensus-replication-force-single-mode 
+ Consensus cluster force to use single mode
+ --consensus-replication-force-sync-epoch-diff=# 
  consensus forceSync epoch diff
- --consensus-heartbeat-thread-cnt[=#] 
+ --consensus-replication-heartbeat-thread-cnt=# 
  Number of consensus heartbeat thread
- --consensus-io-thread-cnt[=#] 
+ --consensus-replication-io-thread-cnt=# 
  Number of consensus io thread
- --consensus-large-batch-ratio[=#] 
+ --consensus-replication-large-batch-ratio=# 
  Large batch ratio of consensus server send at once
- --consensus-large-event-limit=# 
- Consensus large event limit
- --consensus-large-event-split-size[=#] 
+ --consensus-replication-large-event-split-size=# 
  split size for large event, dangerous to change this
  variable
- --consensus-large-trx 
+ --consensus-replication-large-trx 
  consensus large trx or not
- (Defaults to on; use --skip-consensus-large-trx to disable.)
- --consensus-large-trx-split-size=# 
- Max size to split large trx into multi consensus logs.
- (default 2M)
- --consensus-leader-stop-apply 
- leader stop apply
- --consensus-leader-stop-apply-time[=#] 
- leader stop apply time
- --consensus-learner-heartbeat 
+ (Defaults to on; use --skip-consensus-replication-large-trx to disable.)
+ --consensus-replication-learner-heartbeat 
  enable send heartbeat to learner
- (Defaults to on; use --skip-consensus-learner-heartbeat to disable.)
- --consensus-learner-pipelining 
+ (Defaults to on; use --skip-consensus-replication-learner-heartbeat to disable.)
+ --consensus-replication-learner-node 
+ Consensus cluster learner node type
+ --consensus-replication-learner-pipelining 
  enable pipelining send msg to learner
- --consensus-learner-timeout=# 
+ --consensus-replication-learner-timeout=# 
  Consensus learner connection timeout
- --consensus-log-cache-size[=#] 
+ --consensus-replication-log-cache-size=# 
  Max cached logs size
- --consensus-log-level[=name] 
+ --consensus-replication-log-level=name 
  consensus log level
- --consensus-max-delay-index[=#] 
+ --consensus-replication-log-type-node 
+ Consensus cluster log type instance
+ --consensus-replication-max-delay-index=# 
  Max index delay for pipeline log delivery
- --consensus-max-log-size=# 
+ --consensus-replication-max-log-size=# 
  Max one log size. (default: 20M)
- --consensus-max-packet-size[=#] 
+ --consensus-replication-max-packet-size=# 
  Max package size the consensus server send at once
- --consensus-min-delay-index[=#] 
+ --consensus-replication-min-delay-index=# 
  Min index delay for pipeline log delivery
- --consensus-msg-compress-option[=name] 
- consensus msg compress option to one or multiple
- addressesip:port type(0: no compression, 1: lz4
- compression, 2: zstd compression) threshold checksum,    
- if ip:port is *:* it means set option to entire
- cluster.
- --consensus-new-follower-threshold[=#] 
+ --consensus-replication-mts-recover-use-index 
+ Consensus cluster use idex to recover mts
+ --consensus-replication-new-follower-threshold=# 
  Max delay index to allow a learner becomes a follower
- --consensus-old-compact-mode 
- set server to old compact mode to use to be compactible
- with version before 1.2.0.2
- (Defaults to on; use --skip-consensus-old-compact-mode to disable.)
- --consensus-optimistic-heartbeat 
+ --consensus-replication-optimistic-heartbeat 
  whether to use optimistic heartbeat in consensus layer
- --consensus-pipelining-timeout[=#] 
+ --consensus-replication-pipelining-timeout=# 
  the timeout the consensus server cache the log
  (milliseconds)
- --consensus-prefetch-cache-size[=#] 
+ --consensus-replication-prefetch-cache-size=# 
  Max cached logs size
- --consensus-prefetch-fast-fetch 
+ --consensus-replication-prefetch-fast-fetch 
  prefetch speed optimize
- --consensus-prefetch-wakeup-ratio[=#] 
+ --consensus-replication-prefetch-wakeup-ratio=# 
  prefetch wakeup ratio 
- --consensus-prefetch-window-size[=#] 
+ --consensus-replication-prefetch-window-size=# 
  prefetch window size
- --consensus-replicate-with-cache-log 
- set server to replicate with cache log
- --consensus-send-timeout=# 
+ --consensus-replication-purged-gtid=name 
+ Consensus cluster set the purged gtid
+ --consensus-replication-recover-backup 
+ recover from the backup created with xtrabackup
+ --consensus-replication-recover-new-cluster 
+ recover new cluster from the snapshot of cloud storage or
+ the backup created with xtrabackup
+ --consensus-replication-recover-snapshot 
+ recover from the backup of cloud storage
+ --consensus-replication-reset-prefetch-cache 
+ reset consensus prefetch_cache
+ --consensus-replication-send-timeout=# 
  Consensus send packet timeout
- --consensus-sync-follower-meta-interva[=#] 
+ --consensus-replication-start-index=# 
+ Consensus cluster start valid index
+ --consensus-replication-sync-follower-meta-interva=# 
  Interval of leader sync follower's meta for learner
  source
- --consensus-worker-thread-cnt[=#] 
+ --consensus-replication-weak-mode 
+ set server to weak consensus mode
+ --consensus-replication-with-cache-log 
+ set server to replicate with cache log
+ --consensus-replication-worker-thread-cnt=# 
  Number of consensus worker thread
- --consensuslog-revise 
- revise consensuslog before flush to disk
+ --consistent-snapshot-archive 
+ Indicate if consistent snapshot archive enable.
+ (Defaults to on; use --skip-consistent-snapshot-archive to disable.)
+ --consistent-snapshot-archive-dir=name 
+ The location path for consistent snapshot archive or
+ binlog archive
+ --consistent-snapshot-archive-period=# 
+ A consistent snapshot is created to archive at the given
+ interval
+ --consistent-snapshot-expire-seconds=# 
+ If non-zero, consistent snapshot will be purged after
+ consistent_snapshot_expire_seconds seconds. If zero, only
+ the latest consistent snapshot will be retained.
  --console           Write error output on screen; don't remove the console
  window on windows.
  --core-file         Write core on errors.
@@ -522,9 +524,6 @@ The following options may be given as the first argument:
  before storage engine initialization, where each plugin
  is identified as name=library, where name is the plugin
  name and library is the plugin library in plugin_dir.
- --enable-appliedindex-checker 
- enable applied index checker during ordered_commit
- (Defaults to on; use --skip-enable-appliedindex-checker to disable.)
  --end-markers-in-json 
  In JSON output ("EXPLAIN FORMAT=JSON" and optimizer
  trace), if variable is set to 1, repeats the structure's
@@ -553,6 +552,12 @@ The following options may be given as the first argument:
  options are set to nonzero values,
  binlog-expire-logs-seconds takes priority. Possible
  purges happen at startup and at binary log rotation.
+ --explain-format[=name] 
+ The default format in which the EXPLAIN statement
+ displays information. Valid values are TRADITIONAL
+ (default), TREE, JSON and TRADITIONAL_STRICT.
+ TRADITIONAL_STRICT is only used internally by the mtr
+ test suite, and is not meant to be used anywhere else.
  --explicit-defaults-for-timestamp 
  This option causes CREATE TABLE to create all TIMESTAMP
  columns as NULL with DEFAULT NULL attribute, Without this
@@ -568,7 +573,6 @@ The following options may be given as the first argument:
  --flush             Flush MyISAM tables to disk between SQL commands
  --flush-time=#      A dedicated thread is created to flush all tables at the
  given interval
- --force-revise      force revise or not
  --ft-boolean-syntax=name 
  List of operators for MATCH ... AGAINST ( ... IN BOOLEAN
  MODE)
@@ -731,7 +735,8 @@ The following options may be given as the first argument:
  logging. Note that if ALL connections to this server
  ALWAYS use row-based binary logging, the security issues
  do not exist and the binary logging cannot break, so you
- can safely set this to TRUE
+ can safely set this to TRUE. This variable is deprecated
+ and will be removed in a future version.
  --log-bin-use-v1-row-events 
  If equal to 1 then version 1 row events are written to a
  row based binary log.  If equal to 0, then the latest
@@ -785,7 +790,8 @@ The following options may be given as the first argument:
  log_slow_replica_statements instead.
  --log-statements-unsafe-for-binlog 
  Log statements considered unsafe when using statement
- based binary logging.
+ based binary logging. This variable is deprecated and
+ will be removed in a future version.
  (Defaults to on; use --skip-log-statements-unsafe-for-binlog to disable.)
  --log-tc=name       Path to transaction coordinator log (used for
  transactions that affect more than one storage engine,
@@ -941,6 +947,22 @@ The following options may be given as the first argument:
  --no-dd-upgrade     Abort restart if automatic upgrade or downgrade of the
  data dictionary is needed. Deprecated option. Use
  --upgrade=NONE instead.
+ --objstore-bucket[=name] 
+ The object store bucket to store record. If
+ table_on_objstore is true, objstore_bucket must not be
+ empty.
+ --objstore-endpoint[=name] 
+ The endpoint of object store. If need, user can specify
+ the endpoint of object store. Ususally it's need to
+ provide on non-AWS environment.
+ --objstore-provider[=name] 
+ The provider of object store. If table_on_objstore is
+ true, objstore_provider must not be empty.
+ --objstore-region[=name] 
+ The region of object store. If table_on_objstore is true,
+ objstore_region must not be empty.
+ --objstore-use-https 
+ Whether using https to connect to objstore or not.
  --offline-mode      Make the server into offline mode
  --old               Use compatible behavior
  --old-alter-table   Use old, non-optimized alter table
@@ -1218,6 +1240,10 @@ The following options may be given as the first argument:
  is read and applied to server, else this file is ignored
  even if present.
  (Defaults to on; use --skip-persisted-globals-load to disable.)
+ --persistent-on-objstore 
+ Use object store to persist binlog and consistent
+ snapshot.
+ (Defaults to on; use --skip-persistent-on-objstore to disable.)
  --pid-file=name     Pid file used by safe_mysqld
  --plugin-dir=name   Directory for plugins
  --plugin-load=name  Optional semicolon-separated list of plugins to load,
@@ -1281,6 +1307,39 @@ The following options may be given as the first argument:
  --read-rnd-buffer-size=# 
  When reading rows in sorted order after a sort, the rows
  are read through this buffer to avoid a disk seeks
+ --recovery-consistent-snapshot-only 
+ Indicate whether to recover only consistent snapshot
+ without binlog archive recovery.
+ --recovery-consistent-snapshot-timestamp=name 
+ Consistent snapshot timestamp from object store used as
+ the source of recovery during instance.
+ --recovery-consistent-snapshot-tmpdir=name 
+ The location temp path for consistent snapshot recovery
+ from object store.
+ --recovery-from-objstore 
+ Recovery binlog and consistent snapshot from object
+ store.
+ --recovery-objstore-bucket[=name] 
+ The object store bucket to store record as the source of
+ recovery during instance initialization. If
+ recovery_from_objstore is true, recovery_objstore_bucket
+ must not be empty.
+ --recovery-objstore-endpoint[=name] 
+ The endpoint of object store as the source of recovery
+ during instance initialization. If need, user can specify
+ the endpoint of object store. Ususally it's need to
+ provide on non-AWS environment.
+ --recovery-objstore-provider[=name] 
+ The provider of object store as the source of recovery
+ during instance.If recovery_from_objstore is true,
+ recovery_objstore_provider must not be empty.
+ --recovery-objstore-region[=name] 
+ The region of object store as the source of recovery
+ during instance initialization.If recovery_from_objstore
+ is true, recovery_objstore_region must not be empty.
+ --recovery-objstore-use-https 
+ Whether using https to connect to objstore or not as the
+ source of recovery during instance initialization
  --regexp-stack-limit=# 
  Stack size limit for regular expressions matches
  --regexp-time-limit=# 
@@ -1485,8 +1544,6 @@ The following options may be given as the first argument:
  When this option is enabled, connections attempted using
  insecure transport will be rejected.  Secure transports
  are SSL/TLS, Unix socket or Shared Memory (on Windows).
- --reset-consensus-prefetch-cache 
- reset consensus prefetch_cache
  --rpl-read-size=#   The size for reads done from the binlog and relay log. It
  must be a multiple of 4kb. Making it larger might help
  with IO stalls while reading these files when they are
@@ -1521,12 +1578,11 @@ The following options may be given as the first argument:
  --server-id=#       Uniquely identifies the server instance in the community
  of replication partners
  --server-id-bits=#  Set number of significant bits in server-id
+ --serverless        Enable the serverless
  --session-track-gtids=name 
  Controls the amount of global transaction ids to be
  included in the response packet sent by the
  server.(Default: OFF).
- --session-track-index 
- Track current index for non-select request.
  --session-track-schema 
  Track changes to the 'default schema'.
  (Defaults to on; use --skip-session-track-schema to disable.)
@@ -1693,8 +1749,6 @@ The following options may be given as the first argument:
  Enable or disable SMARTENGINE_COMPACTION_HISTORY plugin.
  Possible values are ON, OFF, FORCE (don't start if the
  plugin fails to load).
- --smartengine-compaction-mode=# 
- DBOptions::compaction_mode for SE
  --smartengine-compaction-stats[=name] 
  Enable or disable SMARTENGINE_COMPACTION_STATS plugin.
  Possible values are ON, OFF, FORCE (don't start if the
@@ -1705,8 +1759,6 @@ The following options may be given as the first argument:
  plugin fails to load).
  --smartengine-compaction-task-extents-limit=# 
  CFOptions::compaction_task_extents_limit for SE
- --smartengine-compaction-type=# 
- DBOptions::compaction_type for SE
  --smartengine-compression-options=name 
  CFOptions::compression_opts for SE
  --smartengine-compression-per-level=name 
@@ -1719,8 +1771,6 @@ The following options may be given as the first argument:
  --smartengine-concurrent-writable-file-single-buffer-size=# 
  DBOptions::concurrent_writable_file_single_buffer_size
  for SE
- --smartengine-cpu-compaction-thread-num=# 
- DBOptions::cpu_compaction_thread_num for SE
  --smartengine-datadir[=name] 
  SE data directory
  --smartengine-db-total-write-buffer-size=# 
@@ -1752,8 +1802,6 @@ The following options may be given as the first argument:
  rebuild/norebuild
  --smartengine-disable-parallel-ddl 
  disable parall ddl feature if necessary.
- --smartengine-dump-malloc-stats 
- DBOptions::dump_malloc_stats for se
  --smartengine-dump-memtable-limit-size=# 
  DBOptions::dump_memtable_limit_size for SE
  --smartengine-enable-2pc 
@@ -1774,8 +1822,6 @@ The following options may be given as the first argument:
  --smartengine-force-flush-memtable-now 
  Forces memstore flush which may block all write requests
  so be careful
- --smartengine-fpga-compaction-thread-num=# 
- DBOptions::fpga_compaction_thread_num for SE
  --smartengine-global-info[=name] 
  Enable or disable SMARTENGINE_GLOBAL_INFO plugin.
  Possible values are ON, OFF, FORCE (don't start if the
@@ -1784,10 +1830,6 @@ The following options may be given as the first argument:
  Hot Backup
  --smartengine-idle-tasks-schedule-time=# 
  DBOptions::idle_tasks_schedule_time for SE
- --smartengine-index-file-map[=name] 
- Enable or disable SMARTENGINE_INDEX_FILE_MAP plugin.
- Possible values are ON, OFF, FORCE (don't start if the
- plugin fails to load).
  --smartengine-level-compaction-dynamic-level-bytes 
  CFOptions::level_compaction_dynamic_level_bytes for SE
  (Defaults to on; use --skip-smartengine-level-compaction-dynamic-level-bytes to disable.)
@@ -1808,6 +1850,11 @@ The following options may be given as the first argument:
  Enable or disable SMARTENGINE_LOCKS plugin. Possible
  values are ON, OFF, FORCE (don't start if the plugin
  fails to load).
+ --smartengine-master-thread-compaction-enabled 
+ DBOptions::master_thread_compaction_enabled for SE
+ (Defaults to on; use --skip-smartengine-master-thread-compaction-enabled to disable.)
+ --smartengine-master-thread-monitor-interval-ms[=#] 
+ DBOptions::master_thread_monitor_interval_ms for SE
  --smartengine-max-background-compactions=# 
  DBOptions::max_background_compactions for SE
  --smartengine-max-background-dumps=# 
@@ -1816,24 +1863,18 @@ The following options may be given as the first argument:
  DBOptions::max_background_flushes for SE
  --smartengine-max-free-extent-percent=# 
  DBOptions::max_free_extent_percent for SE
- --smartengine-max-manifest-file-size=# 
- DBOptions::max_manifest_file_size for SE
  --smartengine-max-row-locks=# 
  Maximum number of locks a transaction can have
  --smartengine-max-shrink-extent-count=# 
  DBOptions::max_shrink_extent_count for SE
  --smartengine-max-total-wal-size=# 
  DBOptions::max_total_wal_size for SE
- --smartengine-max-write-buffer-number=# 
- CFOptions::max_write_buffer_number for SE
  --smartengine-max-write-buffer-number-to-maintain=# 
  CFOptions::max_write_buffer_number_to_maintain for SE
  --smartengine-mem-alloc[=name] 
  Enable or disable SMARTENGINE_MEM_ALLOC plugin. Possible
  values are ON, OFF, FORCE (don't start if the plugin
  fails to load).
- --smartengine-memtable=name 
- options for CFOptions::memtable in SE
  --smartengine-min-write-buffer-number-to-merge=# 
  CFOptions::min_write_buffer_number_to_merge for SE
  --smartengine-mutex-backtrace-threshold-ns=# 
@@ -1855,6 +1896,8 @@ The following options may be given as the first argument:
  Enable or disable SMARTENGINE_PERF_CONTEXT_GLOBAL plugin.
  Possible values are ON, OFF, FORCE (don't start if the
  plugin fails to load).
+ --smartengine-persistent-cache-size=# 
+ DBOptions::persistent_cache_size for SE
  --smartengine-purge-invalid-subtable-bg 
  Turn on to enable purging invalid subtable in background
  (Defaults to on; use --skip-smartengine-purge-invalid-subtable-bg to disable.)
@@ -1863,9 +1906,9 @@ The following options may be given as the first argument:
  Possible values are ON, OFF, FORCE (don't start if the
  plugin fails to load).
  --smartengine-query-trace-print-slow 
- if print slow query detail in error log for SE
+ If print slow query detail in error log for SE
  --smartengine-query-trace-sum=name 
- if record query detail in IS table for SE
+ If record query detail in IS table for SE
  --smartengine-query-trace-threshold-time=# 
  If a query use more than this, a trace log will be
  printed to error log
@@ -1966,7 +2009,9 @@ The following options may be given as the first argument:
  event. Use 0 to disable synchronous flushing
  --sync-relay-log-info=# 
  Synchronously flush relay log info to disk after every
- #th transaction. Use 0 to disable synchronous flushing
+ #th transaction. Use 0 to disable synchronous flushing.
+ This variable is deprecated and will be removed in a
+ future version.
  --sync-source-info=# 
  Synchronize replication receiver positions to disk
  periodically, after the specified number of events. Use 0
@@ -1983,6 +2028,8 @@ The following options may be given as the first argument:
  CREATE TABLESPACE or when user tries to do CREATE TABLE
  with ENCRYPTION option which deviates from per-database
  default.
+ --table-on-objstore Use objstore to store data in SmartEngine
+ (Defaults to on; use --skip-table-on-objstore to disable.)
  --table-open-cache=# 
  The number of cached open tables (total for all table
  cache instances)
@@ -2071,8 +2118,35 @@ The following options may be given as the first argument:
  -V, --version       Output version information and exit.
  --wait-timeout=#    The number of seconds the server waits for activity on a
  connection before closing it
- --weak-consensus-mode 
- set server to weak consensus mode
+ --wesql-cluster-consensus-membership-change[=name] 
+ Enable or disable
+ WESQL_CLUSTER_CONSENSUS_MEMBERSHIP_CHANGE plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --wesql-cluster-consensus-status[=name] 
+ Enable or disable WESQL_CLUSTER_CONSENSUS_STATUS plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --wesql-cluster-global[=name] 
+ Enable or disable WESQL_CLUSTER_GLOBAL plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --wesql-cluster-health[=name] 
+ Enable or disable WESQL_CLUSTER_HEALTH plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --wesql-cluster-learner-source[=name] 
+ Enable or disable WESQL_CLUSTER_LEARNER_SOURCE plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --wesql-cluster-local[=name] 
+ Enable or disable WESQL_CLUSTER_LOCAL plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --wesql-cluster-prefetch-channel[=name] 
+ Enable or disable WESQL_CLUSTER_PREFETCH_CHANNEL plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
  --windowing-use-high-precision 
  For SQL window functions, determines whether to enable
  inversion optimization for moving window frames also for
@@ -2106,7 +2180,6 @@ admin-ssl-crlpath (No default value)
 admin-ssl-key (No default value)
 admin-tls-ciphersuites (No default value)
 allow-suspicious-udfs FALSE
-appliedindex-force-delay 0
 authentication-policy *,,
 auto-increment-increment 1
 auto-increment-offset 1
@@ -2116,6 +2189,9 @@ avoid-temporal-upgrade FALSE
 back-log 151
 big-tables FALSE
 bind-address *
+binlog-archive TRUE
+binlog-archive-expire-seconds 2592000
+binlog-archive-slice-max-size 4194304
 binlog-cache-size 32768
 binlog-checksum CRC32
 binlog-direct-non-transactional-updates FALSE
@@ -2146,88 +2222,82 @@ bulk-insert-buffer-size 8388608
 caching-sha2-password-digest-rounds 5000
 caching-sha2-password-private-key-path private_key.pem
 caching-sha2-password-public-key-path public_key.pem
-ccl-max-waiting-count 0
-ccl-queue-bucket-count 4
-ccl-queue-bucket-size 64
-ccl-wait-timeout 86400
 character-set-client-handshake TRUE
 character-set-filesystem binary
 character-set-server utf8mb4
 character-sets-dir MYSQL_CHARSETSDIR/
 check-proxy-users FALSE
 chroot (No default value)
-cluster-archive-recover FALSE
-cluster-current-term 0
-cluster-dump-meta FALSE
-cluster-force-change-meta FALSE
-cluster-force-recover-index 0
-cluster-force-reset-meta FALSE
-cluster-force-single-mode FALSE
-cluster-id 0
-cluster-info (No default value)
-cluster-learner-node FALSE
-cluster-log-type-node FALSE
-cluster-mts-recover-use-index TRUE
-cluster-purged-gtid (No default value)
-cluster-recover-backup FALSE
-cluster-recover-new-cluster FALSE
-cluster-recover-snapshot FALSE
-cluster-start-index 1
 collation-server utf8mb4_0900_ai_ci
-commit-pos-watcher TRUE
-commit-pos-watcher-interval 1000000
 completion-type NO_CHAIN
 concurrent-insert AUTO
 connect-timeout 10
-connection-memory-chunk-size 8912
+connection-memory-chunk-size 8192
 connection-memory-limit 18446744073709551615
-consensus-auto-leader-transfer TRUE
-consensus-auto-leader-transfer-check-seconds 60
-consensus-auto-reset-match-index TRUE
-consensus-check-commit-index-interval 1000
-consensus-check-large-event TRUE
-consensus-checksum FALSE
-consensus-configure-change-timeout 60000
-consensus-disable-election FALSE
-consensus-disable-fifo-cache FALSE
-consensus-dynamic-easyindex TRUE
-consensus-election-timeout 5000
-consensus-enabled TRUE
-consensus-flow-control (No default value)
-consensus-force-recovery FALSE
-consensus-force-sync-epoch-diff 0
-consensus-heartbeat-thread-cnt 0
-consensus-io-thread-cnt 3
-consensus-large-batch-ratio 50
-consensus-large-event-limit 1073741824
-consensus-large-event-split-size 2097152
-consensus-large-trx TRUE
-consensus-large-trx-split-size 2097152
-consensus-leader-stop-apply FALSE
-consensus-leader-stop-apply-time 0
-consensus-learner-heartbeat TRUE
-consensus-learner-pipelining FALSE
-consensus-learner-timeout 0
-consensus-log-cache-size 67108864
-consensus-log-level LOG_ERROR
-consensus-max-delay-index 50000
-consensus-max-log-size 20971520
-consensus-max-packet-size 131072
-consensus-min-delay-index 5000
-consensus-msg-compress-option (No default value)
-consensus-new-follower-threshold 10000
-consensus-old-compact-mode TRUE
-consensus-optimistic-heartbeat FALSE
-consensus-pipelining-timeout 1
-consensus-prefetch-cache-size 67108864
-consensus-prefetch-fast-fetch FALSE
-consensus-prefetch-wakeup-ratio 2
-consensus-prefetch-window-size 10
-consensus-replicate-with-cache-log FALSE
-consensus-send-timeout 0
-consensus-sync-follower-meta-interva 1
-consensus-worker-thread-cnt 3
-consensuslog-revise FALSE
+consensus-replication ON
+consensus-replication-appliedindex-force-delay 0
+consensus-replication-archive-log-bin-index 
+consensus-replication-archive-recovery FALSE
+consensus-replication-archive-recovery-stop-datetime 
+consensus-replication-auto-leader-transfer TRUE
+consensus-replication-auto-leader-transfer-check-seconds 60
+consensus-replication-auto-reset-match-index TRUE
+consensus-replication-check-commit-index-interval 1000
+consensus-replication-checksum FALSE
+consensus-replication-cluster-id 0
+consensus-replication-cluster-info 
+consensus-replication-configure-change-timeout 60000
+consensus-replication-current-term 0
+consensus-replication-disable-election FALSE
+consensus-replication-disable-fifo-cache FALSE
+consensus-replication-dynamic-easyindex TRUE
+consensus-replication-election-timeout 5000
+consensus-replication-enabled TRUE
+consensus-replication-flow-control 
+consensus-replication-force-change-meta FALSE
+consensus-replication-force-recover-index 0
+consensus-replication-force-reset-meta FALSE
+consensus-replication-force-single-mode FALSE
+consensus-replication-force-sync-epoch-diff 0
+consensus-replication-heartbeat-thread-cnt 0
+consensus-replication-io-thread-cnt 4
+consensus-replication-large-batch-ratio 50
+consensus-replication-large-event-split-size 2097152
+consensus-replication-large-trx TRUE
+consensus-replication-learner-heartbeat TRUE
+consensus-replication-learner-node FALSE
+consensus-replication-learner-pipelining FALSE
+consensus-replication-learner-timeout 0
+consensus-replication-log-cache-size 67108864
+consensus-replication-log-level LOG_ERROR
+consensus-replication-log-type-node FALSE
+consensus-replication-max-delay-index 50000
+consensus-replication-max-log-size 20971520
+consensus-replication-max-packet-size 131072
+consensus-replication-min-delay-index 5000
+consensus-replication-mts-recover-use-index FALSE
+consensus-replication-new-follower-threshold 10000
+consensus-replication-optimistic-heartbeat FALSE
+consensus-replication-pipelining-timeout 1
+consensus-replication-prefetch-cache-size 67108864
+consensus-replication-prefetch-fast-fetch FALSE
+consensus-replication-prefetch-wakeup-ratio 2
+consensus-replication-prefetch-window-size 10
+consensus-replication-purged-gtid 
+consensus-replication-recover-backup FALSE
+consensus-replication-recover-new-cluster FALSE
+consensus-replication-recover-snapshot FALSE
+consensus-replication-reset-prefetch-cache FALSE
+consensus-replication-send-timeout 0
+consensus-replication-start-index 1
+consensus-replication-sync-follower-meta-interva 1
+consensus-replication-weak-mode FALSE
+consensus-replication-with-cache-log FALSE
+consensus-replication-worker-thread-cnt 4
+consistent-snapshot-archive TRUE
+consistent-snapshot-archive-dir archive_tmp
+consistent-snapshot-archive-period 600
+consistent-snapshot-expire-seconds 0
 console FALSE
 create-admin-listener-thread FALSE
 cte-max-recursion-depth 1000
@@ -2247,17 +2317,16 @@ disabled-storage-engines
 disconnect-on-expired-password TRUE
 disconnect-slave-event-count 0
 div-precision-increment 4
-enable-appliedindex-checker TRUE
 end-markers-in-json FALSE
 enforce-gtid-consistency FALSE
 eq-range-index-dive-limit 200
 event-scheduler ON
 expire-logs-days 0
+explain-format TRADITIONAL
 explicit-defaults-for-timestamp TRUE
 external-locking FALSE
 flush FALSE
 flush-time 0
-force-revise FALSE
 ft-boolean-syntax + -><()~*:""&|
 ft-max-word-len 84
 ft-min-word-len 4
@@ -2372,6 +2441,11 @@ net-retry-count 10
 net-write-timeout 60
 new FALSE
 no-dd-upgrade FALSE
+objstore-bucket objbucket
+objstore-endpoint (No default value)
+objstore-provider local
+objstore-region local_objstore_region
+objstore-use-https FALSE
 offline-mode FALSE
 old FALSE
 old-alter-table FALSE
@@ -2455,6 +2529,7 @@ performance-schema-users-size -1
 persist-only-admin-x509-subject 
 persist-sensitive-variables-in-plaintext TRUE
 persisted-globals-load TRUE
+persistent-on-objstore TRUE
 port ####
 port-open-timeout 0
 preload-buffer-size 32768
@@ -2468,6 +2543,15 @@ range-optimizer-max-mem-size 8388608
 read-buffer-size 131072
 read-only FALSE
 read-rnd-buffer-size 262144
+recovery-consistent-snapshot-only FALSE
+recovery-consistent-snapshot-timestamp (No default value)
+recovery-consistent-snapshot-tmpdir recovery_tmp
+recovery-from-objstore FALSE
+recovery-objstore-bucket objbucket
+recovery-objstore-endpoint (No default value)
+recovery-objstore-provider local
+recovery-objstore-region local_objstore_region
+recovery-objstore-use-https FALSE
 regexp-stack-limit 8000000
 regexp-time-limit 32
 relay-log relaylog
@@ -2500,7 +2584,6 @@ report-password (No default value)
 report-port 0
 report-user (No default value)
 require-secure-transport FALSE
-reset-consensus-prefetch-cache FALSE
 rpl-read-size 8192
 rpl-stop-replica-timeout 31536000
 rpl-stop-slave-timeout 31536000
@@ -2512,8 +2595,8 @@ select-into-disk-sync FALSE
 select-into-disk-sync-delay 0
 server-id 1
 server-id-bits 32
+serverless FALSE
 session-track-gtids OFF
-session-track-index FALSE
 session-track-schema TRUE
 session-track-state-change FALSE
 session-track-system-variables time_zone,autocommit,character_set_client,character_set_results,character_set_connection
@@ -2564,17 +2647,14 @@ smartengine-columns OFF
 smartengine-compact-cf 0
 smartengine-compaction-delete-percent 70
 smartengine-compaction-history OFF
-smartengine-compaction-mode 0
 smartengine-compaction-stats OFF
 smartengine-compaction-task OFF
 smartengine-compaction-task-extents-limit 1000
-smartengine-compaction-type 0
 smartengine-compression-options -14:1:0
 smartengine-compression-per-level kNoCompression
 smartengine-concurrent-writable-file-buffer-num 4
 smartengine-concurrent-writable-file-buffer-switch-limit 32768
 smartengine-concurrent-writable-file-single-buffer-size 65536
-smartengine-cpu-compaction-thread-num 8
 smartengine-datadir ./.smartengine
 smartengine-db-total-write-buffer-size 107374182400
 smartengine-db-write-buffer-size 107374182400
@@ -2586,7 +2666,6 @@ smartengine-disable-auto-compactions FALSE
 smartengine-disable-instant-ddl FALSE
 smartengine-disable-online-ddl 0
 smartengine-disable-parallel-ddl FALSE
-smartengine-dump-malloc-stats FALSE
 smartengine-dump-memtable-limit-size 67108864
 smartengine-enable-2pc TRUE
 smartengine-estimate-cost-depth 0
@@ -2595,11 +2674,9 @@ smartengine-flush-delete-percent-trigger 700000
 smartengine-flush-delete-record-trigger 700000
 smartengine-flush-log-at-trx-commit 1
 smartengine-force-flush-memtable-now FALSE
-smartengine-fpga-compaction-thread-num 8
 smartengine-global-info OFF
 smartengine-hotbackup 
 smartengine-idle-tasks-schedule-time 60
-smartengine-index-file-map OFF
 smartengine-level-compaction-dynamic-level-bytes TRUE
 smartengine-level0-file-num-compaction-trigger 64
 smartengine-level0-layer-num-compaction-trigger 8
@@ -2608,18 +2685,17 @@ smartengine-level2-usage-percent 70
 smartengine-lock-scanned-rows FALSE
 smartengine-lock-wait-timeout 1
 smartengine-locks OFF
+smartengine-master-thread-compaction-enabled TRUE
+smartengine-master-thread-monitor-interval-ms 60000
 smartengine-max-background-compactions 1
 smartengine-max-background-dumps 1
 smartengine-max-background-flushes 1
 smartengine-max-free-extent-percent 10
-smartengine-max-manifest-file-size 18446744073709551615
 smartengine-max-row-locks 1073741824
 smartengine-max-shrink-extent-count 512
 smartengine-max-total-wal-size 107374182400
-smartengine-max-write-buffer-number 1000
 smartengine-max-write-buffer-number-to-maintain 1000
 smartengine-mem-alloc OFF
-smartengine-memtable 
 smartengine-min-write-buffer-number-to-merge 2
 smartengine-mutex-backtrace-threshold-ns 1000000000
 smartengine-parallel-read-threads 4
@@ -2628,6 +2704,7 @@ smartengine-parallel-wal-recovery FALSE
 smartengine-pause-background-work FALSE
 smartengine-perf-context OFF
 smartengine-perf-context-global OFF
+smartengine-persistent-cache-size 0
 smartengine-purge-invalid-subtable-bg TRUE
 smartengine-query-trace OFF
 smartengine-query-trace-print-slow FALSE
@@ -2672,6 +2749,7 @@ sync-relay-log-info 10000
 sync-source-info 10000
 sysdate-is-now FALSE
 table-encryption-privilege-check FALSE
+table-on-objstore TRUE
 table-open-cache-instances 16
 tablespace-definition-cache 256
 tc-heuristic-recover OFF
@@ -2696,7 +2774,13 @@ validate-config FALSE
 validate-user-plugins TRUE
 verbose TRUE
 wait-timeout 28800
-weak-consensus-mode FALSE
+wesql-cluster-consensus-membership-change ON
+wesql-cluster-consensus-status ON
+wesql-cluster-global ON
+wesql-cluster-health ON
+wesql-cluster-learner-source ON
+wesql-cluster-local ON
+wesql-cluster-prefetch-channel ON
 windowing-use-high-precision TRUE
 xa-detach-on-prepare TRUE
 

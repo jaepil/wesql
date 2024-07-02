@@ -28,6 +28,11 @@ struct st_mysql_consensus_replication {
   bool (*is_running)();
 
   /*
+    This function is used to check log mode.
+  */
+  bool (*is_log_mode)();
+
+  /*
     This function is used to show consensus logs.
   */
   bool (*show_logs)(void *thd);

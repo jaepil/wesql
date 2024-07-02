@@ -438,7 +438,8 @@ int gtid_init_after_consensus_setup(uint64 last_index, const char *log_name) {
   global_sid_lock->wrlock();
 
   /* Add unsaved set of GTIDs into gtid_executed table */
-  if (recover_status == BINLOG_WORKING &&  // just for leader
+  if (!opt_cluster_log_type_instance &&
+      recover_status == BINLOG_WORKING &&  // just for leader
       !gtids_in_binlog.is_empty() &&
       !gtids_in_binlog.is_subset(executed_gtids)) {
     gtids_in_binlog_not_in_table.add_gtid_set(&gtids_in_binlog);
@@ -566,9 +567,10 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
       ev->get_type_code() == binary_log::FORMAT_DESCRIPTION_EVENT) {
     LogErr(INFORMATION_LEVEL, ER_BINLOG_RECOVERING_AFTER_CRASH_USING, log_name);
     bool ha_recover =
-        (ha_recover_end_file != nullptr ||  // consist recovery
-         ev->common_header->flags & LOG_EVENT_BINLOG_IN_USE_F ||
-         DBUG_EVALUATE_IF("eval_force_bin_log_recovery", true, false));
+        (!opt_cluster_log_type_instance &&
+         (ha_recover_end_file != nullptr ||  // consist recovery
+          ev->common_header->flags & LOG_EVENT_BINLOG_IN_USE_F ||
+          DBUG_EVALUATE_IF("eval_force_bin_log_recovery", true, false)));
 
     Consensus_binlog_recovery bl_recovery{binlog_file_reader};
     error =

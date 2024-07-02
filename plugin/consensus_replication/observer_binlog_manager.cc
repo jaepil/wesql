@@ -7,6 +7,7 @@
 #include "consensus_log_manager.h"
 #include "observer_binlog_manager.h"
 #include "plugin.h"
+#include "system_variables.h"
 
 #include "my_loglevel.h"
 #include "mysql/components/services/log_builtins.h"
@@ -146,6 +147,9 @@ static int consensus_binlog_manager_before_flush(Binlog_manager_param *param) {
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
+
+  /* The logger node is not allowed to write to consensus log. */
+  if (opt_cluster_log_type_instance) return 1;
 
   THD *thd = param->thd;
   mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());

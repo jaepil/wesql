@@ -1,0 +1,75 @@
+#
+# Test for consistent snapshot recovery from object store
+#
+--source include/have_consensus_replication.inc
+--source include/paxos.inc
+
+
+# 1. install mysql_clone plugin
+--replace_result $CLONE_PLUGIN CLONE_PLUGIN
+--eval INSTALL PLUGIN clone SONAME '$CLONE_PLUGIN'
+
+# 2. create run directory
+--echo # Create binlog archive path
+--let $archive_dir=$MYSQL_TMP_DIR/mysql_archive
+--mkdir $archive_dir
+
+--echo # Create recovery temp path
+--let $recovery_tmp_dir=$MYSQL_TMP_DIR/mysql_recovery_tmp
+--mkdir $recovery_tmp_dir
+
+--echo # Create local object store
+--let $objstore_dir=$MYSQL_TMP_DIR/objstore
+--mkdir $objstore_dir
+--echo # Create local object store bucket
+--let $bucket=bucket1
+--let $objstore_bucket=$objstore_dir/$bucket
+--mkdir $objstore_bucket
+
+--let $MYSQLD_DATADIR=`select @@datadir`
+
+# 3. start with consistent-snapshot-archive
+--echo # Server restart with --consistent-snapshot-archive=true
+--replace_result $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=$archive_dir --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--source include/restart_mysqld.inc
+
+CREATE DATABASE db1;
+CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1);
+INSERT INTO t1 values(2);
+INSERT INTO t1 values(3);
+INSERT INTO t1 values(4);
+SELECT * FROM t1;
+SHOW CREATE TABLE t1;
+
+# 4. start with consistent-snapshot-archive
+--echo # Server restart with --consistent-snapshot-archive=true
+--replace_result $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=$archive_dir --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--source include/restart_mysqld.inc
+
+INSERT INTO t1 values(5);
+INSERT INTO t1 values(6);
+INSERT INTO t1 values(7);
+INSERT INTO t1 values(8);
+SELECT * FROM t1;
+
+set debug = 'd, crash_commit_before_log';
+--exec echo "wait" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--error 2013
+INSERT INTO t1 values(9);
+
+--source include/wait_until_disconnected.inc
+
+--echo # Force rmdir datadir for recovery test
+--force-rmdir $MYSQLD_DATADIR
+
+# 5. recovery
+--echo # Recovery start from object store.
+--replace_result $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --recovery_from_objstore=true --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=$archive_dir --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--source include/start_mysqld.inc
+
+SELECT * FROM t1;
+DROP DATABASE db1;
