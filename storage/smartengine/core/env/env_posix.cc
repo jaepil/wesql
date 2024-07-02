@@ -567,18 +567,14 @@ class PosixEnv : public Env
     return gettid(pthread_self());
   }
 
-  virtual common::Status InitObjectStore(const std::string_view provider,
-                                         const std::string_view region,
-                                         const std::string_view *endpoint,
-                                         bool use_https,
-                                         const std::string_view bucket,
-                                         const std::string_view bucket_dir) override
-  {
+  virtual common::Status InitObjectStore(const std::string_view provider, const std::string_view region,
+                                         const std::string_view *endpoint, bool use_https,
+                                         const std::string_view bucket) override {
     Status result;
 
     objstore::init_objstore_provider(provider);
 
-    obj_store_ = objstore::create_object_store(provider, region, endpoint, use_https, bucket_dir);
+    obj_store_ = objstore::create_object_store(provider, region, endpoint, use_https);
     if (obj_store_ == nullptr) {
       result = common::Status::InvalidArgument();
     } else {

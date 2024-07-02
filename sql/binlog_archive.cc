@@ -380,8 +380,7 @@ void Binlog_archive::run() {
     binlog_objstore = objstore::create_object_store(
         std::string_view(opt_objstore_provider),
         std::string_view(opt_objstore_region),
-        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https,
-        "");
+        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https);
     if (!binlog_objstore) {
       LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
              "Failed to create object store instance");

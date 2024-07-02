@@ -392,13 +392,9 @@ class Env {
   // Returns the ID of the current thread.
   virtual uint64_t GetThreadID() const;
 
-  virtual common::Status InitObjectStore(const std::string_view provider,
-                                         const std::string_view region,
-                                         const std::string_view *endpoint,
-                                         bool use_https,
-                                         const std::string_view bucket,
-                                         const std::string_view bucket_dir)
-  {
+  virtual common::Status InitObjectStore(const std::string_view provider, const std::string_view region,
+                                         const std::string_view *endpoint, bool use_https,
+                                         const std::string_view bucket) {
     return common::Status::NotSupported("Not supported.");
   }
 

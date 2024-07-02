@@ -51,12 +51,8 @@ public:
     use_obj_ = GetParam();
     if (use_obj_) {
       objstore::ObjectStore *obs = nullptr;
-      auto s = options_.env->InitObjectStore("local",
-                                             test_local_obs_basepath /* use test_dir as the basepath */,
-                                             nullptr,
-                                             false,
-                                             test_local_obs_bucket,
-                                             "");
+      auto s = options_.env->InitObjectStore("local", test_local_obs_basepath /* use test_dir as the basepath */,
+                                             nullptr, false, test_local_obs_bucket);
       ASSERT_OK(s);
       s = options_.env->GetObjectStore(obs);
       ASSERT_OK(s);

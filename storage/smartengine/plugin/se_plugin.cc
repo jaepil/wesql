@@ -240,17 +240,9 @@ static int se_init_func(void *const p)
     }
     std::string_view endpoint(
         opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
-    std::string objstore_bucket_dir = opt_objstore_bucket_dir ? opt_objstore_bucket_dir : "";
-    // remove possible '/' at the beginning and end of the string
-    objstore_bucket_dir.erase(0, objstore_bucket_dir.find_first_not_of("/"));
-    objstore_bucket_dir.erase(objstore_bucket_dir.find_last_not_of("/") + 1);
-
-    common::Status status = main_opts.env->InitObjectStore(std::string_view(opt_objstore_provider),
-                                                           std::string_view(opt_objstore_region),
-                                                           opt_objstore_endpoint ? &endpoint : nullptr,
-                                                           opt_objstore_use_https,
-                                                           opt_objstore_bucket,
-                                                           objstore_bucket_dir);
+    common::Status status = main_opts.env->InitObjectStore(
+        std::string_view(opt_objstore_provider), std::string_view(opt_objstore_region),
+        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https, opt_objstore_bucket);
     if (!status.ok()) {
       std::string err_text = status.ToString();
       sql_print_error("SE: fail to create object store: %s", err_text.c_str());
