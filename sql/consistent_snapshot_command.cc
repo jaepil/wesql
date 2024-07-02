@@ -44,7 +44,7 @@ bool Consistent_archive_command::deinit() {
 }
 
 char *Consistent_archive_command::consistent_archive_purge(
-    UDF_INIT *, UDF_ARGS *, char *result, unsigned long *length,
+    UDF_INIT *, UDF_ARGS *args, char *result, unsigned long *length,
     unsigned char *, unsigned char *error) {
   DBUG_TRACE;
   Consistent_archive *consistent_archive = Consistent_archive::get_instance();
@@ -58,7 +58,8 @@ char *Consistent_archive_command::consistent_archive_purge(
     goto err;
   }
 
-  std::tie(err_val, err_msg) = consistent_archive->purge_consistent_snapshot();
+  std::tie(err_val, err_msg) =
+      consistent_archive->purge_consistent_snapshot(args->args[0], args->lengths[0], false);
   if (err_val) {
     *error = err_val;
     my_error(ER_UDF_ERROR, MYF(0), m_udf_name, err_msg.c_str());
@@ -73,9 +74,15 @@ err:
 bool Consistent_archive_command::consistent_archive_purge_init(
     UDF_INIT *init_id, UDF_ARGS *args, char *message) {
   DBUG_TRACE;
-  if (args->arg_count > 0) {
+  if (args->arg_count != 1) {
     my_stpcpy(message,
               "Wrong arguments: You need to specify correct arguments.");
+    return true;
+  }
+  if (args->arg_type[0] != STRING_RESULT) {
+    my_stpcpy(
+        message,
+        "Wrong arguments: You need to specify snapshot created timestamp.");
     return true;
   }
 

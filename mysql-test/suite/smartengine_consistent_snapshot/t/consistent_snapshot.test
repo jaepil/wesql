@@ -11,10 +11,6 @@
 --let $archive_dir=$MYSQL_TMP_DIR/mysql_archive
 --mkdir $archive_dir
 
---echo # Create recovery temp path
---let $recovery_tmp_dir=$MYSQL_TMP_DIR/mysql_recovery_tmp
---mkdir $recovery_tmp_dir
-
 --echo # Create local object store
 --let $objstore_dir=$MYSQL_TMP_DIR/objstore
 --mkdir $objstore_dir
@@ -27,8 +23,8 @@
 
 # 3. start with consistent-snapshot-archive
 --echo # Server restart with --consistent-snapshot-archive=true
---replace_result $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
---let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --binlog-archive=true --consistent-snapshot-archive=true --consistent-archive-time=1 --mysql-archive-dir=$archive_dir --mysql-archive-recovery-tmpdir=$recovery_tmp_dir --persistent_on_objstore=true --table-on-objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--replace_result $archive_dir archive_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=$archive_dir --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
 --source include/restart_mysqld.inc
 
 CREATE DATABASE db1;
@@ -41,15 +37,15 @@ SELECT * FROM t1;
 SHOW CREATE TABLE t1;
 --sleep 10
 --echo #
---echo # Check for contain innodb_archive #consistent_snapshot 
---let $grep_file=$MYSQL_TMP_DIR/objstore/$bucket/#consistent_snapshot
+--echo # Check for contain innodb_archive consistent_snapshot.index
+--let $grep_file=$MYSQL_TMP_DIR/objstore/$bucket/consistent_snapshot.index
 --let $grep_pattern=innodb_archive.*
---let $grep_output= print_count
+--let $grep_output= boolean
 --source include/grep_pattern.inc
 
---echo # Check for contain se_archive #consistent_snapshot
+--echo # Check for contain se_archive consistent_snapshot.index
 --let $grep_pattern=se_archive.*
---let $grep_output= print_count
+--let $grep_output= boolean
 --source include/grep_pattern.inc
 
 --echo # Select mysql innodb persistent views
@@ -77,20 +73,42 @@ SHOW CREATE TABLE t1;
 --let $assert_cond= "[SELECT * FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX, Log_name, 1]" = "binlog.000001"
 --source include/assert.inc
 
---echo # Select consistent snapshot views
---let $assert_text= consistent snapshot archive file should be exist
---let $assert_cond= "[SELECT COUNT(*) as VAL FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT, VAL, 1]" = 1
+--let $max_attempts = 10
+--let $attempt = 0
+--let $delay = 1
+--echo # Purge persistent snapshot by timestamp
+--let $row_count = `SELECT COUNT(*) FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX`
+while ($row_count < 2 && $attempt < $max_attempts) {
+    let $row_count = `SELECT COUNT(*) FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX`;
+    if ($row_count >= 4) {
+        break;
+    }
+    --inc $attempt
+    --sleep 1
+}
+--disable_result_log
+SELECT * FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+--enable_result_log
+
+--let $snapshot_created_ts = `SELECT CREATED_TS FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX LIMIT 1 OFFSET 2`
+--let $assert_text= Purge consistent snapshot.
+--let purge_res = `SELECT CONSISTENT_PERSISTENT_SNAPSHOT_PURGE('$snapshot_created_ts');`
+--let $assert_cond= INSTR("$purge_res","Purge consistent snapshot successfully") > 0
 --source include/assert.inc
 
---disable_result_log
-SELECT * FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT;
---enable_result_log
+--let $assert_text= Check results after purge.
+--let $assert_cond= "[SELECT CREATED_TS FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX, CREATED_TS, 1]" = "$snapshot_created_ts"
+--source include/assert.inc
 
 --echo # Purge persistent snapshot
 --let $assert_text= Purge consistent snapshot.
---let purge_res = `SELECT CONSISTENT_PERSISTENT_SNAPSHOT_PURGE();`
+--let purge_res = `SELECT CONSISTENT_PERSISTENT_SNAPSHOT_PURGE('all');`
 --let $assert_cond= INSTR("$purge_res","Purge consistent snapshot successfully") > 0
 --source include/assert.inc
+
+--disable_result_log
+SELECT * FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+--enable_result_log
 
 --echo # Cleanup
 DROP DATABASE db1;

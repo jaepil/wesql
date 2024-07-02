@@ -226,7 +226,7 @@ static int se_init_func(void *const p)
                                       main_opts.max_background_dumps + 3,
                                       smartengine::util::Env::Priority::LOW);
 
-  if (opt_table_on_objstore) {
+  if (opt_table_on_objstore && opt_serverless) {
     if (!(opt_objstore_provider && opt_objstore_region &&
           opt_objstore_bucket)) {
       sql_print_error(

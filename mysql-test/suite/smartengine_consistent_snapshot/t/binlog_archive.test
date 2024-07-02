@@ -19,7 +19,7 @@
 
 --echo # Server restart with --binlog-archive=true
 --replace_result $archive_dir archive_dir $objstore_dir objstore_dir
---let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --mysql-archive-dir=$archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --consistent_snapshot_archive_dir=$archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
 --source include/restart_mysqld.inc
 
 CREATE DATABASE db1;
@@ -58,7 +58,7 @@ sleep 2;
 --let $archive_dir=$MYSQL_TMP_DIR/mysql_archive_local
 --mkdir $archive_dir
 --replace_result $archive_dir archive_dir
---let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --mysql-archive-dir=$archive_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --consistent_snapshot_archive_dir=$archive_dir
 --source include/restart_mysqld.inc
 
 FLUSH logs;

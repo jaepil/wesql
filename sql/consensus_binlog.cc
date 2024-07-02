@@ -694,10 +694,10 @@ static enum_read_gtids_from_binlog_status read_gtids_from_consensus_binlog(
   return ret;
 }
 
-
 bool MYSQL_BIN_LOG::consensus_init_gtid_sets(
     Gtid_set *all_gtids, Gtid_set *lost_gtids, bool verify_checksum,
-    bool need_lock, bool is_server_starting, uint64 last_index) {
+    bool need_lock, bool is_server_starting, uint64 last_index,
+    const char *log_name) {
   DBUG_TRACE;
   DBUG_PRINT("info", ("lost_gtids=%p; so we are recovering a %s log; ",
                       lost_gtids, lost_gtids == nullptr ? "relay" : "binary"));
@@ -752,6 +752,13 @@ bool MYSQL_BIN_LOG::consensus_init_gtid_sets(
   */
   if (is_server_starting && !is_consensus_write && !filename_list.empty())
     filename_list.pop_back();
+
+  if (log_name != nullptr) {
+    auto target = std::find(filename_list.begin(), filename_list.end(),
+                            std::string(log_name));
+    if (target != filename_list.end())
+      filename_list.erase(std::next(target), filename_list.end());
+  }
 
   error = 0;
   DBUG_PRINT("info", ("Iterating backwards through binary logs, "
@@ -1435,7 +1442,7 @@ void update_trx_compression(binlog_cache_data *cache_data, Gtid &owned_gtid,
 }
 
 int truncate_binlog_file_to_valid_pos(const char *log_name, my_off_t valid_pos,
-                                      my_off_t binlog_size) {
+                                      my_off_t binlog_size, bool update) {
   std::unique_ptr<MYSQL_BIN_LOG::Binlog_ofile> ofile(
         MYSQL_BIN_LOG::Binlog_ofile::open_existing(key_file_binlog, log_name,
                                                    MYF(MY_WME)));
@@ -1453,6 +1460,15 @@ int truncate_binlog_file_to_valid_pos(const char *log_name, my_off_t valid_pos,
     }
     LogErr(INFORMATION_LEVEL, ER_BINLOG_CRASHED_BINLOG_TRIMMED, log_name,
            binlog_size, valid_pos, valid_pos);
+  }
+
+  if (update) {
+    /* Clear LOG_EVENT_BINLOG_IN_USE_F */
+    uchar flags = 0;
+    if (ofile->update(&flags, 1, BIN_LOG_HEADER_SIZE + FLAGS_OFFSET)) {
+      LogErr(ERROR_LEVEL, ER_BINLOG_CANT_CLEAR_IN_USE_FLAG_FOR_CRASHED_BINLOG);
+      return 1;
+    }
   }
 
   return 0;

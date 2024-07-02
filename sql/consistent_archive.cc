@@ -20,12 +20,15 @@
 #include <string>
 #include "my_io.h"
 
+#include "lex_string.h"
 #include "libbinlogevents/include/binlog_event.h"
+#include "mf_wcomp.h"  // wild_one, wild_many
 #include "my_dbug.h"
 #include "my_dir.h"
 #include "my_sys.h"
 #include "my_thread.h"
 #include "mysql/components/services/log_builtins.h"  // LogErr
+#include "mysql/plugin.h"
 #include "mysql/psi/mysql_file.h"
 #include "mysql/psi/mysql_thread.h"
 #include "mysqld_error.h"
@@ -55,7 +58,7 @@
   MYSQL_LOCAL_CLONE_FILES_DIR "#view_status"
 
 // mysql consistent snapshot archive object
-static Consistent_archive *mysql_consistent_archive = nullptr;
+static Consistent_archive mysql_consistent_archive;
 static my_thread_handle mysql_archiver_pthd;
 static bool abort_archive = false;
 static mysql_mutex_t m_run_lock;
@@ -115,6 +118,9 @@ static bool copy_file(IO_CACHE *from, IO_CACHE *to, my_off_t offset);
 static bool file_has_suffix(const std::string &sfx, const std::string &path);
 static int compare_log_name(const char *log_1, const char *log_2);
 static void exec_binlog_error_action_abort(THD *thd, const char *err_string);
+static time_t calculate_auto_purge_lower_time_bound();
+static int convert_str_to_datetime(const char *str, ulong &my_time);
+static void convert_datetime_to_str(char *str, time_t ts);
 /**
  * @brief Creates a consistent archive object and starts the consistent snapshot
  * archive thread.
@@ -123,43 +129,42 @@ static void exec_binlog_error_action_abort(THD *thd, const char *err_string);
 int start_consistent_archive() {
   DBUG_TRACE;
 
-  if (!opt_consistent_snapshot_archive) {
+  if (!opt_consistent_snapshot_archive || !opt_serverless) {
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "consistent snapshot archive not enabled "
-           "--consistent-snapshot-archive.");
+           "consistent snapshot persistent not enabled.");
     return 0;
   }
   // Not set consistent archive dir
-  if (opt_mysql_archive_dir == nullptr) {
+  if (opt_consistent_snapshot_archive_dir == nullptr) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "Mysql archive path not set, please set --mysql-archive-dir.");
+           "Mysql archive path not set, please set --consistent_snapshot_archive_dir.");
     return 1;
   }
 
   // Check if mysql consistent archive directory exists, and directory is
   // writable.
   MY_STAT stat;
-  if (!my_stat(opt_mysql_archive_dir, &stat, MYF(0)) ||
+  if (!my_stat(opt_consistent_snapshot_archive_dir, &stat, MYF(0)) ||
       !MY_S_ISDIR(stat.st_mode) ||
-      my_access(opt_mysql_archive_dir, (F_OK | W_OK))) {
+      my_access(opt_consistent_snapshot_archive_dir, (F_OK | W_OK))) {
     std::string err_msg;
     err_msg.assign("Mysql archive path not exist: ");
-    err_msg.append(opt_mysql_archive_dir);
+    err_msg.append(opt_consistent_snapshot_archive_dir);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     return 1;
   }
   // data home can not contain archive directory.
-  if (test_if_data_home_dir(opt_mysql_archive_dir)) {
+  if (test_if_data_home_dir(opt_consistent_snapshot_archive_dir)) {
     std::string err_msg;
     err_msg.assign("mysql archive path is within the current data directory: ");
-    err_msg.append(opt_mysql_archive_dir);
+    err_msg.append(opt_consistent_snapshot_archive_dir);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     return 1;
   }
 
   // Check if archive binlog dir exists. If not exists, create it.
   char tmp_archive_data_dir[FN_REFLEN + 1] = {0};
-  strmake(tmp_archive_data_dir, opt_mysql_archive_dir,
+  strmake(tmp_archive_data_dir, opt_consistent_snapshot_archive_dir,
           sizeof(tmp_archive_data_dir) - CONSISTENT_ARCHIVE_SUBDIR_LEN - 1);
   strmake(convert_dirname(tmp_archive_data_dir, tmp_archive_data_dir, NullS),
           STRING_WITH_LEN(CONSISTENT_ARCHIVE_SUBDIR));
@@ -194,41 +199,21 @@ int start_consistent_archive() {
   int count_thread =
       static_cast<int>(array_elements(all_consistent_archive_threads));
   mysql_thread_register(category, all_consistent_archive_threads, count_thread);
-
-  int count_mutex =
-      static_cast<int>(array_elements(all_consistent_archive_mutex_info));
-  mysql_mutex_register(category, all_consistent_archive_mutex_info,
-                       count_mutex);
-
-  int count_cond =
-      static_cast<int>(array_elements(all_consistent_archive_cond_info));
-  mysql_cond_register(category, all_consistent_archive_cond_info, count_cond);
-
-  int count_file =
-      static_cast<int>(array_elements(all_consistent_archive_files));
-  mysql_file_register(category, all_consistent_archive_files, count_file);
-
 #endif
-
-  mysql_mutex_init(PSI_consistent_archive_lock_key, &m_run_lock,
-                   MY_MUTEX_INIT_FAST);
-  mysql_cond_init(PSI_consistent_archive_cond_key, &m_run_cond);
-
-  mysql_consistent_archive = new Consistent_archive();
 
   mysql_mutex_lock(&m_run_lock);
   abort_archive = false;
   if (mysql_thread_create(THR_KEY_consistent_archive, &mysql_archiver_pthd,
                           &connection_attrib, consistent_archive_action,
-                          (void *)mysql_consistent_archive)) {
+                          (void *)&mysql_consistent_archive)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "create consistent archive thread failed");
     mysql_mutex_unlock(&m_run_lock);
     return 1;
   }
-  mysql_consistent_archive->thread_set_created();
+  mysql_consistent_archive.thread_set_created();
 
-  while (mysql_consistent_archive->is_thread_alive_not_running()) {
+  while (mysql_consistent_archive.is_thread_alive_not_running()) {
     DBUG_PRINT("sleep", ("Waiting for consisten archive thread to start"));
     struct timespec abstime;
     set_timespec(&abstime, 1);
@@ -245,27 +230,18 @@ int start_consistent_archive() {
 void stop_consistent_archive() {
   DBUG_TRACE;
 
-  if (!mysql_consistent_archive) goto end;
-
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
          "stop consistent archive");
 
   mysql_mutex_lock(&m_run_lock);
-  if (mysql_consistent_archive->is_thread_dead()) {
+  if (mysql_consistent_archive.is_thread_dead()) {
     mysql_mutex_unlock(&m_run_lock);
-    goto end;
+    return;
   }
   mysql_mutex_unlock(&m_run_lock);
-  mysql_consistent_archive->terminate_consistent_archive_thread();
+  mysql_consistent_archive.terminate_consistent_archive_thread();
   /* Wait until the thread is terminated. */
   my_thread_join(&mysql_archiver_pthd, nullptr);
-end:
-  if (mysql_consistent_archive) {
-    delete mysql_consistent_archive;
-    mysql_consistent_archive = nullptr;
-    mysql_mutex_destroy(&m_run_lock);
-    mysql_cond_destroy(&m_run_cond);
-  }
 }
 
 /**
@@ -286,12 +262,13 @@ static void *consistent_archive_action(void *arg [[maybe_unused]]) {
 Consistent_archive::Consistent_archive()
     : m_thread(),
       m_thd(nullptr),
-      m_clone(nullptr),
       m_diag_area(false),
       m_thd_state(),
       snapshot_objstore(nullptr),
       m_mysql_clone_index_file(),
       m_crash_safe_mysql_clone_index_file(),
+      m_binlog_pos(0),
+      m_se_snapshot_id(0),
       m_se_backup_index_file(),
       m_crash_safe_se_backup_index_file(),
       m_consistent_snapshot_index_file(),
@@ -304,28 +281,43 @@ Consistent_archive::Consistent_archive()
   m_mysql_innodb_clone_dir[0] = '\0';
   m_mysql_clone_index_file_name[0] = '\0';
   m_crash_safe_mysql_clone_index_file_name[0] = '\0';
-  m_mysql_clone_index_number = 0;
+  m_mysql_clone_next_index_number = 0;
 
+  m_binlog_file[0] = '\0';
   tmp_se_backup_dir_[0] = '\0';
   m_se_backup_index_file_name[0] = '\0';
   m_crash_safe_se_backup_index_file_name[0] = '\0';
   m_se_backup_dir[0] = '\0';
-  m_se_bakcup_name[0] = '\0';
-  m_se_backup_index_number = 0;
+  m_se_backup_name[0] = '\0';
+  m_se_backup_next_index_number = 0;
 
+  m_consistent_snapshot_local_time[0] = '\0';
   m_consistent_snapshot_index_file_name[0] = '\0';
   m_crash_safe_consistent_snapshot_index_file_name[0] = '\0';
 
   m_purge_index_file_name[0] = '\0';
-
-  init();
 }
 
-/**
- * @brief Initializes the Consistent_archive object.
- */
-void Consistent_archive::init() {
-  DBUG_TRACE;
+void Consistent_archive::init_pthread_object() {
+#ifdef HAVE_PSI_INTERFACE
+  const char *category = "consistent";
+  int count_mutex =
+      static_cast<int>(array_elements(all_consistent_archive_mutex_info));
+  mysql_mutex_register(category, all_consistent_archive_mutex_info,
+                       count_mutex);
+
+  int count_cond =
+      static_cast<int>(array_elements(all_consistent_archive_cond_info));
+  mysql_cond_register(category, all_consistent_archive_cond_info, count_cond);
+
+  int count_file =
+      static_cast<int>(array_elements(all_consistent_archive_files));
+  mysql_file_register(category, all_consistent_archive_files, count_file);
+
+#endif
+  mysql_mutex_init(PSI_consistent_archive_lock_key, &m_run_lock,
+                   MY_MUTEX_INIT_FAST);
+  mysql_cond_init(PSI_consistent_archive_cond_key, &m_run_cond);
   mysql_mutex_init(PSI_consistent_index_lock_key, &m_consistent_index_lock,
                    MY_MUTEX_INIT_FAST);
   mysql_mutex_init(PSI_mysql_innodb_clone_index_lock_key,
@@ -334,32 +326,30 @@ void Consistent_archive::init() {
                    MY_MUTEX_INIT_FAST);
 }
 
-/**
- * @brief Destructs the Consistent_archive object.
- */
-Consistent_archive::~Consistent_archive() {
-  DBUG_TRACE;
-  cleanup();
-}
-
-/**
- * @brief Cleans up any resources used by the Consistent_archive.
- */
-void Consistent_archive::cleanup() {
-  DBUG_TRACE;
+void Consistent_archive::deinit_pthread_object() {
   mysql_mutex_destroy(&m_se_backup_index_lock);
   mysql_mutex_destroy(&m_mysql_innodb_clone_index_lock);
   mysql_mutex_destroy(&m_consistent_index_lock);
+  mysql_mutex_destroy(&m_run_lock);
+  mysql_cond_destroy(&m_run_cond);
 }
+
+/**
+ * @brief Destructs the Consistent_archive object.
+ */
+Consistent_archive::~Consistent_archive() {}
 
 /**
  * @brief Returns the consistent snapshot archive instance.
  * @return Consistent_archive*
  */
 Consistent_archive *Consistent_archive::get_instance() {
-  return mysql_consistent_archive;
+  return &mysql_consistent_archive;
 }
 
+mysql_mutex_t *Consistent_archive::get_consistent_archive_lock(){
+  return &m_run_lock;
+}
 /**
  * @brief Terminate the binlog archive thread.
  *
@@ -402,6 +392,135 @@ void Consistent_archive::set_thread_context() {
   m_thd = thd;
 }
 
+static bool is_number(const char *str, uint64_t *res, bool allow_wildcards) {
+  int flag;
+  const char *start;
+  DBUG_TRACE;
+
+  flag = 0;
+  start = str;
+  while (*str++ == ' ')
+    ;
+  if (*--str == '-' || *str == '+') str++;
+  while (my_isdigit(files_charset_info, *str) ||
+         (allow_wildcards && (*str == wild_many || *str == wild_one))) {
+    flag = 1;
+    str++;
+  }
+  if (*str == '.') {
+    for (str++; my_isdigit(files_charset_info, *str) ||
+                (allow_wildcards && (*str == wild_many || *str == wild_one));
+         str++, flag = 1)
+      ;
+  }
+  if (*str != 0 || flag == 0) return false;
+  if (res) *res = atol(start);
+  return true; /* Number ok */
+} /* is_number */
+
+// init new mysql archive dir name
+int Consistent_archive::generate_innodb_new_name() {
+  LOG_INFO log_info;
+  int error = 0;
+  uint64_t number = 0;
+  bool need_lock = false;
+
+  if (m_mysql_clone_next_index_number == 0) {
+    need_lock = true;
+    mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
+    if (open_index_file(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
+                        CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
+                        ARCHIVE_MYSQL_INNODB)) {
+      mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
+      return 1;
+    }
+    // init new innodb index number from mysql clone index file.
+    error = find_line_from_index(&log_info, NullS, ARCHIVE_MYSQL_INNODB);
+    if (error == 0) {
+      char tmp_buf[FN_REFLEN + 1] = {0};
+      do {
+        strmake(tmp_buf, log_info.log_file_name, sizeof(tmp_buf) - 1);
+      } while (!(
+          error = find_next_line_from_index(&log_info, ARCHIVE_MYSQL_INNODB)));
+      if (error != LOG_INFO_EOF) {
+        goto err;
+      }
+      is_number(tmp_buf + strlen(CONSISTENT_INNODB_ARCHIVE_BASENAME), &number,
+                false);
+      error = 0;
+      m_mysql_clone_next_index_number = number;
+      m_mysql_clone_next_index_number++;
+    } else if (error == LOG_INFO_EOF) {
+      // log index file is empty.
+      m_mysql_clone_next_index_number = 1;
+      error = 0;
+    } else {
+      goto err;
+    }
+  } else {
+    m_mysql_clone_next_index_number++;
+    error = 0;
+  }
+  sprintf(m_mysql_clone_name, "%s%06llu", CONSISTENT_INNODB_ARCHIVE_BASENAME,
+          (ulonglong)m_mysql_clone_next_index_number);
+err:
+  if (need_lock) {
+    close_index_file(ARCHIVE_MYSQL_INNODB);
+    mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
+  }
+  return error;
+}
+
+int Consistent_archive::generate_se_new_name() {
+  LOG_INFO log_info;
+  int error = 1;
+  uint64_t number = 0;
+  bool need_lock = false;
+
+  if (m_se_backup_next_index_number == 0) {
+    need_lock = true;
+    mysql_mutex_lock(&m_se_backup_index_lock);
+    if (open_index_file(CONSISTENT_SE_ARCHIVE_INDEX_FILE,
+                        CONSISTENT_SE_ARCHIVE_INDEX_FILE, ARCHIVE_SE)) {
+      mysql_mutex_unlock(&m_se_backup_index_lock);
+      return 1;
+    }
+    // init new smartengine index number from mysql clone index file.
+    error = find_line_from_index(&log_info, NullS, ARCHIVE_SE);
+    if (error == 0) {
+      char tmp_buf[FN_REFLEN + 1] = {0};
+      do {
+        strmake(tmp_buf, log_info.log_file_name, sizeof(tmp_buf) - 1);
+      } while (!(error = find_next_line_from_index(&log_info, ARCHIVE_SE)));
+      if (error != LOG_INFO_EOF) {
+        goto err;
+      }
+      is_number(tmp_buf + strlen(CONSISTENT_SE_ARCHIVE_BASENAME), &number,
+                false);
+      m_se_backup_next_index_number = number;
+      m_se_backup_next_index_number++;
+      error = 0;
+    } else if (error == LOG_INFO_EOF) {
+      // log index file is empty.
+      m_se_backup_next_index_number = 1;
+      error = 0;
+    } else {
+      goto err;
+    }
+  } else {
+    m_se_backup_next_index_number++;
+    error = 0;
+  }
+  sprintf(m_se_backup_name, "%s%06llu", CONSISTENT_SE_ARCHIVE_BASENAME,
+          (ulonglong)m_se_backup_next_index_number);
+err:
+  if (need_lock) {
+    close_index_file(ARCHIVE_SE);
+    mysql_mutex_unlock(&m_se_backup_index_lock);
+  }
+  return error;
+}
+
 /**
  * @brief Consistent archive thread run function.
  *
@@ -431,7 +550,7 @@ void Consistent_archive::run() {
     }
   }
 
-  strmake(m_mysql_archive_dir, opt_mysql_archive_dir,
+  strmake(m_mysql_archive_dir, opt_consistent_snapshot_archive_dir,
           sizeof(m_mysql_archive_dir) - 1);
   convert_dirname(m_mysql_archive_dir, m_mysql_archive_dir, NullS);
   strmake(strmake(m_mysql_archive_data_dir, m_mysql_archive_dir,
@@ -439,49 +558,13 @@ void Consistent_archive::run() {
                       CONSISTENT_ARCHIVE_SUBDIR_LEN - 1),
           STRING_WITH_LEN(CONSISTENT_ARCHIVE_SUBDIR));
   convert_dirname(m_mysql_archive_data_dir, m_mysql_archive_data_dir, NullS);
-  // init new mysql archive dir name
-  {
-    LOG_INFO log_info;
-    int error = 1;
 
-    strmake(m_mysql_clone_index_file_name, CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
-            sizeof(m_mysql_clone_index_file_name) - 1);
+  strmake(m_mysql_clone_index_file_name, CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
+          sizeof(m_mysql_clone_index_file_name) - 1);
 
-    mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
-    if (open_index_file(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
-                        CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
-                        ARCHIVE_MYSQL_INNODB)) {
-      mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
-      goto error;
-    }
-    // init new innodb index number from mysql clone index file.
-    error = find_line_from_index(&log_info, NullS, ARCHIVE_MYSQL_INNODB);
-    if (error == 0) {
-      char tmp_buf[FN_REFLEN + 1] = {0};
-      do {
-        strmake(tmp_buf, log_info.log_file_name, sizeof(tmp_buf) - 1);
-      } while (!(
-          error = find_next_line_from_index(&log_info, ARCHIVE_MYSQL_INNODB)));
-      if (error != LOG_INFO_EOF) {
-        mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
-        goto error;
-      }
-      // get tmp_buf last 6 char
-      char *p = tmp_buf + strlen(tmp_buf) - 6;
-      // convert to int
-      m_mysql_clone_index_number = atoi(p);
-      m_mysql_clone_index_number++;
-    } else if (error == LOG_INFO_EOF) {
-      // log index file is empty.
-      m_mysql_clone_index_number = 1;
-    } else {
-      mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
-      goto error;
-    }
-    mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
-  }
-
-  // init new smartengine archive dir name.
+  strmake(m_se_backup_index_file_name, CONSISTENT_SE_ARCHIVE_INDEX_FILE,
+          sizeof(m_se_backup_index_file_name) - 1);
+  // get smartengine temp backup dir name.
   {
     // select @@SMARTENGINE_DATADIR
     String se_data_dir_tmp, *se_data_dir = nullptr;
@@ -509,43 +592,6 @@ void Consistent_archive::run() {
     strmake(convert_dirname(tmp_se_backup_dir_, tmp_se_backup_dir_, NullS),
             STRING_WITH_LEN(MYSQL_SE_TMP_BACKUP_DIR));
     convert_dirname(tmp_se_backup_dir_, tmp_se_backup_dir_, NullS);
-
-    LOG_INFO log_info;
-    int error = 1;
-
-    strmake(m_se_backup_index_file_name, CONSISTENT_SE_ARCHIVE_INDEX_FILE,
-            sizeof(m_se_backup_index_file_name) - 1);
-
-    mysql_mutex_lock(&m_se_backup_index_lock);
-    if (open_index_file(CONSISTENT_SE_ARCHIVE_INDEX_FILE,
-                        CONSISTENT_SE_ARCHIVE_INDEX_FILE, ARCHIVE_SE)) {
-      mysql_mutex_unlock(&m_se_backup_index_lock);
-      goto error;
-    }
-    // init new smartengine index number from mysql clone index file.
-    error = find_line_from_index(&log_info, NullS, ARCHIVE_SE);
-    if (error == 0) {
-      char tmp_buf[FN_REFLEN + 1] = {0};
-      do {
-        strmake(tmp_buf, log_info.log_file_name, sizeof(tmp_buf) - 1);
-      } while (!(error = find_next_line_from_index(&log_info, ARCHIVE_SE)));
-      if (error != LOG_INFO_EOF) {
-        mysql_mutex_unlock(&m_se_backup_index_lock);
-        goto error;
-      }
-      // get tmp_buf last 6 char
-      char *p = tmp_buf + strlen(tmp_buf) - 6;
-      // convert to int
-      m_se_backup_index_number = atoi(p);
-      m_se_backup_index_number++;
-    } else if (error == LOG_INFO_EOF) {
-      // log index file is empty.
-      m_se_backup_index_number = 1;
-    } else {
-      mysql_mutex_unlock(&m_se_backup_index_lock);
-      goto error;
-    }
-    mysql_mutex_unlock(&m_se_backup_index_lock);
   }
 
   mysql_mutex_lock(&m_run_lock);
@@ -568,61 +614,28 @@ void Consistent_archive::run() {
     m_thd->get_stmt_da()->reset_diagnostics_area();
 
     // generate next innodb clone dir name
-    sprintf(m_mysql_clone_name, "%s%06u", CONSISTENT_INNODB_ARCHIVE_BASENAME,
-            m_mysql_clone_index_number);
+    if (generate_innodb_new_name()) {
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+             "failed to generate innodb new name.");
+      goto error;
+    }
     strmake(strmake(m_mysql_innodb_clone_dir, m_mysql_archive_data_dir,
-                    sizeof(m_mysql_innodb_clone_dir) -
-                        CONSISTENT_INNODB_ARCHIVE_NAME_LEN - 1),
-            m_mysql_clone_name, CONSISTENT_INNODB_ARCHIVE_NAME_LEN);
+                    FN_REFLEN - strlen(m_mysql_clone_name)),
+            m_mysql_clone_name, strlen(m_mysql_clone_name));
 
     // generate next smartengine backup dir name
-    sprintf(m_se_bakcup_name, "%s%06u", CONSISTENT_SE_ARCHIVE_BASENAME,
-            m_se_backup_index_number);
-    strmake(
-        strmake(m_se_backup_dir, m_mysql_archive_data_dir,
-                sizeof(m_se_backup_dir) - CONSISTENT_SE_ARCHIVE_NAME_LEN - 1),
-        m_se_bakcup_name, CONSISTENT_SE_ARCHIVE_NAME_LEN);
-
-    ret = wait_for_consistent_archive(timeout);
-    assert(ret == 0 || is_timeout(ret));
-    // If the thread is killed, again archive last consistent snapshot, before
-    // exit.
-    mysql_mutex_lock(&m_run_lock);
-    if (abort_archive) {
-      mysql_mutex_unlock(&m_run_lock);
-      std::string err_msg;
-      if (archive_consistent_snapshot()) {
-        err_msg.assign("Consistent snapshot last archive failed: ");
-        err_msg.append(m_mysql_innodb_clone_dir);
-        LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-      } else {
-        err_msg.assign("Consistent snapshot last archive: ");
-        err_msg.append(m_mysql_innodb_clone_dir);
-        LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-      }
-      break;
+    if (generate_se_new_name()) {
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+             "failed to generate smartengine new name.");
+      goto error;
     }
-    mysql_mutex_unlock(&m_run_lock);
-    if (archive_consistent_snapshot()) {
-      std::string err_msg;
-      err_msg.assign("Consistent snapshot archive failed: ");
-      err_msg.append(m_mysql_innodb_clone_dir);
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-    } else {
-      std::string err_msg;
-      err_msg.assign("Consistent snapshot archive: ");
-      err_msg.append(m_mysql_innodb_clone_dir);
-      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-    }
-    // Regardless of whether the last archiving was successful or not,
-    // m_mysql_clone_index_number is incremented.
-    m_mysql_clone_index_number++;
-    m_se_backup_index_number++;
+    strmake(strmake(m_se_backup_dir, m_mysql_archive_data_dir,
+                    FN_REFLEN - strlen(m_mysql_clone_name)),
+            m_se_backup_name, strlen(m_mysql_clone_name));
 
     // Every time a consistent snapshot is archived, reopens the index file.
     // Ensure that the local index files are consistent with the object store.
     mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
-    close_index_file(ARCHIVE_MYSQL_INNODB);
     if (open_index_file(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
                         CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
                         ARCHIVE_MYSQL_INNODB)) {
@@ -632,13 +645,115 @@ void Consistent_archive::run() {
     mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
 
     mysql_mutex_lock(&m_se_backup_index_lock);
-    close_index_file(ARCHIVE_SE);
     if (open_index_file(CONSISTENT_SE_ARCHIVE_INDEX_FILE,
                         CONSISTENT_SE_ARCHIVE_INDEX_FILE, ARCHIVE_SE)) {
       mysql_mutex_unlock(&m_se_backup_index_lock);
       goto error;
     }
     mysql_mutex_unlock(&m_se_backup_index_lock);
+
+    mysql_mutex_lock(&m_consistent_index_lock);
+    if (open_index_file(CONSISTENT_SNAPSHOT_INDEX_FILE,
+                        CONSISTENT_SNAPSHOT_INDEX_FILE,
+                        ARCHIVE_SNAPSHOT_FILE)) {
+      mysql_mutex_unlock(&m_consistent_index_lock);
+      goto error;
+    }
+    mysql_mutex_unlock(&m_consistent_index_lock);
+
+    memset(m_consistent_snapshot_local_time, 0, sizeof(m_consistent_snapshot_local_time));
+    memset(m_binlog_file, 0, sizeof(m_consistent_snapshot_local_time));
+    m_binlog_pos = 0;
+    m_se_snapshot_id = 0;
+
+    // If the thread is killed, again archive last consistent snapshot, before
+    // exit.
+    mysql_mutex_lock(&m_run_lock);
+    if (abort_archive) {
+      mysql_mutex_unlock(&m_run_lock);
+      std::string err_msg;
+      if (archive_consistent_snapshot()) {
+        err_msg.assign("Consistent snapshot last archive failed");
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+      } else {
+        err_msg.assign("Consistent snapshot last archive: ");
+        err_msg.append(m_consistent_snapshot_local_time);
+        err_msg.append(" ");
+        err_msg.append(m_mysql_clone_name);
+        err_msg.append(" ");
+        err_msg.append(m_se_backup_name);
+        err_msg.append(" ");
+        err_msg.append(m_binlog_file);
+        err_msg.append(" ");
+        err_msg.append(std::to_string(m_binlog_pos));
+        err_msg.append(" ");
+        err_msg.append(std::to_string(m_se_snapshot_id));
+        LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+      }
+      break;
+    }
+    mysql_mutex_unlock(&m_run_lock);
+
+    // First purge expired consistent snapshot,
+    // before next archive consistent snapshot.
+    // The slog generated when smartengine releases snapshot 
+    // is included in subsequent consistent snapshots as much as possible.
+    {
+      char purge_time_str[iso8601_size] = {};
+      auto err_val{0};
+      std::string err_msg{};  // error message
+      if (opt_consistent_snapshot_expire_seconds > 0) {
+        auto purge_time = calculate_auto_purge_lower_time_bound();
+        convert_datetime_to_str(purge_time_str, purge_time);
+      } else {
+        strcpy(purge_time_str, "all");
+      }
+      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, "Auto purge consistent snapshot");
+      std::tie(err_val, err_msg) =
+          purge_consistent_snapshot(purge_time_str, strlen(purge_time_str), true);
+      if (err_val) {
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+      }
+    }
+
+    if (archive_consistent_snapshot()) {
+      std::string err_msg;
+      err_msg.assign("Consistent snapshot archive failed");
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    } else {
+      std::string err_msg;
+      err_msg.assign("Consistent snapshot archive: ");
+      err_msg.append(m_consistent_snapshot_local_time);
+      err_msg.append(" ");
+      err_msg.append(m_mysql_clone_name);
+      err_msg.append(" ");
+      err_msg.append(m_se_backup_name);
+      err_msg.append(" ");
+      err_msg.append(m_binlog_file);
+      err_msg.append(" ");
+      err_msg.append(std::to_string(m_binlog_pos));
+      err_msg.append(" ");
+      err_msg.append(std::to_string(m_se_snapshot_id));
+      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    }
+
+    ret = wait_for_consistent_archive(timeout);
+    assert(ret == 0 || is_timeout(ret));
+        
+    // Every time a consistent snapshot is archived, reopens the index file.
+    // Ensure that the local index files are consistent with the object store.
+    mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
+    close_index_file(ARCHIVE_MYSQL_INNODB);
+    mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
+
+    mysql_mutex_lock(&m_se_backup_index_lock);
+    close_index_file(ARCHIVE_SE);
+    mysql_mutex_unlock(&m_se_backup_index_lock);
+
+    mysql_mutex_lock(&m_consistent_index_lock);
+    close_index_file(ARCHIVE_SNAPSHOT_FILE);
+    mysql_mutex_unlock(&m_consistent_index_lock);
+
     // Free new Item_***.
     m_thd->free_items();
   }
@@ -654,6 +769,9 @@ error:
   mysql_mutex_lock(&m_se_backup_index_lock);
   close_index_file(ARCHIVE_SE);
   mysql_mutex_unlock(&m_se_backup_index_lock);
+  mysql_mutex_lock(&m_consistent_index_lock);
+  close_index_file(ARCHIVE_SNAPSHOT_FILE);
+  mysql_mutex_unlock(&m_consistent_index_lock);
 
   LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
          "Consistent snapshot archive thread end");
@@ -740,8 +858,32 @@ bool Consistent_archive::archive_consistent_snapshot() {
   // release ddl lock
   release_backup_lock(thd);
 
+  // force rotate binlog, wait for binlog rotate complete
+  if (mysql_bin_log.is_open() && m_binlog_file[0] != '\0') {
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, m_binlog_file);
+    // wait archive binlog complete.
+    auto errval =
+        binlog_archive_wait_for_update(thd, m_binlog_file, m_binlog_pos);
+    if (errval != 0) {
+      release_se_snapshot(m_se_snapshot_id);
+      m_se_snapshot_id = 0;
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+             "binlog archive wait for update failed");
+      goto err;
+    }
+  } else {
+    std::string err_msg;
+    err_msg.assign("no persistent binlog: ");
+    if (m_binlog_file[0] != '\0') {
+      err_msg.append(m_binlog_file);
+    }
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+  }
+
   // write consistent snapshot file.
   if (write_consistent_snapshot_file()) {
+    release_se_snapshot(m_se_snapshot_id);
+    m_se_snapshot_id = 0;
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "write consistent snapshot file failed");
     goto err;
@@ -769,6 +911,7 @@ bool Consistent_archive::achive_mysql_innodb() {
   DBUG_TRACE;
   List<set_var_base> tmp_var_list;
   THD *thd = m_thd;
+  plugin_ref plugin{};
 
   // set global clone_block_ddl = off, held backup lock already.
   System_variable_tracker block_ddl_var_tracker =
@@ -813,24 +956,19 @@ bool Consistent_archive::achive_mysql_innodb() {
   lex_end(thd->lex);
   thd->lex = saved_lex;
 
-  assert(m_clone == nullptr);
-  m_clone = clone_plugin_lock(thd, &m_plugin);
-  if (m_clone == nullptr) {
+  Clone_handler *clone = clone_plugin_lock(thd, &plugin);
+  if (clone == nullptr) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, "clone plugin load failed");
     return true;
   }
   // clone mysql innodb data to local dir.
-  auto err = m_clone->clone_local(thd, m_mysql_innodb_clone_dir);
-  clone_plugin_unlock(thd, m_plugin);
-  m_clone = nullptr;
+  auto err = clone->clone_local(thd, m_mysql_innodb_clone_dir);
+  clone_plugin_unlock(thd, plugin);
   if (err != 0) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "local clone mysql innodb failed");
     return true;
   }
-
-  // get binlog file name and position from clone status file.
-  read_mysql_innodb_clone_status();
 
   // tar mysql innod data dir and
   // upload innodb_archive_000001.tar.gz to s3.
@@ -890,7 +1028,7 @@ bool Consistent_archive::achive_mysql_innodb() {
   mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
   if (DBUG_EVALUATE_IF("fault_injection_persistent_innodb_archive_index_file",
                        1, 0) ||
-      add_line_to_index((uchar *)m_mysql_clone_name, strlen(m_mysql_clone_name),
+      add_line_to_index((const char *)m_mysql_clone_name,
                         ARCHIVE_MYSQL_INNODB)) {
     mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
@@ -899,118 +1037,7 @@ bool Consistent_archive::achive_mysql_innodb() {
   }
   mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
 
-  // force rotate binlog, wait for binlog rotate complete
-  if (mysql_bin_log.is_open() && m_binlog_file[0] != '\0') {
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, m_binlog_file);
-    DBUG_EXECUTE_IF("fault_injection_persistent_innodb_archive_rotate_binlog",
-                    { return true; });
-    mysql_mutex_lock(mysql_bin_log.get_log_lock());
-    bool check_purge = false;
-    err = mysql_bin_log.rotate(true, &check_purge);
-    mysql_mutex_unlock(mysql_bin_log.get_log_lock());
-    if (err != 0) {
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, "binlog rotate failed");
-      return true;
-    }
-    // wait archive binlog complete.
-    err = binlog_archive_wait_for_update(thd, m_binlog_file, m_binlog_pos);
-    if (err != 0) {
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-             "binlog archive wait for update failed");
-      return true;
-    }
-  }
-  else {
-    std::string err_msg;
-    err_msg.assign("no persistent binlog: ");
-    if (m_binlog_file[0] != '\0') {
-      err_msg.append(m_binlog_file);
-    }
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-  }
-
   return false;
-}
-
-/**
- * @brief Read mysql innodb clone status file.
- * Retrieve binlog file name and pos.
- */
-void Consistent_archive::read_mysql_innodb_clone_status() {
-  DBUG_TRACE;
-  std::string file_name;
-  char full_log_name[FN_REFLEN + 1] = {0};
-
-  file_name.assign(m_mysql_innodb_clone_dir);
-  file_name.append(FN_DIRSEP);
-  file_name.append(MYSQL_LOCAL_CLONE_VIEW_STATUS_FILE);
-
-  // Reset the status variables.
-  m_binlog_file[0] = '\0';
-  m_binlog_pos = 0;
-
-  std::ifstream status_file;
-  status_file.open(file_name, std::ifstream::in);
-  if (!status_file.is_open()) {
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "open clone status file failed");
-    return;
-  }
-
-  std::string file_line;
-  int line_number = 0;
-  uint32_t state = 0;
-  /* loop through the lines and extract status information. */
-  while (std::getline(status_file, file_line)) {
-    ++line_number;
-    std::stringstream file_data(file_line, std::ifstream::in);
-    switch (line_number) {
-      case 1:
-        /* Read state columns. */
-        file_data >> state >> m_id;
-        m_state = STATE_NONE;
-        if (state < static_cast<uint32_t>(NUM_STATES)) {
-          m_state = static_cast<Clone_state>(state);
-        }
-        break;
-      case 2:
-        /* Read time columns. */
-        file_data >> m_start_time >> m_end_time;
-        break;
-      case 3:
-        /* read source string */
-        strncpy(m_source, file_line.c_str(), sizeof(m_source) - 1);
-        break;
-      case 4:
-        /* Read error number. */
-        file_data >> m_error_number;
-        break;
-      case 5:
-        /* read error string */
-        strncpy(m_error_mesg, file_line.c_str(), sizeof(m_error_mesg) - 1);
-        break;
-      case 6:
-        /* Read binary log file name. */
-        strncpy(m_binlog_file, file_line.c_str(), sizeof(m_binlog_file) - 1);
-        // extend relative paths for m_binlog_file to be consistent snapshot
-        normalize_binlog_name(full_log_name, m_binlog_file, false);
-        strmake(m_binlog_file, full_log_name, sizeof(m_binlog_file) - 1);
-        break;
-      case 7:
-        /* Read binary log position. */
-        file_data >> m_binlog_pos;
-        break;
-      case 8:
-        /* Read GTID_EXECUTED. */
-        m_gtid_string.assign(file_data.str());
-        break;
-      default:
-        m_gtid_string.append("\n");
-        m_gtid_string.append(file_data.str());
-        break;
-    }
-  }
-  status_file.close();
 }
 
 /**
@@ -1020,31 +1047,43 @@ void Consistent_archive::read_mysql_innodb_clone_status() {
 bool Consistent_archive::archive_smartengine() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("archive_smartengine"));
-  bool error = false;
   THD *thd = m_thd;
+  uint64_t backup_snapshot_id = 0;
+  std::string binlog_file;
+  uint64_t binlog_file_offset = 0;
+  plugin_ref plugin{};
 
-  if (trans_begin(thd)) {
+  m_se_snapshot_id = 0;
+
+  plugin = my_plugin_lock_by_name(nullptr, {STRING_WITH_LEN("smartengine")},
+                                  MYSQL_STORAGE_ENGINE_PLUGIN);
+  if (plugin == nullptr) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "Failed to archive smartengine begin transaction");
+           "smartengine plugin is not loaded");
     return true;
   }
-
-  if ((error = acquire_se_snapshot()) ||
-      (error = copy_smartengine_wals_and_metas()) ||
-      (error = release_se_snapshot())) {
+  handlerton *hton = plugin_data<handlerton *>(plugin);
+  // hton->checkpoint(thd);
+  if (hton->create_backup_snapshot(thd, &backup_snapshot_id, binlog_file,
+                                   &binlog_file_offset)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "Failed to archive smartengine, rollback.");
-    trans_rollback_stmt(thd);
-    trans_rollback(thd);
+           "Failed to smartengine create_backup_snapshot.");
+    plugin_unlock(nullptr, plugin);
     return true;
   }
-
-  if (trans_commit_stmt(thd) || trans_commit(thd)) {
-    trans_rollback_stmt(thd);
-    trans_rollback(thd);
+//  else if (hton->incremental_backup(thd)) {
+//  }
+  else if (copy_smartengine_wals_and_metas()) {
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+           "Failed to smartengine incremental_backup and copy wals.");
+    hton->release_backup_snapshot(thd, backup_snapshot_id);
+    plugin_unlock(nullptr, plugin);
     return true;
   }
-
+  plugin_unlock(nullptr, plugin);
+  strncpy(m_binlog_file, binlog_file.c_str(), sizeof(m_binlog_file) - 1);
+  m_binlog_pos = binlog_file_offset;
+  m_se_snapshot_id = backup_snapshot_id;
   return false;
 }
 
@@ -1056,91 +1095,33 @@ bool Consistent_archive::archive_smartengine() {
  * wal file position.
  * @return true if success. or false if fail.
  */
-bool Consistent_archive::acquire_se_snapshot() {
-  DBUG_TRACE;
-  bool res = false;
-  THD *thd = m_thd;
-
-  DBUG_EXECUTE_IF("fault_injection_persistent_smartengine_acquire_snapshot",
-                  { return true; });
-
-  List<set_var_base> tmp_var_list;
-  System_variable_tracker se_hotbackup_var_tracker =
-      System_variable_tracker::make_tracker("SMARTENGINE_HOTBACKUP");
-  // SET GLOBAL SMARTENGINE_HOTBACKUP = 'checkpoint'
-  Item *value = new (thd->mem_root)
-      Item_string("checkpoint", strlen("checkpoint"), &my_charset_utf8mb4_bin);
-  set_var *se_hotbackup_var =
-      new (thd->mem_root) set_var(OPT_GLOBAL, se_hotbackup_var_tracker, value);
-  tmp_var_list.push_back(se_hotbackup_var);
-
-  // SET GLOBAL SMARTENGINE_HOTBACKUP = 'acquire'
-  value = new (thd->mem_root)
-      Item_string("acquire", strlen("acquire"), &my_charset_utf8mb4_bin);
-  se_hotbackup_var =
-      new (thd->mem_root) set_var(OPT_GLOBAL, se_hotbackup_var_tracker, value);
-  tmp_var_list.push_back(se_hotbackup_var);
-
-  // SET GLOBAL SMARTENGINE_HOTBACKUP = 'incremental'
-  value = new (thd->mem_root) Item_string("incremental", strlen("incremental"),
-                                          &my_charset_utf8mb4_bin);
-  se_hotbackup_var =
-      new (thd->mem_root) set_var(OPT_GLOBAL, se_hotbackup_var_tracker, value);
-  tmp_var_list.push_back(se_hotbackup_var);
-
-  LEX *saved_lex = thd->lex, temp_lex;
-  LEX *lex = &temp_lex;
-  thd->lex = lex;
-
-  if (lex_start(thd) || sql_set_variables(thd, &tmp_var_list, false)) {
-    if (thd->is_error()) {
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-             thd->get_stmt_da()->message_text());
-    }
-    res = true;
-  }
-  lex->cleanup(true);
-  lex_end(thd->lex);
-  thd->lex = saved_lex;
-  return res;
-}
 
 /**
  * @brief Release smartengine snapshot.
  * @return true if success. or false if fail.
  */
-bool Consistent_archive::release_se_snapshot() {
+bool Consistent_archive::release_se_snapshot(uint64_t backup_snapshot_id) {
   DBUG_TRACE;
-  bool res = false;
   THD *thd = m_thd;
+  plugin_ref plugin;
 
-  DBUG_EXECUTE_IF("fault_injection_persistent_smartengine_release_snapshot",
-                  { return true; });
-  List<set_var_base> tmp_var_list;
-  // set global SMARTENGINE_HOTBACKUP = 'release'
-  System_variable_tracker se_hotbackup_var_tracker =
-      System_variable_tracker::make_tracker("SMARTENGINE_HOTBACKUP");
-  Item *value = new (thd->mem_root)
-      Item_string("release", strlen("release"), &my_charset_utf8mb4_bin);
-  set_var *se_hotbackup_var =
-      new (thd->mem_root) set_var(OPT_GLOBAL, se_hotbackup_var_tracker, value);
-  tmp_var_list.push_back(se_hotbackup_var);
+  if (backup_snapshot_id == 0) return false;
 
-  LEX *saved_lex = thd->lex, temp_lex;
-  LEX *lex = &temp_lex;
-  thd->lex = lex;
-
-  if (lex_start(thd) || sql_set_variables(thd, &tmp_var_list, false)) {
-    if (thd->is_error()) {
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-             thd->get_stmt_da()->message_text());
-    }
-    res = true;
+  plugin = my_plugin_lock_by_name(nullptr, {STRING_WITH_LEN("smartengine")},
+                                  MYSQL_STORAGE_ENGINE_PLUGIN);
+  if (plugin == nullptr) {
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+           "smartengine plugin is not loaded");
+    return true;
   }
-  lex->cleanup(true);
-  lex_end(thd->lex);
-  thd->lex = saved_lex;
-  return res;
+  handlerton *hton = plugin_data<handlerton *>(plugin);
+  // If release failed, already return success, only report warning.
+  if (hton->release_backup_snapshot(thd, backup_snapshot_id)) {
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+           "Failed to release smartengine snapshot, maybe not exists.");
+  }
+  plugin_unlock(nullptr, plugin);
+  return false;
 }
 
 /**
@@ -1224,7 +1205,7 @@ bool Consistent_archive::copy_smartengine_wals_and_metas() {
 
     // upload se_backup000000.tar to s3
     std::string se_keyid;
-    se_keyid.assign(m_se_bakcup_name);
+    se_keyid.assign(m_se_backup_name);
     se_keyid.append(CONSISTENT_TAR_SUFFIX);
     objstore::Status ss = snapshot_objstore->put_object_from_file(
         std::string_view(opt_objstore_bucket), se_keyid, se_tar_name);
@@ -1247,12 +1228,11 @@ bool Consistent_archive::copy_smartengine_wals_and_metas() {
     }
   }
   // add smartengine backup name to se_backup.index,
-  // And upload se_backup.index to s3.  
+  // And upload se_backup.index to s3.
   mysql_mutex_lock(&m_se_backup_index_lock);
   if (DBUG_EVALUATE_IF("fault_injection_persistent_smartengine_copy_index_file",
                        1, 0) ||
-      add_line_to_index((uchar *)m_se_bakcup_name, strlen(m_se_bakcup_name),
-                        ARCHIVE_SE)) {
+      add_line_to_index((const char *)m_se_backup_name, ARCHIVE_SE)) {
     mysql_mutex_unlock(&m_se_backup_index_lock);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "Failed to add se_backup to se_backup.index");
@@ -1270,129 +1250,36 @@ bool Consistent_archive::copy_smartengine_wals_and_metas() {
  */
 bool Consistent_archive::write_consistent_snapshot_file() {
   DBUG_TRACE;
-  std::string file_name;
-  std::ofstream status_file;
-  objstore::Status ss;
+  std::string snapshot_info;
+  time_t current_time = time(nullptr);
 
   DBUG_EXECUTE_IF("fault_injection_persistent_consistent_snapshot_file",
                   { return true; });
-  /* Append data directory if cloning to different place. */
-  file_name.assign(m_mysql_archive_dir);
-  file_name.append(FN_DIRSEP);
-  file_name.append(CONSISTENT_SNAPSHOT_FILE);
-
+  convert_datetime_to_str(m_consistent_snapshot_local_time, current_time);
+  // append consistent_snapshot.index
+  snapshot_info.assign(m_consistent_snapshot_local_time);
+  snapshot_info.append("|");
+  snapshot_info.append(m_mysql_clone_name);
+  snapshot_info.append("|");
+  snapshot_info.append(m_se_backup_name);
+  snapshot_info.append("|");
+  snapshot_info.append(m_binlog_file);
+  snapshot_info.append("|");
+  snapshot_info.append(std::to_string(m_binlog_pos));
+  snapshot_info.append("|");
+  snapshot_info.append(std::to_string(m_se_snapshot_id));
   mysql_mutex_lock(&m_consistent_index_lock);
-  status_file.open(file_name, std::ofstream::out | std::ofstream::trunc);
-  if (!status_file.is_open()) {
-    std::string err_msg;
-    err_msg.assign("Failed to open consistent snapshot file: ");
-    err_msg.append(file_name);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+  if (add_line_to_index((const char *)snapshot_info.c_str(),
+                        ARCHIVE_SNAPSHOT_FILE)) {
+    mysql_mutex_unlock(&m_consistent_index_lock);
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+           "Failed to add snapshot to consistent_snapshot.index");
     goto err;
-  }
-
-  /* Write mysql innodb clone name. */
-  status_file << m_mysql_clone_name << std::endl;
-
-  /* Write smartengine backup name. */
-  status_file << m_se_bakcup_name << std::endl;
-
-  /* Write binary log information. */
-  status_file << m_binlog_file << std::endl;
-  status_file << m_binlog_pos << std::endl;
-  status_file.close();
-  // upload to s3
-  if (snapshot_objstore != nullptr) {
-    ss = snapshot_objstore->put_object_from_file(
-        std::string_view(opt_objstore_bucket),
-        std::string_view(CONSISTENT_SNAPSHOT_FILE), file_name);
-    if (!ss.is_succ()) {
-      std::string err_msg;
-      err_msg.assign("Failed to upload consistent snapshot file to s3: ");
-      err_msg.append("key=");
-      err_msg.append(CONSISTENT_SNAPSHOT_FILE);
-      err_msg.append(" file=");
-      err_msg.append(file_name);
-      err_msg.append(" error=");
-      err_msg.append(ss.error_message());
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-      goto err;
-    }
   }
   mysql_mutex_unlock(&m_consistent_index_lock);
   return false;
 err:
-  mysql_mutex_unlock(&m_consistent_index_lock);
   return true;
-}
-
-/**
- * @brief Read consistent snapshot file
- *
- * @param cs
- * @return true
- * @return false
- */
-bool Consistent_archive::read_consistent_snapshot_file(
-    Consistent_snapshot *cs) {
-  DBUG_TRACE;
-  mysql_mutex_assert_owner(&m_consistent_index_lock);
-  std::string consistent_file_name;
-  consistent_file_name.assign(m_mysql_archive_dir);
-  consistent_file_name.append(FN_DIRSEP);
-  consistent_file_name.append(CONSISTENT_SNAPSHOT_FILE);
-  if (snapshot_objstore != nullptr) {
-    // Delete the local consistent snapshot file if it exists.
-    remove_file(consistent_file_name);
-    objstore::Status ss = snapshot_objstore->get_object_to_file(
-        std::string_view(opt_objstore_bucket),
-        std::string_view(CONSISTENT_SNAPSHOT_FILE), consistent_file_name);
-    if (!ss.is_succ()) {
-      return true;
-    }
-
-    if (my_chmod(consistent_file_name.c_str(),
-                 USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
-                     OTHERS_WRITE | OTHERS_READ,
-                 MYF(MY_WME))) {
-      return true;
-    }
-  }
-
-  std::ifstream consistent_file;
-  consistent_file.open(consistent_file_name, std::ifstream::in);
-  if (!consistent_file.is_open()) {
-    return true;
-  }
-
-  std::string file_line;
-  int line_number = 0;
-  /* loop through the lines and extract consistent snapshot information. */
-  while (std::getline(consistent_file, file_line)) {
-    ++line_number;
-    std::stringstream file_data(file_line, std::ifstream::in);
-    switch (line_number) {
-      case 1:
-        strncpy(cs->mysql_clone_name, file_line.c_str(),
-                sizeof(cs->mysql_clone_name) - 1);
-        break;
-      case 2:
-        strncpy(cs->se_backup_name, file_line.c_str(),
-                sizeof(cs->se_backup_name) - 1);
-        break;
-      case 3:
-        strncpy(cs->binlog_name, file_line.c_str(),
-                sizeof(cs->binlog_name) - 1);
-        break;
-      case 4:
-        file_data >> cs->binlog_pos;
-        break;
-      default:
-        break;
-    }
-  }
-  consistent_file.close();
-  return false;
 }
 
 /**
@@ -1420,6 +1307,7 @@ int Consistent_archive::open_crash_safe_index_file(Archive_type arch_type) {
     crash_safe_index_file = &m_crash_safe_se_backup_index_file;
     crash_safe_index_file_name = m_crash_safe_se_backup_index_file_name;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file = &m_crash_safe_consistent_snapshot_index_file;
     crash_safe_index_file_name =
         m_crash_safe_consistent_snapshot_index_file_name;
@@ -1457,6 +1345,7 @@ int Consistent_archive::set_crash_safe_index_file_name(
   } else if (arch_type == ARCHIVE_SE) {
     crash_safe_index_file_name = m_crash_safe_se_backup_index_file_name;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file_name =
         m_crash_safe_consistent_snapshot_index_file_name;
   }
@@ -1490,6 +1379,7 @@ int Consistent_archive::close_crash_safe_index_file(Archive_type arch_type) {
   } else if (arch_type == ARCHIVE_SE) {
     crash_safe_index_file = &m_crash_safe_se_backup_index_file;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file = &m_crash_safe_consistent_snapshot_index_file;
   }
 
@@ -1502,6 +1392,7 @@ int Consistent_archive::close_crash_safe_index_file(Archive_type arch_type) {
   } else if (arch_type == ARCHIVE_SE) {
     m_crash_safe_se_backup_index_file = IO_CACHE();
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     m_crash_safe_consistent_snapshot_index_file = IO_CACHE();
   }
 
@@ -1545,6 +1436,7 @@ int Consistent_archive::move_crash_safe_index_file_to_index_file(
     index_file_key = &PSI_consistent_archive_se_log_index_key;
     index_file_cache_key = &PSI_consistent_archive_se_log_index_cache_key;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file_name =
         m_crash_safe_consistent_snapshot_index_file_name;
     index_file = &m_consistent_snapshot_index_file;
@@ -1721,7 +1613,7 @@ static void exec_binlog_error_action_abort(THD *thd, const char *err_string) {
   @retval
     -1   error
 */
-int Consistent_archive::add_line_to_index(uchar *log_name, size_t log_name_len,
+int Consistent_archive::add_line_to_index(const char *log_name,
                                           Archive_type arch_type) {
   DBUG_TRACE;
   IO_CACHE *crash_safe_index_file;
@@ -1743,6 +1635,7 @@ int Consistent_archive::add_line_to_index(uchar *log_name, size_t log_name_len,
     index_file_name.assign(m_se_backup_index_file_name);
     index_keyid.assign(CONSISTENT_SE_ARCHIVE_INDEX_FILE);
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file = &m_crash_safe_consistent_snapshot_index_file;
     crash_safe_index_file_name.assign(
         m_crash_safe_consistent_snapshot_index_file_name);
@@ -1763,7 +1656,8 @@ int Consistent_archive::add_line_to_index(uchar *log_name, size_t log_name_len,
     goto err;
   }
 
-  if (my_b_write(crash_safe_index_file, log_name, log_name_len) ||
+  if (my_b_write(crash_safe_index_file, (const uchar *)log_name,
+                 strlen(log_name)) ||
       my_b_write(crash_safe_index_file, pointer_cast<const uchar *>("\n"), 1) ||
       flush_io_cache(crash_safe_index_file) ||
       mysql_file_sync(crash_safe_index_file->file, MYF(MY_WME))) {
@@ -1774,11 +1668,17 @@ int Consistent_archive::add_line_to_index(uchar *log_name, size_t log_name_len,
     goto err;
   }
 
+  if (move_crash_safe_index_file_to_index_file(arch_type)) {
+    goto err;
+  }
+
+  // If upload to objstore failed, return to run()->while{}.
+  // Will recover the index file from object store, when open_index_file.
   if (snapshot_objstore != nullptr) {
     // upload index file to s3
     objstore::Status ss = snapshot_objstore->put_object_from_file(
         std::string_view(opt_objstore_bucket), index_keyid,
-        crash_safe_index_file_name);
+        index_file_name);
     if (!ss.is_succ()) {
       std::string err_msg;
       err_msg.assign("Failed to upload index file to object store: ");
@@ -1791,12 +1691,6 @@ int Consistent_archive::add_line_to_index(uchar *log_name, size_t log_name_len,
       LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
       goto err;
     }
-  }
-
-  // If upload to obj failed, rerun the binlog archiving from run()->while{}.
-  // Will recover the index file from object store, when open_index_file.
-  if (move_crash_safe_index_file_to_index_file(arch_type)) {
-    goto err;
   }
 
   return 0;
@@ -1830,6 +1724,7 @@ bool Consistent_archive::open_index_file(const char *index_file_name_arg,
     index_file_key = &PSI_consistent_archive_se_log_index_key;
     index_file_cache_key = &PSI_consistent_archive_se_log_index_cache_key;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file_name =
         m_crash_safe_consistent_snapshot_index_file_name;
     index_file = &m_consistent_snapshot_index_file;
@@ -1938,6 +1833,7 @@ void Consistent_archive::close_index_file(Archive_type arch_type) {
   } else if (arch_type == ARCHIVE_SE) {
     index_file = &m_se_backup_index_file;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     index_file = &m_consistent_snapshot_index_file;
   }
 
@@ -1993,6 +1889,7 @@ int Consistent_archive::find_line_from_index(LOG_INFO *linfo,
   } else if (arch_type == ARCHIVE_SE) {
     index_file = &m_se_backup_index_file;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     index_file = &m_consistent_snapshot_index_file;
   }
 
@@ -2075,6 +1972,7 @@ int Consistent_archive::find_next_line_from_index(LOG_INFO *linfo,
   } else if (arch_type == ARCHIVE_SE) {
     index_file = &m_se_backup_index_file;
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     index_file = &m_consistent_snapshot_index_file;
   }
 
@@ -2119,46 +2017,227 @@ err:
  * @brief Purge the pesistent consistent snapshot archive file.
  * @return std::tuple<bool, std::string>
  */
-std::tuple<int, std::string> Consistent_archive::purge_consistent_snapshot() {
+std::tuple<int, std::string> Consistent_archive::purge_consistent_snapshot(
+    const char *to_purged_ts, size_t len [[maybe_unused]], bool auto_purge) {
   DBUG_TRACE;
   int error = 0;
-  Consistent_snapshot consistent_snapshot{};
   std::string err_msg{};
+  LOG_INFO linfo{};
+  std::string purge_innodb_end_name{};
+  std::string purge_se_end_name{};
+  ulong purged_end_ts = 0;
+  bool all_snapshot = false;
+  uint64_t pre_se_snapshot = 0;
+  uint64_t cur_se_snapshot = 0;
+  std::string purge_ts_str{};
+  int line_num = 0;
+  std::vector<uint64_t> archive_backup_ids;
+  std::vector<uint64_t> se_backup_ids;
+  bool only_record_backup_snapshot = false;
+
+  /*
+   * 1. release smartengint snapshot
+   * 2. purge consistent_snapshot.index
+   * 3. purge innodb and smartengine snapshot data.
+  */
+  if (native_strcasecmp(to_purged_ts, "all") == 0) {
+    all_snapshot = true;
+  } else {
+    all_snapshot = false;
+    if (convert_str_to_datetime(to_purged_ts, purged_end_ts)) {
+      err_msg.assign("snapshot to_purged_ts parameter error: ");
+      err_msg.append(to_purged_ts);
+      error = 1;
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+      return std::make_tuple(error, err_msg);
+    }
+    assert(purged_end_ts > 0);
+  }
+
+  // Fetch smartengine all backup snapshot id.
+  if (auto_purge) {
+    show_se_backup_snapshot(m_thd, se_backup_ids);
+  }
 
   mysql_mutex_lock(&m_consistent_index_lock);
-  if (read_consistent_snapshot_file(&consistent_snapshot)) {
+  if (!my_b_inited(&m_consistent_snapshot_index_file)) {
     mysql_mutex_unlock(&m_consistent_index_lock);
-    err_msg.assign("Failed to read #consistent_snapshot");
     error = 1;
+    err_msg.assign("Failed to read consistent_snapshot.index");
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    return std::make_tuple(error, err_msg);
+  }
+
+  /* As the file is flushed, we can't get an error here */
+  my_b_seek(&m_consistent_snapshot_index_file, (my_off_t)0);
+
+ 
+  for (;;) {
+    size_t length;
+    char snapshot_info[4 * FN_REFLEN] = {0};
+    my_off_t offset = my_b_tell(&m_consistent_snapshot_index_file);
+    line_num++;
+
+    /* If we get 0 or 1 characters, this is the end of the file */
+    if ((length = my_b_gets(&m_consistent_snapshot_index_file, snapshot_info,
+                            4 * FN_REFLEN)) <= 1) {
+      /* Did not find the given entry; Return not found or error */
+      error =
+          !m_consistent_snapshot_index_file.error ? LOG_INFO_EOF : LOG_INFO_IO;
+      break;
+    }
+
+    length = strlen(snapshot_info);
+    // Strips the CR+LF at the end of log name and \0-terminates it.
+    if (length && snapshot_info[length - 1] == '\n') {
+      snapshot_info[length - 1] = 0;
+      length--;
+      if (length && snapshot_info[length - 1] == '\r') {
+        snapshot_info[length - 1] = 0;
+        length--;
+      }
+    }
+    if (!length) break;
+
+    std::string in_str;
+    std::string left_string;
+    in_str.assign(snapshot_info);
+    size_t idx = in_str.find("|");
+    std::string ts_str = in_str.substr(0, idx);
+    left_string = in_str.substr(idx + 1);
+    idx = left_string.find("|");
+    std::string innodb_name = left_string.substr(0, idx);
+    left_string = left_string.substr(idx + 1);
+
+    idx = left_string.find("|");
+    std::string se_name = left_string.substr(0, idx);
+    left_string = left_string.substr(idx + 1);
+
+    idx = left_string.find("|");
+    std::string binlog_name = left_string.substr(0, idx);
+    left_string = left_string.substr(idx + 1);
+
+    idx = left_string.find("|");
+    std::string binlog_pos = left_string.substr(0, idx);
+    std::string se_snapshot_id = left_string.substr(idx + 1);
+
+    ulong snapshot_ts;
+    if (convert_str_to_datetime(ts_str.c_str(), snapshot_ts)) {
+      mysql_mutex_unlock(&m_consistent_index_lock);
+      err_msg.assign("consistent snapshot timestamp error: ");
+      err_msg.append(ts_str);
+      error = 1;
+      goto err;
+    }
+
+    // Record all consistent snapshot id
+    cur_se_snapshot = std::stoull(se_snapshot_id);
+    archive_backup_ids.push_back(cur_se_snapshot);
+    if (only_record_backup_snapshot) {
+      continue;
+    }
+
+    // Do nothing
+    // If the creation time of the oldest snapshot is also later 
+    // than the purge time, then do not purge.
+    if (line_num == 1 && snapshot_ts >= purged_end_ts) {
+      break;
+    }
+    // release previous smartengine snapshot,
+    // If release failed, report warning and continue.
+    if (pre_se_snapshot > 0) {
+      if (release_se_snapshot(pre_se_snapshot)) {
+        err_msg.assign("failed release smartengine snapshot: ");
+      } else {
+        err_msg.assign("release smartengine snapshot: ");
+      }
+      err_msg.append(std::to_string(pre_se_snapshot));
+      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    }
+    pre_se_snapshot = cur_se_snapshot;
+    linfo.index_file_start_offset = offset;
+    linfo.index_file_offset = my_b_tell(&m_consistent_snapshot_index_file);
+    purge_ts_str.assign(ts_str);
+    purge_innodb_end_name.assign(innodb_name);
+    purge_se_end_name.assign(se_name);
+
+    // Found upper bound.
+    if (!all_snapshot && snapshot_ts >= purged_end_ts) only_record_backup_snapshot = true;
+  }
+  if (error == LOG_INFO_IO) {
+    mysql_mutex_unlock(&m_consistent_index_lock);
+    error = 1;
+    err_msg.assign("Failed to find snapshot from consistent_snapshot.index");
+    goto err;
+  }
+  // If consistent_snapshot.index is empty or has only lastest snapshot,
+  // Do nothing.
+  if (linfo.index_file_start_offset == 0) {
+    mysql_mutex_unlock(&m_consistent_index_lock);
+    error = 0;
+    err_msg.assign("Purge consistent snapshot successfully: did nothing");
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    return std::make_tuple(error, err_msg); 
+  }
+
+  error = remove_line_from_index(&linfo, ARCHIVE_SNAPSHOT_FILE);
+  if (error) {
+    mysql_mutex_unlock(&m_consistent_index_lock);
+    err_msg.assign("Failed to remove snapshot from consistent_snapshot.index");
     goto err;
   }
   mysql_mutex_unlock(&m_consistent_index_lock);
 
   mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
-  error =
-      purge_archive(consistent_snapshot.mysql_clone_name, ARCHIVE_MYSQL_INNODB);
+  error = purge_archive(purge_innodb_end_name.c_str(), ARCHIVE_MYSQL_INNODB);
   if (error) {
-    err_msg.assign("Failed to purge mysql innodb persistent file: ");
-    err_msg.append(consistent_snapshot.mysql_clone_name);
     mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
+    err_msg.assign("Failed to purge mysql innodb persistent file: ");
+    err_msg.append(purge_innodb_end_name);
     goto err;
   }
   mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
 
   mysql_mutex_lock(&m_se_backup_index_lock);
-  error = purge_archive(consistent_snapshot.se_backup_name, ARCHIVE_SE);
+  error = purge_archive(purge_se_end_name.c_str(), ARCHIVE_SE);
   if (error) {
-    err_msg.assign("Failed to purge mysql innodb persistent file: ");
-    err_msg.append(consistent_snapshot.mysql_clone_name);
     mysql_mutex_unlock(&m_se_backup_index_lock);
+    err_msg.assign("Failed to purge mysql innodb persistent file: ");
+    err_msg.append(purge_se_end_name);
     goto err;
   }
   mysql_mutex_unlock(&m_se_backup_index_lock);
 
-  err_msg.assign("Purge consistent snapshot successfully: ");
-  err_msg.append(consistent_snapshot.mysql_clone_name);
+  // Auto purge unreference smartengine snapshot.
+  // Only during auto purge can snapshots not present in
+  // consistent_snapshot.index be deleted, as auto purge and archive consistent
+  // snapshot are executed sequentially in the same thread. Manual purge
+  // operations cannot ensure that the thread archiving consistent snapshots is
+  // not currently performing create_backup_snapshot when reading list_snapshot.
+  // May create_backup_snapshot succeed but has not yet been written to
+  // consistent_snapshot.index. This can lead to the newly created snapshot
+  // being purged.
+  if (auto_purge) {
+    std::vector<uint64_t> diff1;
+    std::set_difference(se_backup_ids.begin(), se_backup_ids.end(),
+                        archive_backup_ids.begin(), archive_backup_ids.end(),
+                        std::back_inserter(diff1));
+    for (const auto &snapshot_id : diff1) {
+      release_se_snapshot(snapshot_id);
+      err_msg.assign("Purge unreferenc smartengine snapshot: ");
+      err_msg.append(std::to_string(snapshot_id));
+      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    }
+  }
+
+  err_msg.assign("Purge consistent snapshot successfully, before: ");
+  err_msg.append(purge_ts_str);
   err_msg.append(" ");
-  err_msg.append(consistent_snapshot.se_backup_name);
+  err_msg.append(purge_innodb_end_name);
+  err_msg.append(" ");
+  err_msg.append(purge_se_end_name);
+  err_msg.append(" ");
+  err_msg.append(std::to_string(cur_se_snapshot));
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
   return std::make_tuple(error, err_msg);
 err:
@@ -2174,6 +2253,12 @@ int Consistent_archive::purge_archive(const char *match_name,
   LOG_INFO log_info;
 
   // Check if exists.
+  if (!match_name || strlen(match_name) == 0) {
+    err_msg.assign("Failed to find log, name is empty");
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    goto err;
+  }
+
   if ((error = find_line_from_index(&log_info, match_name, arch_type))) {
     err_msg.assign("Failed to find log pos");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
@@ -2219,6 +2304,8 @@ int Consistent_archive::purge_archive(const char *match_name,
     goto err;
   }
 
+  // TODO: Remove data that is smaller than match_name and does not exist
+  // in the index file.
 err:
   int error_index = 0, close_error_index = 0;
   /* Read each entry from m_purge_index_file and delete the file. */
@@ -2462,6 +2549,7 @@ int Consistent_archive::remove_line_from_index(LOG_INFO *log_info,
     index_file_name.assign(m_se_backup_index_file_name);
     index_keyid.assign(CONSISTENT_SE_ARCHIVE_INDEX_FILE);
   } else {
+    assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file = &m_crash_safe_consistent_snapshot_index_file;
     index_file = &m_consistent_snapshot_index_file;
     index_file_name.assign(m_consistent_snapshot_index_file_name);
@@ -2568,6 +2656,28 @@ int Consistent_archive::show_se_persistent_files(
   return error;
 }
 
+int Consistent_archive::show_se_backup_snapshot(
+    THD *thd, std::vector<uint64_t> &backup_ids) {
+  DBUG_TRACE;
+  plugin_ref plugin;
+
+  plugin = my_plugin_lock_by_name(nullptr, {STRING_WITH_LEN("smartengine")},
+                                  MYSQL_STORAGE_ENGINE_PLUGIN);
+  if (plugin == nullptr) {
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+           "smartengine plugin is not loaded");
+    return true;
+  }
+  handlerton *hton = plugin_data<handlerton *>(plugin);
+  // If release failed, already return success, only report warning.
+  if (hton->list_backup_snapshots(thd, backup_ids)) {
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+           "Failed to list smartengine snapshot.");
+  }
+  plugin_unlock(nullptr, plugin);
+  return false;
+}
+
 /**
  * @brief Remove file or directory.
  * @param file
@@ -2659,4 +2769,59 @@ static bool file_has_suffix(const std::string &sfx, const std::string &path) {
   DBUG_TRACE;
   return (path.size() >= sfx.size() &&
           path.compare(path.size() - sfx.size(), sfx.size(), sfx) == 0);
+}
+
+static time_t calculate_auto_purge_lower_time_bound() {
+  if (DBUG_EVALUATE_IF("expire_logs_always", true, false)) return time(nullptr);
+
+  int64 expiration_time = 0;
+  int64 current_time = time(nullptr);
+
+  if (opt_consistent_snapshot_expire_seconds > 0)
+    expiration_time = current_time - opt_consistent_snapshot_expire_seconds;
+
+  // check for possible overflow conditions (4 bytes time_t)
+  if (expiration_time < std::numeric_limits<time_t>::min())
+    expiration_time = std::numeric_limits<time_t>::min();
+
+  return static_cast<time_t>(expiration_time);
+}
+
+/**
+  Converts a datetime String value to its my_time_t representation.
+
+  @retval 0	OK
+  @retval =!0	error
+*/
+static int convert_str_to_datetime(const char *str, ulong &my_time) {
+  MYSQL_TIME_STATUS status;
+  MYSQL_TIME l_time;
+  my_time_t dummy_my_timezone;
+  bool dummy_in_dst_time_gap;
+  DBUG_TRACE;
+
+  /* We require a total specification (date AND time) */
+  if (str_to_datetime(str, strlen(str), &l_time, 0, &status) ||
+      (l_time.time_type != MYSQL_TIMESTAMP_DATETIME_TZ &&
+       l_time.time_type != MYSQL_TIMESTAMP_DATETIME)) {
+    return 1;
+  }
+
+  /*
+    Note that Feb 30th, Apr 31st cause no error messages and are mapped to
+    the next existing day, like in mysqld. Maybe this could be changed when
+    mysqld is changed too (with its "strict" mode?).
+  */
+  my_time = static_cast<ulong>(my_system_gmt_sec(l_time, &dummy_my_timezone, &dummy_in_dst_time_gap));
+  return 0;
+}
+
+static void convert_datetime_to_str(char *str, time_t ts) {
+  struct tm *res;
+  DBUG_TRACE;
+  struct tm tm_tmp;
+  gmtime_r(&ts, (res = &tm_tmp));
+  snprintf(str, iso8601_size, "%04d-%02d-%02d %02d:%02d:%02d", res->tm_year + 1900,
+              res->tm_mon + 1, res->tm_mday, res->tm_hour, res->tm_min,
+              res->tm_sec);
 }

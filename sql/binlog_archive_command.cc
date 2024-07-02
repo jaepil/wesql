@@ -59,7 +59,6 @@ char *Binlog_archive_command::binlog_purge(UDF_INIT *, UDF_ARGS *args,
     goto err;
   }
 
-  binlog_archive->lock_binlog_index();
   std::tie(err_val, err_msg) =
       binlog_archive->purge_logs(log_file.c_str(), nullptr);
   if (err_val) {
@@ -68,7 +67,6 @@ char *Binlog_archive_command::binlog_purge(UDF_INIT *, UDF_ARGS *args,
   } else {
     err_msg.assign("Purge binlog persistent files successfully");
   }
-  binlog_archive->unlock_binlog_index();
 
 err:
   strcpy(result, err_msg.c_str());

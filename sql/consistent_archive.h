@@ -16,13 +16,13 @@
 #ifndef CONSISTENT_ARCHIVE_INCLUDED
 #define CONSISTENT_ARCHIVE_INCLUDED
 
+#include "mysql/components/services/log_builtins.h"  // LogErr
 #include "objstore.h"
 #include "sql/binlog.h"
 #include "sql/clone_handler.h"
 #include "sql/rpl_io_monitor.h"
 #include "sql/sql_plugin_ref.h"
 
-#define CONSISTENT_SNAPSHOT_FILE "#consistent_snapshot"
 #define CONSISTENT_ARCHIVE_SUBDIR "data"
 #define CONSISTENT_ARCHIVE_SUBDIR_LEN 4
 #define CONSISTENT_TAR_SUFFIX ".tar.gz"
@@ -32,26 +32,25 @@
 #define CONSISTENT_INNODB_ARCHIVE_INDEX_FILE "innodb_archive.index"
 #define CONSISTENT_INNODB_ARCHIVE_INDEX_FILE_LEN 20
 #define CONSISTENT_INNODB_ARCHIVE_BASENAME "innodb_archive_"
-#define CONSISTENT_INNODB_ARCHIVE_NAME_LEN 21
 #define CONSISTENT_SE_ARCHIVE_INDEX_FILE "se_archive.index"
 #define CONSISTENT_SE_ARCHIVE_INDEX_FILE_LEN 16
 #define CONSISTENT_SE_ARCHIVE_BASENAME "se_archive_"
-#define CONSISTENT_SE_ARCHIVE_NAME_LEN 17
 #define MYSQL_SE_DATA_FILE_SUFFIX ".sst"
 #define MYSQL_SE_DATA_FILE_SUFFIX_LEN 4
 #define MYSQL_SE_WAL_FILE_SUFFIX ".wal"
 #define MYSQL_SE_WAL_FILE_SUFFIX_LEN 4
 #define MYSQL_SE_TMP_BACKUP_DIR "hotbackup_tmp"
 #define MYSQL_SE_TMP_BACKUP_DIR_LEN 13
-#define CONSISTENT_ARCHIVE_NAME_WITH_NUM_LEN 6
 
 class THD;
 
 typedef struct Consistent_snapshot {
+  char m_consistent_snapshot_local_time[iso8601_size];
   char mysql_clone_name[FN_REFLEN + 1];
   char se_backup_name[FN_REFLEN + 1];
   char binlog_name[FN_REFLEN + 1];
   uint64_t binlog_pos;
+  uint64_t se_snapshot_id;
 } Consistent_snapshot;
 
 class Consistent_archive {
@@ -64,9 +63,13 @@ class Consistent_archive {
   bool is_thread_alive_not_running() const {
     return m_thd_state.is_alive_not_running();
   }
+  bool is_thread_running() const { return m_thd_state.is_running(); }
   bool is_thread_dead() const { return m_thd_state.is_thread_dead(); }
   bool is_thread_alive() const { return m_thd_state.is_thread_alive(); }
   static Consistent_archive *get_instance();
+  void init_pthread_object();
+  void deinit_pthread_object();
+  mysql_mutex_t *get_consistent_archive_lock();
   void lock_mysql_clone_index() {
     mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
   }
@@ -92,31 +95,26 @@ class Consistent_archive {
   inline IO_CACHE *get_consistent_snapshot_index_file() {
     return &m_consistent_snapshot_index_file;
   }
-  bool read_consistent_snapshot_file(Consistent_snapshot *cs);
-  std::tuple<int, std::string> purge_consistent_snapshot();
+  std::tuple<int, std::string> purge_consistent_snapshot(
+      const char *to_created_ts, size_t len, bool auto_purge);
   int show_innodb_persistent_files(std::vector<objstore::ObjectMeta> &objects);
   int show_se_persistent_files(std::vector<objstore::ObjectMeta> &objects);
+  int show_se_backup_snapshot(THD *thd, std::vector<uint64_t> &backup_ids);
 
  private:
   pthread_t m_thread;
   /** the THD handle. */
   THD *m_thd;
-  /** Clone handle in server */
-  Clone_handler *m_clone;
-  /** Loaded clone plugin reference */
-  plugin_ref m_plugin;
   Diagnostics_area m_diag_area;
   /* thread state */
   thread_state m_thd_state;
-  void init();
-  void cleanup();
   void set_thread_context();
 
   enum Archive_type {
     ARCHIVE_NONE = 0,
     ARCHIVE_MYSQL_INNODB = 1,
     ARCHIVE_SE = 2,
-    ARCHICE_SNAPSHOT_FILE = 3,
+    ARCHIVE_SNAPSHOT_FILE = 3,
     NUM_ARCHIVES
   };
 
@@ -133,8 +131,7 @@ class Consistent_archive {
   int find_line_from_index(LOG_INFO *linfo, const char *match_name,
                            Archive_type arch_type);
   int find_next_line_from_index(LOG_INFO *linfo, Archive_type arch_type);
-  int add_line_to_index(uchar *log_name, size_t log_name_len,
-                        Archive_type arch_type);
+  int add_line_to_index(const char *log_name, Archive_type arch_type);
   int open_crash_safe_index_file(Archive_type arch_type);
   int close_crash_safe_index_file(Archive_type arch_type);
   int move_crash_safe_index_file_to_index_file(Archive_type arch_type);
@@ -143,6 +140,7 @@ class Consistent_archive {
   int remove_line_from_index(LOG_INFO *log_info, Archive_type arch_type);
 
   // Archive mysql innodb
+  int generate_innodb_new_name();
   bool achive_mysql_innodb();
   void read_mysql_innodb_clone_status();
   mysql_mutex_t m_mysql_innodb_clone_index_lock;
@@ -152,47 +150,16 @@ class Consistent_archive {
   IO_CACHE m_mysql_clone_index_file;
   IO_CACHE m_crash_safe_mysql_clone_index_file;
   char m_crash_safe_mysql_clone_index_file_name[FN_REFLEN];
-  uint m_mysql_clone_index_number;
-  /** Clone States. */
-  enum Clone_state : uint32_t {
-    STATE_NONE = 0,
-    STATE_STARTED,
-    STATE_SUCCESS,
-    STATE_FAILED,
-    NUM_STATES
-  };
-  /** Length of variable length character columns. */
-  static const size_t S_VAR_COL_LENGTH = 512;
-  /** Current State. */
-  Clone_state m_state{STATE_NONE};
-  /** Clone error number. */
-  uint32_t m_error_number{};
-  /** Unique identifier in current instance. */
-  uint32_t m_id{};
-  /** Process List ID. */
-  uint32_t m_pid{};
-  /** Clone start time. */
-  uint64_t m_start_time{};
-  /** Clone end time. */
-  uint64_t m_end_time{};
-  /* Source binary log position. */
-  uint64_t m_binlog_pos{};
-  /** Clone source. */
-  char m_source[S_VAR_COL_LENGTH]{};
-  /** Clone destination. */
-  char m_destination[S_VAR_COL_LENGTH]{};
-  /** Clone error message. */
-  char m_error_mesg[S_VAR_COL_LENGTH]{};
-  /** Source binary log file name. */
-  char m_binlog_file[S_VAR_COL_LENGTH]{};
-  /** Clone GTID set */
-  std::string m_gtid_string;
+  uint64_t m_mysql_clone_next_index_number;
 
   // Archive smartengine.
+  int generate_se_new_name();
   bool archive_smartengine();
-  bool acquire_se_snapshot();
   bool copy_smartengine_wals_and_metas();
-  bool release_se_snapshot();
+  bool release_se_snapshot(uint64_t backup_snapshot_id);
+  uint64_t m_binlog_pos;
+  char m_binlog_file[FN_REFLEN + 1];
+  uint64_t m_se_snapshot_id;
   /**smartengine tmp backup directory, which stores hard link for smartengine
    files, protect them from be deleted before copy completely.*/
   mysql_mutex_t m_se_backup_index_lock;
@@ -201,13 +168,14 @@ class Consistent_archive {
   IO_CACHE m_se_backup_index_file;
   IO_CACHE m_crash_safe_se_backup_index_file;
   char m_crash_safe_se_backup_index_file_name[FN_REFLEN];
-  uint m_se_backup_index_number;
+  uint64_t m_se_backup_next_index_number;
   char m_se_backup_dir[FN_REFLEN + 1];
-  char m_se_bakcup_name[FN_REFLEN + 1];
+  char m_se_backup_name[FN_REFLEN + 1];
 
   // Archive consistent snapshot file
   bool write_consistent_snapshot_file();
   mysql_mutex_t m_consistent_index_lock;
+  char m_consistent_snapshot_local_time[iso8601_size];
   char m_consistent_snapshot_index_file_name[FN_REFLEN + 1];
   IO_CACHE m_consistent_snapshot_index_file;
   char m_crash_safe_consistent_snapshot_index_file_name[FN_REFLEN];
@@ -228,6 +196,6 @@ class Consistent_archive {
 
 extern int start_consistent_archive();
 extern void stop_consistent_archive();
-extern char *opt_mysql_archive_dir;
+extern char *opt_consistent_snapshot_archive_dir;
 
 #endif

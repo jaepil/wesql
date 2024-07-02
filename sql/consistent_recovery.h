@@ -23,11 +23,25 @@
 #include "mysqld_error.h"
 #include "objstore.h"
 
+#define CONSISTENT_SNAPSHOT_RECOVERY_FILE "#status_consistent_snapshot_recovery"
+#define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_NONE 0
+#define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_BEGIN 1
+#define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_DATA_READY 2
+#define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_END 3
+
 // smartengine, innodb, binlog no recovery order dependency.
 #define CONSISTENT_RECOVERY_NO 0
 #define CONSISTENT_RECOVERY_INNODB 1
 #define CONSISTENT_RECOVERY_SMARTENGINE 2
 #define CONSISTENT_RECOVERY_BINLOG 4
+
+typedef struct Consistent_snapshot_recovery_status {
+  int m_recovery_status;
+  uint64_t m_start_binlog_pos;
+  char m_start_binlog_file[FN_REFLEN + 1];
+  char m_stop_timestamp[MAX_DATETIME_FULL_WIDTH + 4];
+  char m_binlog_index_file[FN_REFLEN + 1];
+} Consistent_snapshot_recovery_status;
 
 /**
  * @brief The consistent recovery class.
@@ -48,13 +62,21 @@ class Consistent_recovery {
   bool recovery_smartengine();
   // recovery binlog
   bool recovery_binlog(const char *index_file_name_arg, const char *log_name);
-  bool binlog_recovery_path_is_validation();
-  bool need_recovery_binlog();
-
+  int read_consistent_snapshot_recovery_status(
+      Consistent_snapshot_recovery_status &recovery_status);
+  int write_consistent_snapshot_recovery_status(
+      Consistent_snapshot_recovery_status &recovery_status);
+  int consistent_snapshot_consensus_recovery_finish();
  private:
-  int create_binlog_index_file(const char *index_file_name);
-  int add_line_to_index_file(uchar *log_name, size_t log_name_len);
-  int close_binlog_index_file();
+  int open_binlog_index_file(IO_CACHE *index_file, const char *index_file_name,
+                             enum cache_type type);
+  int add_line_to_index_file(IO_CACHE *index_file, const char *log_name);
+  int close_binlog_index_file(IO_CACHE *index_file);
+  int truncate_binlogs_from_objstore(const char *log_file_name_arg,
+                                             my_off_t log_pos);
+  int merge_slice_to_binlog_file(const char *to_binlog_file);
+  int truncate_binlog_slice_from_objstore(const char *log_file_name_arg,
+                                             my_off_t log_pos);
 
   enum Consistent_recovery_state {
     CONSISTENT_RECOVERY_STATE_NONE = 0,
@@ -64,13 +86,20 @@ class Consistent_recovery {
     CONSISTENT_RECOVERY_STATE_BINLOG = 4,
     CONSISTENT_RECOVERY_STATE_END
   };
+  enum Consistent_recovery_type {
+    CONSISTENT_RECOVERY_NONE = 0,
+    CONSISTENT_RECOVERY_REBULD = 1,
+    CONSISTENT_RECOVERY_PITR = 2,
+    CONSISTENT_RECOVERY_CLONE = 3
+  };
+  Consistent_recovery_type m_recovery_type;
   Consistent_recovery_state m_state;
   objstore::ObjectStore *recovery_objstore;
-  uint64_t m_binlog_pos{};
+  uint64_t m_binlog_pos;
+  uint64_t m_se_snapshot_id;
+  char m_objstore_bucket[FN_REFLEN + 1];
   char m_binlog_file[FN_REFLEN + 1];
-  char m_binlog_relative_file[FN_REFLEN + 1];
-  // binlog recoverd from consistent snapshot.
-  bool is_recovery_binlog;
+  char m_snapshot_end_binlog_file[FN_REFLEN + 1];
 
   char m_mysql_archive_recovery_dir[FN_REFLEN + 1];
   char m_mysql_archive_recovery_data_dir[FN_REFLEN + 1];
@@ -86,8 +115,9 @@ class Consistent_recovery {
   uint m_se_backup_index;
   char m_se_backup_dir[FN_REFLEN + 1];
   char m_se_backup_name[FN_REFLEN + 1];
-  IO_CACHE binlog_index_file;
-  char binlog_index_file_name[FN_REFLEN + 1];
+  char m_mysql_binlog_index_file_name[FN_REFLEN + 1];
+  char m_consistent_snapshot_local_time
+      [iso8601_size];  // MAX_DATETIME_FULL_WIDTH
 };
 
 extern Consistent_recovery consistent_recovery;

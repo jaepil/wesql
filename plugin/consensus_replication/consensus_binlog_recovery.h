@@ -32,8 +32,13 @@
 
 class MYSQL_BIN_LOG;
 
-extern int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog);
+extern int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
+                                     const char *ha_recover_end_file,
+                                     my_off_t ha_recover_end_pos,
+                                     char *recover_end_file,
+                                     my_off_t &recover_end_pos);
 extern uint64 get_applier_start_index();
-extern int gtid_init_after_consensus_setup(uint64 last_index);
+extern int gtid_init_after_consensus_setup(uint64 last_index,
+                                           const char *log_name = nullptr);
 
 #endif

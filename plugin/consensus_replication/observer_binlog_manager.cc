@@ -18,6 +18,7 @@
 static int consensus_binlog_manager_binlog_recovery(
     Binlog_manager_param *param) {
   DBUG_TRACE;
+  my_off_t binlog_end_pos = 0;
 
   /* If the plugin is not enabled, return success. */
   if (!opt_bin_log || !plugin_is_consensus_replication_enabled()) return 0;
@@ -29,7 +30,16 @@ static int consensus_binlog_manager_binlog_recovery(
 
   assert(param->binlog == consensus_log_manager.get_binlog());
 
-  return opt_initialize ? 0 : consensus_binlog_recovery(param->binlog);
+  return opt_initialize
+             ? 0
+             : (consistent_snapshot_recovery
+                    ? consensus_binlog_recovery(
+                          param->binlog, consistent_recovery_start_binlog,
+                          consistent_recovery_start_position,
+                          consistent_recovery_end_binlog,
+                          consistent_recovery_end_position)
+                    : consensus_binlog_recovery(param->binlog, nullptr, 0,
+                                                nullptr, binlog_end_pos));
 }
 
 static int consensus_binlog_manager_after_binlog_recovery(

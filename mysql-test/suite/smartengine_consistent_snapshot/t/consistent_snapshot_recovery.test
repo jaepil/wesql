@@ -11,10 +11,6 @@
 --let $archive_dir=$MYSQL_TMP_DIR/mysql_archive
 --mkdir $archive_dir
 
---echo # Create recovery temp path
---let $recovery_tmp_dir=$MYSQL_TMP_DIR/mysql_recovery_tmp
---mkdir $recovery_tmp_dir
-
 --echo # Create local object store
 --let $objstore_dir=$MYSQL_TMP_DIR/objstore
 --mkdir $objstore_dir
@@ -27,8 +23,8 @@
 
 # 3. start with consistent-snapshot-archive
 --echo # Server restart with --consistent-snapshot-archive=true
---replace_result $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
---let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --binlog-archive=true --consistent-snapshot-archive=true --consistent-archive-time=1 --mysql-archive-dir=$archive_dir --mysql-archive-recovery-tmpdir=$recovery_tmp_dir --persistent_on_objstore=true --table-on-objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--replace_result $archive_dir archive_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=$archive_dir --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
 --source include/restart_mysqld.inc
 
 CREATE DATABASE db1;
@@ -49,8 +45,8 @@ SHOW CREATE TABLE t1;
 
 # 5. recovery
 --echo # Recovery start from object store.
---replace_result $archive_dir archive_dir $recovery_tmp_dir recovery_tmp_dir $objstore_dir objstore_dir
---let $restart_parameters=restart: --smartengine=1 --consensus_replication_recover_backup --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --binlog-archive=true --consistent-snapshot-archive=true --consistent-archive-time=1 --mysql-archive-dir=$archive_dir --mysql-archive-recovery-tmpdir=$recovery_tmp_dir --persistent_on_objstore=true --table-on-objstore=true --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--replace_result $archive_dir archive_dir $objstore_dir objstore_dir
+--let $restart_parameters=restart: --smartengine=1 --recovery_from_objstore=true --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=$archive_dir --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
 --source include/start_mysqld.inc
 
 SELECT * FROM t1;
