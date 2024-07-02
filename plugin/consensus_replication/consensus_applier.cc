@@ -244,7 +244,7 @@ void update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
             ->start_new_group();
       }
     }
-  } else if (!ev->is_consensus_event()) {
+  } else if (!ev->is_control_event()) {
     MYSQL_BIN_LOG *binlog = consensus_log_manager.get_binlog();
     mysql_mutex_lock(binlog->get_log_lock());
     binlog->switch_and_seek_log(rli->get_event_relay_log_name(),
