@@ -25,9 +25,11 @@
 --source include/leader_transfer_at_sync_point.inc
 
 --let $sync_point= consensus_replication_after_consensus_commit
+--let $should_commit=1
 --source include/leader_transfer_at_sync_point.inc
 
 --let $sync_point= bgc_after_enrolling_for_after_commit_stage
+--let $should_commit=1
 --source include/leader_transfer_at_sync_point.inc
 
 --connection default
