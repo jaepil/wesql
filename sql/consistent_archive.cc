@@ -134,6 +134,11 @@ int start_consistent_archive() {
            "consistent snapshot persistent not enabled.");
     return 0;
   }
+
+  if (!opt_consistent_snapshot_archive_dir) {
+    opt_consistent_snapshot_archive_dir = mysql_tmpdir;
+  }
+
   // Not set consistent archive dir
   if (opt_consistent_snapshot_archive_dir == nullptr) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
@@ -359,16 +364,9 @@ int Consistent_archive::terminate_consistent_archive_thread() {
   DBUG_TRACE;
   mysql_mutex_lock(&m_run_lock);
   abort_archive = true;
+  mysql_cond_broadcast(&m_run_cond);
   while (m_thd_state.is_thread_alive()) {
-    DBUG_PRINT("sleep", ("Waiting for consistent archive thread to stop"));
-    // Can not awake(KILL_CONNECTION), otherise last consistent snapshot failed.
-    /*
-    if (m_thd_state.is_initialized()) {
-      mysql_mutex_lock(&m_thd->LOCK_thd_data);
-      m_thd->awake(THD::KILL_CONNECTION);
-      mysql_mutex_unlock(&m_thd->LOCK_thd_data);
-    }
-    */
+    DBUG_PRINT("sleep", ("Waiting for consistent archive thread to stop")); 
     struct timespec abstime;
     set_timespec(&abstime, 1);
     mysql_cond_timedwait(&m_run_cond, &m_run_lock, &abstime);
@@ -698,7 +696,7 @@ void Consistent_archive::run() {
     // before next archive consistent snapshot.
     // The slog generated when smartengine releases snapshot 
     // is included in subsequent consistent snapshots as much as possible.
-    {
+    if (opt_consistent_snapshot_expire_auto_purge) {
       char purge_time_str[iso8601_size] = {};
       auto err_val{0};
       std::string err_msg{};  // error message
@@ -802,6 +800,10 @@ int Consistent_archive::wait_for_consistent_archive(
   struct timespec ts;
   set_timespec(&ts, timeout.count());
   mysql_mutex_lock(&m_run_lock);
+  if (abort_archive) {
+    mysql_mutex_unlock(&m_run_lock);
+    return error;
+  }
   error = mysql_cond_timedwait(&m_run_cond, &m_run_lock, &ts);
   mysql_mutex_unlock(&m_run_lock);
   return error;
@@ -943,12 +945,11 @@ bool Consistent_archive::achive_mysql_innodb() {
   LEX *saved_lex = thd->lex, temp_lex;
   LEX *lex = &temp_lex;
   thd->lex = lex;
-  if (lex_start(thd) || sql_set_variables(thd, &tmp_var_list, false)) {
+  lex_start(thd);
+  if (sql_set_variables(thd, &tmp_var_list, false)) {
     if (thd->is_error())
       LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
              thd->get_stmt_da()->message_text());
-    lex->cleanup(true);
-    lex_end(thd->lex);
     thd->lex = saved_lex;
     return true;
   }

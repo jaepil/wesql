@@ -1,5 +1,5 @@
 #
-# Test for consistent snapshot recovery from object store
+# Test for consistent snapshot from object store
 #
 
 # 1. install mysql_clone plugin
@@ -7,24 +7,11 @@
 --eval INSTALL PLUGIN clone SONAME '$CLONE_PLUGIN'
 
 # 2. create run directory
---echo # Create binlog archive path
---let $archive_dir=$MYSQL_TMP_DIR/mysql_archive
---mkdir $archive_dir
-
---echo # Create local object store
---let $objstore_dir=$MYSQL_TMP_DIR/objstore
---mkdir $objstore_dir
---echo # Create local object store bucket
---let $bucket=bucket1
---let $objstore_bucket=$objstore_dir/$bucket
---mkdir $objstore_bucket
-
 --let $MYSQLD_DATADIR=`select @@datadir`
 
 # 3. start with consistent-snapshot-archive
---echo # Server restart with --consistent-snapshot-archive=true
---replace_result $archive_dir archive_dir $objstore_dir objstore_dir
---let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=$archive_dir --objstore_provider=local --objstore_region=$objstore_dir --objstore_bucket=$bucket
+--echo # Server restart with --consistent-snapshot-archive=true --consistent_snapshot_archive_period=1 --binlog_archive_expire_auto_purge=false --consistent_snapshot_expire_auto_purge=false
+--let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --binlog_archive_expire_auto_purge=false --consistent_snapshot_expire_auto_purge=false
 --source include/restart_mysqld.inc
 
 CREATE DATABASE db1;
@@ -38,7 +25,10 @@ SHOW CREATE TABLE t1;
 --sleep 10
 --echo #
 --echo # Check for contain innodb_archive consistent_snapshot.index
---let $grep_file=$MYSQL_TMP_DIR/objstore/$bucket/consistent_snapshot.index
+--let $datadir=`select @@datadir`
+--let $region = `select @@objstore_region`
+--let $bucket = `select @@objstore_bucket`
+--let $grep_file=$datadir/$region/$bucket/consistent_snapshot.index
 --let $grep_pattern=innodb_archive.*
 --let $grep_output= boolean
 --source include/grep_pattern.inc

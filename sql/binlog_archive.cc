@@ -130,6 +130,11 @@ int start_binlog_archive() {
            "The binlog persistent not enabled.");
     return 0;
   }
+
+  if (!opt_consistent_snapshot_archive_dir) {
+    opt_consistent_snapshot_archive_dir = mysql_tmpdir;
+  }
+
   // Check if the mysql archive path is set.
   if (opt_consistent_snapshot_archive_dir == nullptr) {
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
@@ -2088,6 +2093,8 @@ static bool recursive_create_dir(const std::string &dir,
 }
 
 int Binlog_archive::auto_purge_logs() {
+  if (!opt_binlog_archive_expire_auto_purge) return 0;
+
   auto purge_time = calculate_auto_purge_lower_time_bound();
   char purge_to_log[FN_REFLEN + 1] = {0};
   bool found = false;

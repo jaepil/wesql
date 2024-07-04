@@ -62,13 +62,13 @@ jobs:
               cat $logfile
           done
 
-      - name: run mtr on objstore
+      - name: run mtr on serverless
         run: |
           cd bu
           cd mysql-test
           CUR_DIR=`pwd`
           ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
-             --initialize="--table_on_objstore=true" --initialize="--objstore_provider=local"
+              --initialize="--serverless=true" --initialize="--plugin-load-add=mysql_clone.so"
 
       - name: view logs of mtr objstore
         if: ${{ failure() }}

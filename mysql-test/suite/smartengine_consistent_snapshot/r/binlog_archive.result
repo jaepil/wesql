@@ -1,9 +1,6 @@
 # Binlog persist to object store
-# Create binlog local archive tmp path
-# Create object store
-# Create object store bucket
-# Server restart with --binlog-archive=true
-# restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --consistent_snapshot_archive_dir=archive_dir --persistent_on_objstore=true --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
+# Server restart with --serverless=true --binlog_archive_expire_auto_purge=false
+# restart: --smartengine=1 --default-storage-engine=smartengine --serverless=true --binlog_archive_expire_auto_purge=false
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1);
@@ -32,26 +29,24 @@ binlog.000003	#	#
 binlog.000004	#	#
 SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 Log_name
-SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log;
-log
-#
-# Object store archive binlog
-#
-# Binlog local archive, not persist object store
-# restart: --smartengine=1 --default-storage-engine=smartengine --binlog-archive=true --consistent_snapshot_archive_dir=archive_dir
-FLUSH logs;
-FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-binlog.000001	#	#
-binlog.000002	#	#
-binlog.000003	#	#
-binlog.000004	#	#
-binlog.000005	#	#
-binlog.000006	#	#
+binlog.000001
+binlog.000002
+binlog.000003
+SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log_slice from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log_slice;
+log_slice
+binlog.000001.0000001856
+binlog.000002.0000000627
+binlog.000003.0000000627
+# Puge persistent binlog binlog.000002
+SELECT binlog_persistent_purge('binlog.000002');
+binlog_persistent_purge('binlog.000002')
+Purge binlog persistent files successfully
 SELECT Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 Log_name
-#
-# Local archive binlog
-#
+binlog.000002
+binlog.000003
+SELECT SUBSTRING_INDEX(REPLACE(Log_name, '/', ' '),  ' ', -1) as log_slice from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by log_slice;
+log_slice
+binlog.000002.0000000627
+binlog.000003.0000000627
 DROP DATABASE db1;

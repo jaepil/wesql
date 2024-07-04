@@ -82,7 +82,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   // Initialize database from consistent snapshot for PITR or clone.
   // If opt_recovery_consistent_snapshot_timestamp is set, recover to the
   // specified timestamp. Otherwise, recover to the latest consistent snapshot.
-
+  my_setwd(mysql_real_data_home, MYF(0));
   if (opt_initialize) {
     m_recovery_type = CONSISTENT_RECOVERY_PITR;
     std::string err_msg;

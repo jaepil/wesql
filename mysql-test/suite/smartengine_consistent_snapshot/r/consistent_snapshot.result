@@ -1,9 +1,6 @@
 INSTALL PLUGIN clone SONAME 'CLONE_PLUGIN';
-# Create binlog archive path
-# Create local object store
-# Create local object store bucket
-# Server restart with --consistent-snapshot-archive=true
-# restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --consistent_snapshot_archive_dir=archive_dir --objstore_provider=local --objstore_region=objstore_dir --objstore_bucket=bucket1
+# Server restart with --consistent-snapshot-archive=true --consistent_snapshot_archive_period=1 --binlog_archive_expire_auto_purge=false --consistent_snapshot_expire_auto_purge=false
+# restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --binlog_archive_expire_auto_purge=false --consistent_snapshot_expire_auto_purge=false
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1);
