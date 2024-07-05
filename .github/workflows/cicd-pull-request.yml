@@ -11,13 +11,13 @@ jobs:
     uses: wesql/wesql-cd/.github/workflows/enable-gke-runner.yml@main
     with:
       GITHUB_REPO: "${{ github.repository }}"
-      RUNNER_LABEL: "gke-amd-runner"
+      RUNNER_LABEL: "gke-oracle8-amd-runner"
     secrets: inherit
 
   build-test:
     needs: [ enable-runner ]
     name: make install mtr
-    runs-on: [self-hosted, gke-amd-runner ]
+    runs-on: [self-hosted, gke-oracle8-amd-runner ]
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@0.11.0
