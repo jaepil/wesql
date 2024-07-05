@@ -45,7 +45,7 @@ jobs:
       - name: make install
         run: |
           cd bu
-          make -j$(echo "4 * $(nproc)" | bc) && make install
+          make -j$(echo "$(nproc)") && make install
 
       - name: run mtr on normal file
         run: |
