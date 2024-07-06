@@ -688,9 +688,10 @@ void se_post_engine_recover() {
 
   txn_db_impl = dynamic_cast<util::TransactionDBImpl *>(se_db);
 
-  mysql_bin_log.get_current_log(&log_info);
-  txn_db_impl->GetDBImpl()->set_global_binlog_pos(&log_info.log_file_name[0],
-                                                  log_info.pos);
+  if (mysql_bin_log.is_open()) {
+    mysql_bin_log.get_current_log(&log_info);
+    txn_db_impl->GetDBImpl()->set_global_binlog_pos(&log_info.log_file_name[0], log_info.pos);
+  }
 }
 
 void se_post_ddl(THD *thd) { ddl_log_manager.post_ddl(thd); }
