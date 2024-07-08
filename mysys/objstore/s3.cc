@@ -380,6 +380,7 @@ Status S3ObjectStore::get_object_meta(const std::string_view &bucket,
 
 Status S3ObjectStore::list_object(const std::string_view &bucket,
                                   const std::string_view &prefix,
+                                  std::string_view &start_after, bool &finished,
                                   std::vector<ObjectMeta> &objects) {
   Aws::S3::Model::ListObjectsRequest request;
   Aws::String full_prefix;
@@ -390,6 +391,9 @@ Status S3ObjectStore::list_object(const std::string_view &bucket,
   }
   request.SetBucket(Aws::String(bucket));
   request.SetPrefix(full_prefix);
+  if (!start_after.empty()) {
+    request.SetMarker(Aws::String(start_after));
+  }
 
   Aws::S3::Model::ListObjectsOutcome outcome;
 
@@ -410,13 +414,27 @@ Status S3ObjectStore::list_object(const std::string_view &bucket,
       break;
     }
   }
+  const Aws::Vector<Aws::S3::Model::Object> &s3_objects =
+      outcome.GetResult().GetContents();
 
-  for (auto obj : outcome.GetResult().GetContents()) {
+  for (const auto &obj : s3_objects) {
     ObjectMeta meta;
     meta.key = obj.GetKey();
     meta.last_modified = obj.GetLastModified().Millis();
     meta.size = obj.GetSize();
     objects.push_back(meta);
+  }
+  finished = !outcome.GetResult().GetIsTruncated();
+  if (finished) {
+    start_after = "";
+  } else {
+    if (!s3_objects.empty()) {
+      start_after = s3_objects.back().GetKey();
+    } else {
+      Errors err_type = Errors::CLOUD_PROVIDER_UNRECOVERABLE_ERROR;
+      return Status(err_type, 0,
+                    "list object returned empty objects but should not");
+    }
   }
 
   return Status();
@@ -456,12 +474,12 @@ Status S3ObjectStore::delete_object(const std::string_view &bucket,
   return Status();
 }
 
-void init_s3_api() {
+void init_aws_api() {
   Aws::SDKOptions options;
   Aws::InitAPI(options);
 }
 
-void cleanup_s3_api() {
+void shutdown_aws_api() {
   Aws::SDKOptions options;
   Aws::ShutdownAPI(options);
 }

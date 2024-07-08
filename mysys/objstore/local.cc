@@ -18,6 +18,7 @@
 
 #include <assert.h>
 #include <sys/errno.h>
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 
@@ -245,6 +246,9 @@ Status LocalObjectStore::get_object_meta(const std::string_view &bucket,
 Status LocalObjectStore::list_object(const std::string_view &bucket,
                                      const std::string_view &prefix
                                      [[maybe_unused]],
+                                     std::string_view &start_after
+                                     [[maybe_unused]],
+                                     bool &finished,
                                      std::vector<ObjectMeta> &objects) {
   const std::lock_guard<std::mutex> _(mutex_);
 
@@ -270,6 +274,13 @@ Status LocalObjectStore::list_object(const std::string_view &bucket,
       objects.push_back(meta);
     }
   }
+
+  // sort the objects by key in lexicographical order.
+  std::sort(
+      objects.begin(), objects.end(),
+      [](const ObjectMeta &a, const ObjectMeta &b) { return a.key < b.key; });
+
+  finished = true;
   return Status();
 }
 

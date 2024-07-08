@@ -23,7 +23,7 @@ namespace objstore {
 
 void init_objstore_provider(const std::string_view &provider) {
   if (provider == "aws") {
-    init_s3_api();
+    init_aws_api();
   } else if (provider == "local") {
     // do nothing
   }
@@ -33,7 +33,7 @@ void cleanup_objstore_provider(ObjectStore *objstore) {
   if (objstore != nullptr) {
     std::string_view provider = objstore->get_provider();
     if (provider == "aws") {
-      cleanup_s3_api();
+      shutdown_aws_api();
     } else if (provider == "local") {
       // do nothing
     }

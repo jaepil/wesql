@@ -128,6 +128,7 @@ class ObjectStore {
 
   virtual Status list_object(const std::string_view &bucket,
                              const std::string_view &prefix,
+                             std::string_view &start_after, bool &finished,
                              std::vector<ObjectMeta> &objects) = 0;
 
   virtual Status delete_object(const std::string_view &bucket,

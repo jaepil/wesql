@@ -635,8 +635,13 @@ void Binlog_archive::run() {
       binlog_keyid.append(binlog_relative_file);
       binlog_keyid.append(".");
 
+      bool finished = false;
+      std::string_view start_after = "";
+      // TODO(#84): should check the output parameter `finished`, if false, set
+      // `start_after` key and continue to list the next batch of objects.
       objstore::Status ss = binlog_objstore->list_object(
-          std::string_view(opt_objstore_bucket), binlog_keyid, objects);
+          std::string_view(opt_objstore_bucket), binlog_keyid, start_after,
+          finished, objects);
       if (!ss.is_succ() &&
           ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
         err_msg.assign("Failed to binlog files: ");
@@ -2422,8 +2427,12 @@ int Binlog_archive::purge_index_entry(ulonglong *decrease_log_space) {
       binlog_keyid.append(FN_DIRSEP);
       binlog_keyid.append(temp_binlog_relative_file_name);
       binlog_keyid.append(".");
+
+      bool finished = false;
+      std::string_view start_after = "";
       objstore::Status ss = binlog_objstore->list_object(
-          std::string_view(opt_objstore_bucket), binlog_keyid, objects);
+          std::string_view(opt_objstore_bucket), binlog_keyid, start_after,
+          finished, objects);
       if (!ss.is_succ() &&
           ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
         std::string err_msg;
@@ -2583,9 +2592,14 @@ int Binlog_archive::show_binlog_persistent_files(
   DBUG_TRACE;
   int error = 0;
   if (binlog_objstore != nullptr) {
-    objstore::Status ss = binlog_objstore->list_object(
-        std::string_view(opt_objstore_bucket),
-        std::string_view(BINLOG_ARCHIVE_SUBDIR), objects);
+    bool finished = false;
+    std::string_view start_after = "";
+    // TODO(#84): should check the output parameter `finished`, if false, set
+    // `start_after` key and continue to list the next batch of objects.
+    objstore::Status ss =
+        binlog_objstore->list_object(std::string_view(opt_objstore_bucket),
+                                     std::string_view(BINLOG_ARCHIVE_SUBDIR),
+                                     start_after, finished, objects);
     if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
       std::string err_msg;
       error = 1;

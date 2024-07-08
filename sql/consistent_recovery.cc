@@ -1010,9 +1010,12 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(const char *log_fil
   binlog_keyid.append(binlog_relative_file);
   binlog_keyid.append(".");
 
+  bool finished = false;
+  std::string_view start_after = "";
   // Find last binlog.000000n.slice
   objstore::Status ss = recovery_objstore->list_object(
-      std::string_view(m_objstore_bucket), binlog_keyid, objects);
+      std::string_view(m_objstore_bucket), binlog_keyid, start_after, finished,
+      objects);
   if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
     err_msg.assign("Failed to binlog files: ");
     err_msg.append(BINLOG_ARCHIVE_SUBDIR);
@@ -1118,8 +1121,11 @@ int Consistent_recovery::merge_slice_to_binlog_file(
   binlog_keyid.append(to_binlog_file);
   binlog_keyid.append(".");
 
+  bool finished = false;
+  std::string_view start_after = "";
   objstore::Status ss = recovery_objstore->list_object(
-      std::string_view(m_objstore_bucket), binlog_keyid, objects);
+      std::string_view(m_objstore_bucket), binlog_keyid, start_after, finished,
+      objects);
   if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
     std::string err_msg;
     err_msg.assign("Failed to binlog files: ");
@@ -1434,8 +1440,12 @@ int Consistent_recovery::truncate_binlogs_from_objstore(const char *log_file_nam
     binlog_keyid.append(FN_DIRSEP);
     binlog_keyid.append(temp_binlog_relative_file_name);
     binlog_keyid.append(".");
+
+    bool finished = false;
+    std::string_view start_after = "";
     ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
-                                        binlog_keyid, objects);
+                                        binlog_keyid, start_after, finished,
+                                        objects);
     if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
       std::string err_msg;
       err_msg.assign("Failed to binlog files: ");

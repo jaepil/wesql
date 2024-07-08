@@ -54,8 +54,24 @@ class S3ObjectStore : public ObjectStore {
                          const std::string_view &key,
                          ObjectMeta &meta) override;
 
+  // for aws s3, the list object interface will return at most 1000 objects,
+  // if there are more objects, the `finished` parameter will be set to false,
+  // and the caller should call this function again with the last returned
+  // object's key as the `start_after` parameter.
+
+  // NOTICE:
+  // 1. by default, aws s3 will return the objects in lexicographical order.
+  // 2. the `start_after` key is not included in the `objects` returned.
+
+  // param[in] bucket: the bucket name
+  // param[in] prefix: the prefix of the object key
+  // param[in & out] start_after: the object key to start after, and return the
+  // object key for the next time to start after if there are more objects.
+  // param[out] finished: whether the list is finished
+  // param[out] objects: the object list returned.
   Status list_object(const std::string_view &bucket,
                      const std::string_view &prefix,
+                     std::string_view &start_after, bool &finished,
                      std::vector<ObjectMeta> &objects) override;
 
   Status delete_object(const std::string_view &bucket,
@@ -74,9 +90,9 @@ class S3ObjectStore : public ObjectStore {
   int retry_times_on_error_ = 10;
 };
 
-void init_s3_api();
+void init_aws_api();
 
-void cleanup_s3_api();
+void shutdown_aws_api();
 
 S3ObjectStore *create_s3_objstore(const std::string_view region,
                                   const std::string_view *endpoint,

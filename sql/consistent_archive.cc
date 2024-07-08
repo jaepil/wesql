@@ -2620,9 +2620,14 @@ int Consistent_archive::show_innodb_persistent_files(
   DBUG_TRACE;
   int error = 0;
   if (snapshot_objstore != nullptr) {
+    bool finished = false;
+    std::string_view start_after = "";
+    // TODO(#84): should check the output parameter `finished`, if false, set
+    // `start_after` key and continue to list the next batch of objects.
     objstore::Status ss = snapshot_objstore->list_object(
         std::string_view(opt_objstore_bucket),
-        std::string_view(CONSISTENT_INNODB_ARCHIVE_BASENAME), objects);
+        std::string_view(CONSISTENT_INNODB_ARCHIVE_BASENAME), start_after,
+        finished, objects);
     if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
       std::string err_msg;
       error = 1;
@@ -2641,9 +2646,14 @@ int Consistent_archive::show_se_persistent_files(
   DBUG_TRACE;
   int error = 0;
   if (snapshot_objstore != nullptr) {
+    bool finished = false;
+    std::string_view start_after = "";
+    // TODO(#84): should check the output parameter `finished`, if false, set
+    // `start_after` key and continue to list the next batch of objects.
     objstore::Status ss = snapshot_objstore->list_object(
         std::string_view(opt_objstore_bucket),
-        std::string_view(CONSISTENT_SE_ARCHIVE_BASENAME), objects);
+        std::string_view(CONSISTENT_SE_ARCHIVE_BASENAME), start_after, finished,
+        objects);
     if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
       std::string err_msg;
       error = 1;
