@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v3
       - name: cmake
         run: |
-          sudo yum install -y perl-core python39
+          sudo yum install -y perl-core
           sudo perl -MCPAN -e 'install IO::Pty'
           sudo perl -MCPAN -e 'install IO::Tty'
           sudo cpan Expect
@@ -36,6 +36,9 @@ jobs:
           sudo mkdir -pv /u01
           sudo chown -R mysql:mysql /u01
           sudo chown -R mysql:mysql ./
+          sudo yum install python3-devel python3-pip mysql-devel
+          sudo pip3 install mysqlclient
+          sudo ln -s /usr/bin/python3 /usr/bin/python
           mkdir -pv bu
           cd bu
           cmake3 ../ -B ./ \
