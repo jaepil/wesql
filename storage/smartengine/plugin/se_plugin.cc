@@ -238,11 +238,23 @@ static int se_init_func(void *const p)
       se_open_tables.free_hash();
       DBUG_RETURN(HA_EXIT_FAILURE);
     }
-    std::string_view endpoint(
-        opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
-    common::Status status = main_opts.env->InitObjectStore(
-        std::string_view(opt_objstore_provider), std::string_view(opt_objstore_region),
-        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https, opt_objstore_bucket);
+
+    std::string_view endpoint(opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
+
+    std::string mtr_test_bucket_subdir = "";
+    if (opt_objstore_mtr_test_bucket_dir) {
+      mtr_test_bucket_subdir = opt_objstore_mtr_test_bucket_dir;
+      // remove possible '/' at the beginning and end of the string
+      mtr_test_bucket_subdir.erase(0, mtr_test_bucket_subdir.find_first_not_of("/"));
+      mtr_test_bucket_subdir.erase(mtr_test_bucket_subdir.find_last_not_of("/") + 1);
+    }
+
+    common::Status status = main_opts.env->InitObjectStore(std::string_view(opt_objstore_provider),
+                                                           std::string_view(opt_objstore_region),
+                                                           opt_objstore_endpoint ? &endpoint : nullptr,
+                                                           opt_objstore_use_https,
+                                                           opt_objstore_bucket,
+                                                           mtr_test_bucket_subdir);
     if (!status.ok()) {
       std::string err_text = status.ToString();
       sql_print_error("SE: fail to create object store: %s", err_text.c_str());

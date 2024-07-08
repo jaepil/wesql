@@ -141,7 +141,13 @@ class ObjectStore {
 ObjectStore *create_object_store(const std::string_view &provider,
                                  const std::string_view region,
                                  const std::string_view *endpoint,
-                                 bool use_https = true);
+                                 bool use_https);
+
+ObjectStore *create_object_store_for_test(const std::string_view &provider,
+                                          const std::string_view region,
+                                          const std::string_view *endpoint,
+                                          bool use_https,
+                                          const std::string_view bucket_dir);
 
 void destroy_object_store(ObjectStore *obj_store);
 

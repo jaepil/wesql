@@ -28,8 +28,9 @@ namespace objstore {
 class S3ObjectStore : public ObjectStore {
  public:
   explicit S3ObjectStore(const std::string_view region,
-                         Aws::S3::S3Client &&s3_client)
-      : region_(region), s3_client_(s3_client) {}
+                         Aws::S3::S3Client &&s3_client,
+                         const std::string_view bucket_dir)
+      : region_(region), s3_client_(s3_client), bucket_dir_(bucket_dir) {}
   virtual ~S3ObjectStore() = default;
 
   Status create_bucket(const std::string_view &bucket) override;
@@ -67,6 +68,8 @@ class S3ObjectStore : public ObjectStore {
 
   std::string region_;
   Aws::S3::S3Client s3_client_;
+  // now for mtr test only
+  const std::string bucket_dir_;
   // TODO(ljc): may add an configuration setting
   int retry_times_on_error_ = 10;
 };
@@ -77,7 +80,12 @@ void cleanup_s3_api();
 
 S3ObjectStore *create_s3_objstore(const std::string_view region,
                                   const std::string_view *endpoint,
-                                  bool useHttps = true);
+                                  bool useHttps);
+
+S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
+                                           const std::string_view *endpoint,
+                                           bool use_https,
+                                           const std::string_view bucket_dir);
 
 void destroy_s3_objstore(S3ObjectStore *s3_obj_store);
 

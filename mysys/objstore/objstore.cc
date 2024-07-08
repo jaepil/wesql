@@ -53,6 +53,20 @@ ObjectStore *create_object_store(const std::string_view &provider,
   }
 }
 
+ObjectStore *create_object_store_for_test(const std::string_view &provider,
+                                          const std::string_view region,
+                                          const std::string_view *endpoint,
+                                          bool use_https,
+                                          const std::string_view bucket_dir) {
+  if (provider == "aws") {
+    return create_s3_objstore_for_test(region, endpoint, use_https, bucket_dir);
+  } else if (provider == "local") {
+    return create_local_objstore(region, endpoint, use_https);
+  } else {
+    return nullptr;
+  }
+}
+
 void destroy_object_store(ObjectStore *obj_store) {
   // provide a register mechanism to create/destroy the object store
   delete obj_store;

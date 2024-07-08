@@ -132,8 +132,14 @@ Status S3ObjectStore::put_object_from_file(
     const std::string_view &bucket, const std::string_view &key,
     const std::string_view &data_file_path) {
   Aws::S3::Model::PutObjectRequest request;
+  Aws::String full_key;
+  if (bucket_dir_.empty()) {
+    full_key = key;
+  } else {
+    full_key.append(bucket_dir_).append("/").append(key);
+  }
+  request.SetKey(full_key);
   request.SetBucket(Aws::String(bucket));
-  request.SetKey(Aws::String(key));
 
   std::shared_ptr<Aws::IOStream> input_data = Aws::MakeShared<Aws::FStream>(
       "IOStreamAllocationTag", data_file_path.data(),
@@ -195,8 +201,14 @@ Status S3ObjectStore::put_object(const std::string_view &bucket,
                                  const std::string_view &data) {
 
   Aws::S3::Model::PutObjectRequest request;
+  Aws::String full_key;
+  if (bucket_dir_.empty()) {
+    full_key = key;
+  } else {
+    full_key.append(bucket_dir_).append("/").append(key);
+  }
+  request.SetKey(full_key);
   request.SetBucket(Aws::String(bucket));
-  request.SetKey(Aws::String(key));
 
   const std::shared_ptr<Aws::IOStream> data_stream =
       Aws::MakeShared<Aws::StringStream>("SStreamAllocationTag");
@@ -239,8 +251,14 @@ Status S3ObjectStore::get_object(const std::string_view &bucket,
                                  const std::string_view &key,
                                  std::string &body) {
   Aws::S3::Model::GetObjectRequest request;
+  Aws::String full_key;
+  if (bucket_dir_.empty()) {
+    full_key = key;
+  } else {
+    full_key.append(bucket_dir_).append("/").append(key);
+  }
+  request.SetKey(full_key);
   request.SetBucket(Aws::String(bucket));
-  request.SetKey(Aws::String(key));
 
   Aws::S3::Model::GetObjectOutcome outcome;
 
@@ -278,8 +296,14 @@ Status S3ObjectStore::get_object(const std::string_view &bucket,
                                  const std::string_view &key, size_t off,
                                  size_t len, std::string &body) {
   Aws::S3::Model::GetObjectRequest request;
+  Aws::String full_key;
+  if (bucket_dir_.empty()) {
+    full_key = key;
+  } else {
+    full_key.append(bucket_dir_).append("/").append(key);
+  }
+  request.SetKey(full_key);
   request.SetBucket(Aws::String(bucket));
-  request.SetKey(Aws::String(key));
   std::string byte_range =
       "bytes=" + std::to_string(off) + "-" + std::to_string(off + len - 1);
   request.SetRange(byte_range);
@@ -319,8 +343,14 @@ Status S3ObjectStore::get_object_meta(const std::string_view &bucket,
                                       const std::string_view &key,
                                       ObjectMeta &meta) {
   Aws::S3::Model::HeadObjectRequest request;
+  Aws::String full_key;
+  if (bucket_dir_.empty()) {
+    full_key = key;
+  } else {
+    full_key.append(bucket_dir_).append("/").append(key);
+  }
+  request.SetKey(full_key);
   request.SetBucket(Aws::String(bucket));
-  request.SetKey(Aws::String(key));
 
   Aws::S3::Model::HeadObjectOutcome outcome;
 
@@ -352,8 +382,14 @@ Status S3ObjectStore::list_object(const std::string_view &bucket,
                                   const std::string_view &prefix,
                                   std::vector<ObjectMeta> &objects) {
   Aws::S3::Model::ListObjectsRequest request;
+  Aws::String full_prefix;
+  if (bucket_dir_.empty()) {
+    full_prefix = prefix;
+  } else {
+    full_prefix.append(bucket_dir_).append("/").append(prefix);
+  }
   request.SetBucket(Aws::String(bucket));
-  request.SetPrefix(Aws::String(prefix));
+  request.SetPrefix(full_prefix);
 
   Aws::S3::Model::ListObjectsOutcome outcome;
 
@@ -389,8 +425,14 @@ Status S3ObjectStore::list_object(const std::string_view &bucket,
 Status S3ObjectStore::delete_object(const std::string_view &bucket,
                                     const std::string_view &key) {
   Aws::S3::Model::DeleteObjectRequest request;
+  Aws::String full_key;
+  if (bucket_dir_.empty()) {
+    full_key = key;
+  } else {
+    full_key.append(bucket_dir_).append("/").append(key);
+  }
+  request.SetKey(full_key);
   request.SetBucket(Aws::String(bucket));
-  request.SetKey(Aws::String(key));
 
   Aws::S3::Model::DeleteObjectOutcome outcome;
 
@@ -435,7 +477,22 @@ S3ObjectStore *create_s3_objstore(const std::string_view region,
   clientConfig.scheme =
       use_https ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
   Aws::S3::S3Client client(clientConfig);
-  return new S3ObjectStore(region, std::move(client));
+  return new S3ObjectStore(region, std::move(client), "");
+}
+
+S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
+                                           const std::string_view *endpoint,
+                                           bool use_https,
+                                           const std::string_view bucket_dir) {
+  Aws::Client::ClientConfiguration clientConfig;
+  clientConfig.region = region;
+  if (endpoint != nullptr) {
+    clientConfig.endpointOverride = *endpoint;
+  }
+  clientConfig.scheme =
+      use_https ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
+  Aws::S3::S3Client client(clientConfig);
+  return new S3ObjectStore(region, std::move(client), bucket_dir);
 }
 
 void destroy_s3_objstore(S3ObjectStore *s3_objstore) {
