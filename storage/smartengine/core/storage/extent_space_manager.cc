@@ -338,6 +338,7 @@ int ExtentSpaceManager::reference(const int64_t table_space_id,
   int ret = Status::kOk;
   TableSpace *table_space = nullptr;
   ExtentIOInfo io_info;
+  bool extent_existed = false;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -349,16 +350,36 @@ int ExtentSpaceManager::reference(const int64_t table_space_id,
   } else if (IS_NULL(table_space = get_table_space(table_space_id))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to find tablespace", K(ret), K(table_space_id), K(extent_space_type), K(extent_id));
-  } else if (FAILED(table_space->reference(extent_space_type, extent_id, io_info))) {
+  } else if (FAILED(table_space->reference_if_need(extent_space_type, extent_id, io_info, extent_existed))) {
     SE_LOG(WARN, "fail to reference extent", K(ret), K(table_space_id), K(extent_space_type), K(extent_id));
+  } else if (extent_existed) {
+    const auto &iter = extent_io_info_map_.find(extent_id.id());
+    if (iter == extent_io_info_map_.end()) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(WARN, "unexpected error, extent not found", K(ret), K(table_space_id), K(extent_space_type), K(extent_id));
+    } else {
+      // existed
+    }
   } else if (!(extent_io_info_map_.emplace(extent_id.id(), io_info).second)) {
     ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "fail to emplace to io_info map", K(ret), K(table_space_id), K(extent_space_type), K(extent_id));
+    SE_LOG(WARN,
+           "unexpected error, fail to emplace to io_info map",
+           K(ret),
+           K(table_space_id),
+           K(extent_space_type),
+           K(io_info));
   } else {
     SE_LOG(INFO, "success to reference extent", K(table_space_id), K(extent_space_type), K(extent_id));
   }
 
   return ret;
+}
+
+bool ExtentSpaceManager::TEST_find_extent(const ExtentId extent_id)
+{
+  SpinRLockGuard r_guard(io_info_map_lock_);
+  auto iter = extent_io_info_map_.find(extent_id.id());
+  return extent_io_info_map_.end() != iter;
 }
 
 int ExtentSpaceManager::get_readable_extent(ExtentId extent_id, IOExtent *&readable_extent)

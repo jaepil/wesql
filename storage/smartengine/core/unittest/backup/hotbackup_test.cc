@@ -36,7 +36,7 @@ namespace util
 class HotbackupTest : public DBTestBase
 {
 public:
-  HotbackupTest() : DBTestBase(test_dir) 
+  HotbackupTest() : DBTestBase(test_dir, false)
   {
     backup_tmp_dir_path_ = db_->GetName() + BACKUP_TMP_DIR;
     backup_tmp_dir_path2_ = db_->GetName() + "/hotbackup_tmp2";
@@ -564,11 +564,13 @@ TEST_F(HotbackupTest, delete_cf_before_and_after_create_snapshot) {
 
   for (auto extent_id : extent_ids) {
     ASSERT_TRUE(nullptr != storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+    ASSERT_TRUE(ExtentSpaceManager::get_instance().TEST_find_extent(extent_id));
   }
 
   Reopen(CurrentOptions(), &dbname_);
   for (auto extent_id : extent_ids) {
     ASSERT_TRUE(nullptr != storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+    ASSERT_TRUE(ExtentSpaceManager::get_instance().TEST_find_extent(extent_id));
   }
 
   ASSERT_OK(backup_snapshot->release_current_backup_snapshot(db_));
@@ -577,6 +579,7 @@ TEST_F(HotbackupTest, delete_cf_before_and_after_create_snapshot) {
 
   for (auto extent_id : extent_ids) {
     ASSERT_EQ(nullptr, storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+    ASSERT_FALSE(ExtentSpaceManager::get_instance().TEST_find_extent(extent_id));
   }
 
   ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
@@ -597,6 +600,7 @@ TEST_F(HotbackupTest, delete_cf_before_and_after_create_snapshot) {
 
   for (auto extent_id : extent_ids) {
     ASSERT_EQ(nullptr, storage::ExtentMetaManager::get_instance().get_meta(extent_id));
+    ASSERT_FALSE(ExtentSpaceManager::get_instance().TEST_find_extent(extent_id));
   }
 
   ASSERT_OK(backup_snapshot->release_current_backup_snapshot(db_));

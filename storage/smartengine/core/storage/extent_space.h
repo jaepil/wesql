@@ -38,7 +38,7 @@ public:
   virtual int allocate(ExtentIOInfo &io_info) = 0;
   virtual int recycle(const ExtentId extent_id) = 0;
   // mark the extent used, only used during recovery
-  virtual int reference(const ExtentId extent_id, ExtentIOInfo &io_info) = 0;
+  virtual int reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool &existed) = 0;
 
   //shrink relative function
   virtual int get_shrink_info_if_need(const ShrinkCondition &shrink_condition, bool &need_shrink, ShrinkInfo &shrink_info) = 0;

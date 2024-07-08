@@ -212,9 +212,10 @@ int TableSpace::recycle(const int32_t extent_space_type, const ExtentId extent_i
   return ret;
 }
 
-int TableSpace::reference(const int32_t extent_space_type,
-                          const ExtentId extent_id,
-                          ExtentIOInfo &io_info)
+int TableSpace::reference_if_need(const int32_t extent_space_type,
+                                  const ExtentId extent_id,
+                                  ExtentIOInfo &io_info,
+                                  bool &existed)
 {
   int ret = Status::kOk;
   ExtentSpace *extent_space = nullptr;
@@ -226,7 +227,7 @@ int TableSpace::reference(const int32_t extent_space_type,
   } else if (IS_NULL(extent_space = get_extent_space(extent_space_type))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to get extent space", K(ret), K(extent_space_type));
-  } else if (FAILED(extent_space->reference(extent_id, io_info))) {
+  } else if (FAILED(extent_space->reference_if_need(extent_id, io_info, existed))) {
     SE_LOG(WARN, "fail to reference extent", K(ret), K(extent_id));
   } else {
     SE_LOG(DEBUG, "success to reference extent", K(extent_id));

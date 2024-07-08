@@ -165,6 +165,21 @@ class SpecialEnv : public util::EnvWrapper {
  public:
   explicit SpecialEnv(util::Env* base);
 
+  virtual bool IsObjectStoreSupported() const override { return target()->IsObjectStoreSupported(); }
+
+  virtual bool IsObjectStoreInited() const override { return target()->IsObjectStoreInited(); }
+
+
+   virtual common::Status InitObjectStore(const std::string_view provider, const std::string_view region,
+                                         const std::string_view *endpoint, bool use_https,
+                                         const std::string_view bucket) override {
+    return target()->InitObjectStore(provider, region, endpoint, use_https, bucket);
+  }
+
+  virtual common::Status DestroyObjectStore() override {
+    return target()->DestroyObjectStore();
+  }
+
   common::Status NewWritableFile(const std::string& f,
                                  util::WritableFile*& r,
                                  const util::EnvOptions& soptions) override {
@@ -595,7 +610,7 @@ class DBTestBase : public testing::Test {
     kSkipMmapReads = 256,
   };
 
-  explicit DBTestBase(const std::string path);
+  explicit DBTestBase(const std::string path, bool use_objstore = false);
 
   ~DBTestBase();
 

@@ -46,6 +46,8 @@ public:
     return number_;
   }
 
+  virtual int recover_extent_space() override;
+
   inline uint32_t pos() const { return pos_; }
 
   inline SnapshotImpl* next() { return next_; }

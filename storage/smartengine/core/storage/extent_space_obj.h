@@ -40,7 +40,7 @@ class ObjectExtentSpace : public ExtentSpace {
   int allocate(ExtentIOInfo &io_info) override;
   int recycle(const ExtentId extent_id) override;
   // mark the extent used, only used during recovery
-  int reference(const ExtentId extent_id, ExtentIOInfo &io_info) override;
+  int reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool& existed) override;
 
   // shrink relative function
   int get_shrink_info_if_need(const ShrinkCondition &shrink_condition,
@@ -80,7 +80,8 @@ class ObjectExtentSpace : public ExtentSpace {
   int64_t free_extent_count_;
   uint64_t last_alloc_ts_;  // timestamp of last allocate extent
   int32_t g_next_allocated_id_;
-  // use int32_t as the id in the extent space, enough or not?
+  // use int32_t as the id in the extent space, this introduce a 4PB limitation of
+  // the max capacity in the extent space of one table.
   std::unordered_set<int32_t> inused_extent_set_;
 };
 

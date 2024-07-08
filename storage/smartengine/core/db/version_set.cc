@@ -211,20 +211,40 @@ int VersionSet::recover_extent_space_manager()
   }
 
   if (SUCCED(ret)) {
-  SubTable* sub_table = nullptr;
-  SubTableMap& all_sub_tables = global_ctx_->all_sub_table_->sub_table_map_;
-  for (auto iter = all_sub_tables.begin();
-       Status::kOk == ret && iter != all_sub_tables.end(); ++iter) {
-    if (nullptr == (sub_table = iter->second)) {
-      ret = Status::kCorruption;
-      SE_LOG(WARN, "subtable must not nullptr", K(ret), K(iter->first));
-    } else if (sub_table->IsDropped()) {
-      // do nothing
-    } else if (FAILED(sub_table->recover_extent_space())) {
-      SE_LOG(WARN, "fail to recover extent space", K(ret), "index_id",
-                  sub_table->GetID());
+    BackupSnapshotMap &backup_snapshots = BackupSnapshotImpl::get_instance()->get_backup_snapshot_map();
+    int64_t backup_snapshot_count = backup_snapshots.get_backup_snapshot_count();
+    BackupSnapshotId prev_backup_id = 0;
+    BackupSnapshotId backup_id = 0;
+    MetaSnapshotSet *backup_snapshot = nullptr;
+    db::Snapshot *sn = nullptr;
+
+    while (SUCCED(ret) && backup_snapshots.get_next_backup_snapshot(prev_backup_id, backup_id, backup_snapshot)) {
+      for (auto iter = backup_snapshot->begin(); SUCCED(ret) && iter != backup_snapshot->end(); ++iter) {
+        if (IS_NULL(sn = *iter)) {
+          ret = Status::kCorruption;
+          SE_LOG(WARN, "meta snapshot must not nullptr", K(ret));
+        } else if (FAILED(sn->recover_extent_space())) {
+          SE_LOG(WARN, "fail to recover extent space", K(ret), "index_id", sn->GetSequenceNumber());
+        }
+      }
+
+      prev_backup_id = backup_id;
     }
   }
+
+  if (SUCCED(ret)) {
+    SubTable *sub_table = nullptr;
+    SubTableMap &all_sub_tables = global_ctx_->all_sub_table_->sub_table_map_;
+    for (auto iter = all_sub_tables.begin(); SUCCED(ret) && iter != all_sub_tables.end(); ++iter) {
+      if (IS_NULL(sub_table = iter->second)) {
+        ret = Status::kCorruption;
+        SE_LOG(WARN, "subtable must not nullptr", K(ret), K(iter->first));
+      } else if (sub_table->IsDropped()) {
+        // do nothing
+      } else if (FAILED(sub_table->recover_extent_space())) {
+        SE_LOG(WARN, "fail to recover extent space", K(ret), "index_id", sub_table->GetID());
+      }
+    }
   }
 
   if (SUCCED(ret)) {

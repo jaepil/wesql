@@ -396,7 +396,7 @@ int DataFile::recycle(const ExtentId extent_id)
   return ret;
 }
 
-int DataFile::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
+int DataFile::reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool &existed)
 {
   int ret = Status::kOk;
 
@@ -408,15 +408,11 @@ int DataFile::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K_(data_file_header), K(extent_id), K_(total_extent_count));
   } else if (is_used_extent(extent_id.offset)) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, the extent is used", K(ret), K(extent_id));
+    existed = true;
   } else {
     set_used_status(extent_id.offset);
-    io_info.set_param(FILE_EXTENT_SPACE,
-                      extent_id,
-                      data_file_header_.extent_size_,
-                      UniqueIdAllocator::get_instance().alloc(),
-                      file_->get_fd());
+    set_extent_io_info(extent_id, io_info);
+    existed = false;
   }
 
   return ret;
@@ -451,7 +447,7 @@ int DataFile::shrink(const int64_t shrink_extent_count)
   return ret;
 }
 
-int DataFile::get_extent_io_info(const ExtentId extent_id, ExtentIOInfo &io_info)
+int DataFile::set_extent_io_info(const ExtentId extent_id, ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
 

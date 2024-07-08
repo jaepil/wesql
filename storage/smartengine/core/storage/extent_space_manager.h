@@ -97,6 +97,8 @@ private:
   int clear_garbage_files();
   int init_extent(const ExtentIOInfo &io_info, IOExtent *&extent);
 
+  bool TEST_find_extent(const ExtentId extent_id);
+
 private:
   bool is_inited_;
   util::Env *env_;

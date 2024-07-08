@@ -404,6 +404,8 @@ class Env {
 
   virtual bool IsObjectStoreSupported() const { return false; }
 
+  virtual bool IsObjectStoreInited() const { return false; }
+
   // if user need use objstore interface, he/she still need include
   // objstore.h. this choice is not very good, since this env header
   // is not self contained. TODO(cnut): refine me.
@@ -830,6 +832,11 @@ class EnvWrapper : public Env {
 
   // Return the target to which this Env forwards all calls
   Env* target() const { return target_; }
+
+
+  virtual bool IsObjectStoreSupported() const override { return target_->IsObjectStoreSupported(); }
+
+  virtual bool IsObjectStoreInited() const override { return target_->IsObjectStoreInited(); }
 
   // The following text is boilerplate that forwards all methods to target()
   common::Status NewSequentialFile(const std::string& f,

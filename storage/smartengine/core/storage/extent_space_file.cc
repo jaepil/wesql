@@ -139,7 +139,7 @@ int FileExtentSpace::recycle(const ExtentId extent_id)
   return ret;
 }
 
-int FileExtentSpace::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
+int FileExtentSpace::reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool &existed)
 {
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
@@ -150,8 +150,10 @@ int FileExtentSpace::reference(const ExtentId extent_id, ExtentIOInfo &io_info)
   } else if (IS_NULL(data_file = get_data_file(extent_id.file_number))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to get data file", K(ret), K(extent_id));
-  } else if (FAILED(data_file->reference(extent_id, io_info))) {
+  } else if (FAILED(data_file->reference_if_need(extent_id, io_info, existed))) {
     SE_LOG(WARN, "fail to reference extent to datafile", K(ret), K(extent_id));
+  } else if (existed) {
+    SE_LOG(DEBUG, "extent is already referenced before", K(extent_id));
   } else {
     SE_LOG(DEBUG, "success to reference extent", K(extent_id));
   }
@@ -656,7 +658,7 @@ int FileExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
   } else if (IS_NULL(src_data_file) || IS_NULL(extent_buf)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(src_data_file), KP(extent_buf));
-  } else if (FAILED(src_data_file->get_extent_io_info(origin_extent_id, origin_io_info))){
+  } else if (FAILED(src_data_file->set_extent_io_info(origin_extent_id, origin_io_info))) {
     SE_LOG(WARN, "fail to get extent io info", K(ret), K(origin_extent_id));
   } else if (FAILED(origin_extent.init(origin_io_info.extent_id_, origin_io_info.unique_id_, origin_io_info.fd_))) {
     SE_LOG(WARN, "fail to init origin extent", K(ret), K(origin_io_info));
@@ -667,7 +669,7 @@ int FileExtentSpace::move_one_extent_to_front(DataFile *src_data_file,
     SE_LOG(WARN, "unexpected error, the new extent should at the front", K(ret), K(origin_io_info), K(new_io_info));
   } else if (FAILED(new_extent.init(new_io_info.extent_id_, new_io_info.unique_id_, new_io_info.fd_))) {
     SE_LOG(WARN, "fail to init new extent", K(ret), K(new_io_info));
-  } else if (FAILED(origin_extent.read(nullptr /*aio_handle=*/, 0, origin_io_info.extent_size_, extent_buf, extent_slice))) {
+  } else if (FAILED(origin_extent.read(nullptr, 0, origin_io_info.extent_size_, extent_buf, extent_slice))) {
     SE_LOG(WARN, "fail to read origin extent", K(ret), K(origin_extent_id));
   } else if (FAILED(new_extent.write(extent_slice))) {
     SE_LOG(WARN, "fail to append new extent", K(ret), K(new_io_info));

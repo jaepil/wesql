@@ -594,9 +594,9 @@ class PosixEnv : public Env
     return common::Status::OK();
   }
 
-  virtual bool IsObjectStoreSupported() const override {
-    return obj_store_ != nullptr;
-  }
+  virtual bool IsObjectStoreSupported() const override { return true; }
+
+  virtual bool IsObjectStoreInited() const override { return obj_store_ != nullptr; }
 
   virtual common::Status GetObjectStore(
       objstore::ObjectStore*& object_store) override {

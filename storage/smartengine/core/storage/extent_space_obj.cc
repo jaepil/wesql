@@ -203,8 +203,8 @@ int ObjectExtentSpace::recycle(const ExtentId extent_id) {
   return ret;
 }
 
-int ObjectExtentSpace::reference(const ExtentId extent_id,
-                                 ExtentIOInfo &io_info) {
+int ObjectExtentSpace::reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool &existed)
+{
   int ret = Status::kOk;
   int32_t faked_fn = convert_table_space_to_fd(table_space_id_);
 
@@ -215,12 +215,12 @@ int ObjectExtentSpace::reference(const ExtentId extent_id,
     SE_LOG(WARN, "unexpected error, file_num not match",
            K(extent_id.file_number), K(table_space_id_), K(ret));
   } else if (!(inused_extent_set_.insert(extent_id.offset).second)) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, fail to insert extent into inused set",
-           K(extent_id.offset), K(table_space_id_), K(ret));
+    existed = true;
+    SE_LOG(DEBUG, "extent is already referenced before", K(extent_id));
   } else {
     ++total_extent_count_;
     ++used_extent_count_;
+    existed = false;
 
     if (g_next_allocated_id_ < extent_id.offset) {
       g_next_allocated_id_ = extent_id.offset;

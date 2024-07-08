@@ -85,6 +85,18 @@ int64_t SnapshotImpl::get_total_extent_count() const
   return total_extent_count;
 }
 
+int SnapshotImpl::recover_extent_space()
+{
+  int ret = Status::kOk;
+  for (int64_t level = 0; SUCCED(ret) && level < storage::MAX_TIER_COUNT; ++level) {
+    if (FAILED(extent_layer_versions_[level]->recover_reference_extents())) {
+      SE_LOG(WARN, "fail to recover extent space", K(ret), K(level));
+    }
+  }
+
+  return ret;
+}
+
 int SnapshotImpl::extent_layer_versions_serialize(char *buf, int64_t buf_len, int64_t &pos) const {
   int ret = Status::kOk;
   int64_t size = extent_layer_versions_get_serialize_size();

@@ -88,13 +88,13 @@ public:
   int allocate(ExtentIOInfo &io_info);
   int recycle(const ExtentId extent_id);
   // mark the extent used, only used during recovery
-  int reference(const ExtentId extent_id, ExtentIOInfo &io_info);
+  int reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool &existed);
 
   //shrink relative function
   int shrink(const int64_t shrink_extent_count);
 
   //statistic relative function
-  int get_extent_io_info(const ExtentId extent_id, ExtentIOInfo &io_info);
+  int set_extent_io_info(const ExtentId extent_id, ExtentIOInfo &io_info);
   int64_t get_table_space_id() const { return data_file_header_.table_space_id_; }
   int32_t get_extent_space_type() const { return data_file_header_.extent_space_type_; }
   int64_t get_file_number() const { return data_file_header_.file_number_; }

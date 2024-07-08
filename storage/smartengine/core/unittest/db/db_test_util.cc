@@ -52,10 +52,11 @@ SpecialEnv::SpecialEnv(Env* base)
   table_write_callback_ = nullptr;
 }
 
-DBTestBase::DBTestBase(const std::string path)
+DBTestBase::DBTestBase(const std::string path, bool use_objstore)
     : option_config_(kDefault),
       mem_env_(!getenv("MEM_ENV") ? nullptr : new MockEnv(Env::Default())),
-      env_(new SpecialEnv(mem_env_ ? mem_env_ : Env::Default())) {
+      env_(new SpecialEnv(mem_env_ ? mem_env_ : Env::Default()))
+{
   env_->SetBackgroundThreads(1, Env::LOW);
   env_->SetBackgroundThreads(1, Env::HIGH);
   env_->SetBackgroundThreads(4, Env::FILTER);
@@ -63,6 +64,10 @@ DBTestBase::DBTestBase(const std::string path)
   alternative_wal_dir_ = dbname_ + "/wal";
   auto options = CurrentOptions();
   options.env = env_;
+  if (env_->IsObjectStoreSupported() && use_objstore) {
+    std::string_view endpoint = "";
+    EXPECT_EQ(common::Status::kOk, env_->InitObjectStore("local", "test", &endpoint, false, "").code());
+  }
   auto delete_options = options;
   delete_options.wal_dir = alternative_wal_dir_;
   DestroyDB(dbname_, delete_options);
@@ -74,6 +79,9 @@ DBTestBase::DBTestBase(const std::string path)
 }
 
 DBTestBase::~DBTestBase() {
+  if (env_->IsObjectStoreInited()) {
+    env_->DestroyObjectStore();
+  }
   SyncPoint::GetInstance()->DisableProcessing();
   SyncPoint::GetInstance()->LoadDependency({});
   SyncPoint::GetInstance()->ClearAllCallBacks();

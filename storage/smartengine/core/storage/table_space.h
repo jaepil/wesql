@@ -44,10 +44,11 @@ public:
   //extent relatice function
   int allocate(const int32_t extent_space_type, ExtentIOInfo &io_info);
   int recycle(const int32_t extent_space_type, const ExtentId extent_id);
-  // mark the extent used, only used during recovery
-  int reference(const int32_t extent_space_type,
-                const ExtentId extent_id,
-                ExtentIOInfo &io_info);
+  // mark the extent used if need, only used during recovery
+  int reference_if_need(const int32_t extent_space_type,
+                        const ExtentId extent_id,
+                        ExtentIOInfo &io_info,
+                        bool &existed);
 
   //shrink relative function
   int move_extens_to_front(const ShrinkInfo &shrink_info, std::unordered_map<int64_t, ExtentIOInfo> &replace_map);
