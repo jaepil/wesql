@@ -38,7 +38,7 @@ jobs:
           sudo chown -R mysql:mysql ./
           sudo yum install python3-devel python3-pip mysql-devel
           sudo pip3 install mysqlclient
-          sudo ln -s /usr/bin/python3 /usr/bin/python
+          sudo ln -sfn /usr/bin/python3 /usr/bin/python
           mkdir -pv bu
           cd bu
           cmake3 ../ -B ./ \
