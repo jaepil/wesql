@@ -13,6 +13,9 @@
 
 namespace alisql {
 
+typedef std::function<void()> WorkerStartCallback;
+typedef std::function<void()> WorkerEndCallback;
+
 class Consensus;
 
 bool MyParseFromArray(google::protobuf::Message& msg, const void* data,
@@ -103,6 +106,9 @@ class Service {
   static std::atomic<uint64_t> running;
   static uint64_t workThreadCnt;
   ClientService* cs;
+
+  static WorkerStartCallback workerStartCb_;
+  static WorkerEndCallback workerEndCb_;
 
  protected:
   static int serializeResponse(easy_request_t* r, PaxosMsg* req, PaxosMsg& rsp);

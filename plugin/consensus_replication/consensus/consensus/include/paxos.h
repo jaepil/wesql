@@ -414,6 +414,13 @@ class Paxos : public Consensus {
   }
   void setChecksumMode(bool mode) { checksum_mode_ = mode; }
   static void appendLogCb(Paxos** paxos) { (*paxos)->appendLog(true); }
+
+  void setWorkerCb(const WorkerStartCallback& start_cb,
+                   const WorkerEndCallback& end_cb) {
+    Service::workerStartCb_ = start_cb;
+    Service::workerEndCb_ = end_cb;
+  }
+
   // int onAsyncEvent(AsyncEventType type, void *arg, void *arg1);
   int tryUpdateCommitIndex();
 

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "consensus.h"
+#include "io/easy_baseth_pool.h"
 #include "msg_compress.h"
 #include "util/easy_inet.h"
 #include "utils.h"
@@ -24,6 +25,15 @@ Service::Service(Consensus* cons)
 
 std::atomic<uint64_t> Service::running(0);
 uint64_t Service::workThreadCnt = 0;
+WorkerStartCallback Service::workerStartCb_ = NULL;
+WorkerEndCallback Service::workerEndCb_ = NULL;
+
+static void* worker_thread_on_start_ex(void* args) {
+  if (Service::workerStartCb_) Service::workerStartCb_();
+  (void)easy_baseth_on_start(args);
+  if (Service::workerEndCb_) Service::workerEndCb_();
+  return NULL;
+}
 
 int Service::init(uint64_t ioThreadCnt, uint64_t workThreadCntArg,
                   uint64_t ConnectTimeout, bool memory_usage_count,
@@ -43,16 +53,19 @@ int Service::init(uint64_t ioThreadCnt, uint64_t workThreadCntArg,
     return -1;
   }
   pool_eio_->do_signal = 0;
-  workPool_ = easy_thread_pool_create(pool_eio_, workThreadCntArg,
-                                      Service::process, NULL);
+
+  workPool_ =
+      easy_thread_pool_create_ex(pool_eio_, workThreadCntArg,
+                                 worker_thread_on_start_ex, Service::process, NULL);
   if (workPool_ == NULL) {
     return -1;
   }
   workThreadCnt = workThreadCntArg;
 
   if (heartbeatThreadCnt) {
-    heartbeatPool_ = easy_thread_pool_create(pool_eio_, heartbeatThreadCnt,
-                                             Service::process, NULL);
+    heartbeatPool_ = easy_thread_pool_create_ex(pool_eio_, heartbeatThreadCnt,
+                                                worker_thread_on_start_ex,
+                                                Service::process, NULL);
     if (heartbeatPool_ == NULL) {
       return -1;
     }
