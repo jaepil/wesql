@@ -2,6 +2,7 @@
 #include "rpl_consensus.h"
 #include "bl_consensus_log.h"
 #include "system_variables.h"
+#include "my_thread.h"
 
 #include "paxos.h"
 #include "paxos_log.h"
@@ -39,6 +40,7 @@ void rpl_consensus_init(bool is_learner, uint64 mock_start_index, ConsensusLogMa
   consensus_ptr->setForceSyncEpochDiff(opt_consensus_force_sync_epoch_diff);
   consensus_ptr->setChecksumMode(opt_consensus_checksum);
   consensus_ptr->setChecksumCb(binlog_checksum_crc32_callback);
+  consensus_ptr->setWorkerCb(my_thread_init, my_thread_end);
   consensus_ptr->setConfigureChangeTimeout(opt_consensus_configure_change_timeout);
   consensus_ptr->setMaxDelayIndex4NewMember(opt_consensus_new_follower_threshold);
   consensus_ptr->setEnableDynamicEasyIndex(opt_consensus_dynamic_easyindex);
