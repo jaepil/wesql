@@ -165,10 +165,10 @@ int DataBlockIterator::update(const Slice &start, const Slice &end)
   if (FAILED(meta_descriptor_.block_info_.deserialize(end.data(), end.size(), pos))) {
     COMPACTION_LOG(WARN, "fail to deserialize block info", K(ret));
   } else {
-    meta_descriptor_.range_.start_key_ = meta_descriptor_.block_info_.first_key_;
+    meta_descriptor_.range_.start_key_ = meta_descriptor_.block_info_.get_first_key();
     meta_descriptor_.range_.end_key_ = start;
-    meta_descriptor_.block_position_.first = meta_descriptor_.block_info_.get_offset();
-    meta_descriptor_.block_position_.second = meta_descriptor_.block_info_.get_size();
+    meta_descriptor_.block_position_.first = meta_descriptor_.block_info_.get_handle().get_offset();
+    meta_descriptor_.block_position_.second = meta_descriptor_.block_info_.get_handle().get_size();
     meta_descriptor_.delete_percent_ = meta_descriptor_.block_info_.get_delete_percent();
     meta_descriptor_.value_ = end;
   }

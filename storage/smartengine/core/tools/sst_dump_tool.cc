@@ -158,7 +158,7 @@ int ExtentDumper::dump_all_data_block(RowBlock *index_block)
       } else if (FAILED(index_block_reader.get_value(block_info))) {
         SE_LOG(WARN, "fail to get block stats", K(ret));
       } else {
-        Slice first_key(block_info.first_key_);
+        Slice first_key(block_info.get_first_key());
         fprintf(stderr, "Data Block #%ld @ [first_key : %s], [last_key : %s]\n\n",
           block_id, first_key.ToString(true /*hex*/).c_str(), last_key.ToString(true /*hex*/).c_str());
         
@@ -187,7 +187,7 @@ int ExtentDumper::dump_data_block(const BlockInfo &block_info)
   int64_t row_count = 1;
   
 
-  if (FAILED(read_block(block_info.handle_, data_block))) {
+  if (FAILED(read_block(block_info.get_handle(), data_block))) {
     SE_LOG(WARN, "fail to read block", K(ret), K(block_info));
   } else if (FAILED(data_block_iterator.setup(&internal_comparator_, data_block, false))) {
     fprintf(stderr, "fail to setup data block iterator: ret = %d\n", ret);
@@ -297,36 +297,36 @@ int ExtentDumper::read_block(const BlockHandle &handle, RowBlock *&block)
   if (UNLIKELY(!handle.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret));
-  } else if (IS_NULL(io_buf = reinterpret_cast<char *>(base_memalign(DIOHelper::DIO_ALIGN_SIZE, handle.size_, ModId::kDefaultMod)))) {
+  } else if (IS_NULL(io_buf = reinterpret_cast<char *>(base_memalign(DIOHelper::DIO_ALIGN_SIZE, handle.get_size(), ModId::kDefaultMod)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for io buf", K(ret), K(handle));
-  } else if (FAILED(extent_.read(nullptr, handle.offset_, handle.size_, io_buf, block_content))) {
+  } else if (FAILED(extent_.read(nullptr, handle.get_offset(), handle.get_size(), io_buf, block_content))) {
     SE_LOG(WARN, "fail to read block", K(ret), K(handle));
   } else if (UNLIKELY(io_buf != block_content.data()) ||
-             UNLIKELY(handle.size_ != block_content.size())) {
+             UNLIKELY(handle.get_size() != static_cast<int32_t>(block_content.size()))) {
     ret = Status::kCorruption;
     SE_LOG(WARN, "the data may be corrupted", K(ret), K(handle), KP(io_buf),
         KP(block_content.data()), K(block_content.size()));
   } else {
     // verify checksum
-    actual_checksum = crc32c::Unmask(handle.checksum_);
+    actual_checksum = crc32c::Unmask(handle.get_checksum());
     expect_checksum = crc32c::Value(block_content.data(), block_content.size());
 
     if (actual_checksum != expect_checksum) {
       ret = Status::kCorruption;
       SE_LOG(WARN, "the block checksum mismatch", K(ret), K(actual_checksum), K(expect_checksum));
     } else {
-      if (kNoCompression == handle.compress_type_) {
+      if (kNoCompression == handle.get_compress_type()) {
         raw_block_content.assign(block_content.data(), block_content.size());
       } else {
         if (IS_NULL(raw_buf = reinterpret_cast<char *>(base_memalign(
-            DIOHelper::DIO_ALIGN_SIZE, handle.raw_size_, ModId::kDefaultMod)))) {
+            DIOHelper::DIO_ALIGN_SIZE, handle.get_raw_size(), ModId::kDefaultMod)))) {
           ret = Status::kMemoryLimit;
           SE_LOG(WARN, "fail to allocate memory for raw buf", K(ret), K(handle));
         } else if (FAILED(compressor_helper.uncompress(block_content,
-                                                       static_cast<CompressionType>(handle.compress_type_),
+                                                       handle.get_compress_type(),
                                                        raw_buf,
-                                                       handle.raw_size_,
+                                                       handle.get_raw_size(),
                                                        raw_block_content))) {
           SE_LOG(WARN, "fail to uncompress block", K(ret));
         } else {

@@ -118,6 +118,7 @@ ExtentWriter::ExtentWriter()
       buf_(),
       footer_(),
       index_block_writer_(),
+      bloom_filter_writer_(nullptr),
       data_block_writer_(nullptr),
       change_info_(nullptr),
       migrate_flag_(false)
@@ -141,7 +142,7 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     SE_LOG(WARN, "invalid argument", K(ret), K(args));
   } else if (FAILED(index_block_writer_.init())) {
     SE_LOG(WARN, "fail to init index block writer", K(ret));
-  } else if (FAILED(bloom_filter_writer_.init(BloomFilter::DEFAULT_PER_KEY_BITS, BloomFilter::DEFAULT_PROBE_NUM))) {
+  } else if (FAILED(init_bloom_filter_writer(args.table_schema_.get_engine_attribute().use_bloom_filter()))) {
     SE_LOG(WARN, "fail to init bloom filter block writer", K(ret));
   } else if (FAILED(init_data_block_writer(args))) {
     SE_LOG(WARN, "fail to init data block writer", K(ret), K(args));
@@ -160,9 +161,8 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     internal_key_comparator_ = args.internal_key_comparator_;
     block_cache_ = args.block_cache_;
     row_cache_ = args.row_cache_;
-    block_info_.max_column_count_ = table_schema_.get_column_schemas().size();
-    block_info_.probe_num_ = BloomFilter::DEFAULT_PROBE_NUM;
-    block_info_.per_key_bits_ = BloomFilter::DEFAULT_PER_KEY_BITS;
+    block_info_.set_probe_num(BloomFilter::DEFAULT_PROBE_NUM);
+    block_info_.set_per_key_bits(BloomFilter::DEFAULT_PER_KEY_BITS);
     change_info_ = args.change_info_;
 
     is_inited_ = true;
@@ -182,6 +182,9 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
 void ExtentWriter::destroy()
 {
   if (is_inited_) {
+    if (IS_NOTNULL(bloom_filter_writer_)) {
+      MOD_DELETE_OBJECT(BloomFilterWriter, bloom_filter_writer_);
+    }
     if (table_schema_.use_column_format()) {
       ColumnBlockWriter *column_block_writer = reinterpret_cast<ColumnBlockWriter *>(data_block_writer_);
       MOD_DELETE_OBJECT(ColumnBlockWriter, column_block_writer);
@@ -298,6 +301,39 @@ int ExtentWriter::test_force_flush_data_block()
 }
 #endif
 
+int ExtentWriter::init_bloom_filter_writer(const bool use_bloom_filter)
+{
+  int ret = Status::kOk;
+
+  if (use_bloom_filter) {
+    if (IS_NULL(bloom_filter_writer_ = MOD_NEW_OBJECT(ModId::kExtentWriter, BloomFilterWriter))) {
+      ret = Status::kMemoryLimit;
+      SE_LOG(WARN, "fail to allocate memory for BloomFilterWriter", K(ret));
+    } else if (FAILED(bloom_filter_writer_->init(BloomFilter::DEFAULT_PER_KEY_BITS, BloomFilter::DEFAULT_PROBE_NUM))) {
+      SE_LOG(WARN, "fail to init bloom filter writer", K(ret));
+    }
+  } else {
+    // not use bloom filter, no need to construct bloom filter writer
+    se_assert(IS_NULL(bloom_filter_writer_));
+  }
+
+  // resource clean
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(bloom_filter_writer_)) {
+      MOD_DELETE_OBJECT(BloomFilterWriter, bloom_filter_writer_);
+    }
+  }
+
+  return ret;
+}
+
+void ExtentWriter::reuse_bloom_filter_writer()
+{
+  if (IS_NOTNULL(bloom_filter_writer_)) {
+    bloom_filter_writer_->reuse();
+  }
+}
+
 int ExtentWriter::init_data_block_writer(const ExtentWriterArgs &args)
 {
   int ret = Status::kOk;
@@ -410,7 +446,7 @@ int ExtentWriter::inner_append_row(const Slice &key, const Slice &value)
     SE_LOG(WARN, "invalid argument", K(ret), K(key.empty()));
   } else if (FAILED(data_block_writer_->append(key, value))) {
     SE_LOG(WARN, "fail to append row to block writer", K(ret), K(key), K(value));
-  } else if (FAILED(bloom_filter_writer_.add(ExtractUserKey(key)))) {
+  } else if (FAILED(add_to_bloom_filter(key))) {
     SE_LOG(WARN, "fail to add to bloom filter", K(ret));
   } else if (FAILED(update_block_stats(key))) {
     SE_LOG(WARN, "fail to update block stats", K(ret), K(key));
@@ -434,22 +470,22 @@ int ExtentWriter::update_block_stats(const Slice &key)
     SE_LOG(WARN, "the key type is unexpected", K(ret), KE(internal_key.type));
   } else {
     // update first key
-    if (0 == block_info_.row_count_) {
-      block_info_.first_key_.assign(key.data(), key.size());
+    if (0 == block_info_.get_row_count()) {
+      block_info_.set_first_key(std::string(key.data(), key.size()));
     }
 
     // update sequence range
-    block_info_.smallest_seq_ = std::min(internal_key.sequence, block_info_.smallest_seq_);
-    block_info_.largest_seq_ = std::max(internal_key.sequence, block_info_.largest_seq_);
+    block_info_.set_smallest_seq(std::min(internal_key.sequence, block_info_.get_smallest_seq()));
+    block_info_.set_largest_seq(std::max(internal_key.sequence, block_info_.get_largest_seq()));
 
     // update row count
-    ++block_info_.row_count_;
+    block_info_.inc_row_count();
     switch (internal_key.type) {
       case kTypeDeletion:
-        ++block_info_.delete_row_count_;
+        block_info_.inc_delete_row_count();
         break;
       case kTypeSingleDeletion:
-        ++block_info_.single_delete_row_count_;
+        block_info_.inc_single_delete_row_count();
         break;
       default:
         // do nothing
@@ -474,7 +510,7 @@ int ExtentWriter::prepare_append_block(const Slice &block,
              UNLIKELY(last_key.empty())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(block.empty()), K(block_info), K(last_key));
-  } else if (FAILED(check_key_order(block_info.first_key_))) {
+  } else if (FAILED(check_key_order(block_info.get_first_key()))) {
     SE_LOG(WARN, "fail to check key order", K(ret));
   // force to close current data block
   } else if (FAILED(write_data_block())) {
@@ -492,8 +528,8 @@ int ExtentWriter::inner_append_block(const Slice &block, const BlockInfo &block_
 {
   int ret = Status::kOk;
   BlockInfo new_block_info(block_info);
-  new_block_info.handle_.offset_ = buf_.size();
-  new_block_info.handle_.size_ = block.size();
+  new_block_info.get_handle().set_offset(buf_.size());
+  new_block_info.get_handle().set_size(block.size());
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -511,10 +547,42 @@ int ExtentWriter::inner_append_block(const Slice &block, const BlockInfo &block_
   } else if (FAILED(index_block_writer_.append(last_key, new_block_info))) {
     SE_LOG(WARN, "fail to write block index", K(ret));
   } else {
-    extent_info_.raw_data_size_ += block_info.handle_.raw_size_;
-    extent_info_.data_size_ += block_info.handle_.size_;
+    extent_info_.raw_data_size_ += block_info.get_handle().get_raw_size();
+    extent_info_.data_size_ += block_info.get_handle().get_size();
     extent_info_.update(last_key, new_block_info);
     last_key_.assign(last_key.data(), last_key.size());
+  }
+
+  return ret;
+}
+
+int ExtentWriter::add_to_bloom_filter(const Slice &key)
+{
+  int ret = Status::kOk;
+
+  if (IS_NOTNULL(bloom_filter_writer_)) {
+    if (UNLIKELY(key.empty())) {
+      ret = Status::kInvalidArgument;
+      SE_LOG(WARN, "invalid argument", K(ret), K(key));
+    } else if (FAILED(bloom_filter_writer_->add(ExtractUserKey(key)))) {
+      SE_LOG(WARN, "fail to add to bloom filter", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+int ExtentWriter::build_bloom_filter(BlockInfo &block_info)
+{
+  int ret = Status::kOk;
+  Slice bloom_filter;
+
+  if (IS_NOTNULL(bloom_filter_writer_)) {
+    if (FAILED(bloom_filter_writer_->build(bloom_filter))) {
+      SE_LOG(WARN, "fail to build bloom filter", K(ret));
+    } else {
+      block_info.set_bloom_filter(bloom_filter);
+    }
   }
 
   return ret;
@@ -564,7 +632,7 @@ bool ExtentWriter::need_switch_extent_for_row(const Slice &key, const Slice &val
   size += buf_.size(); // current extent sze
   size += data_block_writer_->future_size(key.size(), value.size()); // current block future size
   // the bloom filter size is included.
-  size += index_block_writer_.future_size(key, block_info_);
+  size += index_block_writer_.future_size(key.size(), block_info_.get_max_serialize_size(table_schema_.get_column_schemas().size()));
 
   return size >= MAX_EXTENT_SIZE;  
 }
@@ -576,7 +644,7 @@ bool ExtentWriter::need_switch_extent_for_block(const Slice &block, const BlockI
 
   size += buf_.size(); // current extent size
   size += block.size(); // new block size
-  size += index_block_writer_.future_size(last_key, block_info);
+  size += index_block_writer_.future_size(last_key.size(), block_info.get_serialize_size());
 
   return size >= MAX_EXTENT_SIZE;
 }
@@ -584,6 +652,7 @@ bool ExtentWriter::need_switch_extent_for_block(const Slice &block, const BlockI
 int ExtentWriter::write_data_block()
 {
   int ret = Status::kOk;
+  uint32_t block_checksum = 0;
   Slice raw_block;
   Slice compressed_block;
   CompressionType actual_compress_type = common::kNoCompression;
@@ -597,7 +666,7 @@ int ExtentWriter::write_data_block()
     // empty block, do nothing
   } else if (FAILED(data_block_writer_->build(raw_block, block_info_))) {
     SE_LOG(WARN, "fail to build data block", K(ret));
-  } else if (FAILED(bloom_filter_writer_.build(block_info_.bloom_filter_))) {
+  } else if (FAILED(build_bloom_filter(block_info_))) {
     SE_LOG(WARN, "fail to build bloom filter", K(ret));
   } else if (FAILED(compressor_helper_.compress(raw_block,
                                                 compress_type_,
@@ -605,11 +674,12 @@ int ExtentWriter::write_data_block()
                                                 actual_compress_type))) {
     SE_LOG(WARN, "fail to compressed block", K(ret), K(raw_block));
   } else {
-    block_info_.handle_.offset_ = buf_.size();
-    block_info_.handle_.size_ = compressed_block.size();
-    block_info_.handle_.raw_size_ = raw_block.size();
-    block_info_.handle_.compress_type_ = actual_compress_type;
-    calculate_block_checksum(compressed_block, block_info_.handle_.checksum_);
+    block_info_.get_handle().set_offset(buf_.size());
+    block_info_.get_handle().set_size(compressed_block.size());
+    block_info_.get_handle().set_raw_size(raw_block.size());
+    block_info_.get_handle().set_compress_type(actual_compress_type);
+    calculate_block_checksum(compressed_block, block_checksum);
+    block_info_.get_handle().set_checksum(block_checksum);
 
     if (FAILED(buf_.write(compressed_block))) {
       SE_LOG(WARN, "fail to write block body", K(ret));
@@ -622,7 +692,7 @@ int ExtentWriter::write_data_block()
       if (migrate_flag_ && !table_schema_.use_column_format()) {
         // TODO(Zhao Dongsheng): The blocks currently being migrated to 
         // the block cache are uncompresed. And, ignore the migrate ret?
-        if (FAILED(collect_migrating_block(raw_block, block_info_.handle_, kNoCompression))) {
+        if (FAILED(collect_migrating_block(raw_block, block_info_.get_handle(), kNoCompression))) {
           SE_LOG(WARN, "fail to collect migrating block", K(ret), K_(block_info));
         }
         migrate_flag_ = false;
@@ -635,11 +705,10 @@ int ExtentWriter::write_data_block()
 
       // clear previous block status
       data_block_writer_->reuse();
-      bloom_filter_writer_.reuse();
+      reuse_bloom_filter_writer();
       block_info_.reset();
-      block_info_.max_column_count_ = table_schema_.get_column_schemas().size();
-      block_info_.probe_num_ = BloomFilter::DEFAULT_PROBE_NUM;
-      block_info_.per_key_bits_ = BloomFilter::DEFAULT_PER_KEY_BITS;
+      block_info_.set_probe_num(BloomFilter::DEFAULT_PROBE_NUM);
+      block_info_.set_per_key_bits(BloomFilter::DEFAULT_PER_KEY_BITS);
     }
   }
 
@@ -649,6 +718,7 @@ int ExtentWriter::write_data_block()
 int ExtentWriter::write_index_block()
 {
   int ret = Status::kOk;
+  uint32_t block_checksum = 0;
   Slice raw_block;
   Slice compressed_block;
   CompressionType actual_compress_type = common::kNoCompression;
@@ -665,11 +735,12 @@ int ExtentWriter::write_index_block()
   } else if (FAILED(compressor_helper_.compress(raw_block, compress_type_, compressed_block, actual_compress_type))) {
     SE_LOG(WARN, "fail to compress index block", K(ret));
   } else {
-    handle.offset_ = buf_.size();
-    handle.size_ = compressed_block.size();
-    handle.raw_size_ = raw_block.size();
-    handle.compress_type_ = actual_compress_type;
-    calculate_block_checksum(compressed_block, handle.checksum_);
+    handle.set_offset(buf_.size());
+    handle.set_size(compressed_block.size());
+    handle.set_raw_size(raw_block.size());
+    handle.set_compress_type(actual_compress_type);
+    calculate_block_checksum(compressed_block, block_checksum);
+    handle.set_checksum(block_checksum);
 
     if (FAILED(buf_.write(compressed_block))) {
       SE_LOG(WARN, "fail to write block body", K(ret));
@@ -1006,7 +1077,7 @@ int ExtentWriter::collect_migrating_block(const Slice &block,
                                                  compress_type))) {
       ret = Status::kMemoryLimit;
       SE_LOG(WARN, "fail to allocate memory for migrating block", K(ret));
-    } else if (!(migrating_blocks_.emplace(block_handle.offset_, migrating_block).second)) {
+    } else if (!(migrating_blocks_.emplace(block_handle.get_offset(), migrating_block).second)) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "fail to emplace migrating block", K(ret), K(block_handle));
     } else {

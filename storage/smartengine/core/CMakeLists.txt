@@ -749,6 +749,7 @@ set(TESTS
         unittest/schema/column_schema_test.cc
         unittest/schema/engine_attribute_test.cc
         unittest/schema/table_schema_test.cc
+        unittest/table/block_struct_test.cc
         unittest/table/parallel_read_test.cc
         #unittest/transactions/optimistic_transaction_test.cc
         #unittest/transactions/transaction_test.cc

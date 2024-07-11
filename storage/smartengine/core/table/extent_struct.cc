@@ -134,14 +134,14 @@ void ExtentInfo::reset()
 void ExtentInfo::update(const common::Slice &largest_key, const BlockInfo &block_info)
 {
   if (0 == smallest_key_.size()) {
-    smallest_key_.DecodeFrom(common::Slice(block_info.first_key_));
+    smallest_key_.DecodeFrom(common::Slice(block_info.get_first_key()));
   }
   largest_key_.DecodeFrom(largest_key);
-  smallest_seq_ = std::min(smallest_seq_, block_info.smallest_seq_);
-  largest_seq_ = std::max(largest_seq_, block_info.largest_seq_);
+  smallest_seq_ = std::min(smallest_seq_, block_info.get_smallest_seq());
+  largest_seq_ = std::max(largest_seq_, block_info.get_largest_seq());
   ++data_block_count_;
-  row_count_ += block_info.row_count_;
-  delete_row_count_ += block_info.delete_row_count_ + block_info.single_delete_row_count_; 
+  row_count_ += block_info.get_row_count();
+  delete_row_count_ += block_info.get_delete_row_count() + block_info.get_single_delete_row_count(); 
 }
 
 DEFINE_TO_STRING(ExtentInfo, KV_(table_space_id), KV_(extent_space_type), KV_(extent_id),

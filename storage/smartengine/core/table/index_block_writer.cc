@@ -97,9 +97,9 @@ int IndexBlockWriter::build(Slice &block)
 
 bool IndexBlockWriter::is_empty() const { return block_writer_.is_empty(); }
 
-int64_t IndexBlockWriter::future_size(const common::Slice &key, const BlockInfo &block_info) const
+int64_t IndexBlockWriter::future_size(const int64_t key_size, const int64_t block_info_size) const
 {
-  return block_writer_.future_size(key.size(), block_info.get_max_serialize_size());
+  return block_writer_.future_size(key_size, block_info_size);
 }
 
 int IndexBlockWriter::serialize_block_stats(const BlockInfo &block_info, Slice &serialized_value)

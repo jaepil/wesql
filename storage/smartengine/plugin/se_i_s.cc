@@ -1621,8 +1621,8 @@ static int se_i_s_se_subtable_fill_table(
           ++extent_count;
           raw_data_size += ((storage::ExtentMeta*)extent_meta_buf.data())->raw_data_size_; 
           compressed_data_size += ((storage::ExtentMeta*)extent_meta_buf.data())->data_size_;
-          raw_index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.raw_size_; 
-          compressed_index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.size_;
+          raw_index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.get_raw_size(); 
+          compressed_index_size += ((storage::ExtentMeta*)extent_meta_buf.data())->index_block_handle_.get_size();
           iter->Next();
         }
         tables->table->field[SMARTENGINE_SUBTABLE_FIELD::TABLE_NAME]->store(

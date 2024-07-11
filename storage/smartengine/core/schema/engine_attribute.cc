@@ -41,7 +41,7 @@ const char *EngineAttribute::ENGINE_ATTRIBUTE_NAMES[] = {"data_format",
 EngineAttribute::EngineAttribute()
     : data_format_(EngineAttribute::ROW_FORMAT),
       block_size_(DEFAULT_BLOCK_SIZE),
-      use_bloom_filter_(false),
+      use_bloom_filter_(true),
       compress_types_()
 {
   compress_types_.push_back(kZSTD);

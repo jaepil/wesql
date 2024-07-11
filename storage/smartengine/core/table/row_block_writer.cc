@@ -152,7 +152,7 @@ int RowBlockWriter::build(Slice &block, BlockInfo &block_info)
     SE_LOG(WARN, "fail to append restarts", K(ret));
   } else {
     block.assign(buf_.data(), buf_.size());
-    block_info.column_block_ = 0;
+    block_info.set_row_format();
   }
 
   return ret;

@@ -43,16 +43,9 @@ enum ChecksumType : int8_t
   kxxHash = 0x2,
 };
 
-struct BlockHandle
+class BlockHandle
 {
-  static const int64_t BLOCK_HANDLE_VERSION = 1;
-
-  uint32_t offset_;
-  uint32_t size_;
-  uint32_t raw_size_;
-  uint32_t checksum_;
-  int8_t compress_type_;
-
+public:
   BlockHandle();
   BlockHandle(const BlockHandle &block_handle);
   ~BlockHandle();
@@ -60,29 +53,32 @@ struct BlockHandle
 
   void reset();
   bool is_valid() const;
+  inline void set_offset(int32_t offset) { offset_ = offset; }
+  inline int32_t get_offset() const { return offset_; }
+  inline void set_size(int32_t size) { size_ = size; }
+  inline int32_t get_size() const { return size_; }
+  inline void set_raw_size(int32_t raw_size) { raw_size_ = raw_size; } 
+  inline int32_t get_raw_size() const { return raw_size_; }
+  inline void set_checksum(uint32_t checksum) { checksum_ = checksum; }
+  inline uint32_t get_checksum() const { return checksum_; }
+  inline void set_compress_type(common::CompressionType compress_type) { compress_type_ = compress_type; }
+  inline common::CompressionType get_compress_type() const { return compress_type_; }
 
+  static const int64_t BLOCK_HANDLE_VERSION = 1;
+  DECLARE_SERIALIZATION()
   DECLARE_TO_STRING()
-  DECLARE_COMPACTIPLE_SERIALIZATION(BLOCK_HANDLE_VERSION)
+
+private:
+  int32_t offset_;
+  int32_t size_;
+  int32_t raw_size_;
+  uint32_t checksum_;
+  common::CompressionType compress_type_;
 };
 
-struct BlockInfo
+class BlockInfo
 {
-  static const int64_t BLOCK_INFO_VERSION = 1;
-
-  BlockHandle handle_;
-  std::string first_key_;
-  int32_t row_count_;
-  int32_t delete_row_count_;
-  int32_t single_delete_row_count_;
-  common::SequenceNumber smallest_seq_;
-  common::SequenceNumber largest_seq_;
-  int32_t per_key_bits_;
-  int32_t probe_num_;
-  common::Slice bloom_filter_;
-  int8_t column_block_;
-  int32_t max_column_count_;
-  std::vector<ColumnUnitInfo> unit_infos_;
-
+public:
   BlockInfo();
   BlockInfo(const BlockInfo &block_info);
   ~BlockInfo();
@@ -90,14 +86,59 @@ struct BlockInfo
 
   void reset();
   bool is_valid() const;
-  inline uint32_t get_offset() const { return handle_.offset_; }
-  inline uint32_t get_size() const {return handle_.size_; }
+  inline void set_handle(BlockHandle handle) { handle_ = handle; }
+  inline const BlockHandle &get_handle() const { return handle_; }
+  inline BlockHandle &get_handle() { return handle_; }
+  inline void set_first_key(const std::string &first_key) { first_key_ = first_key; }
+  inline const std::string &get_first_key() const { return first_key_; }
+  inline void inc_row_count() { ++row_count_; }
+  inline int32_t get_row_count() const { return row_count_; }
+  inline void inc_delete_row_count() { ++delete_row_count_; }
+  inline int32_t get_delete_row_count() const { return delete_row_count_; }
+  inline void inc_single_delete_row_count() { ++single_delete_row_count_; }
+  inline int32_t get_single_delete_row_count() const { return single_delete_row_count_; }
   inline int64_t get_delete_percent() const { return ((delete_row_count_ + single_delete_row_count_) * 100) / row_count_; }
-  inline bool is_column_block() const {return (1 == column_block_); }
-  int64_t get_max_serialize_size() const;
+  inline void set_smallest_seq(common::SequenceNumber smallest_seq) { smallest_seq_ = smallest_seq; }
+  inline common::SequenceNumber get_smallest_seq() const { return smallest_seq_; }
+  inline void set_largest_seq(common::SequenceNumber largest_seq) { largest_seq_ = largest_seq; }
+  inline common::SequenceNumber get_largest_seq() const { return largest_seq_; }
+  inline void set_columnar_format() { attr_ |= FLAG_COLUMNAR_FORMAT; }
+  inline void set_row_format() { attr_ &= (~FLAG_COLUMNAR_FORMAT); }
+  inline bool is_columnar_format() const { return 0 != (attr_ & FLAG_COLUMNAR_FORMAT); }
+  inline void set_has_bloom_filter() { attr_ |= FLAG_HAS_BLOOM_FILTER; }
+  inline void unset_has_bloom_filter() { attr_ &= (~FLAG_HAS_BLOOM_FILTER); }
+  inline bool has_bloom_filter() const { return 0 != (attr_ & FLAG_HAS_BLOOM_FILTER); }
+  inline void set_per_key_bits(int32_t per_key_bits) { per_key_bits_ = per_key_bits; }
+  inline int32_t get_per_key_bits() const { return  per_key_bits_; }
+  inline void set_probe_num(int32_t probe_num) { probe_num_ = probe_num; }
+  inline int32_t get_probe_num() const { return probe_num_; }
+  void set_bloom_filter(const common::Slice &bloom_filter);
+  inline const common::Slice &get_bloom_filter() const { return bloom_filter_; }
+  inline const std::vector<ColumnUnitInfo> &get_unit_infos() const { return unit_infos_; }
+  inline std::vector<ColumnUnitInfo> &get_unit_infos() { return unit_infos_; }
+  int64_t get_max_serialize_size(int64_t column_count) const;
 
+  static const int64_t BLOCK_INFO_VERSION = 1;
+  DECLARE_SERIALIZATION()
   DECLARE_TO_STRING()
-  DECLARE_COMPACTIPLE_SERIALIZATION(BLOCK_INFO_VERSION)
+
+private:
+  static const int8_t FLAG_COLUMNAR_FORMAT = 0x01;
+  static const int8_t FLAG_HAS_BLOOM_FILTER = 0x02;
+
+private:
+  BlockHandle handle_;
+  std::string first_key_;
+  int32_t row_count_;
+  int32_t delete_row_count_;
+  int32_t single_delete_row_count_;
+  common::SequenceNumber smallest_seq_;
+  common::SequenceNumber largest_seq_;
+  int8_t attr_;
+  int32_t per_key_bits_;
+  int32_t probe_num_;
+  common::Slice bloom_filter_;
+  std::vector<ColumnUnitInfo> unit_infos_;
 };
 
 } // namespace table

@@ -1542,7 +1542,7 @@ int StorageManager::get_level_usage_percent(const Snapshot *current_meta,
       if (meta->num_deletes_ > 0) {
         ++delete_size;
       }
-      int64_t one_usage = meta->data_size_ + meta->index_block_handle_.size_;
+      int64_t one_usage = meta->data_size_ + meta->index_block_handle_.get_size();
       total_usage += one_usage;
       ++size;
       level_iter->Next();

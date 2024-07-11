@@ -136,13 +136,13 @@ int ColumnBlockWriter::build(Slice &block_data, BlockInfo &block_info)
       } else if (FAILED(block_buf_.write(unit_data))) {
         SE_LOG(WARN, "fail to write unit data", K(ret));
       } else {
-        block_info.unit_infos_.push_back(unit_info);
+        block_info.get_unit_infos().push_back(unit_info);
       }
     }
 
     if (SUCCED(ret)) {
       block_data.assign(block_buf_.data(), block_buf_.size());
-      block_info.column_block_ = 1;
+      block_info.set_columnar_format();
 
 #ifndef NDEBUG  
       SE_LOG(INFO, "success to build column block", K(ret), "size", block_data.size());

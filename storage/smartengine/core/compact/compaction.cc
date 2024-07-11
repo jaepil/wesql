@@ -326,10 +326,10 @@ int GeneralCompaction::copy_data_block(const MetaDescriptor &data_block_desc)
     ret = Status::kErrorUnexpected;
     COMPACTION_LOG(WARN, "the extent reader and aio handle must not be nullptr", K(ret),
         KP(reader_rep.extent_reader_), KP(reader_rep.aio_handle_), K(data_block_desc));
-  } else if (IS_NULL(block_buf = reinterpret_cast<char *>(base_malloc(data_block_desc.block_info_.handle_.size_, ModId::kCompaction)))) {
+  } else if (IS_NULL(block_buf = reinterpret_cast<char *>(base_malloc(data_block_desc.block_info_.get_handle().get_size(), ModId::kCompaction)))) {
     ret = Status::kMemoryLimit;
-    SE_LOG(WARN, "fail to allocate memory for block buf", K(ret), "handle", data_block_desc.block_info_.handle_);
-  } else if (FAILED(reader_rep.extent_reader_->get_data_block(data_block_desc.block_info_.handle_, reader_rep.aio_handle_, block_buf, data_block))) {
+    SE_LOG(WARN, "fail to allocate memory for block buf", K(ret), K(data_block_desc.block_info_.get_handle()));
+  } else if (FAILED(reader_rep.extent_reader_->get_data_block(data_block_desc.block_info_.get_handle(), reader_rep.aio_handle_, block_buf, data_block))) {
     COMPACTION_LOG(WARN, "fail to get data block", K(ret), K(data_block_desc));
   } else if (FAILED(extent_writer_->append_block(data_block,
                                                  data_block_desc.value_,
@@ -474,7 +474,7 @@ int GeneralCompaction::create_data_block_iterator(ExtentReader *extent_reader,
   } else {
     // TODO(Zhao Dongsheng) : Does the cache migration mechanism only apply to data
     // compacted to level 1?
-    if (1 == context_.output_level_ && FAILED(extent_reader->check_block_in_cache(block_handle.block_info_.handle_, in_cache))) {
+    if (1 == context_.output_level_ && FAILED(extent_reader->check_block_in_cache(block_handle.block_info_.get_handle(), in_cache))) {
       COMPACTION_LOG(WARN, "fail to check block in cache", K(ret), K(block_handle.block_info_));
     } else if (in_cache) {
       // TODO(Zhao Dongsheng): We need to evaluate whether to proactively invalidate the

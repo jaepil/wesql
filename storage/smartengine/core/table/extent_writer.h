@@ -95,6 +95,8 @@ public:
 #endif
 private:
   int init_data_block_writer(const ExtentWriterArgs &args);
+  int init_bloom_filter_writer(const bool use_bloom_filter);
+  void reuse_bloom_filter_writer();
   int append_normal_row(const common::Slice &key, const common::Slice &value);
   int append_large_row(const common::Slice &key, const common::Slice &value);
   int prepare_append_row(const common::Slice &key, const common::Slice &value);
@@ -105,6 +107,8 @@ private:
   int inner_append_block(const common::Slice &block,
                          const BlockInfo &block_info,
                          const common::Slice &last_key);
+  int add_to_bloom_filter(const common::Slice &key);
+  int build_bloom_filter(BlockInfo &block_info);
   int check_key_order(const common::Slice &key);
   bool need_switch_block_for_row(const uint32_t key_size, const uint32_t value_size) const;
   bool need_switch_extent_for_row(const common::Slice &key, const common::Slice &value) const;
@@ -156,7 +160,7 @@ private:
   util::BufferWriter buf_;
   Footer footer_;
   IndexBlockWriter index_block_writer_;
-  BloomFilterWriter bloom_filter_writer_;
+  BloomFilterWriter *bloom_filter_writer_;
   BlockWriter *data_block_writer_;
   storage::ChangeInfo *change_info_;
   bool migrate_flag_;

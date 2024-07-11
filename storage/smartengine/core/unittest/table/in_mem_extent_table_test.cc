@@ -72,8 +72,8 @@ static void get_data_block(ExtentReader* extent_reader,
   ret = block_info.deserialize(input.data(), input.size(), pos);
   assert(Status::kOk == ret);
 
-  char *buf = new char[block_info.handle_.size_];
-  ret = extent_reader->get_data_block(block_info.handle_, nullptr, buf, block);
+  char *buf = new char[block_info.get_handle().get_size()];
+  ret = extent_reader->get_data_block(block_info.get_handle(), nullptr, buf, block);
   assert(Status::kOk == ret);
 }
 

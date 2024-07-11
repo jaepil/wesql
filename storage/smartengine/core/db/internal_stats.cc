@@ -1217,15 +1217,15 @@ void InternalStats::dump_cfmap_stats(
         } else if (0 == level) {
           level0_extents++;
           level0_data_size += extent_meta->data_size_;
-          level0_index_size += extent_meta->index_block_handle_.size_;
+          level0_index_size += extent_meta->index_block_handle_.get_size();
         } else if (1 == level) {
           level1_extents++;
           level1_data_size += extent_meta->data_size_;
-          level1_index_size += extent_meta->index_block_handle_.size_;
+          level1_index_size += extent_meta->index_block_handle_.get_size();
         } else {
           level2_extents++;
           level2_data_size += extent_meta->data_size_;
-          level2_index_size += extent_meta->index_block_handle_.size_;
+          level2_index_size += extent_meta->index_block_handle_.get_size();
         } 
         iter->Next();
       }

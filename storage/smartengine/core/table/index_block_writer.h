@@ -30,7 +30,7 @@ public:
   int append(const common::Slice &key, const BlockInfo &block_info);
   int build(common::Slice &block);
   bool is_empty() const;
-  int64_t future_size(const common::Slice &key, const BlockInfo &block_info) const;
+  int64_t future_size(const int64_t key_size, const int64_t block_info_size) const;
 
 private:
   int serialize_block_stats(const BlockInfo &block_info, common::Slice &serialized_value);

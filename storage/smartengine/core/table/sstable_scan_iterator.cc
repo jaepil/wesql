@@ -377,13 +377,13 @@ int BlockPrefetchHelper::send_merged_io_request()
     BlockDataHandle<RowBlock> &end_handle = get_block_handle(io_merge_handle_.get_end_pos());
     // in forward scan, the offset of merged io is the start_handle's offset
     // in backward scan, the offset of merged io is the end_handle's offset
-    offset = std::min(start_handle.block_info_.get_offset(), end_handle.block_info_.get_offset());
+    offset = std::min(start_handle.block_info_.get_handle().get_offset(), end_handle.block_info_.get_handle().get_offset());
     // all handles share one AIOReq
     std::shared_ptr<AIOReq> aio_req(new AIOReq());
 
     for (int64_t i = io_merge_handle_.get_start_pos(); i <= io_merge_handle_.get_end_pos(); i++) {
       BlockDataHandle<RowBlock> &handle = get_block_handle(i);
-      size += handle.block_info_.get_size();
+      size += handle.block_info_.get_handle().get_size();
       handle.aio_handle_.aio_req_ = aio_req;
       handle.has_prefetched_ = true;
     }

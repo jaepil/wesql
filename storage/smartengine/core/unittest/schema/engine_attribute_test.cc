@@ -66,7 +66,7 @@ TEST(EngineAttributeTest, serialize_and_deserialize)
   // check
   ASSERT_FALSE(engine_attribute.use_column_format());
   ASSERT_EQ(engine_attribute.use_column_format(), des_engine_attribute.use_column_format());
-  ASSERT_FALSE(engine_attribute.use_bloom_filter());
+  ASSERT_TRUE(engine_attribute.use_bloom_filter());
   ASSERT_EQ(engine_attribute.use_bloom_filter(), des_engine_attribute.use_bloom_filter());
   ASSERT_EQ(123, engine_attribute.get_block_size());
   ASSERT_EQ(engine_attribute.get_block_size(), des_engine_attribute.get_block_size());

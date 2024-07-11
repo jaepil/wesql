@@ -38,12 +38,12 @@ int ColumnBlockIterator::init(const Slice &block, const BlockInfo &block_info, c
   } else if (IS_NULL(block.data()) || UNLIKELY(0 == block.size())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "Invalid argument", K(ret), KP(block.data()), K(block.size()));
-  } else if (FAILED(init_column_unit_readers(block, block_info.unit_infos_, table_schema.get_column_schemas(), block_info.row_count_))) {
+  } else if (FAILED(init_column_unit_readers(block, block_info.get_unit_infos(), table_schema.get_column_schemas(), block_info.get_row_count()))) {
     SE_LOG(WARN, "fail to init column unit readers", K(ret), K(block_info));
   } else {
     block_data_ = block.data();
     block_size_ = block.size();
-    row_count_ = block_info.row_count_;
+    row_count_ = block_info.get_row_count();
     row_cursor_ = 0;
     table_schema_ = table_schema;
     is_inited_ = true;

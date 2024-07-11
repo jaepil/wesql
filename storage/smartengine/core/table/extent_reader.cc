@@ -130,7 +130,8 @@ int ExtentReader::get(const Slice &key, GetContext *get_context)
       may_exist = true;
       if (FAILED(index_block_reader.get_value(block_info))) {
         SE_LOG(WARN, "fail to get block index", K(ret));
-      } else if (FAILED(check_in_bloom_filter(get_context->get_user_key(), block_info, may_exist))) {
+      } else if (block_info.has_bloom_filter() &&
+                 FAILED(check_in_bloom_filter(get_context->get_user_key(), block_info, may_exist))) {
         SE_LOG(WARN, "fail to check in bloom filter", K(ret), K(block_info));
       } else {
         if (may_exist) {
@@ -191,7 +192,7 @@ int ExtentReader::prefetch_data_block(BlockDataHandle<RowBlock> &data_block_hand
     SE_LOG(WARN, "ExtentReader should be inited", K(ret));
   } else if (IS_NULL(block_cache_)) {
    // distable block cache, the prefetching does nothing.
-  } else if (FAILED(cache_entry_key_.generate(data_block_handle.block_info_.get_offset(),
+  } else if (FAILED(cache_entry_key_.generate(data_block_handle.block_info_.get_handle().get_offset(),
                                               cache_key_buf,
                                               cache_key))) {
     SE_LOG(WARN, "fail to generate cache entry key", K(ret));
@@ -342,7 +343,7 @@ int ExtentReader::setup_data_block_iterator(const int64_t scan_add_blocks_limit,
       char cache_key_buf[CacheEntryKey::MAX_CACHE_KEY_SZIE] = {0};
       Slice cache_key;
 
-      if (FAILED(cache_entry_key_.generate(data_block_handle.block_info_.get_offset(), cache_key_buf, cache_key))) {
+      if (FAILED(cache_entry_key_.generate(data_block_handle.block_info_.get_handle().get_offset(), cache_key_buf, cache_key))) {
         SE_LOG(WARN, "fail to generate cache key", K(ret));
       } else if (FAILED(block_cache_->Insert(cache_key,
                                              data_block,
@@ -397,7 +398,7 @@ int ExtentReader::check_block_in_cache(const BlockHandle &block_handle, bool &in
     SE_LOG(WARN, "invalid argument", K(ret), K(block_handle));
   } else if (IS_NULL(block_cache_)) {
     in_cache = false;
-  } else if (FAILED(cache_entry_key_.generate(block_handle.offset_, cache_key_buf, cache_key))) {
+  } else if (FAILED(cache_entry_key_.generate(block_handle.get_offset(), cache_key_buf, cache_key))) {
     SE_LOG(WARN, "fail to generate cache entry key", K(ret), K(block_handle));
   } else {
     in_cache = block_cache_->check_in_cache(cache_key);
@@ -423,13 +424,13 @@ int ExtentReader::approximate_key_offet(const Slice &key, int64_t &offset)
       if (FAILED(index_block_reader.get_value(block_info))) {
         SE_LOG(WARN, "fail to get block stats", K(ret));
       } else {
-        offset = block_info.get_offset();
+        offset = block_info.get_handle().get_offset();
       }
     } else {
       // key is past the last key in the extent. Approximate the offset
       // by returning the offset of the index block (which is right near
       // the end of the extent).
-      offset = extent_meta_->index_block_handle_.offset_;
+      offset = extent_meta_->index_block_handle_.get_offset();
     }
   }
 
@@ -449,10 +450,14 @@ int ExtentReader::check_in_bloom_filter(const Slice &user_key, const BlockInfo &
   if (UNLIKELY(user_key.empty()) || UNLIKELY(!block_info.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(user_key), K(block_info));
-  } else if (FAILED(bloom_filter_reader.init(block_info.bloom_filter_, block_info.probe_num_))) {
+  } else if (FAILED(bloom_filter_reader.init(block_info.get_bloom_filter(), block_info.get_probe_num()))) {
     SE_LOG(WARN, "fail to init bloom filter reader", K(ret), K(block_info));
   } else if (FAILED(bloom_filter_reader.check(user_key, may_exist))) {
     SE_LOG(WARN, "fail to check through bloom filter reader", K(ret), K(user_key));
+  } else {
+#ifndef NDEBUG
+    SE_LOG(INFO, "check in bloom filter", K(may_exist));
+#endif
   }
 
   return ret;
@@ -523,7 +528,7 @@ int ExtentReader::get_data_block_through_cache(BlockDataHandle<RowBlock> &data_b
   } else if (IS_NULL(block_cache_)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "try to get data block through disabled block cache", K(ret));
-  } else if (FAILED(cache_entry_key_.generate(data_block_handle.block_info_.get_offset(), cache_key_buf, cache_key))) {
+  } else if (FAILED(cache_entry_key_.generate(data_block_handle.block_info_.get_handle().get_offset(), cache_key_buf, cache_key))) {
     SE_LOG(WARN, "fail to generate cache key", K(ret));
   } else if (IS_NOTNULL(data_block_handle.block_entry_.handle_ = block_cache_->Lookup(cache_key))) {
     // cache hit
@@ -602,7 +607,7 @@ int ExtentReader::read_index_block(const BlockHandle &handle, RowBlock *&index_b
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(handle));
   } else if (IS_NULL(index_block_buf = reinterpret_cast<char *>(base_memalign(
-      DIOHelper::DIO_ALIGN_SIZE, handle.raw_size_, ModId::kExtentReader)))) {
+      DIOHelper::DIO_ALIGN_SIZE, handle.get_raw_size(), ModId::kExtentReader)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for index block buf", K(ret), K(handle));
   } else if (FAILED(read_and_uncompress_block(handle, nullptr /*aio_handle*/, index_block_buf, index_block_content))) {
@@ -640,15 +645,15 @@ int ExtentReader::read_data_block(const BlockInfo &block_info, AIOHandle *aio_ha
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(block_info));
   } else if (IS_NULL(block_buf = reinterpret_cast<char *>(base_memalign(
-      DIOHelper::DIO_ALIGN_SIZE, block_info.handle_.raw_size_, ModId::kExtentReader)))) {
+      DIOHelper::DIO_ALIGN_SIZE, block_info.get_handle().get_raw_size(), ModId::kExtentReader)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for block buf", K(ret), K(block_info));
-  } else if (FAILED(read_and_uncompress_block(block_info.handle_,
+  } else if (FAILED(read_and_uncompress_block(block_info.get_handle(),
                                               aio_handle,
                                               block_buf,
                                               block_content))) {
     SE_LOG(WARN, "fail to read and uncompress block", K(ret), K(block_info), KP(aio_handle));
-  } else if (block_info.is_column_block()) {
+  } else if (block_info.is_columnar_format()) {
     if (FAILED(convert_to_row_block(block_content, block_info, row_block_content))) {
       SE_LOG(WARN, "fail to convert column block to row block", K(ret), K(block_info));
     } else {
@@ -694,14 +699,14 @@ int ExtentReader::read_block(const BlockHandle &handle,
   if (UNLIKELY(!handle.is_valid()) || IS_NULL(buf)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(handle), KP(buf));
-  } else if (FAILED(extent_->read(aio_handle, handle.offset_, handle.size_, buf, block))) {
+  } else if (FAILED(extent_->read(aio_handle, handle.get_offset(), handle.get_size(), buf, block))) {
     SE_LOG(WARN, "fail to read block from extent", K(ret), KP(aio_handle), K(handle));
-  } else if (UNLIKELY(buf != block.data()) || UNLIKELY(handle.size_ != static_cast<int64_t>(block.size()))) {
+  } else if (UNLIKELY(buf != block.data()) || UNLIKELY(handle.get_size() != static_cast<int64_t>(block.size()))) {
     ret = Status::kCorruption;
     SE_LOG(WARN, "the block maybe corrupt", K(ret), KP(buf), KP(block.data()), K(handle), K(block.size()));
   } else {
     // verify checksum
-    actual_checksum = crc32c::Unmask(handle.checksum_);
+    actual_checksum = crc32c::Unmask(handle.get_checksum());
     expect_checksum = crc32c::Value(block.data(), block.size());
     if (UNLIKELY(actual_checksum != expect_checksum)) {
       ret = Status::kCorruption;
@@ -723,7 +728,7 @@ int ExtentReader::read_and_uncompress_block(const BlockHandle &handle,
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(handle), KP(buf));
   } else {
-    if (kNoCompression == handle.compress_type_) {
+    if (kNoCompression == handle.get_compress_type()) {
       if (FAILED(read_block(handle, aio_handle, buf, block))) {
         SE_LOG(WARN, "fail to read block", K(ret), K(handle));
       }
@@ -733,15 +738,15 @@ int ExtentReader::read_and_uncompress_block(const BlockHandle &handle,
       CompressorHelper compressor_helper;
 
       if (IS_NULL(compressed_buf = reinterpret_cast<char *>(base_memalign(
-          DIOHelper::DIO_ALIGN_SIZE, handle.size_, ModId::kExtentReader)))) {
+          DIOHelper::DIO_ALIGN_SIZE, handle.get_size(), ModId::kExtentReader)))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for compressed buf", K(ret), K(handle));      
       } else if (FAILED(read_block(handle, aio_handle, compressed_buf, compressed_block))) {
         SE_LOG(WARN, "fail to read compressed block", K(ret), K(handle));
       } else if (FAILED(compressor_helper.uncompress(compressed_block,
-                                                     static_cast<CompressionType>(handle.compress_type_),
+                                                     handle.get_compress_type(),
                                                      buf,
-                                                     handle.raw_size_,
+                                                     handle.get_raw_size(),
                                                      block))) {
         SE_LOG(WARN, "fail to uncompress block", K(ret), K(handle), K(compressed_block));
       }
