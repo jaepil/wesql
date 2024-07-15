@@ -75,7 +75,6 @@ class ConsensusLogIndex {
  private:
   bool inited;
   ulonglong total_log_size;
-  PSI_mutex_key key_LOCK_consensuslog_index;
   mysql_mutex_t LOCK_consensuslog_index;
   std::multimap<uint64, ConsensusLogIndexEntry> index_list;  // hold all the binlogs' index
 };

@@ -9,17 +9,17 @@
 
 /* clang-format off */
 
-PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_index;
-PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_term_lock;
-PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_truncate_lock;
-PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_apply_thread_lock;
-PSI_mutex_key key_CONSENSUSLOG_LOCK_Consensus_stage_change;
+PSI_mutex_key key_mutex_ConsensusLog_index;
+PSI_mutex_key key_mutex_ConsensusLog_term_lock;
+PSI_mutex_key key_mutex_ConsensusLog_apply_thread_lock;
+PSI_mutex_key key_mutex_Consensus_stage_change;
 PSI_mutex_key key_fifo_cache_cleaner;
 
 PSI_rwlock_key key_rwlock_plugin_running;
 PSI_rwlock_key key_rwlock_plugin_stop;
 PSI_rwlock_key key_rwlock_ConsensusLog_status_lock;
 PSI_rwlock_key key_rwlock_ConsensusLog_commit_lock;
+PSI_rwlock_key key_rwlock_ConsensusLog_truncate_lock;
 PSI_rwlock_key key_rwlock_ConsensusLog_log_cache_lock;
 PSI_rwlock_key key_rwlock_ConsensusLog_prefetch_channels_hash;
 
@@ -39,16 +39,14 @@ PSI_memory_key key_memory_ConsensusPreFetchManager;
 #ifdef HAVE_PSI_INTERFACE
 
 static PSI_mutex_info all_consensus_replication_psi_mutex_keys[] = {
-    {&key_CONSENSUSLOG_LOCK_ConsensusLog_index,
+    {&key_mutex_ConsensusLog_index,
      "ConsensusLogIndex::LOCK_consensuslog_index", 0, 0, PSI_DOCUMENT_ME},
-    {&key_CONSENSUSLOG_LOCK_ConsensusLog_term_lock,
+    {&key_mutex_ConsensusLog_term_lock,
      "ConsensusLogManager::LOCK_consensuslog_term", 0, 0, PSI_DOCUMENT_ME},
-    {&key_CONSENSUSLOG_LOCK_ConsensusLog_truncate_lock,
-     "ConsensusLogManager::LOCK_consensuslog_truncate", 0, 0, PSI_DOCUMENT_ME},
-    {&key_CONSENSUSLOG_LOCK_ConsensusLog_apply_thread_lock,
+    {&key_mutex_ConsensusLog_apply_thread_lock,
      "ConsensusLogManager::LOCK_consensuslog_apply_thread_lock", 0, 0,
      PSI_DOCUMENT_ME},
-    {&key_CONSENSUSLOG_LOCK_Consensus_stage_change,
+    {&key_mutex_Consensus_stage_change,
      "ConsensusLogManager::LOCK_consnesus_state_change", 0, 0, PSI_DOCUMENT_ME},
 };
 
@@ -80,6 +78,9 @@ static PSI_rwlock_info all_consensus_replication_psi_rwlock_keys[] = {
      PSI_DOCUMENT_ME},
     {&key_rwlock_ConsensusLog_commit_lock,
      "ConsensusLogManager::LOCK_consensuslog_commit", PSI_FLAG_SINGLETON, 0,
+     PSI_DOCUMENT_ME},
+    {&key_rwlock_ConsensusLog_truncate_lock,
+     "ConsensusLogManager::LOCK_consensuslog_truncate", PSI_FLAG_SINGLETON, 0,
      PSI_DOCUMENT_ME},
     {&key_rwlock_ConsensusLog_log_cache_lock,
      "ConsensusLogManager::LOCK_consensuslog_cache", PSI_FLAG_SINGLETON, 0,

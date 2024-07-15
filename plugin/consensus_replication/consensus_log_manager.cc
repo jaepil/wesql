@@ -173,13 +173,13 @@ int ConsensusLogManager::init(uint64 max_fifo_cache_size_arg,
                     &LOCK_consensuslog_status);
   mysql_rwlock_init(key_rwlock_ConsensusLog_commit_lock,
                     &LOCK_consensuslog_commit);
-  mysql_mutex_init(key_CONSENSUSLOG_LOCK_ConsensusLog_term_lock,
-                   &LOCK_consensuslog_term, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_CONSENSUSLOG_LOCK_ConsensusLog_truncate_lock,
-                   &LOCK_consensuslog_truncate, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_CONSENSUSLOG_LOCK_ConsensusLog_apply_thread_lock,
+  mysql_mutex_init(key_mutex_ConsensusLog_term_lock, &LOCK_consensuslog_term,
+                   MY_MUTEX_INIT_FAST);
+  mysql_rwlock_init(key_rwlock_ConsensusLog_truncate_lock,
+                    &LOCK_consensuslog_truncate);
+  mysql_mutex_init(key_mutex_ConsensusLog_apply_thread_lock,
                    &LOCK_consensus_applier_catchup, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_CONSENSUSLOG_LOCK_Consensus_stage_change,
+  mysql_mutex_init(key_mutex_Consensus_stage_change,
                    &LOCK_consensus_state_change, MY_MUTEX_INIT_FAST);
 
   mysql_cond_init(key_COND_ConsensusLog_catchup, &COND_consensus_applier_catchup);
@@ -292,8 +292,8 @@ int ConsensusLogManager::change_meta_if_needed() {
     // learner info
     if (!opt_cluster_info) {
       sql_print_error(
-          "[x-cluster]  cluster_info must be set when the server is running "
-          "with --initialize(-insecure) ");
+          "consensus_replication_cluster_info must be set when the server is "
+          "running with --initialize(-insecure) ");
       return -1;
     }
     consensus_info->set_cluster_info(std::string(opt_cluster_info));
@@ -494,7 +494,7 @@ int ConsensusLogManager::cleanup() {
     mysql_rwlock_destroy(&LOCK_consensuslog_status);
     mysql_rwlock_destroy(&LOCK_consensuslog_commit);
     mysql_mutex_destroy(&LOCK_consensuslog_term);
-    mysql_mutex_destroy(&LOCK_consensuslog_truncate);
+    mysql_rwlock_destroy(&LOCK_consensuslog_truncate);
     mysql_mutex_destroy(&LOCK_consensus_applier_catchup);
     mysql_mutex_destroy(&LOCK_consensus_state_change);
     mysql_cond_destroy(&COND_consensus_applier_catchup);
@@ -789,7 +789,7 @@ int ConsensusLogManager::truncate_log(uint64 consensus_index) {
                         consensus_index);
   prefetch_manager->stop_prefetch_threads();
   mysql_rwlock_rdlock(&LOCK_consensuslog_status);
-  mysql_mutex_lock(&LOCK_consensuslog_truncate);
+  mysql_rwlock_wrlock(&LOCK_consensuslog_truncate);
   MYSQL_BIN_LOG *log =
       status == BINLOG_WORKING ? binlog : &(rli_info->relay_log);
   mysql_mutex_lock(log->get_log_lock());
@@ -824,7 +824,7 @@ int ConsensusLogManager::truncate_log(uint64 consensus_index) {
     mysql_mutex_unlock(&rli->data_lock);
   }
 
-  mysql_mutex_unlock(&LOCK_consensuslog_truncate);
+  mysql_rwlock_unlock(&LOCK_consensuslog_truncate);
   mysql_rwlock_unlock(&LOCK_consensuslog_status);
   if (error) {
     sql_print_error(

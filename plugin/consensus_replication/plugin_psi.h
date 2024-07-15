@@ -33,11 +33,10 @@ void register_all_consensus_replication_psi_keys();
 #endif /* HAVE_PSI_INTERFACE */
 
 /* clang-format off */
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_index;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_term_lock;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_truncate_lock;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_ConsensusLog_apply_thread_lock;
-extern PSI_mutex_key key_CONSENSUSLOG_LOCK_Consensus_stage_change;
+extern PSI_mutex_key key_mutex_ConsensusLog_index;
+extern PSI_mutex_key key_mutex_ConsensusLog_term_lock;
+extern PSI_mutex_key key_mutex_ConsensusLog_apply_thread_lock;
+extern PSI_mutex_key key_mutex_Consensus_stage_change;
 
 extern PSI_mutex_key key_fifo_cache_cleaner;
 
@@ -45,6 +44,7 @@ extern PSI_rwlock_key key_rwlock_plugin_running;
 extern PSI_rwlock_key key_rwlock_plugin_stop;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_status_lock;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_commit_lock;
+extern PSI_rwlock_key key_rwlock_ConsensusLog_truncate_lock;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_log_cache_lock;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_prefetch_channels_hash;
 

@@ -173,7 +173,7 @@ class ConsensusLogManager {
   inline mysql_rwlock_t *get_consensuslog_commit_lock() {
     return &LOCK_consensuslog_commit;
   }
-  inline mysql_mutex_t *get_consensuslog_truncate_lock() {
+  inline mysql_rwlock_t *get_consensuslog_truncate_lock() {
     return &LOCK_consensuslog_truncate;
   }
 
@@ -260,7 +260,7 @@ class ConsensusLogManager {
   std::atomic<uint64>
       current_state_degrade_term;   // the term when degrade
 
-  mysql_mutex_t LOCK_consensuslog_truncate;
+  mysql_rwlock_t LOCK_consensuslog_truncate;
   std::atomic<uint64> cache_index;  // last cache log entry
   std::atomic<uint64> sync_index;   // last log entry
 

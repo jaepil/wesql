@@ -71,6 +71,8 @@ static int consensus_binlog_manager_after_binlog_recovery(
       error = 1;
     }
     consensus_log_manager.set_start_without_log(true);
+    consensus_log_manager.set_sync_index_if_greater(
+        consensus_log_manager.get_current_index() - 1);
   } else {
     if (param->binlog->open_exist_consensus_binlog(
             opt_bin_logname, max_binlog_size, false,
@@ -266,18 +268,18 @@ static int consensus_binlog_manager_after_enrolling_stage(
   }
 
   /* The group log may potentially be truncated. */
-  mysql_mutex_lock(consensus_log_manager.get_consensuslog_truncate_lock());
+  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_truncate_lock());
   if (group_max_log_index > 0 &&
       group_max_log_index < consensus_log_manager.get_current_index()) {
     consensus_log_manager.set_sync_index_if_greater(group_max_log_index);
   }
-  mysql_mutex_unlock(consensus_log_manager.get_consensuslog_truncate_lock());
+  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_truncate_lock());
 
   /* The group log may potentially be truncated. If not,
    * group_max_log_index is not more than sync_index. */
   if (group_max_log_index > 0 &&
       group_max_log_index <= consensus_log_manager.get_sync_index()) {
-    if (!opt_initialize) rpl_consensus_write_log_done(group_max_log_index);
+    rpl_consensus_write_log_done(group_max_log_index);
   }
 
   for (THD *head = param->thd; head; head = head->next_to_commit) {

@@ -1689,6 +1689,12 @@ static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
       goto end;
     }
 
+    sql_print_information(
+        "write_cache_consensus_log: the current pos(%lu), "
+        "payload size(%lu), consensus_index %llu.",
+        binlog_file_get_current_pos(binlog_file), payload_size,
+        thd->consensus_context.consensus_index);
+
     /* Write consensus log event */
     if (write_consensus_log_event(binlog_file, flag,
                                   thd->consensus_context.consensus_term,

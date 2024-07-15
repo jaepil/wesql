@@ -22,8 +22,7 @@
 #include "sql/log.h"
 
 int ConsensusLogIndex::init() {
-  key_LOCK_consensuslog_index = key_CONSENSUSLOG_LOCK_ConsensusLog_index;
-  mysql_mutex_init(key_LOCK_consensuslog_index, &LOCK_consensuslog_index,
+  mysql_mutex_init(key_mutex_ConsensusLog_index, &LOCK_consensuslog_index,
                    MY_MUTEX_INIT_FAST);
   inited = true;
   return 0;

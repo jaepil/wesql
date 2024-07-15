@@ -374,12 +374,6 @@ int fill_wesql_cluster_consensus_membership_change(THD *thd, Table_ref *tables,
   DBUG_RETURN(0);
 }
 
-ST_FIELD_INFO consensus_commit_pos_info[] = {
-    {"LOGNAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "", 0},
-    {"POSITION", 21, MYSQL_TYPE_LONGLONG, 0, MY_I_S_UNSIGNED, "", 0},
-    {"INDEX", 21, MYSQL_TYPE_LONGLONG, 0, MY_I_S_UNSIGNED, "", 0},
-    {0, 0, MYSQL_TYPE_STRING, 0, 0, "", 0}};
-
 ST_FIELD_INFO wesql_cluster_global_fields_info[] = {
     {"SERVER_ID", 10, MYSQL_TYPE_LONG, 0, 0, 0, 0},
     {"IP_PORT", HOST_AND_PORT_LENGTH, MYSQL_TYPE_STRING, 0, 0, 0, 0},
