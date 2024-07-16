@@ -44,6 +44,9 @@ enum Errors {
   SE_OBJECT_ALREADY_IN_ACTIVE_TIER,
   SE_OBJECT_NOT_IN_ACTIVE_TIER,
 
+  // privilege errors
+  SE_ACCESS_DENIED,
+
   // not-retryable generic errors, for s3, like:
   // INCOMPLETE_SIGNATURE
   // INVALID_ACTION

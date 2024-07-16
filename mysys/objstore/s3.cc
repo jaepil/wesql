@@ -45,6 +45,8 @@ Errors aws_error_to_objstore_error(const Aws::S3::S3Error &aws_error) {
   }
   int aws_error_code = static_cast<int>(aws_error.GetErrorType());
   switch (aws_error_code) {
+    case static_cast<int>(Aws::S3::S3Errors::ACCESS_DENIED):
+      return Errors::SE_ACCESS_DENIED;
     case static_cast<int>(Aws::S3::S3Errors::BUCKET_ALREADY_EXISTS):
       return Errors::SE_BUCKET_ALREADY_EXISTS;
     case static_cast<int>(Aws::S3::S3Errors::BUCKET_ALREADY_OWNED_BY_YOU):
@@ -484,9 +486,34 @@ void shutdown_aws_api() {
   Aws::ShutdownAPI(options);
 }
 
-S3ObjectStore *create_s3_objstore(const std::string_view region,
-                                  const std::string_view *endpoint,
-                                  bool use_https) {
+char *get_s3_access_key_id() {
+  char *access_key_id = std::getenv("AWS_ACCESS_KEY_ID");
+  if (access_key_id) {
+    return access_key_id;
+  }
+  access_key_id = std::getenv("ACCESS_KEY_ID");
+  if (access_key_id) {
+    return access_key_id;
+  }
+  return nullptr;
+}
+
+char *get_s3_access_secret_key() {
+  char *access_secret_key = std::getenv("AWS_SECRET_ACCESS_KEY");
+  if (access_secret_key) {
+    return access_secret_key;
+  }
+  access_secret_key = std::getenv("SECRET_ACCESS_KEY");
+  if (access_secret_key) {
+    return access_secret_key;
+  }
+  return nullptr;
+}
+
+S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
+                                         const std::string_view *endpoint,
+                                         bool use_https,
+                                         const std::string_view bucket_dir) {
   Aws::Client::ClientConfiguration clientConfig;
   clientConfig.region = region;
   if (endpoint != nullptr) {
@@ -494,23 +521,44 @@ S3ObjectStore *create_s3_objstore(const std::string_view region,
   }
   clientConfig.scheme =
       use_https ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
-  Aws::S3::S3Client client(clientConfig);
-  return new S3ObjectStore(region, std::move(client), "");
+
+  char *access_key_id = get_s3_access_key_id();
+  char *access_secret_key = get_s3_access_secret_key();
+
+  if (access_key_id && access_secret_key) {
+    // if both access_key_id and access_secret_key are not empty, we use them to
+    // create the client.
+    Aws::String access_key_id_str(access_key_id);
+    Aws::String access_secret_key_str(access_secret_key);
+    Aws::Auth::AWSCredentials credentials(access_key_id_str,
+                                          access_secret_key_str);
+    Aws::S3::S3Client client(credentials, nullptr, clientConfig);
+    return new S3ObjectStore(region, std::move(client), bucket_dir);
+  } else if (access_key_id || access_secret_key) {
+    // if one of the access_key_id and access_secret_key is empty, we treat it
+    // as an invalid input.
+    return nullptr;
+  } else {
+    // if both access_key_id and access_secret_key are empty, will find the
+    // credentials by default credential provider chain for AWS. see
+    // https://github.com/aws/aws-sdk-cpp/blob/main/docs/Credentials_Providers.md
+    // for details
+    Aws::S3::S3Client client(clientConfig);
+    return new S3ObjectStore(region, std::move(client), bucket_dir);
+  }
+}
+
+S3ObjectStore *create_s3_objstore(const std::string_view region,
+                                  const std::string_view *endpoint,
+                                  bool use_https) {
+  return create_s3_objstore_helper(region, endpoint, use_https, "");
 }
 
 S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
                                            const std::string_view *endpoint,
                                            bool use_https,
                                            const std::string_view bucket_dir) {
-  Aws::Client::ClientConfiguration clientConfig;
-  clientConfig.region = region;
-  if (endpoint != nullptr) {
-    clientConfig.endpointOverride = *endpoint;
-  }
-  clientConfig.scheme =
-      use_https ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
-  Aws::S3::S3Client client(clientConfig);
-  return new S3ObjectStore(region, std::move(client), bucket_dir);
+  return create_s3_objstore_helper(region, endpoint, use_https, bucket_dir);
 }
 
 void destroy_s3_objstore(S3ObjectStore *s3_objstore) {
