@@ -59,7 +59,7 @@ jobs:
           cd bu
           cd mysql-test
           ./mysql-test-run.pl --suite=consensus_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
-          ./mysql-test-run.pl --suite=smartengine,smartengine_consistent_snapshot  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
+          ./mysql-test-run.pl --suite=smartengine --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
 
       - name: view logs of mtr on normal file
         if: ${{ failure() }}
@@ -74,10 +74,12 @@ jobs:
           cd bu
           cd mysql-test
           CUR_DIR=`pwd`
+          ./mysql-test-run.pl --suite=smartengine_consistent_snapshot  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
+              --initialize="--serverless=true" --initialize="--objstore_provider=local"
           ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
-              --initialize="--serverless=true" --initialize="--plugin-load-add=mysql_clone.so"
+              --initialize="--serverless=true" --initialize="--objstore_provider=local" --initialize="--plugin-load-add=mysql_clone.so"
 
-      - name: view logs of mtr objstore
+      - name: view logs of mtr serverless
         if: ${{ failure() }}
         run: |
           for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
