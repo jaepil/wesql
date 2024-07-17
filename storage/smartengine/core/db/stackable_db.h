@@ -197,7 +197,7 @@ class StackableDB : public db::DB {
     return db_->Flush(fopts, column_family);
   }
 
-  virtual common::Status SyncWAL() override { return db_->SyncWAL(); }
+  virtual int sync_wal() override { return db_->sync_wal(); }
 
   virtual common::Status DisableFileDeletions() override {
     return db_->DisableFileDeletions();

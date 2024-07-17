@@ -738,10 +738,10 @@ class DB {
     return Flush(options, DefaultColumnFamily());
   }
 
-  // Sync the wal. Note that Write() followed by SyncWAL() is not exactly the
+  // Sync the wal. Note that Write() followed by sync_wal() is not exactly the
   // same as Write() with sync=true: in the latter case the changes won't be
   // visible until the sync is done.
-  virtual common::Status SyncWAL() = 0;
+  virtual int sync_wal() = 0;
 
   // The sequence number of the most recent transaction.
   virtual common::SequenceNumber GetLatestSequenceNumber() const = 0;

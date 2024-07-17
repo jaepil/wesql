@@ -107,6 +107,7 @@ class ConcurrentDirectFileWriter {
   common::Status flush();
   common::Status close();
   common::Status sync_with_out_flush(bool use_fsync);
+  int sync_to_disk(bool use_fsync);
   void set_skip_flush(bool skip_flush) { this->skip_flush_ = skip_flush; }
   util::WritableFile* writable_file() const { return writable_file_; }
   bool use_allocator() const { return use_allocator_; }

@@ -280,19 +280,11 @@ class MemTable {
   {
     recovery_point_ = recovery_point;
   }
-  void set_dump_sequence(const common::SequenceNumber dump_seq)
-  {
-    dump_seq_ = dump_seq;
-  }
   const RecoveryPoint get_recovery_point()
   {
     return recovery_point_;
   }
 
-  common::SequenceNumber get_dump_sequence()
-  {
-    return dump_seq_;
-  }
   // if this memtable contains data from a committed
   // two phase transaction we must take note of the
   // log which contains that data so we can know
@@ -424,7 +416,6 @@ class MemTable {
   MemTable& operator=(const MemTable&);
   // during recovery don't switch the memtable 
   bool no_flush_;
-  common::SequenceNumber dump_seq_;
 };
 
 extern const char* EncodeKey(std::string* scratch, const common::Slice& target);

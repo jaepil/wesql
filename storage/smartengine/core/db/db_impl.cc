@@ -226,20 +226,19 @@ thread_local std::unordered_map<std::string, std::string> *STRESS_CHECK_RECORDS 
 const std::string kDefaultColumnFamilyName("default");
 void DumpSmartEngineBuildVersion();
 
-CompressionType GetCompressionFlush(
-    const ImmutableCFOptions& ioptions,
-    const MutableCFOptions& mutable_cf_options,
-    const int64_t level) {
+CompressionType GetCompressionFlush(const ImmutableCFOptions& ioptions, const int64_t level)
+{
   assert( level >= 0);
+  CompressionType compress_type = common::kNoCompression;
   // Compressing memtable flushes might not help unless the sequential load
   // optimization is used for leveled compaction. Otherwise the CPU and
   // latency overhead is not offset by saving much space.
   if ( static_cast<uint64_t>(level) < ioptions.compression_per_level.size()) {
     // For leveled compress when min_level_to_compress != 0.
-    return ioptions.compression_per_level[level];
-  } else {
-    return kNoCompression;
+    compress_type = ioptions.compression_per_level[level];
   }
+
+  return compress_type;
 }
 
 namespace {
@@ -422,7 +421,11 @@ DBImpl::DBImpl(const DBOptions &options, const std::string &dbname)
       deal_last_record_error_mutex_(false),
       max_sequence_during_recovery_(0),
       max_log_file_number_during_recovery_(0),
-      log_sync_cv_(&mutex_),
+      curr_log_writer_(nullptr),
+      log_flush_mutex_(),
+      log_sync_mutex_(),
+      log_sync_cv_(),
+      is_syncing_(false),
       total_log_size_(0),
       is_snapshot_supported_(true),
       write_buffer_manager_(immutable_db_options_.write_buffer_manager.get()),
@@ -591,14 +594,9 @@ DBImpl::~DBImpl() {
     mutex_.Lock();
   }
 
-  for (auto l : logs_to_free_) {
-//    delete l;
-    MOD_DELETE_OBJECT(Writer, l);
+  if (IS_NOTNULL(curr_log_writer_)) {
+    MOD_DELETE_OBJECT(Writer, curr_log_writer_);
   }
-  for (auto& log : logs_) {
-    log.ClearWriter();
-  }
-  logs_.clear();
 
   // Table cache may have table handles holding blocks from the block cache.
   // We need to release them before the block cache is destroyed. The block
@@ -632,20 +630,6 @@ DBImpl::~DBImpl() {
   if (db_lock_ != nullptr) {
     env_->UnlockFile(db_lock_);
   }
-
-//  if (nullptr != gc_timer_) {
-//    gc_timer_->stop();
-//    MOD_DELETE_OBJECT(Timer, gc_timer_);
-//  }
-//
-//  if (nullptr != shrink_timer_) {
-//    shrink_timer_->stop();
-//    MOD_DELETE_OBJECT(Timer, shrink_timer_);
-//  }
-//
-//  if (nullptr != timer_service_) {
-//    MOD_DELETE_OBJECT(TimerService, timer_service_);
-//  }
 
   StorageLogger::get_instance().destroy();
   ExtentMetaManager::get_instance().destroy();
@@ -812,16 +796,6 @@ void DBImpl::bg_master_thread_func() {
   SE_LOG(WARN, "smartengine Master Thread go offline", K(ret), K((int)bg_error_.code()));
 }
 
-void DBImpl::ScheduleBgLogWriterClose(JobContext* job_context) {
-  if (!job_context->logs_to_free.empty()) {
-    for (auto l : job_context->logs_to_free) {
-      AddToLogsToFreeQueue(l);
-    }
-    job_context->logs_to_free.clear();
-    SchedulePurge();
-  }
-}
-
 Directory* DBImpl::Directories::GetDataDir(size_t path_id) {
   assert(path_id < data_dirs_.size());
   Directory* ret_dir = data_dirs_[path_id];
@@ -922,10 +896,9 @@ Status DBImpl::SetOptions(
     InstrumentedMutexLock l(&mutex_);
     s = cfd->SetOptions(options_map);
     if (s.ok()) {
-      new_options = *cfd->GetLatestMutableCFOptions();
       // todo object pool
       SuperVersion *sv = MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion);
-      auto* old_sv = cfd->InstallSuperVersion(sv, &mutex_, new_options);
+      auto* old_sv = cfd->InstallSuperVersion(sv, &mutex_);
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
       this->wait_all_active_thread_exit();
     }
@@ -992,84 +965,33 @@ Status DBImpl::SetDBOptions(
   return s;
 }
 
-Status DBImpl::SyncWAL() {
-  autovector<log::Writer*, 1> logs_to_sync;
-  bool need_log_dir_sync;
-  uint64_t current_log_number;
+int DBImpl::sync_wal()
+{
+  int ret = Status::kOk;
+  bool need_sync = true;
 
-  {
-    QUERY_TRACE_SCOPE(TracePoint::DB_SYNC_WAL);
-    InstrumentedMutexLock l(&mutex_);
-    assert(!logs_.empty());
-
-    // This SyncWAL() call only cares about logs up to this number.
-    current_log_number = logfile_number_;
-
-    while (logs_.front().number <= current_log_number &&
-           logs_.front().getting_synced) {
-      log_sync_cv_.Wait();
-    }
-    // First check that logs are safe to sync in background.
-    for (auto it = logs_.begin();
-         it != logs_.end() && it->number <= current_log_number; ++it) {
-      if (!it->writer->file()->writable_file()->IsSyncThreadSafe()) {
-        return Status::NotSupported(
-            "SyncWAL() is not supported for this implementation of WAL file", Slice());
-      }
-    }
-    for (auto it = logs_.begin();
-         it != logs_.end() && it->number <= current_log_number; ++it) {
-      auto& log = *it;
-      assert(!log.getting_synced);
-      log.getting_synced = true;
-      logs_to_sync.push_back(log.writer);
-    }
-
-    need_log_dir_sync = !log_dir_synced_;
+  QUERY_TRACE_SCOPE(TracePoint::DB_SYNC_WAL);
+  std::unique_lock<std::mutex> log_sync_guard(log_sync_mutex_);
+  while (is_syncing_.load()) {
+    log_sync_cv_.wait(log_sync_guard);
+    need_sync = false;
   }
 
-  QUERY_COUNT(CountPoint::WAL_FILE_SYNCED);
-  Status status;
-  for (log::Writer* log : logs_to_sync) {
-    status = log->file()->sync(false /**use_fsync*/);
-    if (!status.ok()) {
-      break;
-    }
+  if (need_sync) {
+    is_syncing_.store(true);
+    log_sync_guard.unlock();
+    ret = curr_log_writer_->file()->sync_to_disk(false);
+    QUERY_COUNT(CountPoint::WAL_FILE_SYNCED);
+    log_sync_guard.lock();
+    is_syncing_.store(false);
+    log_sync_cv_.notify_all();
   }
-  if (status.ok() && need_log_dir_sync) {
-    status = directories_.GetWalDir()->Fsync();
+    
+  if (FAILED(ret)) {
+    SE_LOG(ERROR, "fail to sync wal", K(ret));
   }
 
-  TEST_SYNC_POINT("DBImpl::SyncWAL:BeforeMarkLogsSynced:1");
-  {
-    InstrumentedMutexLock l(&mutex_);
-    MarkLogsSynced(current_log_number, need_log_dir_sync, status);
-  }
-  TEST_SYNC_POINT("DBImpl::SyncWAL:BeforeMarkLogsSynced:2");
-
-  return status;
-}
-
-void DBImpl::MarkLogsSynced(uint64_t up_to, bool synced_dir,
-                            const Status& status) {
-  mutex_.AssertHeld();
-  if (synced_dir && logfile_number_ == up_to && status.ok()) {
-    log_dir_synced_ = true;
-  }
-  for (auto it = logs_.begin(); it != logs_.end() && it->number <= up_to;) {
-    auto& log = *it;
-    assert(log.getting_synced);
-    if (status.ok() && logs_.size() > 1) {
-      logs_to_free_.push_back(log.ReleaseWriter());
-      it = logs_.erase(it);
-    } else {
-      log.getting_synced = false;
-      ++it;
-    }
-  }
-  assert(!status.ok() || logs_.empty() || logs_[0].number > up_to ||
-         (logs_.size() == 1 && !logs_[0].getting_synced));
-  log_sync_cv_.SignalAll();
+  return ret;
 }
 
 SequenceNumber DBImpl::GetLatestSequenceNumber() const {
@@ -1091,29 +1013,20 @@ void DBImpl::BackgroundCallPurge() {
   // We use one single loop to clear both queues so that after existing the loop
   // both queues are empty. This is stricter than what is needed, but can make
   // it easier for us to reason the correctness.
-  while (!purge_queue_.empty() || !logs_to_free_queue_.empty()) {
-    if (!purge_queue_.empty()) {
-      auto purge_file = purge_queue_.begin();
-      auto fname = purge_file->fname;
-      auto type = purge_file->type;
-      auto number = purge_file->number;
-      auto path_id = purge_file->path_id;
-      auto job_id = purge_file->job_id;
-      purge_queue_.pop_front();
+  while (!purge_queue_.empty()) {
+    auto purge_file = purge_queue_.begin();
+    auto fname = purge_file->fname;
+    auto type = purge_file->type;
+    auto number = purge_file->number;
+    auto path_id = purge_file->path_id;
+    auto job_id = purge_file->job_id;
+    purge_queue_.pop_front();
 
-      mutex_.Unlock();
-      Status file_deletion_status;
-      DeleteObsoleteFileImpl(file_deletion_status, job_id, fname, type, number,
-                             path_id);
-      mutex_.Lock();
-    } else {
-      assert(!logs_to_free_queue_.empty());
-      log::Writer* log_writer = *(logs_to_free_queue_.begin());
-      logs_to_free_queue_.pop_front();
-      mutex_.Unlock();
-      delete log_writer;
-      mutex_.Lock();
-    }
+    mutex_.Unlock();
+    Status file_deletion_status;
+    DeleteObsoleteFileImpl(file_deletion_status, job_id, fname, type, number,
+                           path_id);
+    mutex_.Lock();
   }
   bg_purge_scheduled_--;
 
@@ -1154,9 +1067,6 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
                                state->mu);
     state->super_version->Cleanup();
     state->db->FindObsoleteFiles(&job_context, false, true);
-    if (state->background_purge) {
-      state->db->ScheduleBgLogWriterClose(&job_context);
-    }
     state->mu->Unlock();
 
     MOD_DELETE_OBJECT(SuperVersion, state->super_version);
@@ -1446,7 +1356,7 @@ Status DBImpl::CreateColumnFamily(CreateSubTableArgs &args, ColumnFamilyHandle *
       SE_LOG(WARN, "fail to commit trans", K(ret));
       abort();
     } else {
-      SuperVersion *old_sv = InstallSuperVersionAndScheduleWork(cfd, nullptr, *cfd->GetLatestMutableCFOptions());
+      SuperVersion *old_sv = InstallSuperVersionAndScheduleWork(cfd, nullptr);
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
     }
   }
@@ -1899,7 +1809,6 @@ void DBImpl::ReturnAndCleanupSuperVersion(ColumnFamilyData* cfd,
         }
         sv->Cleanup();
       }
-//      delete sv;
       MOD_DELETE_OBJECT(SuperVersion, sv);
       QUERY_COUNT(CountPoint::NUMBER_SUPERVERSION_CLEANUPS);
     }
@@ -2348,9 +2257,8 @@ Status DBImpl::InstallSstExternal(ColumnFamilyHandle* column_family,
   } else if (FAILED(StorageLogger::get_instance().commit(dummy_log_seq))) {
     SE_LOG(WARN, "fail to commit cerate index trans", K(ret));
   } else {
-    auto mutable_cf_options = cfd->GetLatestMutableCFOptions();
     mutex_.Lock();
-    SuperVersion *old_sv = InstallSuperVersionAndScheduleWork(cfd, nullptr, *mutable_cf_options);
+    SuperVersion *old_sv = InstallSuperVersionAndScheduleWork(cfd, nullptr);
     mutex_.Unlock();
     if (nullptr != old_sv) {
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
@@ -2499,7 +2407,7 @@ int DBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
     } else if (FAILED(versions_->create_backup_snapshot(meta_snapshots))) {
       SE_LOG(WARN, "Failed to create the backup snapshot", K(backup_id), K(ret));
     } else {
-      if (FAILED(SwitchMemtable(sub_table, &context, true /* force create new wal file*/).code())) {
+      if (FAILED(switch_memtable(sub_table, &context, true /* force create new wal file*/))) {
         SE_LOG(WARN, "Failed to switch memtable", K(backup_id), K(ret));
       } else {
         last_manifest_file_num = StorageLogger::get_instance().current_manifest_file_number();

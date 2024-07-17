@@ -333,8 +333,6 @@ Status ConcurrentDirectFileWriter::close() {
     s = interim;
   }
 
-//  writable_file_.reset();
-
   TEST_KILL_RANDOM("ConcurrentDirectFileWriter::close:1", rocksdb_kill_odds);
 
   this->destory_multi_buffer();
@@ -434,6 +432,19 @@ Status ConcurrentDirectFileWriter::sync_with_out_flush(bool use_fsync) {
                    rocksdb_kill_odds);
   pending_sync_ = false;
   return Status::OK();
+}
+
+int ConcurrentDirectFileWriter::sync_to_disk(bool use_fsync)
+{
+  int ret = Status::kOk;
+
+  if (use_fsync) {
+    ret = writable_file_->Fsync().code();
+  } else {
+    ret = writable_file_->Sync().code();
+  }
+
+  return ret;
 }
 
 Status ConcurrentDirectFileWriter::sync_internal(bool use_fsync) {

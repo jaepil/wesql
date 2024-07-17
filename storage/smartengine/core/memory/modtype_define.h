@@ -129,6 +129,7 @@ DEFINE_MOD_TYPE(kColumnBlockWriter)
 DEFINE_MOD_TYPE(kColumnBlockReader)
 DEFINE_MOD_TYPE(kBloomFilter)
 DEFINE_MOD_TYPE(kIOExtent)
+DEFINE_MOD_TYPE(kLogWriter)
 
 DEFINE_MOD_TYPE(kMaxMod)
 #endif

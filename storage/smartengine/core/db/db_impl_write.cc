@@ -18,12 +18,15 @@
 #include "util/file_reader_writer.h"
 #include "util/sync_point.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace common;
-using namespace util;
+using namespace memory;
 using namespace monitor;
+using namespace util;
 
-namespace db {
+namespace db
+{
 
 using smartengine::db::WriteState;
 using smartengine::db::WriteRequest;
@@ -85,6 +88,7 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
                               uint64_t* log_used, uint64_t log_ref,
                               bool disable_memtable) {
   QUERY_TRACE_SCOPE(TracePoint::WRITE_ASYNC);
+  QUERY_COUNT(CountPoint::WRITE_TRANSACTION_COUNT);
   if (my_batch == nullptr) {
     return Status::Corruption("Batch is nullptr!");
   }
@@ -97,11 +101,7 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
   SequenceNumber thread_local_expected_seq = 0;
   WriteRequest* w_request = MOD_NEW_OBJECT(memory::ModId::kWriteRequest, WriteRequest,
       write_options, my_batch, call_back, log_ref, disable_memtable);
-//  WriteRequest* w_request = new WriteRequest(write_options, my_batch, call_back,
-//                                             log_ref, disable_memtable);
-
   w_request->start_time_us_ = env_->NowNanos();
-
   JoinGroupStatus join_status;
 
   // if there are leff then 5 concurrent threads, we use fast group
@@ -137,6 +137,7 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
 
   assert(db::W_STATE_GROUP_LEADER == join_status.join_state_);
   assert(db::W_STATE_GROUP_LEADER == w_request->state_);
+  QUERY_COUNT(CountPoint::PIPELINE_GROUP_COUNT);
   QUERY_COUNT_ADD(CountPoint::PIPLINE_GROUP_SIZE,
                   w_request->follower_vector_.size())
   uint64_t total_count = 0;
@@ -206,7 +207,7 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
   w_request->group_first_sequence_ = last_sequence + 1;
   w_request->group_last_sequence_ =
       last_sequence + w_request->group_total_count_;
-  w_request->log_writer_used_ = logs_.back().writer;
+  w_request->log_writer_used_ = curr_log_writer_;
   // we will asigh to follower in DoWriteMemtableJob();
   assert(this->logfile_number_ != 0);
   w_request->log_used_ = this->logfile_number_;
@@ -471,15 +472,13 @@ int DBImpl::do_copy_log_buffer_job(uint64_t thread_local_expected_seq) {
 
   assert(this->pipline_copy_log_busy_flag_.load());
   QUERY_TRACE_SCOPE(TracePoint::TIME_PER_LOG_COPY);
-  log::Writer* current_log_writer = logs_.back().writer;
 
   const uint64_t MAX_COPY_BYTES_IN_SINGLE_LOOP = 4 * 1024 * 1024;
   uint64_t total_log_bytes = 0;
   uint64_t processeed_entry_num = 0;
   size_t job_num = 0;
   Status copy_log_status;
-  uint32_t log_crc32;
-  ;
+  uint32_t log_crc32 = 0;
   while (!error) {
     if (total_log_bytes > MAX_COPY_BYTES_IN_SINGLE_LOOP) {
       break;
@@ -491,9 +490,9 @@ int DBImpl::do_copy_log_buffer_job(uint64_t thread_local_expected_seq) {
       break;
     }
     assert(0 != job_num && log_request != nullptr);
-    // we update current_log_writer in switchmemtable
+    // we update current_log_writer_ in switchmemtable
     // so all of the log_requests in log_queue_ should wirte the same log_writer
-    assert(current_log_writer == log_request->log_writer_used_);
+    assert(curr_log_writer_ == log_request->log_writer_used_);
     assert(log_request->group_first_sequence_ >=
            this->pipline_manager_.get_last_sequence_post_to_flush_queue());
 
@@ -509,7 +508,7 @@ int DBImpl::do_copy_log_buffer_job(uint64_t thread_local_expected_seq) {
     if (log_request->group_need_log_) {
       this->total_log_size_ += log_entry.size();
       this->alive_log_files_.back().AddSize(log_entry.size());
-      copy_log_status = current_log_writer->AddRecord(log_entry, log_crc32);
+      copy_log_status = curr_log_writer_->AddRecord(log_entry, log_crc32);
     }
 
 //inject error in copy log buffer
@@ -526,7 +525,7 @@ int DBImpl::do_copy_log_buffer_job(uint64_t thread_local_expected_seq) {
           "group_last_sequence_=%lu,"
           "log_file_num=%lu,log_file_offset=%lu,log_entry_size=%lu,",
           log_request->group_first_sequence_, log_request->group_last_sequence_,
-          log_request->log_used_, current_log_writer->file()->get_file_size(),
+          log_request->log_used_, curr_log_writer_->file()->get_file_size(),
           log_entry.size());
       assert(log_request != nullptr);
       this->pipline_manager_.add_error_job(log_request);
@@ -534,40 +533,41 @@ int DBImpl::do_copy_log_buffer_job(uint64_t thread_local_expected_seq) {
       break;
     }
     total_log_bytes += log_entry.size();
-    log_request->log_file_pos_ = current_log_writer->file()->get_file_size();
+    log_request->log_file_pos_ = curr_log_writer_->file()->get_file_size();
     this->pipline_manager_.add_flush_log_job(log_request);
   }
   assert(this->pipline_copy_log_busy_flag_.load());
   this->pipline_copy_log_busy_flag_.store(false);
   if (total_log_bytes > 0) {
-    QUERY_COUNT_ADD(CountPoint::BYTES_PER_LOG_COPY, total_log_bytes);
-    QUERY_COUNT_ADD(CountPoint::ENTRY_PER_LOG_COPY, processeed_entry_num);
+    QUERY_COUNT_ADD(CountPoint::PIPELINE_COPY_LOG_SIZE, total_log_bytes);
+    QUERY_COUNT_ADD(CountPoint::PIPELINE_COPY_LOG_COUNT, processeed_entry_num);
   }
   return error;
 }
 
 int DBImpl::do_flush_log_buffer_job(uint64_t thread_local_expected_seq) {
   int error = 0;
-  log::Writer* current_log_writer = logs_.back().writer;
 
   // check this to avoid frequently flush log buffer, we can write more bytes
   // one time
-  if ((current_log_writer->file()->get_imm_buffer_num() == 0) &&
+  if ((curr_log_writer_->file()->get_imm_buffer_num() == 0) &&
       (this->pipline_manager_.get_last_sequence_post_to_log_queue() >
            thread_local_expected_seq ||
        this->pipline_manager_.get_memtable_job_num() != 0 ||
        this->pipline_manager_.get_copy_log_job_num() != 0 ||
-       this->pipline_manager_.get_copy_log_job_num() != 0)) {
+       this->pipline_manager_.get_commit_job_num() != 0)) {
     return error;
   }
 
-  bool busy = this->pipline_flush_log_busy_flag_.load();
-  if (busy ||
-      !this->pipline_flush_log_busy_flag_.compare_exchange_strong(busy, true)) {
-    return error;
+  if (!immutable_db_options_.parallel_flush_log) {
+    bool busy = this->pipline_flush_log_busy_flag_.load();
+    if (busy ||
+        !this->pipline_flush_log_busy_flag_.compare_exchange_strong(busy, true)) {
+      return error;
+    }
   }
 
-  assert(this->pipline_flush_log_busy_flag_.load());
+  assert(immutable_db_options_.parallel_flush_log || this->pipline_flush_log_busy_flag_.load());
   QUERY_TRACE_SCOPE(TracePoint::TIME_PER_LOG_WRITE);
   Status s;
 
@@ -575,14 +575,16 @@ int DBImpl::do_flush_log_buffer_job(uint64_t thread_local_expected_seq) {
   int64_t flush_bytes = 0;
   uint64_t flush_lsn = 0;
 
-  error = current_log_writer->file()->try_to_flush_one_imm_buffer();
+  error = curr_log_writer_->file()->try_to_flush_one_imm_buffer();
+  log_flush_mutex_.lock();
   if (!error) {
-    flush_lsn = current_log_writer->file()->get_flush_pos();
-    assert(flush_lsn >= this->last_flushed_log_lsn_.load());
+    flush_lsn = curr_log_writer_->file()->get_flush_pos();
+    se_assert(flush_lsn >= this->last_flushed_log_lsn_.load());
     flush_bytes = flush_lsn - this->last_flushed_log_lsn_.load();
     this->last_flushed_log_lsn_.store(flush_lsn);
   } else {
     this->pipline_flush_log_busy_flag_.store(false);
+    log_flush_mutex_.unlock();
     return error;
   }
 
@@ -594,14 +596,17 @@ int DBImpl::do_flush_log_buffer_job(uint64_t thread_local_expected_seq) {
   if (need_wal_sync) {
     QUERY_TRACE_SCOPE(TracePoint::WAL_FILE_SYNC);
     QUERY_COUNT(CountPoint::WAL_FILE_SYNCED)
+    QUERY_COUNT(CountPoint::PIPELINE_FLUSH_LOG_SYNC_COUNT);
     // Handle sync failed !!!
-    s = current_log_writer->file()->sync_with_out_flush(false);
+    s = curr_log_writer_->file()->sync_to_disk(false);
+  } else {
+    QUERY_COUNT(CountPoint::PIPELINE_FLUSH_LOG_NOT_SYNC_COUNT);
   }
 
 #ifndef NDEBUG
   //inject io error while flush log buffer
   //this will left corrupted wal log entry 
-  if (current_log_writer->file()->get_imm_buffer_num() != 0) {
+  if (curr_log_writer_->file()->get_imm_buffer_num() != 0) {
     TEST_SYNC_POINT("DBImpl::do_flush_log_buffer_job::after_flush_sync"); 
   }
 #endif
@@ -622,9 +627,11 @@ int DBImpl::do_flush_log_buffer_job(uint64_t thread_local_expected_seq) {
     this->pipline_manager_.add_memtable_job(request);
   }
 
+  log_flush_mutex_.unlock();
   this->pipline_flush_log_busy_flag_.store(false);
 
-  QUERY_COUNT_ADD(CountPoint::BYTES_PER_LOG_WRITE, flush_bytes);
+  QUERY_COUNT(CountPoint::PIPELINE_FLUSH_LOG_COUNT);
+  QUERY_COUNT_ADD(CountPoint::PIPELINE_FLUSH_LOG_SIZE, flush_bytes);
   //make compiler happy
   UNUSED(flush_bytes);
   return error;
@@ -721,7 +728,7 @@ void DBImpl::update_committed_version(WriteRequest* writer) {
                                                  writer);
   version_sliding_window_map_.insert(commit_unit);
   std::unordered_map<uint64_t, WriteRequest*>::iterator ite;
-  WriteRequest* c_unit;
+  WriteRequest* c_unit = nullptr;
   uint64_t expected_sequence = 0;
   uint64_t rec_sequence = 0;
   while (true) {
@@ -837,7 +844,7 @@ Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
   }
 
   if (UNLIKELY(status.ok() && write_buffer_manager_->should_flush())) {
-    // Before a new memtable is added in SwitchMemtable(),
+    // Before a new memtable is added in switch_memtable(),
     // write_buffer_manager_->ShouldFlush() will keep returning true. If another
     // thread is writing to another DB with the same write buffer, they may also
     // be flushed. We may end up with flushing much more DBs than needed. It's
@@ -857,7 +864,7 @@ Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
 
   if (UNLIKELY(status.ok() && !flush_scheduler_.Empty())) {
     write_context->type_ = OTHER; // delete/write_buffer
-    status = ScheduleFlushes(write_context);
+    status = schedule_flush(write_context);
   }
 
   return status;
@@ -1131,7 +1138,7 @@ int DBImpl::trigger_switch_or_dump(ColumnFamilyData* cfd, WriteContext *write_co
 int DBImpl::trigger_switch_memtable(ColumnFamilyData *cf2switch, WriteContext *write_context) {
   int ret = Status::kOk;
   if (nullptr != cf2switch) {
-    if (FAILED(SwitchMemtable(cf2switch, write_context).code())) {
+    if (FAILED(switch_memtable(cf2switch, write_context, false))) {
       SE_LOG(ERROR, "Fail to switch memtable", K(ret), K(cf2switch->GetID()));
     } else {
       cf2switch->imm()->FlushRequested();
@@ -1159,7 +1166,6 @@ Status DBImpl::HandleTotalWriteBufferFull(WriteContext* write_context) {
     uint64_t start_time = env_->NowNanos();
     if (start_time < next_trim_time_) return Status(ret);
 
-//    SuperVersion* new_superversion = new SuperVersion();
     SuperVersion *new_superversion = MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
     if (new_superversion == nullptr) {
       SE_LOG(INFO, "Cannot allocate memory for superversion");
@@ -1180,8 +1186,7 @@ Status DBImpl::HandleTotalWriteBufferFull(WriteContext* write_context) {
             &write_context->memtables_to_free_, seqno);
         if (trim_num > 0) {
           write_context->superversions_to_free_.push_back(
-              InstallSuperVersionAndScheduleWork(
-                  cfd, new_superversion, *cfd->GetLatestMutableCFOptions()));
+              InstallSuperVersionAndScheduleWork(cfd, new_superversion));
         }
       }
 
@@ -1197,7 +1202,6 @@ Status DBImpl::HandleTotalWriteBufferFull(WriteContext* write_context) {
         trim_size += m->ApproximateMemoryAllocated();
       }
     } else {
-//      delete new_superversion;  // rare case
       MOD_DELETE_OBJECT(SuperVersion, new_superversion);
     }
 
@@ -1264,7 +1268,7 @@ Status DBImpl::HandleTotalWriteBufferFull(WriteContext* write_context) {
     }
     if (sub_table_picked != nullptr) {
       write_context->all_sub_table_ = all_sub_table;
-      if(FAILED(SwitchMemtable(sub_table_picked, write_context).code())) {
+      if(FAILED(switch_memtable(sub_table_picked, write_context, false))) {
         SE_LOG(WARN, "fail to switch memtable", K(ret));
       } else {
         sub_table_picked->imm()->FlushRequested();
@@ -1302,7 +1306,7 @@ Status DBImpl::HandleWriteBufferFull(WriteContext* write_context) {
   int ret = Status::kOk;
   int tmp_ret = Status::kOk;
 
-  // Before a new memtable is added in SwitchMemtable(),
+  // Before a new memtable is added in switch_memtable(),
   // write_buffer_manager_->ShouldFlush() will keep returning true. If another
   // thread is writing to another DB with the same write buffer, they may also
   // be flushed. We may end up with flushing much more DBs than needed. It's
@@ -1312,25 +1316,6 @@ Status DBImpl::HandleWriteBufferFull(WriteContext* write_context) {
       "using %" PRIu64 " bytes out of a total of %" PRIu64 ".",
       write_buffer_manager_->memory_usage(),
       write_buffer_manager_->buffer_size());
-#if 0
-  // first check storage manager memtable
-  if (storage_write_buffer_manager_ != nullptr) {
-    if (storage_write_buffer_manager_->memory_usage() >
-        storage_write_buffer_manager_->buffer_size()) {
-      // release meta memtable do a checkpoint
-      SequenceNumber seq = versions_->get_earliest_meta_version();
-      // must have some meta data
-      if (seq != kMaxSequenceNumber && seq != 1) {
-        ROCKS_LOG_INFO(immutable_db_options_.info_log,
-                       "Do a storage manager chekpoint");
-        status = storage_manager_->write_checkpoint(seq);
-        if (!status.ok()) {
-          return status;
-        }
-      }
-    }
-  }
-#endif
   // no need to refcount because drop is happening in write thread, so can't
   // happen while we're in the write thread
   SubTable* sub_table_picked = nullptr;
@@ -1372,7 +1357,7 @@ Status DBImpl::HandleWriteBufferFull(WriteContext* write_context) {
 
     if (sub_table_picked != nullptr) {
       write_context->all_sub_table_ = all_sub_table;
-      if (FAILED(SwitchMemtable(sub_table_picked, write_context).code())) {
+      if (FAILED(switch_memtable(sub_table_picked, write_context, false))) {
         SE_LOG(WARN, "fail to switch memtable", K(ret));
       } else {
         sub_table_picked->imm()->FlushRequested();
@@ -1396,197 +1381,135 @@ uint64_t DBImpl::GetMaxTotalWalSize() const {
   return mutable_db_options_.max_total_wal_size;
 }
 
-Status DBImpl::ScheduleFlushes(WriteContext* context) {
+int DBImpl::schedule_flush(WriteContext *write_context)
+{
+  mutex_.AssertHeld();
   int ret = Status::kOk;
-  AllSubTable* all_sub_table = nullptr;
-  GlobalContext* global_ctx = nullptr;
-  if (nullptr == (global_ctx = versions_->get_global_ctx())) {
-    ret = Status::kCorruption;
-    SE_LOG(WARN, "global ctx must not nullptr", K(ret));
-  } else if (FAILED(global_ctx->acquire_thread_local_all_sub_table(
-                 all_sub_table))) {
-    SE_LOG(WARN, "fail to acquire all sub table", K(ret));
-  } else if (nullptr == all_sub_table) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "unexpected error, all sub table must not nullptr",
-                K(ret));
+  ColumnFamilyData *sub_table = nullptr;
+
+  if (IS_NULL(write_context)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(write_context));
   } else {
-    context->all_sub_table_ = all_sub_table;
+    while (SUCCED(ret) && IS_NOTNULL(sub_table = flush_scheduler_.TakeNextColumnFamily())) {
+      if (FAILED(switch_memtable(sub_table, write_context, false))) {
+        SE_LOG(WARN, "fail to switch memtable", K(ret), "index_id", sub_table->GetID());
+      } else if (sub_table->Unref()) {
+        MOD_DELETE_OBJECT(ColumnFamilyData, sub_table);
+      }
+    }
   }
 
-  ColumnFamilyData* cfd;
-  Status status = Status::OK();
-  while ((cfd = flush_scheduler_.TakeNextColumnFamily()) != nullptr) {
-    status = SwitchMemtable(cfd, context);
-    if (cfd->Unref()) {
-      MOD_DELETE_OBJECT(ColumnFamilyData, cfd);
+  // try to advance recovery point, ignore error.
+  advance_recovery_point_without_flush();
+
+  return ret;
+}
+
+int DBImpl::switch_memtable(ColumnFamilyData *sub_table, WriteContext *write_context, bool force_create_new_log)
+{
+  mutex_.AssertHeld();
+  int ret = Status::kOk;
+  SequenceNumber seq = 0;
+  RecoveryPoint recovery_point;
+  SuperVersion *new_super_version = nullptr;
+  SuperVersion *retired_super_version = nullptr;
+
+  // The switch memtable operation acts as a barrier in the write process and requires waiting for
+  // all tasks in the transaction commit pipeline to complete.
+  this->wait_all_active_thread_exit();
+  seq = versions_->LastSequence();
+
+  if (!bg_error_.ok() || pipline_global_error_flag_.load()) {
+    if (bg_error_.ok()) {
+      bg_error_ = Status::Corruption("pipeline error while switch memtable");
     }
-    if (!status.ok()) {
-      break;
+    ret = Status::kCorruption;
+    SE_LOG(ERROR, "found bg_error when switch memtable", K(ret), KE(bg_error_.code()), K_(pipline_global_error_flag));
+  } else if (UNLIKELY(!version_sliding_window_map_.empty()) ||
+             UNLIKELY(0 != pipline_manager_.get_copy_log_job_num()) ||
+             UNLIKELY(0 != pipline_manager_.get_flush_log_job_num()) ||
+             UNLIKELY(0 != pipline_manager_.get_memtable_job_num()) ||
+             UNLIKELY(0 != pipline_manager_.get_commit_job_num()) ||
+             UNLIKELY(versions_->LastSequence() != versions_->LastAllocatedSequence())) {
+    ret = Status::kCorruption;
+    SE_LOG(ERROR, "the pipeline status is corrupted.", K(ret),
+        K(version_sliding_window_map_.size()),
+        "copy_log_job_num", pipline_manager_.get_copy_log_job_num(),
+        "flush_log_job_num", pipline_manager_.get_flush_log_job_num(),
+        "write_memtable_job_num", pipline_manager_.get_memtable_job_num(),
+        "commit_job_num", pipline_manager_.get_commit_job_num(),
+        "last_sequence", versions_->LastSequence(), "last_allocated_sequence", versions_->LastAllocatedSequence());
+  } else if (FAILED(update_wal_writer(force_create_new_log))) {
+    SE_LOG(WARN, "fail to update wal writer", K(ret));
+  } else {
+    SE_LOG(INFO, "success to switch memtable", "index_id", sub_table->GetID(),
+       K_(logfile_number), "num_imm_unflushed", sub_table->imm()->NumNotFlushed(),
+       "num_imm_flushed", sub_table->imm()->NumFlushed(),
+       "num_entries", sub_table->mem()->num_entries(), KE(write_context->type_));
+    recovery_point.log_file_number_ = logfile_number_;
+    recovery_point.seq_ = seq;
+    if (FAILED(sub_table->update_active_memtable(recovery_point, &(write_context->memtables_to_free_)))) {
+      SE_LOG(WARN, "fail to update active memtable", K(ret), K(recovery_point));
+    } else if (IS_NULL(new_super_version = MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion))) {
+      ret = Status::kMemoryLimit;
+      SE_LOG(WARN, "fail to allocate memory for new super version", K(ret));
+    } else {
+      // (Zhao Dongsheng) The 'db_mutex' will be unlocked and locked
+      // at an extreme point in 'InstallSuperVersionAndScheduleWork',
+      // so this assert condition needs to be placed before it.
+      se_assert((seq == versions_->LastAllocatedSequence()) && (seq == versions_->LastSequence()));
+
+      if (IS_NOTNULL(retired_super_version = InstallSuperVersionAndScheduleWork(sub_table, new_super_version))) {
+        write_context->superversions_to_free_.push_back(retired_super_version);
+      }
+    }
+  }
+
+
+  return ret;
+}
+
+int DBImpl::advance_recovery_point_without_flush()
+{
+  mutex_.AssertHeld();
+  int ret = Status::kOk;
+  GlobalContext *global_ctx = nullptr;
+  AllSubTable *all_sub_table = nullptr;
+  ColumnFamilyData *sub_table = nullptr;
+  RecoveryPoint recovery_point;
+
+  this->wait_all_active_thread_exit();
+  recovery_point.log_file_number_ = logfile_number_;
+  recovery_point.seq_ = versions_->LastSequence();
+  if (FAILED(get_all_sub_table(all_sub_table, global_ctx))) {
+    SE_LOG(WARN, "get all subtale failed", K(ret));
+  } else {
+    SubTableMap &all_subtables = all_sub_table->sub_table_map_;
+    for (auto iter = all_subtables.begin(); SUCCED(ret) && all_subtables.end() != iter; ++iter) {
+      if (IS_NULL(sub_table = iter->second)) {
+        ret = Status::kErrorUnexpected;
+        SE_LOG(WARN, "unexpected error, the subtable must not be nullptr", K(ret), "index_id", sub_table->GetID());
+      } else if ((0 == sub_table->mem()->GetFirstSequenceNumber()) &&
+                 (0 == sub_table->imm()->NumNotFlushed())) {
+        sub_table->set_recovery_point(recovery_point);
+        // TODO (Zhao Dongsheng) : need insert into dump list here?
+        versions_->GetColumnFamilySet()->insert_into_dump_list(sub_table);
+        sub_table->mem()->SetCreationSeq(recovery_point.seq_);
+      }
     }
   }
 
   int tmp_ret = ret;
-  if (nullptr != global_ctx &&
-      FAILED(global_ctx->release_thread_local_all_sub_table(all_sub_table))) {
-    SE_LOG(WARN, "fail to release all sub table", K(ret), K(tmp_ret));
+  if (IS_NOTNULL(global_ctx) && FAILED(global_ctx->release_thread_local_all_sub_table(all_sub_table))) {
+    SE_LOG(WARN, "fail to release all subtables", K(ret));
   }
 
-  return status;
-}
+  se_assert(pipline_global_error_flag_.load() || 
+            ((versions_->LastAllocatedSequence() == versions_->LastSequence()) &&
+            (recovery_point.seq_ == versions_->LastSequence())));
 
-// REQUIRES: mutex_ is held
-// REQUIRES: this thread is currently at the front of the writer queue
-Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd,
-                              WriteContext* context,
-                              const bool force_create_new_log) {
-  mutex_.AssertHeld();
-//  unique_ptr<WritableFile> lfile;
-  WritableFile *lfile = nullptr;
-  log::Writer* new_log = nullptr;
-  MemTable* new_mem = nullptr;
-  assert(context->all_sub_table_ != nullptr);
-
-  // pipline check before switch memtable
-  this->wait_all_active_thread_exit();
-
-  if (!bg_error_.ok() || pipline_global_error_flag_.load()) {
-    if (bg_error_.ok()) {
-      bg_error_ = Status::Corruption("pipline error while switch memtable"); 
-    }
-    int error_code = (int)bg_error_.code();
-    SE_LOG(ERROR, "bg_error while SwitchMemtable", 
-                       K(error_code), K(pipline_global_error_flag_));
-    return bg_error_;
-  }
-
-  assert(0 == this->version_sliding_window_map_.size());
-  assert(0 == this->pipline_manager_.get_copy_log_job_num());
-  assert(0 == this->pipline_manager_.get_flush_log_job_num());
-  assert(0 == this->pipline_manager_.get_memtable_job_num());
-  assert(0 == this->pipline_manager_.get_commit_job_num());
-  assert(this->versions_->LastSequence() ==
-         this->versions_->LastAllocatedSequence());
-
-  SequenceNumber seq = versions_->LastSequence();
-  RecoveryPoint recovery_point(logfile_number_, seq);
-  cfd->mem()->set_recovery_point(recovery_point);
-  // Attempt to switch to a new memtable and trigger flush of old.
-  // Do this without holding the dbmutex lock.
-  bool creating_new_log = !log_empty_ || force_create_new_log;
-  uint64_t new_log_number =
-      creating_new_log ? versions_->NewFileNumber() : logfile_number_;
-  SuperVersion* new_superversion = nullptr;
-  const MutableCFOptions mutable_cf_options = *cfd->GetLatestMutableCFOptions();
-  // flush happens before logging, but that should be ok.
-  int num_imm_unflushed = cfd->imm()->NumNotFlushed();
-  int num_imm_flushed = cfd->imm()->NumFlushed();
-  DBOptions db_options =
-      BuildDBOptions(immutable_db_options_, mutable_db_options_);
-  const auto preallocate_block_size =
-      GetWalPreallocateBlockSize(mutable_cf_options.write_buffer_size);
-  Status s;
-  {
-    if (creating_new_log) {
-      EnvOptions opt_env_opt =
-          env_->OptimizeForLogWrite(env_options_, db_options);
-      s = NewWritableFile(
-          env_, LogFileName(immutable_db_options_.wal_dir, new_log_number),
-          lfile, opt_env_opt);
-      if (s.ok()) {
-        // Our final size should be less than write_buffer_size
-        // (compression, etc) but err on the side of caution.
-
-        // use preallocate_block_size instead
-        // of calling GetWalPreallocateBlockSize()
-        lfile->SetPreallocationBlockSize(preallocate_block_size);
-        ConcurrentDirectFileWriter *file_writer = MOD_NEW_OBJECT(memory::ModId::kDBImpl,
-            ConcurrentDirectFileWriter, lfile, opt_env_opt);
-        s = file_writer->init_multi_buffer();
-        if (s.ok()) {
-          new_log = MOD_NEW_OBJECT(memory::ModId::kDBImpl,
-                                  log::Writer,
-                                  file_writer,
-                                  new_log_number,
-                                  false /**recycle_log_files*/);
-        } else {
-          SE_LOG(ERROR, "init multi log buffer failed! when switchMemtable");
-          return s;
-        }
-      }
-    }
-
-    if (s.ok()) {
-      new_mem = cfd->ConstructNewMemtable(mutable_cf_options, seq);
-      new_superversion = MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    }
-  }
-
-  util::ConcurrentDirectFileWriter* log_writer = nullptr;
-  if (creating_new_log && nullptr != new_log)
-    log_writer = new_log->file();
-  else
-    log_writer = logs_.back().writer->file();
-
-  SE_LOG(INFO,
-      "CK_INFO: switch memtable",
-      K(cfd->GetID()), K(new_log_number),
-      K(log_writer->get_multi_buffer_num()), K(log_writer->get_multi_buffer_size()),
-      K(log_writer->get_switch_buffer_limit()), K(num_imm_unflushed),
-      K(num_imm_flushed), K(cfd->mem()->num_entries()), K((int)context->type_));
-  if (!s.ok()) {
-    // how do we fail if we're not creating new log?
-    assert(creating_new_log);
-    assert(!new_mem);
-    assert(!new_log);
-    return s;
-  }
-  if (creating_new_log) {
-    this->last_flushed_log_lsn_.store(0);
-    logfile_number_ = new_log_number;
-    assert(new_log != nullptr);
-    log_empty_ = true;
-    log_dir_synced_ = false;
-    logs_.emplace_back(logfile_number_, new_log);
-    alive_log_files_.push_back(LogFileNumberSize(logfile_number_));
-  }
-  recovery_point.log_file_number_ = logfile_number_;
-  recovery_point.seq_ = versions_->LastSequence();
-  int ret = Status::kOk;
-  int tmp_ret = Status::kOk;
-  GlobalContext *global_ctx = nullptr;
-  AllSubTable* all_sub_table = context->all_sub_table_;
-  SubTableMap& all_subtables = all_sub_table->sub_table_map_;
-  SubTable* sub_table = nullptr;
-  for (auto iter = all_subtables.begin();
-       Status::kOk == ret && all_subtables.end() != iter; ++iter) {
-    // all this is just optimization to delete logs that
-    // are no longer needed -- if CF is empty, that means it
-    // doesn't need that particular log to stay alive, so we just
-    // advance the log number. no need to persist this in the manifest
-    if (nullptr == (sub_table = iter->second)) {
-      ret = Status::kCorruption;
-      SE_LOG(WARN, "sub table must not nullptr", K(ret), K(iter->first));
-    } else if (sub_table->mem()->GetFirstSequenceNumber() == 0 &&
-               sub_table->imm()->NumNotFlushed() == 0) {
-      if (creating_new_log) {
-        sub_table->set_recovery_point(recovery_point);
-        versions_->GetColumnFamilySet()->insert_into_dump_list(sub_table);
-      }
-      sub_table->mem()->SetCreationSeq(versions_->LastSequence());
-    }
-  }
-  cfd->mem()->set_recovery_point(recovery_point);
-  cfd->mem()->set_dump_sequence(recovery_point.seq_);
-  cfd->imm()->Add(cfd->mem(), &context->memtables_to_free_);
-  // update immemtable's largest sequence number
-  cfd->set_imm_largest_seq(cfd->mem()->get_last_sequence_number());
-  new_mem->Ref();
-  cfd->SetMemtable(new_mem);
-  context->superversions_to_free_.push_back(InstallSuperVersionAndScheduleWork(
-      cfd, new_superversion, mutable_cf_options));
-  // sync directory
-  return Status(ret);
+  return ret;  
 }
 
 size_t DBImpl::GetWalPreallocateBlockSize(uint64_t write_buffer_size) const {
@@ -1609,17 +1532,6 @@ size_t DBImpl::GetWalPreallocateBlockSize(uint64_t write_buffer_size) const {
   return bsize;
 }
 
-void DBImpl::LogWriterNumber::ClearWriter() {
-  //      delete writer;
-  if (nullptr != writer) {
-    if (!writer->use_allocator()) {
-//      writer->delete_file_writer();
-      MOD_DELETE_OBJECT(Writer, writer);
-    } else {
-      writer->~Writer();
-    }
-  }
-}
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
 Status DB::Put(const WriteOptions& opt, ColumnFamilyHandle* column_family,

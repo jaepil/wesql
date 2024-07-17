@@ -15,13 +15,16 @@
  */
 
 #include "db/batch_group.h"
+#include "monitoring/query_perf_context.h"
 
-using namespace smartengine;
-using namespace util;
+
+namespace smartengine
+{
 using namespace common;
-
-namespace smartengine {
-namespace db {
+using namespace monitor;
+using namespace util;
+namespace db
+{
 
 void GroupSlot::switch_leader_on_timeout(WriteRequest* current_leader) {
   if (leader_writer_.load() != current_leader) return;
@@ -73,7 +76,6 @@ int BatchGroupManager::init() {
   if (inited_) return ret;
   bool fail = false;
   for (size_t index = 0; index < this->slot_array_size_; index++) {
-//    GroupSlot* slot = new GroupSlot(this->max_group_size_);
     GroupSlot* slot = MOD_NEW_OBJECT(memory::ModId::kWriteRequest, GroupSlot, this->max_group_size_);
     if (nullptr == slot) {
       fail = true;
@@ -83,7 +85,6 @@ int BatchGroupManager::init() {
   }
   if (fail) {
     for (GroupSlot* slot : slot_array_) {
-//      delete slot;
       MOD_DELETE_OBJECT(GroupSlot, slot);
     }
     slot_array_.clear();
@@ -96,7 +97,6 @@ int BatchGroupManager::init() {
 void BatchGroupManager::destroy() {
   if (!inited_) return;
   for (GroupSlot* slot : slot_array_) {
-//    delete slot;
     MOD_DELETE_OBJECT(GroupSlot, slot);
   }
   slot_array_.clear();
@@ -128,6 +128,7 @@ void BatchGroupManager::join_batch_group(WriteRequest* writer,
   if (!wait_state) {  // timeout, we should set ourself leader
     slot->switch_leader_on_timeout(writer);
     set_state(writer, W_STATE_GROUP_LEADER);
+    QUERY_COUNT(CountPoint::PIPELINE_GROUP_WAIT_TIMEOUT_COUNT);
   }
 
   assert(writer->state_ == W_STATE_GROUP_LEADER);

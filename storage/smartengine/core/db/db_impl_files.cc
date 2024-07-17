@@ -267,9 +267,9 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
     }
   }
 
-  // logs_ is empty when called during recovery, in which case there can't yet
+  // curr_log_writer_ is nullptr when called during recovery, in which case there can't yet
   // be any tracked obsolete logs
-  if (!alive_log_files_.empty() && !logs_.empty()) {
+  if (!alive_log_files_.empty() && IS_NOTNULL(curr_log_writer_)) {
     uint64_t min_log_number = job_context->log_number;
     size_t num_alive_log_files = alive_log_files_.size();
     // find newly obsoleted log files
@@ -287,24 +287,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       // number < MinLogNumber().
       assert(alive_log_files_.size());
     }
-    while (!logs_.empty() && logs_.front().number < min_log_number) {
-      auto& log = logs_.front();
-      if (log.getting_synced) {
-        log_sync_cv_.Wait();
-        // logs_ could have changed while we were waiting.
-        continue;
-      }
-      logs_to_free_.push_back(log.ReleaseWriter());
-      logs_.pop_front();
-    }
-    // Current log cannot be obsolete.
-    assert(!logs_.empty());
   }
-
-  // We're just cleaning up for DB::Write().
-  assert(job_context->logs_to_free.empty());
-  job_context->logs_to_free = logs_to_free_;
-  logs_to_free_.clear();
 }
 
 namespace {

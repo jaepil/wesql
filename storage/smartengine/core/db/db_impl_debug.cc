@@ -57,7 +57,7 @@ Status DBImpl::TEST_FlushMemTable(bool wait, ColumnFamilyHandle* cfh) {
     auto cfhi = reinterpret_cast<ColumnFamilyHandleImpl*>(cfh);
     cfd = cfhi->cfd();
   }
-  return FlushMemTable(cfd, fo);
+  return flush_memtable(cfd, fo);
 }
 
 Status DBImpl::TEST_WaitForFlushMemTable(ColumnFamilyHandle* column_family) {
@@ -88,11 +88,6 @@ Status DBImpl::TEST_WaitForCompact() {
 void DBImpl::TEST_LockMutex() { mutex_.Lock(); }
 
 void DBImpl::TEST_UnlockMutex() { mutex_.Unlock(); }
-
-size_t DBImpl::TEST_LogsToFreeSize() {
-  InstrumentedMutexLock l(&mutex_);
-  return logs_to_free_.size();
-}
 
 uint64_t DBImpl::TEST_LogfileNumber() {
   InstrumentedMutexLock l(&mutex_);

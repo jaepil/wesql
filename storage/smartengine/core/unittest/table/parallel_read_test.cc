@@ -460,8 +460,8 @@ void ParallelReadTest::append_memtable(const int64_t key_start,
                                        const int64_t step,
                                        const ValueType value_type)
 {
-  MemTable *mem = nullptr;
-  build_memtable(mem);
+  MemTable *mem = subtable_->mem();
+  //build_memtable(mem);
   assert(nullptr != mem);
   const int64_t key_size = 20;
   int64_t row_size = 128;
@@ -475,8 +475,8 @@ void ParallelReadTest::append_memtable(const int64_t key_start,
              Slice(buf, strlen(buf)));
   }
 
-  subtable_->SetMemtable(mem);
-  mems_.push_back(mem);
+  //subtable_->SetMemtable(mem);
+  //mems_.push_back(mem);
 }
 
 void ParallelReadTest::write_batch_append(
@@ -788,14 +788,14 @@ TEST_F(ParallelReadTest, parallel_run_memtable_l0)
   init(arg);
   write_data(100, 1000, 0, 0);
 
-  append_memtable(1100,2000,0,1);
+  db_impl_->get_version_set()->SetLastSequence(1);
+  append_memtable(1100,2000,1, 1);
   //update superversion
   {
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -829,8 +829,7 @@ TEST_F(ParallelReadTest, parallel_multi_layer_l0)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -871,8 +870,7 @@ TEST_F(ParallelReadTest, parallel_multi_layer_l0_l2)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -916,8 +914,7 @@ TEST_F(ParallelReadTest, parallel_run_after_compaction)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -931,8 +928,7 @@ TEST_F(ParallelReadTest, parallel_run_after_compaction)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -971,8 +967,7 @@ TEST_F(ParallelReadTest, parallel_multi_layer_l0_l2_overlap)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -995,14 +990,14 @@ TEST_F(ParallelReadTest, parallel_run_only_memtable)
   TestArgs arg;
   init(arg);
 
-  append_memtable(1,1000,0,1);
+  db_impl_->get_version_set()->SetLastSequence(1);
+  append_memtable(1,1000,1,1);
   //update superversion
   {
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -1058,8 +1053,7 @@ TEST_F(ParallelReadTest, parallel_run_level2)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -1096,8 +1090,7 @@ TEST_F(ParallelReadTest, parallel_run_parallel)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 
@@ -1176,8 +1169,7 @@ TEST_F(ParallelReadTest, parallel_run_balance)
     InstrumentedMutexLock l(&db_impl_mutex_);
     db::SuperVersion *new_sv =
         MOD_NEW_OBJECT(memory::ModId::kSuperVersion, SuperVersion);
-    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(
-        new_sv, &db_impl_mutex_, *subtable_->GetLatestMutableCFOptions());
+    db::SuperVersion *old_sv = subtable_->InstallSuperVersion(new_sv, &db_impl_mutex_);
     MOD_DELETE_OBJECT(SuperVersion, old_sv);
   }
 

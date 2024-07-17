@@ -49,6 +49,7 @@ struct ImmutableDBOptions {
   bool avoid_flush_during_recovery;
   uint64_t table_cache_size;
   uint64_t persistent_cache_size;
+  bool parallel_flush_log;
 };
 
 struct MutableDBOptions

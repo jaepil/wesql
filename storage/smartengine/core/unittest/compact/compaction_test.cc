@@ -740,7 +740,7 @@ class CompactionTest : public testing::Test {
         context_->idb_options_,
         jct,
         output_file_directory,
-        GetCompressionFlush(ioptions, *ct.mutable_cf_options_, 0),
+        GetCompressionFlush(ioptions, 0),
         stats, ct, arena);
     flush_job.set_memtables(mems_);
     flush_job.set_meta_snapshot(storage_manager_->get_current_version());

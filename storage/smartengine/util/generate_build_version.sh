@@ -1,15 +1,4 @@
 #!/bin/bash
-MKFILE=`mktemp`
-# create and run a simple makefile
-# include se make file relative to the path of this script
-echo "include storage/smartengine/core/src.mk
-all:
-	@echo \$(LIB_SOURCES)" > $MKFILE
-for f in `make --makefile $MKFILE`
-do
-  echo ./core/$f
-done
-rm $MKFILE
 
 # create build_version.cc file. Only create one if it doesn't exists or if it is different
 # this is so that we don't rebuild mysqld every time

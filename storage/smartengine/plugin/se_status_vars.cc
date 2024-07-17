@@ -100,6 +100,12 @@ void SeStatusVars::reset()
   top2_mod_mem_info_ = 0;
   top3_mod_mem_info_ = 0;
   global_external_fragmentation_rate_ = 0;
+  write_transaction_count_ = 0;
+  pipeline_group_count_ = 0;
+  pipeline_copy_log_size_ = 0;
+  pipeline_copy_log_count_ = 0;
+  pipeline_flush_log_size_ = 0;
+  pipeline_flush_log_count_ = 0;
 }
 
 DEFINE_TO_STRING(SeStatusVars, KV_(block_cache_miss), KV_(block_cache_hit), KV_(block_cache_add),
@@ -118,7 +124,8 @@ DEFINE_TO_STRING(SeStatusVars, KV_(block_cache_miss), KV_(block_cache_hit), KV_(
     KV_(all_flush_megabytes), KV_(all_compaction_megabytes),
     KV_(top1_subtable_size), KV_(top2_subtable_size), KV_(top3_subtable_size),
     KV_(top1_mod_mem_info), KV_(top2_mod_mem_info), KV_(top3_mod_mem_info),
-    KV_(global_external_fragmentation_rate))
+    KV_(global_external_fragmentation_rate), KV_(pipeline_group_count), KV_(pipeline_copy_log_size),
+    KV_(pipeline_copy_log_count), KV_(pipeline_flush_log_size), KV_(pipeline_flush_log_count))
 
 static int se_update_query_perf_vars(SeStatusVars &status_vars)
 {
@@ -162,6 +169,15 @@ static int se_update_query_perf_vars(SeStatusVars &status_vars)
     SE_ASSIGN_PERF_COUNTER(number_superversion_releases, NUMBER_SUPERVERSION_RELEASES);
     SE_ASSIGN_PERF_COUNTER(number_superversion_cleanups, NUMBER_SUPERVERSION_CLEANUPS);
     SE_ASSIGN_PERF_COUNTER(number_block_not_compressed, NUMBER_BLOCK_NOT_COMPRESSED);
+    SE_ASSIGN_PERF_COUNTER(write_transaction_count, WRITE_TRANSACTION_COUNT);
+    SE_ASSIGN_PERF_COUNTER(pipeline_group_count, PIPELINE_GROUP_COUNT);
+    SE_ASSIGN_PERF_COUNTER(pipeline_group_wait_timeout_count, PIPELINE_GROUP_WAIT_TIMEOUT_COUNT);
+    SE_ASSIGN_PERF_COUNTER(pipeline_copy_log_size, PIPELINE_COPY_LOG_SIZE);
+    SE_ASSIGN_PERF_COUNTER(pipeline_copy_log_count, PIPELINE_COPY_LOG_COUNT);
+    SE_ASSIGN_PERF_COUNTER(pipeline_flush_log_size, PIPELINE_FLUSH_LOG_SIZE);
+    SE_ASSIGN_PERF_COUNTER(pipeline_flush_log_count, PIPELINE_FLUSH_LOG_COUNT);
+    SE_ASSIGN_PERF_COUNTER(pipeline_flush_log_sync_count, PIPELINE_FLUSH_LOG_SYNC_COUNT);
+    SE_ASSIGN_PERF_COUNTER(pipeline_flush_log_not_sync_count, PIPELINE_FLUSH_LOG_NOT_SYNC_COUNT);
   }
 
   return ret;
@@ -288,6 +304,15 @@ static SHOW_VAR se_status_vars[] = {
  SE_GLOBAL_LONG_STATUS_VAR(top2_mod_mem_info),
  SE_GLOBAL_LONG_STATUS_VAR(top3_mod_mem_info),
  SE_GLOBAL_LONG_STATUS_VAR(global_external_fragmentation_rate),
+ SE_GLOBAL_LONG_STATUS_VAR(write_transaction_count),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_group_count),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_group_wait_timeout_count),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_copy_log_size),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_copy_log_count),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_flush_log_size),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_flush_log_count),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_flush_log_sync_count),
+ SE_GLOBAL_LONG_STATUS_VAR(pipeline_flush_log_not_sync_count),
   {NullS, NullS, SHOW_LONG, SHOW_SCOPE_GLOBAL}
 };
 

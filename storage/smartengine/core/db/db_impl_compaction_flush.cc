@@ -29,64 +29,23 @@
 #include "storage/storage_logger.h"
 #include "util/ebr.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace common;
-using namespace util;
-using namespace table;
+using namespace memory;
 using namespace monitor;
 using namespace storage;
-using namespace memory;
+using namespace table;
+using namespace util;
 
-namespace db {
-Status DBImpl::SyncClosedLogs(JobContext* job_context) {
-  TEST_SYNC_POINT("DBImpl::SyncClosedLogs:Start");
-  mutex_.AssertHeld();
-  autovector<log::Writer*, 1> logs_to_sync;
-  uint64_t current_log_number = logfile_number_;
-  while (logs_.front().number < current_log_number &&
-         logs_.front().getting_synced) {
-    log_sync_cv_.Wait();
-  }
-  for (auto it = logs_.begin();
-       it != logs_.end() && it->number < current_log_number; ++it) {
-    auto& log = *it;
-    assert(!log.getting_synced);
-    log.getting_synced = true;
-    logs_to_sync.push_back(log.writer);
-  }
-
-  Status s;
-  if (!logs_to_sync.empty()) {
-    mutex_.Unlock();
-
-    for (log::Writer* log : logs_to_sync) {
-      __SE_LOG(INFO, "[JOB %d] Syncing log #%" PRIu64, job_context->job_id, log->get_log_number());
-      s = log->file()->sync(false /**use_fsync*/);
-    }
-    if (s.ok()) {
-      s = directories_.GetWalDir()->Fsync();
-    }
-
-    mutex_.Lock();
-
-    // "number <= current_log_number - 1" is equivalent to
-    // "number < current_log_number".
-    MarkLogsSynced(current_log_number - 1, true, s);
-    if (!s.ok()) {
-      bg_error_ = s;
-      SE_LOG(WARN, "failed during SyncClosedLogs", K((int)bg_error_.code())); 
-      TEST_SYNC_POINT("DBImpl::SyncClosedLogs:Failed");
-      return s;
-    }
-  }
-  return s;
-}
+namespace db
+{
 
 int DBImpl::dump_memtable_to_outputfile(
-    const common::MutableCFOptions& mutable_cf_options,
     STDumpJob &st_dump_job,
     bool *madeProgress,
-    JobContext& job_context) {
+    JobContext& job_context)
+{
   int ret = Status::kOk;
   assert(madeProgress);
   *madeProgress = false;
@@ -100,7 +59,7 @@ int DBImpl::dump_memtable_to_outputfile(
   DumpJob *dump_job = ALLOC_OBJECT(
       DumpJob, st_dump_job.dump_alloc_,sub_table, immutable_db_options_,
       *sub_table->GetLatestMutableCFOptions(),
-      GetCompressionFlush(*sub_table->ioptions(), mutable_cf_options, 0),
+      GetCompressionFlush(*sub_table->ioptions(), 0),
       &shutting_down_, earliest_write_conflict_snapshot, job_context, snapshot_seqs,
       directories_.GetDataDir(0U), &env_options_, st_dump_job.dump_mem_,
       st_dump_job.dump_max_seq_, st_dump_job.dump_alloc_);
@@ -108,7 +67,7 @@ int DBImpl::dump_memtable_to_outputfile(
   if (FAILED(run_one_flush_task(sub_table, dump_job, job_context, flushed_seqs))) {
     SE_LOG(WARN, "failed to run one flush task", K(ret));
   } else {
-    InstallSuperVersionAndScheduleWorkWrapper(sub_table, &job_context, *sub_table->GetLatestMutableCFOptions());
+    InstallSuperVersionAndScheduleWorkWrapper(sub_table, &job_context);
     *madeProgress = true;
     if (nullptr != sub_table) {
       sub_table->set_pending_dump(false);
@@ -156,18 +115,6 @@ int DBImpl::run_one_flush_task(ColumnFamilyData *sub_table,
       for (MemTable* m : mems) {
         flushed_seqs.push_back(m->GetFirstSequenceNumber());
       }
-
-      if (versions_->get_global_ctx()->all_sub_table_->sub_table_map_.size() > 0) {
-        // If there are more than one column families, we need to make sure that
-        // all the log files except the most recent one are synced. Otherwise if
-        // the host crashes after flushing and before WAL is persistent, the
-        // flushed SST may contain data from write batches whose updates to
-        // other column families are missing.
-        Status s = SyncClosedLogs(&context);
-        if (FAILED(s.code())) {
-          SE_LOG(WARN, "sync closed logs failed", K(ret));
-        }
-      }
     }
     if (FAILED(ret)) {
       flush_job->cancel();
@@ -198,14 +145,12 @@ int DBImpl::run_one_flush_task(ColumnFamilyData *sub_table,
 
 Status DBImpl::FlushMemTableToOutputFile(
     STFlushJob &st_flush_job,
-    const MutableCFOptions& mutable_cf_options,
     bool* made_progress,
     JobContext& job_context) {
   mutex_.AssertHeld();
   int ret = Status::kOk;
   ColumnFamilyData *sub_table = st_flush_job.get_subtable();
   assert(sub_table->imm()->NumNotFlushed() != 0);
-//  assert(sub_table->imm()->IsFlushPending());
   SequenceNumber earliest_write_conflict_snapshot = kMaxSequenceNumber;
 
   // build context
@@ -228,7 +173,7 @@ Status DBImpl::FlushMemTableToOutputFile(
       FlushJob, st_flush_job.flush_alloc_,
       dbname_, sub_table, immutable_db_options_,
       job_context, directories_.GetDataDir(0U),
-      GetCompressionFlush(*sub_table->ioptions(), mutable_cf_options, context.output_level_),
+      GetCompressionFlush(*sub_table->ioptions(), context.output_level_),
       stats_, context, st_flush_job.flush_alloc_);
 
   if (nullptr != flush_job) {
@@ -239,8 +184,7 @@ Status DBImpl::FlushMemTableToOutputFile(
   if (FAILED(run_one_flush_task(sub_table, flush_job, job_context, flushed_seqs))) {
     SE_LOG(WARN, "failed to run one flush task", K(ret));
   } else {
-    InstallSuperVersionAndScheduleWorkWrapper(sub_table, &job_context,
-                                              mutable_cf_options);
+    InstallSuperVersionAndScheduleWorkWrapper(sub_table, &job_context);
     //@yuanfeng, ugly.this used to control flushjob seria in subtable
     sub_table->set_pending_flush(false);
     if (FLUSH_LEVEL1_TASK == st_flush_job.get_task_type()) {
@@ -411,7 +355,7 @@ void DBImpl::CancelAllBackgroundWork(bool wait) {
         } else {
           sub_table->Ref();
           mutex_.Unlock();
-          FlushMemTable(sub_table, FlushOptions());
+          flush_memtable(sub_table, FlushOptions());
           mutex_.Lock();
           sub_table->Unref();
         }
@@ -434,66 +378,40 @@ void DBImpl::CancelAllBackgroundWork(bool wait) {
 Status DBImpl::Flush(const FlushOptions& flush_options,
                      ColumnFamilyHandle* column_family) {
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  return FlushMemTable(cfh->cfd(), flush_options);
+  return flush_memtable(cfh->cfd(), flush_options);
 }
 
-Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
-                             const FlushOptions& flush_options,
-                             bool writes_stopped) {
-  Status s;
-  {
-    WriteContext context;
-    InstrumentedMutexLock guard_lock(&mutex_);
+int DBImpl::flush_memtable(ColumnFamilyData *sub_table, const FlushOptions &flush_options)
+{
+  int ret = Status::kOk;
+  WriteContext write_context;
+  write_context.type_ = MANUAL_FLUSH;
 
-    if (cfd->imm()->NumNotFlushed() == 0 && cfd->mem()->IsEmpty()) {
-      // Nothing to flush
-      return Status::OK();
-    }
-    
-    int ret = Status::kOk;
-    GlobalContext* global_ctx = nullptr;
-    AllSubTable *all_sub_table = nullptr;
-    if (nullptr == (global_ctx = versions_->get_global_ctx())) {
-      ret = Status::kCorruption;
-      SE_LOG(WARN, "global ctx must not nullptr", K(ret));
-    } else if (FAILED(global_ctx->acquire_thread_local_all_sub_table(
-                   all_sub_table))) {
-      SE_LOG(WARN, "fail to acquire all sub table", K(ret));
-    } else if (nullptr == all_sub_table) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "unexpected error, all sub table must not nullptr",
-                  K(ret));
-    } else {
-      context.all_sub_table_ = all_sub_table;
-    }
-
-    // we will wait all active thread exit in SwitchMemtable, so there is no
-    // need
-    // to EnterUnbatched mode
-    //
-    // SwitchMemtable() will release and reacquire mutex
-    // during execution
-    context.type_ = MANUAL_FLUSH;
-    s = SwitchMemtable(cfd, &context);
-
-    int tmp_ret = ret;
-    if (nullptr != global_ctx &&
-        FAILED(global_ctx->release_thread_local_all_sub_table(all_sub_table))) {
-      SE_LOG(WARN, "fail to release all sub table", K(ret), K(tmp_ret));
-    }
-
-    cfd->imm()->FlushRequested();
-
-    // schedule flush
-    SchedulePendingFlush(cfd);
+  mutex_.Lock();
+  if (IS_NULL(sub_table)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret));
+  } else if ((0 == sub_table->imm()->NumNotFlushed()) && (sub_table->mem()->IsEmpty())) {
+    // there is no data in the memtables, no need to flush.
+  } else if (FAILED(switch_memtable(sub_table, &write_context, false))) {
+    SE_LOG(WARN, "fail to switch memtable", K(ret), "index_id", sub_table->GetID());
+  } else {
+    sub_table->imm()->FlushRequested();
+    SchedulePendingFlush(sub_table);
     MaybeScheduleFlushOrCompaction();
+
+    // try to advance the recovery point, ignore errors.
+    advance_recovery_point_without_flush();
+  }
+  mutex_.Unlock();
+
+  if (SUCCED(ret) && flush_options.wait) {
+    if (FAILED(WaitForFlushMemTable(sub_table).code())) {
+      SE_LOG(WARN, "fail to wait for flush memtable", K(ret));
+    }
   }
 
-  if (s.ok() && flush_options.wait) {
-    // Wait until the compaction completes
-    s = WaitForFlushMemTable(cfd);
-  }
-  return s;
+  return ret;
 }
 
 Status DBImpl::WaitForFlushMemTable(ColumnFamilyData* cfd) {
@@ -1273,8 +1191,7 @@ int DBImpl::background_dump(bool* madeProgress, JobContext* job_context) {
     ColumnFamilyData *sub_table = dump_job->get_subtable();
     job_context->task_type_ = TaskType::DUMP_TASK;
     job_context->output_level_ = 0;
-    const MutableCFOptions &mutable_cf_options = *sub_table->GetLatestMutableCFOptions();
-    if (FAILED(dump_memtable_to_outputfile(mutable_cf_options, *dump_job, madeProgress, *job_context))) {
+    if (FAILED(dump_memtable_to_outputfile(*dump_job, madeProgress, *job_context))) {
       SE_LOG(WARN, "failed to dump memtable to outputfile", K(ret));
     } else if (FAILED(sub_table->set_compaction_check_info(&mutex_))) {
       SE_LOG(WARN, "failed to set compaction check info", K(ret), K(sub_table->GetID()));
@@ -1371,8 +1288,7 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context)
 
   if (nullptr != flush_job  && nullptr != job_context) {
     ColumnFamilyData *sub_table = flush_job->get_subtable();
-    const MutableCFOptions mutable_cf_options = *sub_table->GetLatestMutableCFOptions();
-    status = FlushMemTableToOutputFile(*flush_job, mutable_cf_options, made_progress, *job_context);
+    status = FlushMemTableToOutputFile(*flush_job, made_progress, *job_context);
     int ret = 0;
     if (FAILED(sub_table->set_compaction_check_info(&mutex_))) {
       SE_LOG(WARN, "failed to set compaction check info", K(ret), K(sub_table->GetID()));
@@ -1820,7 +1736,7 @@ Status DBImpl::run_one_compaction_task(ColumnFamilyData* sub_table,
 
           mutex_.Lock();
           if (SUCCED(ret)) {
-            InstallSuperVersionAndScheduleWorkWrapper(sub_table, job_context, *sub_table->GetLatestMutableCFOptions());
+            InstallSuperVersionAndScheduleWorkWrapper(sub_table, job_context);
             SE_LOG(INFO, "install compaction result to level(2)");
           }
         }
@@ -1952,7 +1868,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress, JobContext* job_context
 
           mutex_.Lock();
           if (SUCCED(ret)) {
-            InstallSuperVersionAndScheduleWorkWrapper(cfd, job_context, *cfd->GetLatestMutableCFOptions());
+            InstallSuperVersionAndScheduleWorkWrapper(cfd, job_context);
             SE_LOG(INFO, "install compaction result ", K((int)cf_job->job_->get_task_type()));
           } else {
             SE_LOG(ERROR, "install compaction result failed", K(ret));
@@ -2006,24 +1922,20 @@ Status DBImpl::BackgroundCompaction(bool* made_progress, JobContext* job_context
 // first call already used it. In that rare case, we take a hit and create a
 // new SuperVersion() inside of the mutex. We do similar thing
 // for superversion_to_free
-void DBImpl::InstallSuperVersionAndScheduleWorkWrapper(
-    ColumnFamilyData* cfd, JobContext* job_context,
-    const MutableCFOptions& mutable_cf_options) {
+void DBImpl::InstallSuperVersionAndScheduleWorkWrapper(ColumnFamilyData* cfd, JobContext* job_context)
+{
   mutex_.AssertHeld();
-  SuperVersion* old_superversion = InstallSuperVersionAndScheduleWork(
-      cfd, job_context->new_superversion, mutable_cf_options);
+  SuperVersion* old_superversion = InstallSuperVersionAndScheduleWork(cfd, job_context->new_superversion);
   job_context->new_superversion = nullptr;
   job_context->superversions_to_free.push_back(old_superversion);
 }
 
-SuperVersion* DBImpl::InstallSuperVersionAndScheduleWork(
-    ColumnFamilyData* cfd, SuperVersion* new_sv,
-    const MutableCFOptions& mutable_cf_options) {
+SuperVersion* DBImpl::InstallSuperVersionAndScheduleWork(ColumnFamilyData* cfd, SuperVersion* new_sv)
+{
   mutex_.AssertHeld();
 
   auto* old_sv = cfd->GetSuperVersion();
-  auto* old = cfd->InstallSuperVersion(new_sv ? new_sv : MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion),
-                                       &mutex_, mutable_cf_options);
+  auto* old = cfd->InstallSuperVersion(new_sv ? new_sv : MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion), &mutex_);
 
   // Whenever we install new SuperVersion, we might need to issue new flushes or
   // compactions.
@@ -2033,5 +1945,6 @@ SuperVersion* DBImpl::InstallSuperVersionAndScheduleWork(
 
   return old;
 }
-}
+
+}  // namespace db
 }  // namespace smartengine

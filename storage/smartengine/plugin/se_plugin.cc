@@ -183,18 +183,20 @@ static int se_init_func(void *const p)
   // Using newer ExtentBasedTable format version for reuse of block and SST.
   se_tbl_options.format_version = 3;
 
+  // TODO (Zhao Dongsheng) : The force setting of the follow parameters
+  // will cause the configuration parameters to not take affect.
   // set default value for some internal options
   se_tbl_options.cache_index_and_filter_blocks = true;
   se_tbl_options.cache_index_and_filter_blocks_with_high_priority = true;
   se_tbl_options.pin_l0_filter_and_index_blocks_in_cache = false;
   se_db_options.allow_concurrent_memtable_write = true;
   se_db_options.use_direct_write_for_wal = false;
-  se_db_options.concurrent_writable_file_buffer_num =
-      DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_NUMBER;
-  se_db_options.concurrent_writable_file_single_buffer_size =
-      DEFAULT_SE_CONCURRENT_WRITABLE_FILE_SINGLE_BUFFER_SIZE; // 64KB
-  se_db_options.concurrent_writable_file_buffer_switch_limit =
-      DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_SWITCH_LIMIT; // 32 KB
+  //se_db_options.concurrent_writable_file_buffer_num =
+  //    DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_NUMBER;
+  //se_db_options.concurrent_writable_file_single_buffer_size =
+  //    DEFAULT_SE_CONCURRENT_WRITABLE_FILE_SINGLE_BUFFER_SIZE; // 64KB
+  //se_db_options.concurrent_writable_file_buffer_switch_limit =
+  //    DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_SWITCH_LIMIT; // 32 KB
   if (nullptr != se_cf_compression_per_level &&
       !smartengine::common::GetVectorCompressionType(
           std::string(se_cf_compression_per_level),

@@ -504,6 +504,7 @@ struct DBOptions {
   uint64_t estimate_cost_depth = 0;
   bool master_thread_compaction_enabled = true;
   uint64_t persistent_cache_size = 0;
+  bool parallel_flush_log = false;
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -600,6 +601,7 @@ struct ReadOptions {
   // Default: false
   bool pin_data;
 
+  // TODO (Zhao Dongsheng) : the value is always false now, set it to true if has performance concern.
   // If true, when PurgeObsoleteFile is called in CleanupIteratorState, we
   // schedule a background job in the flush job queue and delete obsolete files
   // in background.

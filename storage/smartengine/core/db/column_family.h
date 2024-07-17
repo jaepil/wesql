@@ -255,18 +255,11 @@ public:
   // thread-safe
   const util::EnvOptions* soptions() const;
   const common::ImmutableCFOptions* ioptions() const { return &ioptions_; }
-  // REQUIRES: DB mutex held
-  // This returns the common::MutableCFOptions used by current SuperVersion
-  // You should use this API to reference common::MutableCFOptions most of the
-  // time.
-  const common::MutableCFOptions* GetCurrentMutableCFOptions() const {
-    return &(super_version_->mutable_cf_options);
-  }
+
+  // TODO (Zhao Dongsheng) : this interface is improper.
   // REQUIRES: DB mutex held
   // This returns the latest MutableCFOptions, which may be not in effect yet.
-  const common::MutableCFOptions* GetLatestMutableCFOptions() const {
-    return &mutable_cf_options_;
-  }
+  const common::MutableCFOptions* GetLatestMutableCFOptions() const { return &mutable_cf_options_; }
 
   // REQUIRES: DB mutex held
   // Build ColumnFamiliesOptions with immutable options and latest mutable
@@ -279,10 +272,9 @@ public:
 
   InternalStats* internal_stats() { return internal_stats_.get(); }
 
+  int update_active_memtable(const RecoveryPoint &recovery_point, util::autovector<MemTable *> *to_delete);
   MemTableList* imm() { return &imm_; }
   MemTable* mem() { return mem_; }
-  uint64_t GetNumLiveVersions() const;    // REQUIRE: DB mutex held
-  void SetMemtable(MemTable* new_mem) { mem_ = new_mem; }
 
   // calculate the oldest log needed for the durability of this column family
   uint64_t OldestLogToKeep();
@@ -290,11 +282,9 @@ public:
   uint64_t OldestLogMemToKeep();
 
   // See Memtable constructor for explanation of earliest_seq param.
-  MemTable* ConstructNewMemtable(
-      const common::MutableCFOptions& mutable_cf_options,
-      common::SequenceNumber earliest_seq);
-  void CreateNewMemtable(const common::MutableCFOptions& mutable_cf_options,
-                         common::SequenceNumber earliest_seq);
+  MemTable* ConstructNewMemtable(common::SequenceNumber earliest_seq);
+  // TODO (Zhao Dongsheng) : the interface is improper.
+  void CreateNewMemtable(common::SequenceNumber earliest_seq);
 
   TableCache* table_cache() const { return table_cache_.get(); }
 
@@ -333,12 +323,7 @@ public:
   // As argument takes a pointer to allocated SuperVersion to enable
   // the clients to allocate SuperVersion outside of mutex.
   // IMPORTANT: Only call this from DBImpl::InstallSuperVersion()
-  SuperVersion* InstallSuperVersion(
-      SuperVersion* new_superversion, monitor::InstrumentedMutex* db_mutex,
-      const common::MutableCFOptions& mutable_cf_options);
-  SuperVersion* InstallSuperVersion(SuperVersion* new_superversion,
-                                    monitor::InstrumentedMutex* db_mutex);
-
+  SuperVersion* InstallSuperVersion(SuperVersion* new_superversion, monitor::InstrumentedMutex* db_mutex);
   void ResetThreadLocalSuperVersions();
 
   // Protected by DB mutex

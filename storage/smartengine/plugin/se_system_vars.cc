@@ -1477,6 +1477,13 @@ static MYSQL_SYSVAR_ULONG(
     nullptr, nullptr,
     se_db_options.persistent_cache_size, 0, ULONG_MAX, 0);
 
+static MYSQL_SYSVAR_BOOL(
+    parallel_flush_log,
+    se_db_options.parallel_flush_log,
+    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
+    "DBOptions::parallel_flush_logfor SE",
+    nullptr, nullptr, false);
+
 ulong se_thd_lock_wait_timeout(THD *thd)
 {
   return THDVAR(thd, lock_wait_timeout);
@@ -1600,6 +1607,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(master_thread_monitor_interval_ms),
     MYSQL_SYSVAR(master_thread_compaction_enabled),
     MYSQL_SYSVAR(persistent_cache_size),
+    MYSQL_SYSVAR(parallel_flush_log),
     nullptr};
 
 SYS_VAR **se_system_vars_export = se_system_vars_internal;

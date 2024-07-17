@@ -266,7 +266,7 @@ class DBImpl : public DB {
   using DB::Flush;
   virtual common::Status Flush(const common::FlushOptions& options,
                                ColumnFamilyHandle* column_family) override;
-  virtual common::Status SyncWAL() override;
+  virtual int sync_wal() override;
 
   virtual common::SequenceNumber GetLatestSequenceNumber() const override;
 
@@ -406,8 +406,6 @@ class DBImpl : public DB {
 
   void TEST_UnlockMutex();
 
-  size_t TEST_LogsToFreeSize();
-
   uint64_t TEST_LogfileNumber();
 
   uint64_t TEST_total_log_size() const { return total_log_size_; }
@@ -525,10 +523,6 @@ class DBImpl : public DB {
   void schedule_master_thread();
   static void bg_master_func_wrapper(void* db);
   void bg_master_thread_func(void);
-
-  // move logs pending closing from job_context to the DB queue and
-  // schedule a purge
-  void ScheduleBgLogWriterClose(JobContext* job_context);
 
   uint64_t MinLogNumberToKeep();
 
@@ -694,9 +688,6 @@ class DBImpl : public DB {
 
   void MarkLogAsHavingPrepSectionFlushed(uint64_t log);
   void MarkLogAsContainingPrepSection(uint64_t log);
-  void AddToLogsToFreeQueue(log::Writer* log_writer) {
-    logs_to_free_queue_.push_back(log_writer);
-  }
 
   public:
   std::list<storage::CompactionJobStatsInfo*> &get_compaction_history(std::mutex **mutex,
@@ -844,12 +835,10 @@ protected:
   // log-file/memtable and writes a new descriptor iff successful.
   common::Status FlushMemTableToOutputFile(
       STFlushJob &st_flush_job,
-      const common::MutableCFOptions& mutable_cf_options,
       bool* madeProgress,
       JobContext &job_context);
 
   int dump_memtable_to_outputfile(
-      const common::MutableCFOptions& mutable_cf_options,
       STDumpJob &st_dump_job,
       bool *madeProgress,
       JobContext& job_context);
@@ -895,11 +884,8 @@ protected:
                                util::BinaryHeap<SubTable*, Compare> *picked_sub_tables,
                                std::list<SubTable*>& switched_sub_tables);
 
-  int create_new_log_writer(memory::ArenaAllocator &arena);
+  int update_wal_writer(bool force);
   int set_compaction_need_info();
-//  int init_gc_timer();
-//  int init_cache_purge_timer();
-//  int init_shrink_timer();
   struct LogReporter : public log::Reader::Reporter {
     util::Env* env_;
     const char* fname_;
@@ -920,7 +906,7 @@ protected:
     }
   };
 
-  common::Status ScheduleFlushes(WriteContext* context);
+  int schedule_flush(WriteContext *write_context);
 
   int handle_single_wal_full(WriteContext* write_context);
 
@@ -928,14 +914,11 @@ protected:
 
   int trigger_switch_or_dump(ColumnFamilyData* cfd, WriteContext *write_context);
 
-  common::Status SwitchMemtable(ColumnFamilyData* cfd,
-                                WriteContext* context,
-                                const bool force_create_new_log = false);
+  int switch_memtable(ColumnFamilyData *sub_table, WriteContext *write_context, bool force_create_new_log);
 
-  // Force current memtable contents to be flushed.
-  common::Status FlushMemTable(ColumnFamilyData* cfd,
-                               const common::FlushOptions& options,
-                               bool writes_stopped = false);
+  int advance_recovery_point_without_flush();
+
+  int flush_memtable(ColumnFamilyData *sub_table, const common::FlushOptions &flush_options);
 
   // Wait for memtable flushed
   common::Status WaitForFlushMemTable(ColumnFamilyData* cfd);
@@ -1053,12 +1036,6 @@ protected:
   void record_compaction_stats(
       const storage::Compaction::Statstics& compaction_stats);
 
-//  void record_compaction_stats(
-//      const storage::MajorCompaction::Statstics& compaction_stats);
-  // helper function to call after some of the logs_ were synced
-  void MarkLogsSynced(uint64_t up_to, bool synced_dir,
-                      const common::Status& status);
-
   const Snapshot* GetSnapshotImpl(bool is_write_conflict_boundary);
 
   uint64_t GetMaxTotalWalSize() const;
@@ -1088,6 +1065,7 @@ protected:
   // * whenever num_running_ingest_file_ goes to 0.
   monitor::InstrumentedCondVar bg_cv_;
   uint64_t logfile_number_;
+  // TODO (Zhao Dongsheng) : the log synced is useless?
   bool log_dir_synced_;
   bool log_empty_;
   ColumnFamilyHandleImpl* default_cf_handle_;
@@ -1111,44 +1089,16 @@ protected:
     bool getting_flushed = false;
     bool switch_flag = false;
   };
-  struct LogWriterNumber {
-    // pass ownership of _writer
-    LogWriterNumber(uint64_t _number, log::Writer* _writer)
-        : number(_number), writer(_writer) {}
-
-    log::Writer* ReleaseWriter() {
-      auto* w = writer;
-      writer = nullptr;
-      return w;
-    }
-    void ClearWriter();
-
-    uint64_t number;
-    // Visual Studio doesn't support deque's member to be noncopyable because
-    // of a unique_ptr as a member.
-    log::Writer* writer;  // own
-    // true for some prefix of logs_
-    bool getting_synced = false;
-  };
   std::deque<LogFileNumberSize> alive_log_files_;
-  // Log files that aren't fully synced, and the current log file.
-  // Synchronization:
-  //  - push_back() is done from write thread with locked mutex_,
-  //  - pop_front() is done from any thread with locked mutex_,
-  //  - back() and items with getting_synced=true are not popped,
-  //  - it follows that write thread with unlocked mutex_ can safely access
-  //    back() and items with getting_synced=true.
-  std::deque<LogWriterNumber> logs_;
-  // Signaled when getting_synced becomes false for some of the logs_.
-  monitor::InstrumentedCondVar log_sync_cv_;
+  log::Writer *curr_log_writer_;
+  std::mutex log_flush_mutex_;
+  std::mutex log_sync_mutex_;
+  std::condition_variable log_sync_cv_;
+  std::atomic<bool> is_syncing_;
   std::atomic<uint64_t> total_log_size_;
   // If true, we have only one (default) column family. We use this to optimize
   // some code-paths
   bool single_column_family_mode_;
-  // If this is non-empty, we need to delete these log files in background
-  // threads. Protected by db mutex.
-  util::autovector<log::Writer*> logs_to_free_;
-
   bool is_snapshot_supported_;
 
   mutable port::Mutex snap_mutex[MAX_SNAP];
@@ -1407,8 +1357,6 @@ protected:
   // A queue to store pointer of subtable to garbage clean
   std::deque<GCJob *> gc_queue_;
 
-  // A queue to store log writers to close
-  std::deque<log::Writer*> logs_to_free_queue_;
   int unscheduled_flushes_;
   int unscheduled_compactions_;
   int unscheduled_dumps_;
@@ -1529,16 +1477,12 @@ protected:
   // the InstallSuperVersion() function. Background threads carry
   // job_context which can have new_superversion already
   // allocated.
-  void InstallSuperVersionAndScheduleWorkWrapper(
-      ColumnFamilyData* cfd, JobContext* job_context,
-      const common::MutableCFOptions& mutable_cf_options);
+  void InstallSuperVersionAndScheduleWorkWrapper(ColumnFamilyData* cfd, JobContext* job_context);
 
   // All ColumnFamily state changes go through this function. Here we analyze
   // the new state and we schedule background work if we detect that the new
   // state needs flush or compaction.
-  SuperVersion* InstallSuperVersionAndScheduleWork(
-      ColumnFamilyData* cfd, SuperVersion* new_sv,
-      const common::MutableCFOptions& mutable_cf_options);
+  SuperVersion* InstallSuperVersionAndScheduleWork(ColumnFamilyData* cfd, SuperVersion* new_sv);
 
   // Function that Get and KeyMayExist call with no_io true or false
   // Note: 'value_found' from KeyMayExist propagates here
@@ -1577,10 +1521,7 @@ extern common::Options SanitizeOptions(const std::string& db,
 extern common::DBOptions SanitizeOptions(const std::string& db,
                                          const common::DBOptions& src);
 
-extern common::CompressionType GetCompressionFlush(
-    const common::ImmutableCFOptions& ioptions,
-    const common::MutableCFOptions& mutable_cf_options,
-    const int64_t level);
+extern common::CompressionType GetCompressionFlush(const common::ImmutableCFOptions& ioptions, const int64_t level);
 
 // Fix user-supplied options to be reasonable
 template <class T, class V>

@@ -589,12 +589,8 @@ int DBImpl::after_replay_wal_files(ArenaAllocator &arena)
     versions_->SetLastAllocatedSequence(max_seq_in_rp_);
   }
 
-  if (FAILED(create_new_log_writer(arena))) {
+  if (FAILED(update_wal_writer(true /*force*/))) {
     SE_LOG(WARN, "fail to create new log writer", K(ret));
-//  } else if (FAILED(init_gc_timer())) {
-//    SE_LOG(WARN, "fail to init gc timer", K(ret));
-//  } else if (FAILED(init_shrink_timer())) {
-//    SE_LOG(WARN, "fail to init shrink timer", K(ret));
   } else {
     versions_->GetColumnFamilySet()->set_during_repaly_wal(false);
   }
@@ -849,20 +845,13 @@ int DBImpl::recovery_switch_memtable(ColumnFamilyData *sub_table)
   int ret = Status::kOk;
   MemTable *new_mem = nullptr;
   WriteContext write_context;
-  RecoveryPoint recovery_point(static_cast<int64_t>(logfile_number_), versions_->LastSequence());
+  RecoveryPoint recovery_point(logfile_number_, versions_->LastSequence());
 
   if (IS_NULL(sub_table)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(sub_table));
-  } else if (IS_NULL(new_mem = sub_table->ConstructNewMemtable(*sub_table->GetLatestMutableCFOptions(), versions_->LastSequence()))) {
-    ret = Status::kErrorUnexpected;
-    SE_LOG(WARN, "fail to construct new memtable", K(ret));
-  } else {
-    sub_table->mem()->set_recovery_point(recovery_point);
-    sub_table->imm()->Add(sub_table->mem(), &write_context.memtables_to_free_);
-    sub_table->set_imm_largest_seq(sub_table->mem()->get_last_sequence_number());
-    new_mem->Ref();
-    sub_table->SetMemtable(new_mem);
+  } else if (FAILED(sub_table->update_active_memtable(recovery_point, &(write_context.memtables_to_free_)))) {
+    SE_LOG(WARN, "fail to update active memtable", K(ret), "index_id", sub_table->GetID());
   }
 
   return ret;
@@ -894,11 +883,10 @@ int DBImpl::recovery_write_memtable(WriteBatch &batch, uint64_t current_log_file
 int DBImpl::recovery_flush(ColumnFamilyData *sub_table)
 {
   int ret = Status::kOk;
-  const MutableCFOptions mutable_cf_options = *sub_table->GetLatestMutableCFOptions();
   JobContext job_context(next_job_id_.fetch_add(1), true);
   STFlushJob st_flush_job(sub_table, nullptr, FLUSH_TASK, true /*need_check_snapshot*/);
  
-  if (FAILED(FlushMemTableToOutputFile(st_flush_job, mutable_cf_options, nullptr, job_context).code())) {
+  if (FAILED(FlushMemTableToOutputFile(st_flush_job, nullptr, job_context).code())) {
     SE_LOG(WARN, "fail to flush memtable", K(ret));
   } else {
     job_context.Clean();
@@ -1238,34 +1226,54 @@ int DBImpl::deal_with_log_record_corrution(WALRecoveryMode recovery_mode,
   return ret;
 }
 
-int DBImpl::create_new_log_writer(ArenaAllocator &arena)
+int DBImpl::update_wal_writer(bool force)
 {
+  mutex_.AssertHeld();
   int ret = Status::kOk;
-  UNUSED(arena);
-  uint64_t new_log_number = versions_->NewFileNumber();
-  std::string log_file_name =  LogFileName(immutable_db_options_.wal_dir, new_log_number);
-  EnvOptions env_options(initial_db_options_);
-  EnvOptions opt_env_options = immutable_db_options_.env->OptimizeForLogWrite(
-      env_options, BuildDBOptions(immutable_db_options_, mutable_db_options_));
-  WritableFile *write_file = nullptr;
-  ConcurrentDirectFileWriter *concurrent_file_writer = nullptr;
-  log::Writer *log_writer = nullptr;
+  bool create_new_log = !log_empty_ || force;
 
-  if (FAILED(NewWritableFile(immutable_db_options_.env, log_file_name, write_file, opt_env_options).code())) {
-    SE_LOG(WARN, "fail to create write file", K(ret), K(new_log_number), K(log_file_name));
-  } else {
-    write_file->SetPreallocationBlockSize(GetWalPreallocateBlockSize(32 * 1024));
-    concurrent_file_writer = MOD_NEW_OBJECT(ModId::kDBImplWrite, ConcurrentDirectFileWriter, write_file, opt_env_options);
-    if (FAILED(concurrent_file_writer->init_multi_buffer().code())) {
-      SE_LOG(WARN, "fail to init multi buffer", K(ret), K(new_log_number), K(log_file_name));
-    } else if (IS_NULL(log_writer = MOD_NEW_OBJECT(ModId::kDBImplWrite, log::Writer, concurrent_file_writer,
-            new_log_number, false /**recycle_log_files*/, false /**not free mem*/))) {
-      ret = Status::kMemoryLimit;
-      SE_LOG(WARN, "fail to allocate memory for log_writer", K(ret));
+  if (create_new_log) {
+    WritableFile *log_file = nullptr;
+    ConcurrentDirectFileWriter *log_file_writer = nullptr;
+    log::Writer *log_writer = nullptr;
+    // TODO (Zhao Dongsheng) : the implementation of mutual construction between options is unclear.
+    DBOptions curr_db_options = BuildDBOptions(immutable_db_options_, mutable_db_options_);
+    EnvOptions opt_env_options = env_->OptimizeForLogWrite(env_options_, curr_db_options);
+    uint64_t new_log_file_number = versions_->NewFileNumber();
+    std::string new_log_file_name = LogFileName(immutable_db_options_.wal_dir, new_log_file_number);
+
+    if (FAILED(NewWritableFile(env_, new_log_file_name, log_file, opt_env_options).code())) {
+      SE_LOG(WARN, "fail to create new log file", K(ret), K(new_log_file_name));
     } else {
-      logfile_number_ = new_log_number;
-      logs_.emplace_back(new_log_number, log_writer);
-      alive_log_files_.push_back(LogFileNumberSize(logfile_number_));
+      // TODO (Zhao Dongsheng): The preallocate is not actually working? And the parameter should be mutable_cf_options.write_buffer_size?
+      log_file->SetPreallocationBlockSize(GetWalPreallocateBlockSize(32 * 1024));
+      if (IS_NULL(log_file_writer = MOD_NEW_OBJECT(ModId::kLogWriter, ConcurrentDirectFileWriter, log_file, opt_env_options))) {
+        ret = Status::kMemoryLimit;
+        SE_LOG(WARN, "fail to allocate memory for log file writer", K(ret));
+      } else if (IS_NULL(log_writer = MOD_NEW_OBJECT(ModId::kLogWriter,
+                                                     log::Writer,
+                                                     log_file_writer,
+                                                     new_log_file_number,
+                                                     false,
+                                                     false))) {
+        ret = Status::kMemoryLimit;
+        SE_LOG(WARN, "fail to allocate memory for log writer", K(ret));
+      } else {
+        // TODO(Zhao Dongsheng): If it affects performance, the sync operation here needs
+        // to be made asynchronous.
+        std::unique_lock<std::mutex> lock_sync_guard(log_sync_mutex_);
+        if (IS_NOTNULL(curr_log_writer_)) {
+          curr_log_writer_->file()->sync_to_disk(false);
+          MOD_DELETE_OBJECT(Writer, curr_log_writer_);
+        }
+        directories_.GetWalDir()->Fsync();
+        log_dir_synced_ = true;
+        logfile_number_ = new_log_file_number;
+        log_empty_ = true;
+        last_flushed_log_lsn_.store(0);
+        curr_log_writer_ = log_writer;
+        alive_log_files_.push_back(LogFileNumberSize(logfile_number_));
+      }
     }
   }
 
@@ -1383,9 +1391,7 @@ Status DB::Open(const Options &options,
       sub_table = iter.second;
       impl->NewThreadStatusCfInfo(sub_table);
       // no compaction schedule in recovery
-      SuperVersion *old_sv = sub_table->InstallSuperVersion(
-          MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion), &impl->mutex_,
-          *sub_table->GetLatestMutableCFOptions());
+      SuperVersion *old_sv = sub_table->InstallSuperVersion(MOD_NEW_OBJECT(ModId::kSuperVersion, SuperVersion), &impl->mutex_);
       MOD_DELETE_OBJECT(SuperVersion, old_sv);
     }
     impl->alive_log_files_.push_back(

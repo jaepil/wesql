@@ -263,7 +263,8 @@ else
       -DMYSQL_SERVER_SUFFIX="$server_suffix"         \
       -DWITH_UNIT_TESTS=0 \
       -DWITH_JEMALLOC=1 \
-      -DWITH_WESQL=1
+      -DWITH_WESQL=1 \
+      -DWITH_CONSENSUS_REPLICATION=1
 
 fi
 

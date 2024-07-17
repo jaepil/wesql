@@ -141,6 +141,15 @@ struct SeStatusVars
   uint64_t top2_mod_mem_info_;
   uint64_t top3_mod_mem_info_;
   uint64_t global_external_fragmentation_rate_;
+  uint64_t write_transaction_count_;
+  uint64_t pipeline_group_count_;
+  uint64_t pipeline_group_wait_timeout_count_;
+  uint64_t pipeline_copy_log_size_;
+  uint64_t pipeline_copy_log_count_;
+  uint64_t pipeline_flush_log_size_;
+  uint64_t pipeline_flush_log_count_;
+  uint64_t pipeline_flush_log_sync_count_;
+  uint64_t pipeline_flush_log_not_sync_count_;
 
   SeStatusVars();
   void reset();

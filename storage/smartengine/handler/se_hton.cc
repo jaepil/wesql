@@ -631,8 +631,7 @@ bool se_flush_wal(handlerton *const hton, bool binlog_group_flush)
     return HA_EXIT_SUCCESS;
   }
   global_stats.wal_group_syncs_++;
-  const common::Status s = se_db->SyncWAL();
-  if (!s.ok()) {
+  if (Status::kOk != se_db->sync_wal()) {
     return HA_EXIT_FAILURE;
   }
   return HA_EXIT_SUCCESS;

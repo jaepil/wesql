@@ -25,7 +25,7 @@ struct JobContext {
     return full_scan_candidate_files.size() ||
            log_delete_files.size() ||
            new_superversion != nullptr || superversions_to_free.size() > 0 ||
-           memtables_to_free.size() > 0 || logs_to_free.size() > 0;
+           memtables_to_free.size() > 0;
   }
 
   // Structure to store information for candidate files to delete.
@@ -55,8 +55,6 @@ struct JobContext {
   util::autovector<MemTable*> memtables_to_free;
 
   util::autovector<SuperVersion*> superversions_to_free;
-
-  util::autovector<log::Writer*> logs_to_free;
 
   SuperVersion* new_superversion;  // if nullptr no new superversion
 
@@ -94,16 +92,12 @@ struct JobContext {
     for (auto s : superversions_to_free) {
       MOD_DELETE_OBJECT(SuperVersion, s);
     }
-    for (auto l : logs_to_free) {
-      MOD_DELETE_OBJECT(Writer, l);
-    }
     // if new_superversion was not used, it will be non-nullptr and needs
     // to be freed here
     MOD_DELETE_OBJECT(SuperVersion, new_superversion);
 
     memtables_to_free.clear();
     superversions_to_free.clear();
-    logs_to_free.clear();
     new_superversion = nullptr;
   }
 
@@ -111,7 +105,6 @@ struct JobContext {
     assert(memtables_to_free.size() == 0);
     assert(superversions_to_free.size() == 0);
     assert(new_superversion == nullptr);
-    assert(logs_to_free.size() == 0);
   }
 };
 }

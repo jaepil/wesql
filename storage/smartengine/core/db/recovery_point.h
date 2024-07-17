@@ -47,7 +47,7 @@ struct RecoveryPoint
   }
   bool is_valid() const
   {
-    return log_file_number_ >= 0 && seq_ > 0;
+    return log_file_number_ >= 0;
   }
 
   bool operator > (const RecoveryPoint &recovery_point) const

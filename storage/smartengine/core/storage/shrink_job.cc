@@ -304,7 +304,7 @@ int ShrinkJob::apply_change_infos()
       SE_LOG(WARN, "fail to apply change info", K(ret));
     } else {
       mutex_->Lock();
-      old_version = sub_table->InstallSuperVersion(MOD_NEW_OBJECT(memory::ModId::kSuperVersion, db::SuperVersion), mutex_, *(sub_table->GetLatestMutableCFOptions()));
+      old_version = sub_table->InstallSuperVersion(MOD_NEW_OBJECT(memory::ModId::kSuperVersion, db::SuperVersion), mutex_);
       mutex_->Unlock();
       if (nullptr != old_version) {
         MOD_DELETE_OBJECT(SuperVersion, old_version);
@@ -332,7 +332,7 @@ int ShrinkJob::update_super_version()
       SE_LOG(WARN, "unexpected error, subtable must not nullptr", K(ret));
     } else {
       mutex_->Lock();
-      old_version = sub_table->InstallSuperVersion(MOD_NEW_OBJECT(memory::ModId::kSuperVersion, db::SuperVersion), mutex_, *(sub_table->GetLatestMutableCFOptions()));
+      old_version = sub_table->InstallSuperVersion(MOD_NEW_OBJECT(memory::ModId::kSuperVersion, db::SuperVersion), mutex_);
       mutex_->Unlock();
       if (nullptr != old_version) {
         MOD_DELETE_OBJECT(SuperVersion, old_version);

@@ -295,7 +295,7 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
     write_buffer_manager_ = global_ctx->write_buf_mgr_;
     column_family_set_ = column_family_set;
     mutable_cf_options_ = MutableCFOptions(SanitizeOptions(ImmutableDBOptions(DBOptions(global_ctx->options_)), args.cf_options_));
-    CreateNewMemtable(mutable_cf_options_, 1);
+    CreateNewMemtable(1);
     is_inited_ = true;
   }
 
@@ -458,19 +458,20 @@ const EnvOptions* ColumnFamilyData::soptions() const {
   return &(column_family_set_->global_ctx_->env_options_);
 }
 
-MemTable* ColumnFamilyData::ConstructNewMemtable(
-    const MutableCFOptions& mutable_cf_options, SequenceNumber earliest_seq) {
+MemTable* ColumnFamilyData::ConstructNewMemtable(SequenceNumber earliest_seq)
+{
   // TODO(Zhao Dongsheng) maybe use objectpool
   return MOD_NEW_OBJECT(memory::ModId::kMemtable, MemTable, internal_comparator_, ioptions_,
-      mutable_cf_options, write_buffer_manager_, earliest_seq);
+      mutable_cf_options_, write_buffer_manager_, earliest_seq);
 }
 
-void ColumnFamilyData::CreateNewMemtable(const MutableCFOptions &mutable_cf_options, SequenceNumber earliest_seq) {
+void ColumnFamilyData::CreateNewMemtable(SequenceNumber earliest_seq)
+{
   if (mem_ != nullptr) {
     auto ptr = mem_->Unref();
     MOD_DELETE_OBJECT(MemTable, ptr);
   }
-  SetMemtable(ConstructNewMemtable(mutable_cf_options, earliest_seq));
+  mem_ = ConstructNewMemtable(earliest_seq);
   mem_->Ref();
 }
 
@@ -620,8 +621,11 @@ Snapshot *ColumnFamilyData::get_meta_snapshot(InstrumentedMutex *db_mutex) {
 }
 
 // need db mutex locked outside
-void ColumnFamilyData::release_meta_snapshot(Snapshot *s, monitor::InstrumentedMutex *db_mutex) {
+// TODO(Zhao Dongsheng): Does not need to be protected by 'db_mutex'?
+void ColumnFamilyData::release_meta_snapshot(Snapshot *s, monitor::InstrumentedMutex *db_mutex)
+{
   if (db_mutex != nullptr) {
+    db_mutex->AssertHeld();
     db_mutex->Unlock();
   }
   TEST_SYNC_POINT("ColumnFamilyData::release_meta_snapshot:Unlock");
@@ -984,17 +988,12 @@ int64_t ColumnFamilyData::get_serialize_size() const
 
 DEFINE_TO_STRING(ColumnFamilyData, KV_(sub_table_meta), KV_(storage_manager))
 
-SuperVersion* ColumnFamilyData::InstallSuperVersion(
-    SuperVersion* new_superversion, InstrumentedMutex* db_mutex) {
+SuperVersion* ColumnFamilyData::InstallSuperVersion(SuperVersion* new_superversion, InstrumentedMutex* db_mutex)
+{
+  se_assert(IS_NOTNULL(db_mutex));
   db_mutex->AssertHeld();
-  return InstallSuperVersion(new_superversion, db_mutex, mutable_cf_options_);
-}
-
-SuperVersion* ColumnFamilyData::InstallSuperVersion(
-    SuperVersion* new_superversion, InstrumentedMutex* db_mutex,
-    const MutableCFOptions& mutable_cf_options) {
   new_superversion->db_mutex = db_mutex;
-  new_superversion->mutable_cf_options = mutable_cf_options;
+  new_superversion->mutable_cf_options = mutable_cf_options_;
   new_superversion->Init(this,
                          mem_,
                          imm_.current(),
@@ -1069,6 +1068,32 @@ Status ColumnFamilyData::SetOptions(
     mutable_cf_options_ = new_mutable_cf_options;
   }
   return s;
+}
+
+// TODO(Zhao Dongsheng): Currently, the 'switch_memtable' is a global barrier, so there is no lock protection here.
+// In the future, when reviewing the use of db_mutex, it will be necessary to determine whether subtable-level
+// locks are needed for protection.
+int ColumnFamilyData::update_active_memtable(const RecoveryPoint &recovery_point, autovector<MemTable *> *to_delete)
+{
+  int ret = Status::kOk;
+  MemTable *new_memtable = nullptr;
+
+  if (UNLIKELY(!recovery_point.is_valid()) || IS_NULL(to_delete)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalud argument", K(ret), K(recovery_point), KP(to_delete));
+  } else if (IS_NULL(new_memtable = ConstructNewMemtable(recovery_point.seq_))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for new memtable", K(ret));
+  } else {
+    se_assert(IS_NOTNULL(mem_));
+    mem_->set_recovery_point(recovery_point);
+    imm_.Add(mem_, to_delete);
+    imm_largest_seq_ = mem_->get_last_sequence_number();
+    new_memtable->Ref();
+    mem_ = new_memtable;
+  }
+
+  return ret;
 }
 
 int ColumnFamilyData::release_memtable_resource()
@@ -1386,7 +1411,6 @@ std::vector<ColumnFamilyData *> ColumnFamilySet::get_next_dump_cfds(const int64_
       SE_LOG(INFO, "CK_INFO: cfd is dropped", K(cur->cfd_->GetID()));
     } else {
       cur_rp = cur->cfd_->get_recovery_point();
-      SequenceNumber cur_dump_seq = cur->cfd_->mem()->get_dump_sequence();
       if (cur_rp.log_file_number_ < file_number
           || (cur_rp.log_file_number_ == file_number && cur_rp.seq_ < dump_seq)) {
         res_cfds.push_back(cur->cfd_);

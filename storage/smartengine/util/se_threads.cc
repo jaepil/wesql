@@ -165,7 +165,7 @@ void SeBackgroundThread::run()
 
     // Flush the WAL.
     if (se_db && se_flush_log_at_trx_commit == 2) {
-      const common::Status s = se_db->SyncWAL();
+      const common::Status s = se_db->sync_wal();
       if (!s.ok()) {
         se_handle_io_error(s, SE_IO_ERROR_BG_THREAD);
       }

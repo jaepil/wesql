@@ -94,8 +94,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       temp_min_prep_log_(UINT64_MAX),
       flush_state_(FLUSH_NOT_REQUESTED),
       env_(ioptions.env),
-      no_flush_(false),
-      dump_seq_(0)
+      no_flush_(false)
 {
   UpdateFlushState();
   // something went wrong if we need to flush before inserting anything

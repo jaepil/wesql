@@ -19,17 +19,11 @@ IF(HAVE_SCHED_GETCPU)
   ADD_DEFINITIONS(-DHAVE_SCHED_GETCPU=1)
 ENDIF()
 
-# get a list of smartengine library source files
-# run with env -i to avoid passing variables
+# generate build version for smartengine.
 EXECUTE_PROCESS(
-  COMMAND env -i ${CMAKE_SOURCE_DIR}/storage/smartengine/get_smartengine_files.sh
-  OUTPUT_VARIABLE SCRIPT_OUTPUT
+  COMMAND env -i ${CMAKE_SOURCE_DIR}/storage/smartengine/util/generate_build_version.sh
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
-# split the list into lines
-STRING(REGEX MATCHALL "[^\n]+" SE_LIB_SOURCES ${SCRIPT_OUTPUT})
-
-
 
 INCLUDE_DIRECTORIES(
   ${CMAKE_SOURCE_DIR}/sql
@@ -50,17 +44,6 @@ INCLUDE_DIRECTORIES(
 )
 
 ADD_DEFINITIONS(-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX -DOS_LINUX -DHAVE_ZLIB)
-
-# need xstream_extent
-#SET(XSTREAM_SOURCES
-#  xstream/ds_buffer.cc
-#  xstream/ds_local.cc
-#  xstream/ds_stdout.cc
-#  xstream/datasink.cc
-#  xstream/xstream_read.cc
-#  xstream/xstream_write.cc
-#  xstream/xcrypt_write.cc
-#  )
 
 SET(SE_SOURCES
   handler/ha_smartengine.cc 
@@ -145,8 +128,178 @@ SET(SE_SOURCES
   util/se_counter.h
   util/se_comparator.h
   util/se_atomic_stat.h
-  ${SE_LIB_SOURCES}
-  #${XSTREAM_SOURCES}
+  core/backup/hotbackup_impl.cc
+  core/cache/cache_entry.cc
+  core/cache/clock_cache.cc
+  core/cache/lru_cache.cc
+  core/cache/persistent_cache.cc
+  core/cache/row_cache.cc
+  core/cache/sharded_cache.cc
+  core/compact/reuse_block_merge_iterator.cc
+  core/compact/range_iterator.cc
+  core/compact/compaction_job.cc
+  core/compact/compaction.cc
+  core/compact/flush_iterator.cc
+  core/compact/split_compaction.cc
+  core/compact/mt_ext_compaction.cc
+  core/compact/compaction_tasks_picker.cc
+  core/compact/task_type.cc
+  core/compact/compaction_iterator.cc
+  core/compact/new_compaction_iterator.cc
+  core/compact/compaction_stats.cc
+  core/db/binlog_position.cc
+  core/db/column_family.cc
+  core/db/db_filesnapshot.cc
+  core/db/db_impl.cc
+  core/db/db_impl_write.cc
+  core/db/db_impl_compaction_flush.cc
+  core/db/db_impl_files.cc
+  core/db/db_impl_open.cc
+  core/db/db_impl_debug.cc
+  core/db/db_info_dumper.cc
+  core/db/db_iter.cc
+  core/db/dbformat.cc
+  core/db/replay_task.cc
+  core/db/replay_thread_pool.cc
+  core/db/replay_threadpool_executor.cc
+  core/db/dump_job.cc
+  core/db/flush_job.cc
+  core/db/flush_scheduler.cc
+  core/db/internal_stats.cc
+  core/db/log_reader.cc
+  core/db/log_writer.cc
+  core/db/recovery_point.cc
+  core/db/snapshot_impl.cc
+  core/db/table_cache.cc
+  core/db/version_set.cc
+  core/db/wal_manager.cc
+  core/db/batch_group.cc
+  core/db/pipline_queue_manager.cc
+  core/env/env.cc
+  core/env/env_posix.cc
+  core/env/io_posix.cc
+  core/env/memenv.cc
+  core/logger/logger.cc
+  core/memory/chunk_allocator.cc
+  core/memory/alloc_mgr.cc
+  core/memory/mod_info.cc
+  core/memtable/memtable.cc
+  core/memtable/memtable_allocator.cc
+  core/memtable/memtable_list.cc
+  core/memtable/skiplistrep.cc
+  core/memtable/art.cc
+  core/memtable/art_node.cc
+  core/memtable/artrep.cc
+  core/monitoring/histogram.cc
+  core/monitoring/histogram_windowing.cc
+  core/monitoring/instrumented_mutex.cc
+  core/monitoring/iostats_context.cc
+  core/monitoring/perf_level.cc
+  core/monitoring/query_perf_context.cc
+  core/monitoring/statistics.cc
+  core/monitoring/thread_status_impl.cc
+  core/monitoring/thread_status_updater.cc
+  core/monitoring/thread_status_updater_debug.cc
+  core/monitoring/thread_status_util.cc
+  core/monitoring/thread_status_util_debug.cc
+  core/options/cf_options.cc
+  core/options/db_options.cc
+  core/options/options.cc
+  core/options/options_helper.cc
+  core/port/port_posix.cc
+  core/port/stack_trace.cc
+  core/schema/column_schema.cc
+  core/schema/engine_attribute.cc
+  core/schema/table_schema.cc
+  core/storage/change_info.cc
+  core/storage/data_file.cc
+  core/storage/extent_meta_manager.cc
+  core/storage/extent_space_file.cc
+  core/storage/extent_space_manager.cc
+  core/storage/extent_space_obj.cc
+  core/storage/io_extent.cc
+  core/storage/large_object_extent_manager.cc
+  core/storage/shrink_job.cc
+  core/storage/storage_common.cc
+  core/storage/storage_logger.cc
+  core/storage/storage_log_entry.cc
+  core/storage/storage_manager.cc
+  core/storage/storage_meta_struct.cc
+  core/storage/table_space.cc
+  core/storage/multi_version_extent_meta_layer.cc
+  core/table/block_struct.cc
+  core/table/bloom_filter.cc
+  core/table/column_block_iterator.cc
+  core/table/column_block_writer.cc
+  core/table/column_struct.cc
+  core/table/column_unit.cc
+  core/table/extent_table_factory.cc
+  core/table/extent_reader.cc
+  core/table/extent_struct.cc
+  core/table/extent_writer.cc
+  core/table/get_context.cc
+  core/table/index_block_reader.cc
+  core/table/index_block_writer.cc
+  core/table/iterator.cc
+  core/table/large_object.cc
+  core/table/merging_iterator.cc
+  core/table/parallel_read.cc
+  core/table/row_block.cc
+  core/table/row_block_iterator.cc
+  core/table/row_block_writer.cc
+  core/table/sst_file_writer.cc
+  core/table/table_properties.cc
+  core/table/two_level_iterator.cc
+  core/table/sstable_scan_iterator.cc
+  core/util/aio_wrapper.cc
+  core/util/arena.cc
+  core/util/build_version.cc
+  core/util/coding.cc
+  core/util/comparator.cc
+  core/util/compress/compressor.cc
+  core/util/compress/compressor_factory.cc
+  core/util/compress/compressor_helper.cc
+  core/util/compress/lz4_compressor.cc
+  core/util/compress/zlib_compressor.cc
+  core/util/compress/zstd_compressor.cc
+  core/util/concurrent_arena.cc
+  core/util/crc32c.cc
+  core/util/dio_helper.cc
+  core/util/dynamic_bloom.cc
+  core/util/ebr.cc
+  core/util/file_reader_writer.cc
+  core/util/concurrent_direct_file_writer.cc
+  core/util/file_util.cc
+  core/util/filename.cc
+  core/util/hash.cc
+  core/util/murmurhash.cc
+  core/util/random.cc
+  core/util/rate_limiter.cc
+  core/util/slice.cc
+  core/util/status.cc
+  core/util/status_message.cc
+  core/util/string_util.cc
+  core/util/sync_point.cc
+  core/util/thread_local.cc
+  core/util/threadpool_imp.cc
+  core/util/transaction_test_util.cc
+  core/util/xxhash.cc
+  core/util/memory_stat.cc
+  core/util/to_string.cc
+  core/util/misc_utility.cc
+  core/transactions/optimistic_transaction_db_impl.cc
+  core/transactions/optimistic_transaction_impl.cc
+  core/transactions/transaction_base.cc
+  core/transactions/transaction_db_impl.cc
+  core/transactions/transaction_db_mutex_impl.cc
+  core/transactions/transaction_impl.cc
+  core/transactions/transaction_log_impl.cc
+  core/transactions/transaction_lock_mgr.cc
+  core/transactions/transaction_util.cc
+  core/write_batch/write_batch.cc
+  core/write_batch/write_batch_base.cc
+  core/write_batch/write_batch_with_index.cc
+  core/write_batch/write_batch_with_index_internal.cc
 )
 
 IF(WITH_FB_TSAN)

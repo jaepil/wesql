@@ -140,7 +140,7 @@ TEST_F(ParallelRecoveryTest, pick_memtable_test) {
     SubTable *subtable = new SubTable(options);
     RecoveryPoint rp(0, i); // for identify
     subtable->set_recovery_point(rp);
-    subtable->CreateNewMemtable(*subtable->GetLatestMutableCFOptions(), 0);
+    subtable->CreateNewMemtable(0);
     subtables.emplace(i, subtable);
   }
   SubTable *subtable0 = subtables[0];
