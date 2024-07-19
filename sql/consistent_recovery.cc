@@ -161,11 +161,13 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   convert_dirname(mysql_real_data_home, mysql_real_data_home, NullS);
 
   if (test_if_hard_path(opt_recovery_consistent_snapshot_tmpdir)) {
-    strmake(m_mysql_archive_recovery_dir, opt_recovery_consistent_snapshot_tmpdir,
+    strmake(m_mysql_archive_recovery_dir,
+            opt_recovery_consistent_snapshot_tmpdir,
             sizeof(m_mysql_archive_recovery_dir) - 1);
   } else {
-    strxnmov(m_mysql_archive_recovery_dir, sizeof(m_mysql_archive_recovery_dir) - 1, 
-      mysql_real_data_home, opt_recovery_consistent_snapshot_tmpdir, NullS);
+    strxnmov(m_mysql_archive_recovery_dir,
+             sizeof(m_mysql_archive_recovery_dir) - 1, mysql_real_data_home,
+             opt_recovery_consistent_snapshot_tmpdir, NullS);
   }
   // create new tmp recovery dir.
   convert_dirname(m_mysql_archive_recovery_dir, m_mysql_archive_recovery_dir,
@@ -418,12 +420,17 @@ bool Consistent_recovery::recovery_mysql_innodb() {
     LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
   }
   std::string mysql_clone_file_name;
+  std::string mysql_clone_keyid;
   mysql_clone_file_name.assign(m_mysql_archive_recovery_data_dir);
   mysql_clone_file_name.append(m_mysql_clone_name);
-  mysql_clone_file_name.append(CONSISTENT_TAR_SUFFIX);
-  std::string mysql_clone_keyid;
   mysql_clone_keyid.assign(m_mysql_clone_name);
-  mysql_clone_keyid.append(CONSISTENT_TAR_SUFFIX);
+  if (opt_consistent_snapshot_compression) {
+    mysql_clone_file_name.append(CONSISTENT_TAR_GZ_SUFFIX);
+    mysql_clone_keyid.append(CONSISTENT_TAR_GZ_SUFFIX);
+  } else {
+    mysql_clone_file_name.append(CONSISTENT_TAR_SUFFIX);
+    mysql_clone_keyid.append(CONSISTENT_TAR_SUFFIX);
+  }
   // delete the local expired data if it exists.
   remove_file(mysql_clone_file_name);
   // download m_mysql_clone_name from object store
@@ -462,8 +469,13 @@ bool Consistent_recovery::recovery_mysql_innodb() {
   clone_untar_name.append(m_mysql_clone_name);
   // Delete local expired data if it exists.
   remove_file(clone_untar_name);
-  cmd << "tar -xzf " << mysql_clone_file_name.c_str() << " -C "
-      << m_mysql_archive_recovery_data_dir;
+  if (opt_consistent_snapshot_compression) {
+    cmd << "tar -xzf " << mysql_clone_file_name.c_str() << " -C "
+        << m_mysql_archive_recovery_data_dir;
+  } else {
+    cmd << "tar -xf " << mysql_clone_file_name.c_str() << " -C "
+        << m_mysql_archive_recovery_data_dir;
+  }
   if (system(cmd.str().c_str())) {
     std::string err_msg;
     err_msg.assign("Failed to untar mysql innodb clone file: ");
@@ -525,12 +537,17 @@ bool Consistent_recovery::recovery_smartengine() {
   }
 
   std::string se_file_name;
+  std::string se_backup_keyid;
   se_file_name.assign(m_mysql_archive_recovery_data_dir);
   se_file_name.append(m_se_backup_name);
-  se_file_name.append(CONSISTENT_TAR_SUFFIX);
-  std::string se_backup_keyid;
   se_backup_keyid.assign(m_se_backup_name);
-  se_backup_keyid.append(CONSISTENT_TAR_SUFFIX);
+  if (opt_consistent_snapshot_compression) {
+    se_file_name.append(CONSISTENT_TAR_GZ_SUFFIX);
+    se_backup_keyid.append(CONSISTENT_TAR_GZ_SUFFIX);
+  } else {
+    se_file_name.append(CONSISTENT_TAR_SUFFIX);
+    se_backup_keyid.append(CONSISTENT_TAR_SUFFIX);
+  }
   // delete the local expired data if it exists.
   remove_file(se_file_name);
   // download m_se_backup_name from object store
@@ -568,8 +585,13 @@ bool Consistent_recovery::recovery_smartengine() {
   se_backup_untar_name.append(m_se_backup_name);
   // Delete local expired data if it exists.
   remove_file(se_backup_untar_name);
-  cmd << "tar -xzf " << se_file_name << " -C "
-      << m_mysql_archive_recovery_data_dir;
+  if (opt_consistent_snapshot_compression) {
+    cmd << "tar -xzf " << se_file_name << " -C "
+        << m_mysql_archive_recovery_data_dir;
+  } else {
+    cmd << "tar -xf " << se_file_name << " -C "
+        << m_mysql_archive_recovery_data_dir;
+  }
   if (system(cmd.str().c_str())) {
     std::string err_msg;
     err_msg.assign("Failed to untar smartengine backup file: ");
@@ -933,12 +955,11 @@ int Consistent_recovery::consistent_snapshot_consensus_recovery_finish() {
   if (m_state == CONSISTENT_RECOVERY_STATE_END) {
     // After consensus recovery finish, truncate persistent binlog
     if (opt_recovery_consistent_snapshot_only) {
-      truncate_binlogs_from_objstore(m_binlog_file, static_cast<my_off_t> (0));
-    }
-    else if (!opt_initialize) {
+      truncate_binlogs_from_objstore(m_binlog_file, static_cast<my_off_t>(0));
+    } else if (!opt_initialize) {
       truncate_binlogs_from_objstore(
           consistent_recovery_end_binlog,
-          static_cast<my_off_t> (consistent_recovery_end_position));
+          static_cast<my_off_t>(consistent_recovery_end_position));
     }
     convert_dirname(mysql_real_data_home, mysql_real_data_home, NullS);
     file_name.assign(mysql_real_data_home);
@@ -975,14 +996,14 @@ static bool is_number(const char *str, ulonglong *res, bool allow_wildcards) {
   return true; /* Number ok */
 }
 
-// Binlog slice on S3 cannot guarantee the integrity of transaction logs, 
-// Consensus will truncate the incomplete transaction binlog logs after recovery. 
-// Therefore, the binlog archive cannot simply start from the last binlog slice on S3. 
-// Instead, the binlog on S3 should be truncated first before beginning the archive process.
-// Only the last binlog should be truncated
-// truncate_archived_binlog(log_name, pos);
-int Consistent_recovery::truncate_binlog_slice_from_objstore(const char *log_file_name_arg,
-                                             my_off_t log_pos) {
+// Binlog slice on S3 cannot guarantee the integrity of transaction logs,
+// Consensus will truncate the incomplete transaction binlog logs after
+// recovery. Therefore, the binlog archive cannot simply start from the last
+// binlog slice on S3. Instead, the binlog on S3 should be truncated first
+// before beginning the archive process. Only the last binlog should be
+// truncated truncate_archived_binlog(log_name, pos);
+int Consistent_recovery::truncate_binlog_slice_from_objstore(
+    const char *log_file_name_arg, my_off_t log_pos) {
   LOG_INFO log_info;
   std::string err_msg;
 
@@ -1030,11 +1051,11 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(const char *log_fil
   for (const auto &object : objects) {
     if (is_number(object.key.c_str() + binlog_keyid.length(), &number, false)) {
       if (truncate_slice_end) {
-        recovery_objstore->delete_object(
-                std::string_view(opt_objstore_bucket), object.key);     
+        recovery_objstore->delete_object(std::string_view(opt_objstore_bucket),
+                                         object.key);
       } else {
         if (number == log_pos) {
-          truncate_slice_end = true; 
+          truncate_slice_end = true;
         }
         if (number > log_pos) {
           my_off_t slice_pos;
@@ -1049,7 +1070,8 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(const char *log_fil
           remove_file(binlog_slice_name);
           // download slice from object store
           ss = recovery_objstore->get_object_to_file(
-              std::string_view(opt_objstore_bucket), object.key, binlog_slice_name);
+              std::string_view(opt_objstore_bucket), object.key,
+              binlog_slice_name);
           if (!ss.is_succ()) {
             err_msg.assign("Failed to download binlog file slice: ");
             err_msg.append(" key=");
@@ -1090,12 +1112,13 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(const char *log_fil
           }
           // Delete old slice
           recovery_objstore->delete_object(
-                std::string_view(opt_objstore_bucket), object.key);
+              std::string_view(opt_objstore_bucket), object.key);
           err_msg.assign("truncate binlog on object store: ");
           err_msg.append(log_file_name_arg);
           err_msg.append(" to pos ");
           err_msg.append(std::to_string(log_pos));
-          LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+          LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+                 err_msg.c_str());
         }
         pre_slice_number = number;
       }
@@ -1348,8 +1371,8 @@ static int compare_log_name(const char *log_1, const char *log_2) {
   return strcmp(log_1_basename, log_2_basename);
 }
 
-int Consistent_recovery::truncate_binlogs_from_objstore(const char *log_file_name_arg,
-                                             my_off_t log_pos) {
+int Consistent_recovery::truncate_binlogs_from_objstore(
+    const char *log_file_name_arg, my_off_t log_pos) {
   DBUG_TRACE;
   LOG_INFO log_info;
   IO_CACHE new_index_io_cache;
