@@ -44,7 +44,7 @@ class ConsensusLogIndex {
   int cleanup();
 
   int add_to_index_list(uint64 consensus_index, ulong timestamp,
-                        std::string &log_name, ulonglong log_size = 0,
+                        const std::string &log_name, ulonglong log_size = 0,
                         bool remove_dup = false);
   int truncate_before(std::string &log_name);  // retain log_name
   int truncate_after(std::string &log_name);   // retain log_name

@@ -20,15 +20,7 @@
 #ifndef CONSENSUS_BINLOG_RECOVERY_INCLUDE
 #define CONSENSUS_BINLOG_RECOVERY_INCLUDE
 
-#include <string.h>
-#include <sys/types.h>
-#include <atomic>
-#include <utility>
-
-#include "libbinlogevents/include/binlog_event.h"  // enum_binlog_checksum_alg
 #include "my_inttypes.h"
-#include "sql/binlog_reader.h"  // Binlog_file_reader
-#include "sql/mysqld.h"
 
 class MYSQL_BIN_LOG;
 

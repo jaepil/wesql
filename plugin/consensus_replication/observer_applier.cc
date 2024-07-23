@@ -1,7 +1,7 @@
 #include <stddef.h>
 
 #include "consensus_applier.h"
-#include "consensus_log_manager.h"
+#include "consensus_meta.h"
 #include "observer_applier.h"
 #include "plugin.h"
 
@@ -15,11 +15,12 @@
 #include "sql/rpl_rli_pdb.h"
 
 static int consensus_applier_rli_init_info(Binlog_applier_param *param,
-                                      bool force_retriever_gtid,
-                                      bool &exit_init) {
+                                           bool force_retriever_gtid,
+                                           bool &exit_init) {
   exit_init = false;
 
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   mysql_mutex_assert_owner(&param->rli->data_lock);
 
@@ -35,10 +36,11 @@ static int consensus_applier_rli_init_info(Binlog_applier_param *param,
 }
 
 static int consensus_applier_rli_end_info(Binlog_applier_param *param,
-                                      bool &exit_end) {
+                                          bool &exit_end) {
   exit_end = false;
 
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   Relay_log_info *rli = param->rli;
@@ -53,7 +55,10 @@ static int consensus_applier_rli_end_info(Binlog_applier_param *param,
 
 static int consensus_applier_before_start(Binlog_applier_param *param,
                                           ulong n_workers) {
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
+
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   int error = 0;
@@ -72,7 +77,7 @@ static int consensus_applier_before_start(Binlog_applier_param *param,
 
       if (!error && n_workers > 0) {
         Consensus_applier_info *applier_info =
-            consensus_log_manager.get_applier_info();
+            consensus_meta.get_applier_info();
         error = create_applier_workers(param->rli, applier_info, n_workers);
       }
     }
@@ -82,7 +87,8 @@ static int consensus_applier_before_start(Binlog_applier_param *param,
 
 static int consensus_applier_reader_before_open(
     Binlog_applier_param *param, Rpl_applier_reader *applier_reader) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   mysql_mutex_assert_not_owner(&param->rli->data_lock);
 
@@ -100,7 +106,8 @@ static int consensus_applier_reader_before_open(
 
 static int consensus_applier_reader_before_read_event(
     Binlog_applier_param *param, Rpl_applier_reader *applier_reader) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   THD *thd = param->rli->info_thd;
@@ -120,7 +127,8 @@ static int consensus_applier_reader_before_read_event(
 
 static int consensus_applier_before_read_next_event(Binlog_applier_param *param,
                                                     bool &applier_stop) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   Relay_log_info *rli = param->rli;
@@ -138,7 +146,8 @@ static int consensus_applier_before_read_next_event(Binlog_applier_param *param,
 
 static int consensus_applier_before_apply_event(Binlog_applier_param *param,
                                                 Log_event *ev) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   THD *thd = param->rli->info_thd;
@@ -154,7 +163,8 @@ static int consensus_applier_before_apply_event(Binlog_applier_param *param,
 
 static int consensus_applier_on_mts_groups_assigned(Binlog_applier_param *param,
                                                     Slave_job_group *ptr_g) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   Relay_log_info *rli = param->rli;
@@ -162,14 +172,15 @@ static int consensus_applier_on_mts_groups_assigned(Binlog_applier_param *param,
   assert(!is_mts_worker(rli->info_thd));
 
   if (rli->info_thd->consensus_context.consensus_replication_applier) {
-    ptr_g->reset_consensus_index(consensus_log_manager.get_apply_index());
+    ptr_g->reset_consensus_index(consensus_applier.get_apply_index());
   }
 
   return 0;
 }
 
 static int consensus_applier_on_stmt_done(Binlog_applier_param *param) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   Relay_log_info *rli = param->rli;
@@ -181,9 +192,8 @@ static int consensus_applier_on_stmt_done(Binlog_applier_param *param) {
   if (rli->info_thd->consensus_context.consensus_replication_applier &&
       (rli->is_parallel_exec() || !rli->is_in_group()) &&
       rli->mts_group_status == Relay_log_info::MTS_NOT_IN_GROUP) {
-    uint64 event_consensus_index = consensus_log_manager.get_apply_index();
-    Consensus_applier_info *applier_info =
-        consensus_log_manager.get_applier_info();
+    uint64 event_consensus_index = consensus_applier.get_apply_index();
+    Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
     applier_info->set_consensus_apply_index(event_consensus_index);
     error = applier_info->flush_info(true, true);
   }
@@ -193,7 +203,8 @@ static int consensus_applier_on_stmt_done(Binlog_applier_param *param) {
 
 static int consensus_applier_on_checkpoint_routine(
     Binlog_applier_param *param) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   Relay_log_info *rli = param->rli;
@@ -202,8 +213,7 @@ static int consensus_applier_on_checkpoint_routine(
   mysql_mutex_assert_owner(&param->rli->data_lock);
 
   if (rli->info_thd->consensus_context.consensus_replication_applier) {
-    Consensus_applier_info *applier_info =
-        consensus_log_manager.get_applier_info();
+    Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
     applier_info->set_consensus_apply_index(rli->gaq->lwm.consensus_index);
     applier_info->flush_info(true, true);
     update_consensus_applied_index(rli->gaq->lwm.consensus_index);
@@ -215,20 +225,20 @@ static int consensus_applier_on_checkpoint_routine(
 static int consensus_applier_on_commit_positions(Binlog_applier_param *param,
                                                  Slave_job_group *ptr_g,
                                                  bool check_xa) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   THD *thd = param->rli->info_thd;
   int error = 0;
 
   if (thd->consensus_context.consensus_replication_applier) {
-    Consensus_applier_info *applier_info =
-        consensus_log_manager.get_applier_info();
+    Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
 
     if (!ptr_g) {
       mysql_mutex_assert_owner(&param->rli->data_lock);
       error = applier_info->commit_positions(
-          consensus_log_manager.get_apply_index(),
+          consensus_applier.get_apply_index(),
           check_xa ? (!thd->get_transaction()->xid_state()->check_in_xa(false))
                    : true);
     } else {
@@ -247,10 +257,10 @@ static int consensus_applier_on_commit_positions(Binlog_applier_param *param,
   return error;
 }
 
-
 static int consensus_applier_on_rollback_positions(
     Binlog_applier_param *param) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   THD *thd = param->rli->info_thd;
@@ -259,8 +269,7 @@ static int consensus_applier_on_rollback_positions(
   if (thd->consensus_context.consensus_replication_applier) {
     mysql_mutex_assert_owner(&param->rli->data_lock);
 
-    Consensus_applier_info *applier_info =
-        consensus_log_manager.get_applier_info();
+    Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
     error = applier_info->rollback_positions();
 
     thd->set_trans_pos(param->rli->get_group_relay_log_name(),
@@ -271,12 +280,14 @@ static int consensus_applier_on_rollback_positions(
 
 static int consensus_applier_on_mts_recovery_groups(
     Binlog_applier_param *param) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   int error = 0;
 
-  if (channel_map.is_consensus_replication_channel_name(param->rli->get_channel())) {
+  if (channel_map.is_consensus_replication_channel_name(
+          param->rli->get_channel())) {
     error = applier_mts_recovery_groups(param->rli);
   }
 
@@ -285,14 +296,15 @@ static int consensus_applier_on_mts_recovery_groups(
 
 static int consensus_applier_on_mts_finalize_recovery(
     Binlog_applier_param *param) {
-  if (!plugin_is_consensus_replication_enabled()) return 0;
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   int error = 0;
 
-  if (channel_map.is_consensus_replication_channel_name(param->rli->get_channel())) {
-    Consensus_applier_info *applier_info =
-        consensus_log_manager.get_applier_info();
+  if (channel_map.is_consensus_replication_channel_name(
+          param->rli->get_channel())) {
+    Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
     if ((error = applier_info->mts_finalize_recovery())) {
       Consensus_info_factory::reset_consensus_applier_workers(applier_info);
     } else {
@@ -305,9 +317,8 @@ static int consensus_applier_on_mts_finalize_recovery(
 
 static int consensus_applier_reader_before_close(
     Binlog_applier_param *param, Rpl_applier_reader *applier_reader) {
-  if (!plugin_is_consensus_replication_enabled()) {
-    return 0;
-  }
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   THD *thd = param->rli->info_thd;
@@ -321,15 +332,15 @@ static int consensus_applier_reader_before_close(
 }
 
 static int consensus_applier_after_stop(Binlog_applier_param *param) {
-  if (!plugin_is_consensus_replication_enabled()) {
-    return 0;
-  }
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
 
+  DBUG_TRACE;
   THD *thd = param->rli->info_thd;
+
   if (thd->consensus_context.consensus_replication_applier) {
     if (!is_mts_worker(thd)) {
-      Consensus_applier_info *applier_info =
-          consensus_log_manager.get_applier_info();
+      Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
       destory_applier_workers(param->rli, applier_info);
     }
   }

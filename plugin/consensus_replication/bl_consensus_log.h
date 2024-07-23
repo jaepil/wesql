@@ -26,6 +26,8 @@
 #include "paxos_log.h"
 
 class ConsensusLogManager;
+class ConsensusMeta;
+class ConsensusStateProcess;
 
 class BLConsensusLog : public alisql::PaxosLog {
  public:
@@ -42,7 +44,9 @@ class BLConsensusLog : public alisql::PaxosLog {
   BLConsensusLog();
   virtual ~BLConsensusLog();
   void init(uint64 fake_start_index_arg,
-            ConsensusLogManager *consensus_log_manager_arg);
+            ConsensusLogManager *consensus_log_manager_arg,
+            ConsensusMeta *consensus_meta_arg,
+            ConsensusStateProcess *consensus_state_process_arg);
 
   virtual int getEntry(uint64_t logIndex, alisql::LogEntry &entry,
                        bool fastFail, uint64_t serverId) override;
@@ -51,7 +55,7 @@ class BLConsensusLog : public alisql::PaxosLog {
   virtual const alisql::LogEntry *getEntry(
       uint64_t logIndex __attribute__((unused)),
       bool fastfail __attribute__((unused)) = false) override {
-    return NULL;
+    return nullptr;
   }
   virtual uint64_t getLeftSize(uint64_t startLogIndex) override;
   virtual bool getLeftSize(uint64_t startLogIndexi,
@@ -86,6 +90,8 @@ class BLConsensusLog : public alisql::PaxosLog {
   uint64_t
       mock_start_index;  // before this index, all log entry should be mocked
   ConsensusLogManager *consensusLogManager_;  // ConsensusLog Operation detail
+  ConsensusMeta *consensusMeta_;              // ConsensusMeta Operation detail
+  ConsensusStateProcess *consensusStateProcess_;
 };
 
 #endif

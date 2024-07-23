@@ -16,38 +16,30 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
-#include <errno.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string>
-
 #include "consensus_binlog.h"
 #include "consensus_log_index.h"
 #include "consensus_log_manager.h"
+#include "consensus_meta.h"
 #include "consensus_recovery_manager.h"
+#include "consensus_state_process.h"
 #include "rpl_consensus.h"
 #include "system_variables.h"
 
-#include "my_config.h"
-#include "my_dbug.h"
+#include "libbinlogevents/include/binlog_event.h"
+#include "mysql/psi/mysql_file.h"
 
-#include "sql/log.h"
 #include "my_loglevel.h"
 #include "mysql/components/services/log_builtins.h"
+#include "sql/log.h"
 
-#include "libbinlogevents/include/binlog_event.h"
-#include "my_byteorder.h"
 #include "sql/binlog_istream.h"
 #include "sql/binlog_reader.h"
 #include "sql/debug_sync.h"  // DEBUG_SYNC
-#include "sql/log.h"
 #include "sql/protocol.h"
-#include "sql/sql_lex.h"
+#include "sql/rpl_rli.h"
 #include "sql/sql_class.h"
+#include "sql/sql_lex.h"
 #include "sql/tztime.h"  // my_tz_SYSTEM
-#include "mysql/psi/mysql_file.h"
 
 using binary_log::checksum_crc32;
 
@@ -280,12 +272,12 @@ int copy_from_consensus_log_cache(IO_CACHE_binlog_cache_storage *from,
   return ret;
 }
 
-static int large_event_flush(THD *thd, ulonglong total_size, Log_event *ev,
-                             ulonglong event_len, ulonglong total_event_len,
-                             bool have_checksum,
-                             MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
-                             ulonglong &total_batch_size,
-                             ulonglong &flushed_size) {
+static int do_write_large_event(THD *thd, ulonglong total_trx_size,
+                                Log_event *ev, ulonglong event_len,
+                                ulonglong total_event_len, bool have_checksum,
+                                MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
+                                ulonglong &total_batch_size,
+                                ulonglong &flushed_size) {
   int error = 0;
   uint flag = 0;
   ulonglong ev_footer_size = have_checksum ? BINLOG_CHECKSUM_LEN : 0;
@@ -298,6 +290,8 @@ static int large_event_flush(THD *thd, ulonglong total_size, Log_event *ev,
 
   // more than one batch
   assert(batches > 1);
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_WRITE_LARGE_EVENT,
+               total_event_len, batches, total_batch_size, total_trx_size);
 
   /**
    * Use consensus log writer to revise the event, because the end_log_pos is
@@ -338,7 +332,7 @@ static int large_event_flush(THD *thd, ulonglong total_size, Log_event *ev,
     total_batch_size += batch_size;
 
     // set flag
-    if (total_batch_size == total_size)
+    if (total_batch_size == total_trx_size)
       flag = Consensus_log_event_flag::FLAG_LARGE_TRX_END;
     else
       flag = Consensus_log_event_flag::FLAG_LARGE_TRX;
@@ -361,12 +355,6 @@ static int large_event_flush(THD *thd, ulonglong total_size, Log_event *ev,
 
     thd->consensus_context.consensus_index =
         consensus_log_manager.get_current_index();
-    sql_print_information(
-        "large_event_flush: event batch_size %llu, total_batch_size %llu, "
-        "original buf_size "
-        "%llu, consensus_index %llu.",
-        batch_size, total_batch_size, total_size,
-        thd->consensus_context.consensus_index);
 
     uint32 batch_crc =
         opt_consensus_checksum ? checksum_crc32(0, buffer, batch_size) : 0;
@@ -379,14 +367,16 @@ static int large_event_flush(THD *thd, ulonglong total_size, Log_event *ev,
               Consensus_log_event::get_event_length() + ev_footer_size,
           true, true);
 
-      sql_print_information(
-          "large_event_flush: write empty log, the current pos(%lu), "
-          "empty log size(%lu)",
-          binlog_file_get_current_pos(binlog_file), empty_log.length());
+      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_WRITE_EMPYT_LOG,
+                   binlog_file_get_current_pos(binlog_file), empty_log.length(),
+                   batch_size, thd->consensus_context.consensus_index, end_pos,
+                   total_event_len);
 
       if (write_consensus_log_event(binlog_file, flag,
                                     thd->consensus_context.consensus_term,
                                     empty_log.length(), batch_crc)) {
+        LogPluginErr(ERROR_LEVEL,
+                     ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
         error = 1;
       } else {
         int4store((uchar *)empty_log.c_str(),
@@ -400,16 +390,18 @@ static int large_event_flush(THD *thd, ulonglong total_size, Log_event *ev,
       flushed_size += empty_log.length() +
                       Consensus_log_event::get_event_length() + ev_footer_size;
     } else {
-      sql_print_information(
-          "large_event_flush: write payload log, the current pos(%lu), "
-          "payload start pos(%lu), payload size(%lu)",
-          binlog_file_get_current_pos(binlog_file), event_start_pos,
-          total_event_len);
+      LogPluginErr(
+          INFORMATION_LEVEL, ER_CONSENSUS_LOG_WRITE_LARGE_EVENT_PAYLOAD,
+          binlog_file_get_current_pos(binlog_file), batch_size, event_start_pos,
+          total_event_len, thd->consensus_context.consensus_index,
+          total_batch_size, total_trx_size);
 
       /* Write consensus log entry with revised event to binlog file */
       if (write_consensus_log_event(binlog_file, flag,
                                     thd->consensus_context.consensus_term,
                                     total_event_len, batch_crc)) {
+        LogPluginErr(ERROR_LEVEL,
+                     ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
         error = 1;
       } else {
         error = write_buffer_to_binlog_file(
@@ -483,16 +475,17 @@ static int large_trx_flush_log_cache(THD *thd,
     consensus_log_manager.set_first_event_in_file(false);
   }
 
-  sql_print_information(
-      "large_trx_flush_log_cache: the current pos(%lu), "
-      "payload size(%lu)",
-      binlog_file_get_current_pos(binlog_file), batch_size);
-
-  if ((opt_consensus_checksum && calc_consensus_crc(log_cache, crc32)) ||
-      write_consensus_log_event(binlog_file, flag,
-                                thd->consensus_context.consensus_term,
-                                batch_size, crc32) ||
-      stream_copy(log_cache, (Basic_ostream *)binlog_file)) {
+  if ((opt_consensus_checksum && calc_consensus_crc(log_cache, crc32))) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                 "calculate the consensus entry crc for a large transaction");
+    return 1;
+  } else if (write_consensus_log_event(binlog_file, flag,
+                                       thd->consensus_context.consensus_term,
+                                       batch_size, crc32)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
+  } else if (stream_copy(log_cache, (Basic_ostream *)binlog_file)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                 "copy from the consensus write cache to the binlog file");
     return 1;
   }
 
@@ -503,7 +496,7 @@ static int large_trx_flush_log_cache(THD *thd,
     ccnt++;
     if (ccnt > 1) {
       // force miss 1 byte and then crash
-      copy_from_consensus_log_cache(log_cache, batch_content, batch_size-1);
+      copy_from_consensus_log_cache(log_cache, batch_content, batch_size - 1);
       binlog_file_flush_and_sync(binlog_file);
       DBUG_SUICIDE();
     }
@@ -520,12 +513,12 @@ static int large_trx_flush_log_cache(THD *thd,
   return 0;
 }
 
-static int large_trx_flush(THD *thd, ulonglong total_size, bool have_checksum,
-                           Gtid_log_event &gtid_event,
-                           binlog_cache_data *cache_data,
-                           MYSQL_BIN_LOG::Binlog_ofile *binlog_file) {
+static int do_write_large_trx(THD *thd, ulonglong total_trx_size,
+                              bool have_checksum, Gtid_log_event &gtid_event,
+                              binlog_cache_data *cache_data,
+                              MYSQL_BIN_LOG::Binlog_ofile *binlog_file) {
   int error = 0;
-  Log_event *ev = NULL;
+  Log_event *ev = nullptr;
   uint flag = 0;
   bool fisrt_event_in_batch = false;
   ulonglong batch_size = 0, total_batch_size = 0;
@@ -559,7 +552,7 @@ static int large_trx_flush(THD *thd, ulonglong total_size, bool have_checksum,
   gtid_event.write(&consensus_writer);
 
   while (!error && (ev = payload_event_istream.read_event_object(
-                        fd_ev, false, &default_alloc)) != NULL) {
+                        fd_ev, false, &default_alloc)) != nullptr) {
     ulonglong event_len = uint4korr(ev->temp_buf + EVENT_LEN_OFFSET);
     ulonglong event_total_len = event_len + ev_footer_size;
     batch_size = log_cache->length();
@@ -577,11 +570,10 @@ static int large_trx_flush(THD *thd, ulonglong total_size, bool have_checksum,
 
       total_batch_size += batch_size;
 
-      sql_print_information(
-          "Large trx batch_size %llu, total_batch_size %llu, original buf_size "
-          "%llu, consensus_index %llu.",
-          batch_size, total_batch_size, total_size,
-          thd->consensus_context.consensus_index);
+      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_WRITE_LARGE_TRX_ENTRY,
+                   binlog_file_get_current_pos(binlog_file), batch_size,
+                   thd->consensus_context.consensus_index, total_batch_size,
+                   total_trx_size);
 
       /* Write consensus log entry with current batch to binlog file */
       large_trx_flush_log_cache(thd, log_cache, binlog_file, flag);
@@ -623,9 +615,9 @@ static int large_trx_flush(THD *thd, ulonglong total_size, bool have_checksum,
       ulonglong flush_size = 0;
       /* current ev is large event */
       assert(batch_size == 0 && fisrt_event_in_batch);
-      error = large_event_flush(thd, total_size, ev, event_len, event_total_len,
-                                have_checksum, binlog_file, total_batch_size,
-                                flush_size);
+      error = do_write_large_event(thd, total_trx_size, ev, event_len,
+                                   event_total_len, have_checksum, binlog_file,
+                                   total_batch_size, flush_size);
 
       consensus_writer.inc_end_log_pos(flush_size);
     } else {
@@ -644,11 +636,9 @@ static int large_trx_flush(THD *thd, ulonglong total_size, bool have_checksum,
     flag = Consensus_log_event_flag::FLAG_LARGE_TRX_END;
     thd->consensus_context.consensus_index =
         consensus_log_manager.get_current_index();
-    sql_print_information(
-        "Large trx batch_size %llu, total_batch_size %llu, original buf_size "
-        "%llu, consensus_index %llu.",
-        log_cache->length(), total_batch_size, total_size,
-        thd->consensus_context.consensus_index);
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_WRITE_LARGE_TRX_END_ENTRY,
+                 binlog_file_get_current_pos(binlog_file), log_cache->length(),
+                 thd->consensus_context.consensus_index);
     large_trx_flush_log_cache(thd, log_cache, binlog_file, flag);
     log_cache->reset();
   }
@@ -657,7 +647,8 @@ static int large_trx_flush(THD *thd, ulonglong total_size, bool have_checksum,
 
 void consensus_before_commit(THD *thd) {
   DBUG_TRACE;
-  if ((rpl_consensus_wait_commit_index_update(
+  if (thd->consensus_context.consensus_index > 0 &&
+      (rpl_consensus_wait_commit_index_update(
            thd->consensus_context.consensus_index,
            thd->consensus_context.consensus_term) <
        thd->consensus_context.consensus_index)) {
@@ -669,13 +660,13 @@ void consensus_before_commit(THD *thd) {
         Consensus_binlog_context_info::CSS_NONE) {
       // Wait for the state degrade term to be updated
       while (thd->consensus_context.consensus_term >=
-             consensus_log_manager.get_current_state_degrade_term())
+             consensus_state_process.get_current_state_degrade_term())
         my_sleep(1000);
 
       // Rollback the transaction if the index is more than
       // start_apply_index
       if (thd->consensus_context.consensus_index >
-          consensus_log_manager.get_consensus_info()->get_start_apply_index())
+          consensus_meta.get_consensus_info()->get_start_apply_index())
         thd->consensus_context.consensus_error =
             Consensus_binlog_context_info::CSS_LEADERSHIP_CHANGE;
     }
@@ -742,10 +733,8 @@ static int get_lower_bound_pos_of_index(const uint64 start_index,
       consensus_log_manager.get_log_file_index()->get_lower_bound_pos_of_index(
           start_index, consensus_index, pos, matched);
 
-  sql_print_information(
-      "Consensus get low bound pos of index %llu from index %llu. pos %llu "
-      "matched %d",
-      consensus_index, start_index, pos, matched);
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_RETRIEVE_LOW_BOUND_POS,
+               consensus_index, start_index, pos, matched);
 
   return res;
 }
@@ -756,21 +745,17 @@ int consensus_find_log_by_index(uint64 consensus_index, std::string &file_name,
       consensus_index, file_name, start_index);
 }
 
-int consensus_get_first_index() {
-  return consensus_log_manager.get_log_file_index()->get_first_index();
-}
-
-static int fetch_binlog_by_offset(Binlog_file_reader &binlog_file_reader,
-                                  uint64 start_pos, uint64 end_pos,
-                                  Consensus_cluster_info_log_event *rci_ev,
-                                  std::string &log_content) {
+static int fetch_log_by_offset(Binlog_file_reader &binlog_file_reader,
+                               uint64 start_pos, uint64 end_pos,
+                               Consensus_cluster_info_log_event *rci_ev,
+                               std::string &log_content) {
   DBUG_TRACE;
 
   if (start_pos == end_pos) {
     log_content.assign("");
     return 0;
   }
-  if (rci_ev == NULL) {
+  if (rci_ev == nullptr) {
     unsigned int buf_size = end_pos - start_pos;
     uchar *buffer =
         (uchar *)my_malloc(key_memory_thd_main_mem_root, buf_size, MYF(MY_WME));
@@ -798,14 +783,14 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
   if (binlog_file_reader.open(file_name, lower_start_pos)) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-           binlog_file_reader.get_error_str());
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
     return 1;
   }
 
-  Log_event *ev = NULL;
-  Consensus_cluster_info_log_event *rci_ev = NULL;
-  Consensus_log_event *consensus_log_ev = NULL;
+  Log_event *ev = nullptr;
+  Consensus_cluster_info_log_event *rci_ev = nullptr;
+  Consensus_log_event *consensus_log_ev = nullptr;
   uint64 start_pos = binlog_file_reader.position();
   uint64 end_pos = start_pos;
 
@@ -820,182 +805,133 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
   std::vector<uint64> blob_term_list;
   std::vector<uint64> blob_flag_list;
   std::vector<uint64> blob_crc32_list;
+
   ConsensusPreFetchManager *prefetch_mgr =
       consensus_log_manager.get_prefetch_manager();
   ConsensusPreFetchChannel *prefetch_channel =
       prefetch_mgr->get_prefetch_channel(channel_id);
-  prefetch_channel->set_prefetching(true);
+
   if (prefetch_channel->get_channel_id() == 0)
     prefetch_channel->clear_large_trx_table();
+
   while (!stop_prefetch &&
-         (ev = binlog_file_reader.read_event_object()) != NULL) {
-    switch (ev->get_type_code()) {
-      case binary_log::CONSENSUS_LOG_EVENT:
-        consensus_log_ev = (Consensus_log_event *)ev;
-        current_index = consensus_log_ev->get_index();
-        current_term = consensus_log_ev->get_term();
-        consensus_log_length = consensus_log_ev->get_length();
-        current_flag = consensus_log_ev->get_flag();
-        current_crc32 = consensus_log_ev->get_reserve();
-        end_pos = start_pos = binlog_file_reader.position();
+         (ev = binlog_file_reader.read_event_object()) != nullptr) {
+    if (ev->get_type_code() == binary_log::CONSENSUS_LOG_EVENT) {
+      consensus_log_ev = (Consensus_log_event *)ev;
+      current_index = consensus_log_ev->get_index();
+      current_term = consensus_log_ev->get_term();
+      consensus_log_length = consensus_log_ev->get_length();
+      current_flag = consensus_log_ev->get_flag();
+      current_crc32 = consensus_log_ev->get_reserve();
+      end_pos = start_pos = binlog_file_reader.position();
 
-        update_pos_map_by_start_index(file_start_index, consensus_log_ev,
-                                      binlog_file_reader.event_start_pos(),
-                                      start_pos + consensus_log_length,
-                                      next_set);
-
-        if (opt_consensus_prefetch_fast_fetch) {
-          /*
-           * jump to next consensus_log_event:
-           * 1. not large trx, not blob
-           * 2. current_index + window_size < start_index
-           */
-          if ((!(current_flag & (Consensus_log_event_flag::FLAG_LARGE_TRX |
-                                 Consensus_log_event_flag::FLAG_LARGE_TRX_END |
-                                 Consensus_log_event_flag::FLAG_BLOB |
-                                 Consensus_log_event_flag::FLAG_BLOB_START |
-                                 Consensus_log_event_flag::FLAG_BLOB_END))) &&
-              (current_index + prefetch_channel->get_window_size() <
-               start_index)) {
-            binlog_file_reader.seek(start_pos + consensus_log_length);
-          }
-          /*
-           * fetch data directly:
-           * 1. not large trx, not blob
-           * 2. not configure change
-           * 3. current_index + window_size >= start_index
-           */
-          if ((!(current_flag &
-                 (Consensus_log_event_flag::FLAG_LARGE_TRX |
-                  Consensus_log_event_flag::FLAG_LARGE_TRX_END |
-                  Consensus_log_event_flag::FLAG_BLOB |
-                  Consensus_log_event_flag::FLAG_BLOB_START |
-                  Consensus_log_event_flag::FLAG_BLOB_END |
-                  Consensus_log_event_flag::FLAG_CONFIG_CHANGE))) &&
-              (current_index + prefetch_channel->get_window_size() >=
-               start_index)) {
-            uchar *buffer =
-                (uchar *)my_malloc(key_memory_thd_main_mem_root,
-                                   consensus_log_length, MYF(MY_WME));
-            binlog_file_reader.ifile()->read(buffer, consensus_log_length);
-            int result = 0;
-            while ((result = prefetch_channel->add_log_to_prefetch_cache(
-                        current_term, current_index, consensus_log_length,
-                        buffer, false, current_flag, current_crc32)) == FULL) {
-              // wait condition already executed in add log to prefetch cache
-            }
-            if (result == INTERRUPT ||
-                current_index == consensus_log_manager.get_sync_index())
-              stop_prefetch = true;
-            my_free(buffer);
-            end_pos = binlog_file_reader.position();
-            assert(end_pos - start_pos == consensus_log_length);
-          }
-        }
-        break;
-      default:
-        if (!ev->is_control_event()) {
-          end_pos = binlog_file_reader.position();
-          if (ev->get_type_code() == binary_log::CONSENSUS_CLUSTER_INFO_EVENT) {
-            rci_ev = static_cast<Consensus_cluster_info_log_event *>(ev);
-          }
-          if (end_pos > start_pos &&
-              end_pos - start_pos == consensus_log_length) {
-            if (prefetch_channel->get_channel_id() == 0 &&
-                (current_flag &
-                 (Consensus_log_event_flag::FLAG_LARGE_TRX |
-                  Consensus_log_event_flag::FLAG_LARGE_TRX_END))) {
-              prefetch_channel->add_log_to_large_trx_table(
-                  current_term, current_index, (rci_ev != NULL), current_flag);
-            }
-            if (current_flag & Consensus_log_event_flag::FLAG_BLOB) {
-              blob_index_list.push_back(current_index);
-              blob_term_list.push_back(current_term);
-              blob_flag_list.push_back(current_flag);
-              blob_crc32_list.push_back(current_crc32);
-            } else if (current_flag & Consensus_log_event_flag::FLAG_BLOB_END) {
-              blob_index_list.push_back(current_index);
-              blob_term_list.push_back(current_term);
-              blob_flag_list.push_back(current_flag);
-              blob_crc32_list.push_back(current_crc32);
-              uint64 split_len = opt_consensus_large_event_split_size;
-              uint64 blob_start_pos = start_pos,
-                     blob_end_pos = start_pos + split_len;
-              for (size_t i = 0; i < blob_index_list.size(); ++i) {
-                if (blob_index_list[i] + prefetch_channel->get_window_size() >=
-                    start_index) {
-                  fetch_binlog_by_offset(binlog_file_reader, blob_start_pos,
-                                         blob_end_pos, NULL, log_content);
-                  int result = 0;
-                  while ((result = prefetch_channel->add_log_to_prefetch_cache(
-                              blob_term_list[i], blob_index_list[i],
-                              log_content.size(),
-                              reinterpret_cast<uchar *>(
-                                  const_cast<char *>(log_content.c_str())),
-                              false, blob_flag_list[i], blob_crc32_list[i])) ==
-                         FULL) {
-                    // wait condition already executed in add log to prefetch
-                    // cache
-                  }
-                  if (result == INTERRUPT) {
-                    stop_prefetch = true;
-                    break;  // break iterate blob_index_list
-                  }
-                }
-                blob_start_pos = blob_end_pos;
-                blob_end_pos = blob_end_pos + split_len > end_pos
-                                   ? end_pos
-                                   : blob_end_pos + split_len;
-              }
-              blob_index_list.clear();
-              blob_term_list.clear();
-              blob_flag_list.clear();
-              blob_crc32_list.clear();
-            } else {
-              if (current_index + prefetch_channel->get_window_size() >=
-                  start_index) {
-                fetch_binlog_by_offset(binlog_file_reader, start_pos, end_pos,
-                                       rci_ev, log_content);
-                int result = 0;
-                while ((result = prefetch_channel->add_log_to_prefetch_cache(
-                            current_term, current_index, log_content.size(),
-                            reinterpret_cast<uchar *>(
-                                const_cast<char *>(log_content.c_str())),
-                            (rci_ev != NULL), current_flag, current_crc32)) ==
-                       FULL) {
-                  // wait condition already executed in add log to prefetch
-                  // cache
-                }
-                if (result == INTERRUPT ||
-                    current_index == consensus_log_manager.get_sync_index()) {
-                  stop_prefetch = true;  // because truncate log happened, stop
-                                         // prefetch and retry
-                }
-              }
-            }
-            rci_ev = NULL;
-          }
-        }
-        break;
+      update_pos_map_by_start_index(file_start_index, consensus_log_ev,
+                                    binlog_file_reader.event_start_pos(),
+                                    start_pos + consensus_log_length, next_set);
+      delete ev;
+      continue;
     }
+
+    if (ev->is_control_event()) {
+      delete ev;
+      continue;
+    }
+
+    end_pos = binlog_file_reader.position();
+    if (end_pos == start_pos || end_pos - start_pos != consensus_log_length) {
+      delete ev;
+      continue;
+    }
+
+    if (ev->get_type_code() == binary_log::CONSENSUS_CLUSTER_INFO_EVENT) {
+      rci_ev = static_cast<Consensus_cluster_info_log_event *>(ev);
+    }
+
+    if (prefetch_channel->get_channel_id() == 0 &&
+        (current_flag & (Consensus_log_event_flag::FLAG_LARGE_TRX |
+                         Consensus_log_event_flag::FLAG_LARGE_TRX_END))) {
+      prefetch_channel->add_log_to_large_trx_table(
+          current_term, current_index, (rci_ev != nullptr), current_flag);
+    }
+
+    if (current_flag & Consensus_log_event_flag::FLAG_BLOB) {
+      blob_index_list.push_back(current_index);
+      blob_term_list.push_back(current_term);
+      blob_flag_list.push_back(current_flag);
+      blob_crc32_list.push_back(current_crc32);
+    } else if (current_flag & Consensus_log_event_flag::FLAG_BLOB_END) {
+      blob_index_list.push_back(current_index);
+      blob_term_list.push_back(current_term);
+      blob_flag_list.push_back(current_flag);
+      blob_crc32_list.push_back(current_crc32);
+
+      /* Split large event to multi slices */
+      uint64 split_len = opt_consensus_large_event_split_size;
+      uint64 blob_start_pos = start_pos, blob_end_pos = start_pos + split_len;
+      for (size_t i = 0; i < blob_index_list.size(); ++i) {
+        if (blob_index_list[i] + prefetch_channel->get_window_size() >=
+            start_index) {
+          int result = 0;
+          fetch_log_by_offset(binlog_file_reader, blob_start_pos, blob_end_pos,
+                              nullptr, log_content);
+          while ((result = prefetch_channel->add_log_to_prefetch_cache(
+                      blob_term_list[i], blob_index_list[i], log_content.size(),
+                      reinterpret_cast<uchar *>(
+                          const_cast<char *>(log_content.c_str())),
+                      false, blob_flag_list[i], blob_crc32_list[i])) == FULL) {
+            // wait condition already executed in add_log_to_prefetch_cache
+          }
+          if (result == INTERRUPT) {
+            stop_prefetch = true;
+            break;
+          }
+        }
+
+        blob_start_pos = blob_end_pos;
+        blob_end_pos = blob_end_pos + split_len > end_pos
+                           ? end_pos
+                           : blob_end_pos + split_len;
+      }
+
+      blob_index_list.clear();
+      blob_term_list.clear();
+      blob_flag_list.clear();
+      blob_crc32_list.clear();
+    } else if (current_index + prefetch_channel->get_window_size() >=
+               start_index) {
+      fetch_log_by_offset(binlog_file_reader, start_pos, end_pos, rci_ev,
+                          log_content);
+      int result = 0;
+      while ((result = prefetch_channel->add_log_to_prefetch_cache(
+                  current_term, current_index, log_content.size(),
+                  reinterpret_cast<uchar *>(
+                      const_cast<char *>(log_content.c_str())),
+                  (rci_ev != nullptr), current_flag, current_crc32)) == FULL) {
+        /* Wait condition already executed in add_log_to_prefetch_cache */
+      }
+      if (result == INTERRUPT ||
+          current_index >= consensus_log_manager.get_sync_index()) {
+        /* Truncate log happened */
+        stop_prefetch = true;
+      }
+    }
+    rci_ev = nullptr;
     delete ev;
   }
 
-  prefetch_channel->set_prefetching(false);
   prefetch_channel->dec_ref_count();
   prefetch_channel->clear_prefetch_request();
 
-  sql_print_information(
-      "channel_id %llu prefetch log reached consensus index %llu", channel_id,
-      (uint64)current_index);
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_FINISH_PREFETCH, channel_id,
+               current_index);
 
   return 0;
 }
 
-static int read_log_by_consensus_index(
-    const char *file_name, uint64 start_index, uint64 consensus_index,
-    uint64 *consensus_term, std::string &log_content, bool *outer, uint *flag,
-    uint64 *checksum, bool need_content) {
+static int read_log_by_index(const char *file_name, uint64 start_index,
+                             uint64 consensus_index, uint64 *consensus_term,
+                             std::string &log_content, bool *outer, uint *flag,
+                             uint64 *checksum, bool need_content) {
   uint64 lower_start_pos;
   bool next_set = false;
   bool matched;
@@ -1007,26 +943,24 @@ static int read_log_by_consensus_index(
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
   if (binlog_file_reader.open(file_name, lower_start_pos)) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-           binlog_file_reader.get_error_str());
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
     return 1;
   }
 
-  Log_event *ev = NULL;
-  Consensus_cluster_info_log_event *rci_ev = NULL;
-  Consensus_log_event *consensus_log_ev = NULL;
+  Log_event *ev = nullptr;
+  Consensus_cluster_info_log_event *rci_ev = nullptr;
+  Consensus_log_event *consensus_log_ev = nullptr;
   bool found = false;
   bool stop_scan = false;
-  bool in_transaction = false;
   uint64 start_pos = lower_start_pos;
   uint64 end_pos = start_pos;
   uint64 consensus_log_length = 0;
   uint64 cindex, cterm, cflag, ccrc32;
   std::vector<uint64> blob_index_list;
-  std::vector<uint64> blob_term_list;
-  std::vector<uint64> blob_flag_list;
-  std::vector<uint64> blob_crc32_list;
-  while (!stop_scan && (ev = binlog_file_reader.read_event_object()) != NULL) {
+
+  while (!stop_scan &&
+         (ev = binlog_file_reader.read_event_object()) != nullptr) {
     switch (ev->get_type_code()) {
       case binary_log::CONSENSUS_LOG_EVENT:
         consensus_log_ev = (Consensus_log_event *)ev;
@@ -1041,8 +975,9 @@ static int read_log_by_consensus_index(
           *consensus_term = cterm;
           *flag = cflag;
           *checksum = ccrc32;
-        } else if (!found && consensus_log_ev->get_index() > consensus_index) {
-          sql_print_information("directly read log error, log size is error");
+        } else if (!found && cindex > consensus_index) {
+          LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_READ_MALFORMED_LOG,
+                       consensus_index, start_index, cindex);
           abort();
         }
         update_pos_map_by_start_index(
@@ -1053,23 +988,12 @@ static int read_log_by_consensus_index(
       default:
         if (!ev->is_control_event()) {
           end_pos = binlog_file_reader.position();
-          if (ev->get_type_code() == binary_log::CONSENSUS_CLUSTER_INFO_EVENT &&
-              found) {
-            rci_ev = (Consensus_cluster_info_log_event *)ev;
-          }
-          if (end_pos > start_pos &&
-              end_pos - start_pos == consensus_log_length) {
+          if (end_pos - start_pos == consensus_log_length) {
             if (need_content && (cflag & Consensus_log_event_flag::FLAG_BLOB)) {
               blob_index_list.push_back(cindex);
-              blob_term_list.push_back(cterm);
-              blob_flag_list.push_back(cflag);
-              blob_crc32_list.push_back(ccrc32);
             } else if (need_content &&
                        (cflag & Consensus_log_event_flag::FLAG_BLOB_END)) {
               blob_index_list.push_back(cindex);
-              blob_term_list.push_back(cterm);
-              blob_flag_list.push_back(cflag);
-              blob_crc32_list.push_back(ccrc32);
               if (found) {
                 assert(consensus_index >= blob_index_list[0] &&
                        consensus_index <= cindex);
@@ -1079,8 +1003,8 @@ static int read_log_by_consensus_index(
                        blob_end_pos = start_pos + split_len;
                 for (size_t i = 0; i < blob_index_list.size(); ++i) {
                   if (blob_index_list[i] == consensus_index) {
-                    fetch_binlog_by_offset(binlog_file_reader, blob_start_pos,
-                                           blob_end_pos, NULL, log_content);
+                    fetch_log_by_offset(binlog_file_reader, blob_start_pos,
+                                        blob_end_pos, nullptr, log_content);
                     *outer = false;
                     end_pos = start_pos = binlog_file_reader.position();
                     stop_scan = true;
@@ -1093,19 +1017,17 @@ static int read_log_by_consensus_index(
                 }
               }
               blob_index_list.clear();
-              blob_term_list.clear();
-              blob_flag_list.clear();
-              blob_crc32_list.clear();
-            } else {
-              if (found) {
-                if (need_content || rci_ev != NULL)
-                  fetch_binlog_by_offset(binlog_file_reader, start_pos, end_pos,
-                                         rci_ev, log_content);
-                *outer = (rci_ev != NULL);
-                end_pos = start_pos = binlog_file_reader.position();
-                stop_scan = true;
-                rci_ev = NULL;
+            } else if (found) {
+              if (ev->get_type_code() ==
+                  binary_log::CONSENSUS_CLUSTER_INFO_EVENT) {
+                rci_ev = (Consensus_cluster_info_log_event *)ev;
               }
+              if (need_content || rci_ev != nullptr)
+                fetch_log_by_offset(binlog_file_reader, start_pos, end_pos,
+                                    rci_ev, log_content);
+              *outer = (rci_ev != nullptr);
+              end_pos = start_pos = binlog_file_reader.position();
+              stop_scan = true;
             }
           }
         }
@@ -1114,23 +1036,10 @@ static int read_log_by_consensus_index(
     delete ev;
   }
 
-  // if scan to end of file
-  if (end_pos > start_pos && !in_transaction) {
-    if (need_content || rci_ev != NULL)
-      fetch_binlog_by_offset(binlog_file_reader, start_pos, end_pos, rci_ev,
-                             log_content);
-    sql_print_information("Consensus read last log size %llu directly",
-                          end_pos - start_pos);
-    end_pos = start_pos = binlog_file_reader.position();
+  if (!found) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_BY_INDEX_ERROR,
+                 lower_start_pos, consensus_index);
   }
-
-  sql_print_information("Consensus read log reached consensus index %llu directly",
-                        consensus_index);
-
-  if (!found) sql_print_error("Consensus read log by consensus index failed");
-
-  // mysql_file_close(file, MYF(MY_WME));
-  // end_io_cache(&log);
 
   return (int)!found;
 }
@@ -1143,12 +1052,13 @@ int consensus_get_log_entry(uint64 consensus_index, uint64 *consensus_term,
   int ret = 0;
   DBUG_TRACE;
 
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index) ||
-      read_log_by_consensus_index(file_name.c_str(), start_index,
-                                  consensus_index, consensus_term, log_content,
-                                  outer, flag, checksum, need_content)) {
-    sql_print_error("Get log entry cannot find consensus index log %llu.",
-                    consensus_index);
+  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
+                 "getting log entry");
+    ret = 1;
+  } else if (read_log_by_index(file_name.c_str(), start_index, consensus_index,
+                               consensus_term, log_content, outer, flag,
+                               checksum, need_content)) {
     ret = 1;
   }
 
@@ -1163,11 +1073,14 @@ int consensus_prefetch_log_entries(THD *thd, uint64 channel_id,
   DBUG_TRACE;
 
   // use another io_cache , so do not need lock LOCK_log
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index) ||
-      prefetch_logs_of_file(thd, channel_id, file_name.c_str(), start_index,
-                            consensus_index)) {
-    sql_print_error("Prefetch cannot find consensus index log %llu.",
-                    consensus_index);
+  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
+                 "prefetching log entries");
+    ret = 1;
+  } else if (prefetch_logs_of_file(thd, channel_id, file_name.c_str(),
+                                   start_index, consensus_index)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_PREFETCH_ERROR,
+                 file_name.c_str(), consensus_index, start_index);
     ret = 1;
   }
 
@@ -1195,8 +1108,8 @@ uint64 consensus_get_trx_end_index(uint64 firstIndex) {
   uint64 start_index;
   uint64 start_pos;
   bool matched;
-  Log_event *ev = NULL;
-  Consensus_log_event *consensus_log_ev = NULL;
+  Log_event *ev = nullptr;
+  Consensus_log_event *consensus_log_ev = nullptr;
   bool stop_scan = false;
   uint64 currentIndex = 0;
   uint64 currentFlag = 0;
@@ -1204,9 +1117,8 @@ uint64 consensus_get_trx_end_index(uint64 firstIndex) {
 
   // use another io_cache , so do not need lock LOCK_log
   if (consensus_find_log_by_index(firstIndex, file_name, start_index)) {
-    sql_print_error(
-        "consensus_get_trx_end_index cannot find consensus index log %llu.",
-        firstIndex);
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, firstIndex,
+                 "getting trx end index");
     return 0;
   }
 
@@ -1217,12 +1129,13 @@ uint64 consensus_get_trx_end_index(uint64 firstIndex) {
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
   if (binlog_file_reader.open(file_name.c_str(), start_pos)) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-           binlog_file_reader.get_error_str());
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
     return 0;
   }
 
-  while (!stop_scan && (ev = binlog_file_reader.read_event_object()) != NULL) {
+  while (!stop_scan &&
+         (ev = binlog_file_reader.read_event_object()) != nullptr) {
     switch (ev->get_type_code()) {
       case binary_log::CONSENSUS_LOG_EVENT:
         consensus_log_ev = (Consensus_log_event *)ev;
@@ -1265,18 +1178,18 @@ int consensus_find_pos_by_index(const char *file_name, const uint64 start_index,
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
   if (binlog_file_reader.open(file_name, start_pos)) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-           binlog_file_reader.get_error_str());
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
     return 1;
   }
 
-  Log_event *ev = NULL;
-  Consensus_log_event *consensus_log_ev = NULL;
-  Previous_consensus_index_log_event *consensus_prev_ev = NULL;
+  Log_event *ev = nullptr;
+  Consensus_log_event *consensus_log_ev = nullptr;
+  Previous_consensus_index_log_event *consensus_prev_ev = nullptr;
   bool found = false;
   bool first_log_in_file = false;
 
-  while (!found && (ev = binlog_file_reader.read_event_object()) != NULL) {
+  while (!found && (ev = binlog_file_reader.read_event_object()) != nullptr) {
     switch (ev->get_type_code()) {
       case binary_log::CONSENSUS_LOG_EVENT:
         consensus_log_ev = (Consensus_log_event *)ev;
@@ -1307,8 +1220,8 @@ int consensus_find_pos_by_index(const char *file_name, const uint64 start_index,
     delete ev;
   }
   if (binlog_file_reader.has_fatal_error()) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-           binlog_file_reader.get_error_str());
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
   }
 
   return !found;
@@ -1322,14 +1235,18 @@ int consensus_get_log_position(uint64 consensus_index, char *log_name,
   DBUG_TRACE;
 
   // use another io_cache , so do not need lock LOCK_log
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index) ||
-      consensus_find_pos_by_index(file_name.c_str(), start_index,
-                                  consensus_index, pos)) {
-    sql_print_error("Get log position cannot find consensus index log %llu.",
-                    consensus_index);
+  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
+                 "getting log position");
     ret = 1;
+  } else if (consensus_find_pos_by_index(file_name.c_str(), start_index,
+                                         consensus_index, pos)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_INDEX_IN_FILE_ERROR,
+                 consensus_index, file_name.c_str());
+    ret = 1;
+  } else {
+    strncpy(log_name, file_name.c_str(), FN_REFLEN);
   }
-  strncpy(log_name, file_name.c_str(), FN_REFLEN);
   return ret;
 }
 
@@ -1356,25 +1273,6 @@ static bool check_auto_purge_size_condition() {
 }
 #endif
 
-int consensus_binlog_after_purge_file(MYSQL_BIN_LOG *binlog,
-                                      const char *log_file_name) {
-  int error = 0;
-  DBUG_TRACE;
-
-  if (!binlog->is_relay_log) {
-    std::string file_name = std::string(log_file_name);
-    consensus_log_manager.get_log_file_index()->truncate_before(file_name);
-
-    global_sid_lock->wrlock();
-    error = binlog->consensus_init_gtid_sets(
-        nullptr, const_cast<Gtid_set *>(gtid_state->get_lost_gtids()),
-        opt_source_verify_checksum, false);
-    global_sid_lock->unlock();
-  }
-
-  return error;
-}
-
 bool consensus_show_log_events(THD *thd) {
   bool ret = false;
   DBUG_TRACE;
@@ -1394,23 +1292,22 @@ bool consensus_show_log_events(THD *thd) {
   */
   ha_binlog_wait(thd);
 
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
-  MYSQL_BIN_LOG *log =
-      consensus_log_manager.get_status() == BINLOG_WORKING
-          ? &mysql_bin_log
-          : &consensus_log_manager.get_relay_log_info()->relay_log;
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+  MYSQL_BIN_LOG *log = consensus_state_process.get_consensus_log();
 
   if (log->is_open()) {
     LEX_CONSENSUS_INFO *lex_ci = &thd->lex->consensus;
     LEX_MASTER_INFO *lex_mi = &thd->lex->mi;
     char search_file_name[FN_REFLEN];
-    uint64 first_index = consensus_get_first_index();
+    uint64 first_index =
+        consensus_log_manager.get_log_file_index()->get_first_index();
     uint64 consensus_index =
         lex_ci->log_index < first_index ? first_index : lex_ci->log_index;
     uint64 pos = BIN_LOG_HEADER_SIZE;
 
     if (consensus_get_log_position(consensus_index, search_file_name, &pos)) {
-      mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+      mysql_rwlock_unlock(
+          consensus_state_process.get_consensuslog_status_lock());
       my_error(ER_CONSENSUS_INDEX_NOT_VALID, MYF(0)); /* purecov: inspected */
       return true;
     }
@@ -1421,7 +1318,7 @@ bool consensus_show_log_events(THD *thd) {
 
   ret = show_binlog_events(thd, log);
 
-  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
 
   return ret;
 }
@@ -1447,13 +1344,10 @@ bool consensus_show_logs(THD *thd) {
                                 Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF))
     return true;
 
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
-  MYSQL_BIN_LOG *log =
-      consensus_log_manager.get_status() == BINLOG_WORKING
-          ? &mysql_bin_log
-          : &consensus_log_manager.get_relay_log_info()->relay_log;
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+  MYSQL_BIN_LOG *log = consensus_state_process.get_consensus_log();
   if (!log->is_open()) {
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
     my_error(ER_NO_BINARY_LOGGING, MYF(0));
     return true;
   }
@@ -1466,7 +1360,7 @@ bool consensus_show_logs(THD *thd) {
 
   log->raw_get_current_log(&cur);           // dont take mutex
   mysql_mutex_unlock(log->get_log_lock());  // lockdep, OK
-  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
 
   cur_dir_len = dirname_length(cur.log_file_name);
 
@@ -1560,7 +1454,8 @@ static uint32 abstract_event_timestamp_from_cache(
       buffer += event_incr;
     }
 
-    if (length == 0) ret = log_cache->next(&buffer, &length); // Move to the next buffer if current buffer is processed
+    // Move to the next buffer if current buffer is processed
+    if (length == 0) ret = log_cache->next(&buffer, &length);
   }
 
   if (length > 0) log_cache->truncate(log_cache->length());
@@ -1595,7 +1490,8 @@ static bool write_consensus_log_event(MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
   Consensus_log_event rev(flag, term, consensus_log_manager.get_current_index(),
                           length);
   if (consensus_append && consensus_log_manager.get_event_timestamp() > 0)
-    rev.common_header->when.tv_sec = consensus_log_manager.get_event_timestamp();
+    rev.common_header->when.tv_sec =
+        consensus_log_manager.get_event_timestamp();
   rev.common_header->log_pos = binlog_file_get_current_pos(binlog_file);
   rev.common_footer->checksum_alg =
       static_cast<enum_binlog_checksum_alg>(binlog_checksum_options);
@@ -1612,17 +1508,17 @@ static bool write_consensus_log_event(MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
   return false;
 }
 
-static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
-                                     binlog_cache_data *cache_data,
-                                     MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
-                                     bool have_checksum) {
+static int do_write_binlog_cache(THD *thd, Gtid_log_event &gtid_event,
+                                 binlog_cache_data *cache_data,
+                                 MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
+                                 bool have_checksum) {
   int error = 0;
   uint flag = 0;
   bool is_large_trx = false;
   DBUG_TRACE;
 
   Binlog_cache_storage *cache_storage = binlog_cache_get_storage(cache_data);
-  ulonglong total_size =
+  ulonglong total_trx_size =
       cache_storage->length() +       /* binlog cache data */
       gtid_event.get_event_length() + /* gtid event */
       (have_checksum ? (binlog_cache_get_event_counter(cache_data) + 1) *
@@ -1630,12 +1526,12 @@ static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
                      : 0); /* checksum for each event including gtid event */
 
   // determine whether log is too large
-  if (total_size > opt_consensus_max_log_size) is_large_trx = true;
+  if (total_trx_size > opt_consensus_max_log_size) is_large_trx = true;
 
   /* Check large trx */
   if (!opt_consensus_large_trx && is_large_trx) {
-    sql_print_warning(
-        "Failed to flush log ,because consensus log is too large.");
+    LogPluginErr(WARNING_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                 "consensus log is too large");
     thd->mark_transaction_to_rollback(true);
     thd->consensus_context.consensus_error =
         Consensus_binlog_context_info::CSS_LOG_TOO_LARGE;
@@ -1643,11 +1539,11 @@ static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
   }
 
   /* Check server status */
-  mysql_mutex_lock(consensus_log_manager.get_log_term_lock());
+  mysql_mutex_lock(consensus_state_process.get_log_term_lock());
   if (rpl_consensus_log_get_term() != thd->consensus_context.consensus_term ||
       rpl_consensus_get_term() != thd->consensus_context.consensus_term) {
-    sql_print_warning(
-        "Failed to flush log ,because consensus leader is changed.");
+    LogPluginErr(WARNING_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                 "consensus leader is changed.");
     thd->mark_transaction_to_rollback(true);
     thd->consensus_context.consensus_error =
         Consensus_binlog_context_info::CSS_LEADERSHIP_CHANGE;
@@ -1676,8 +1572,14 @@ static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
     consensus_writer.inc_end_log_pos(Consensus_log_event::get_event_length() +
                                      (have_checksum ? BINLOG_CHECKSUM_LEN : 0));
 
-    if (gtid_event.write(&consensus_writer) ||
-        cache_storage->copy_to(&consensus_writer)) {
+    if (gtid_event.write(&consensus_writer)) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                   "write gtid event");
+      error = 1;
+      goto end;
+    } else if (cache_storage->copy_to(&consensus_writer)) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                   "copy form binlog cache to consensus write cache");
       error = 1;
       goto end;
     }
@@ -1685,20 +1587,21 @@ static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
     size_t payload_size = consensus_log_manager.get_log_cache()->length();
     if (opt_consensus_checksum &&
         calc_consensus_crc(consensus_log_manager.get_log_cache(), crc32)) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                   "calculate the consensus entry crc");
       error = 1;
       goto end;
     }
 
-    sql_print_information(
-        "write_cache_consensus_log: the current pos(%lu), "
-        "payload size(%lu), consensus_index %llu.",
-        binlog_file_get_current_pos(binlog_file), payload_size,
-        thd->consensus_context.consensus_index);
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_LOG,
+                 binlog_file_get_current_pos(binlog_file), payload_size,
+                 thd->consensus_context.consensus_index);
 
     /* Write consensus log event */
     if (write_consensus_log_event(binlog_file, flag,
                                   thd->consensus_context.consensus_term,
                                   payload_size, crc32)) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
       error = 1;
       goto end;
     }
@@ -1706,6 +1609,8 @@ static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
     /*  Write gtid log event and binlog cache data */
     if (stream_copy(consensus_log_manager.get_log_cache(),
                     (Basic_ostream *)binlog_file)) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR,
+                   "copy from the consensus write cache to the binlog file");
       error = 1;
       goto end;
     }
@@ -1720,20 +1625,20 @@ static int write_cache_consensus_log(THD *thd, Gtid_log_event &gtid_event,
             false, flag, crc32, true) == 1) {
       my_free(payload);
     }
-    payload = NULL;
+    payload = nullptr;
   } else {
-    error = large_trx_flush(thd, total_size, have_checksum, gtid_event,
-                            cache_data, binlog_file);
+    error = do_write_large_trx(thd, total_trx_size, have_checksum, gtid_event,
+                               cache_data, binlog_file);
   }
 
 end:
-  mysql_mutex_unlock(consensus_log_manager.get_log_term_lock());
+  mysql_mutex_unlock(consensus_state_process.get_log_term_lock());
   return error;
 }
 
-static int append_consensue_log_entry(ConsensusLogEntry &log,
-                                      MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
-                                      bool &add_cache, Relay_log_info *rli) {
+static int append_one_log_entry(ConsensusLogEntry &log,
+                                MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
+                                bool &add_cache, Relay_log_info *rli) {
   int error = 0;
   DBUG_TRACE;
 
@@ -1744,10 +1649,9 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
             ? BINLOG_CHECKSUM_LEN
             : 0));
 
-  sql_print_information(
-      "append_consensue_log_entry: the current pos(%lu), "
-      "payload_start_pos(%lu)",
-      binlog_file_get_current_pos(binlog_file), payload_start_pos);
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_LOG,
+               binlog_file_get_current_pos(binlog_file), payload_start_pos,
+               log.index, log.flag);
 
   add_cache = true;
 
@@ -1769,14 +1673,21 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
 
     ev.set_relay_log_event();
     error = ev.write(&consensus_cache_writer);
+    if (error) {
+      LogPluginErr(
+          ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+          "write a consensus cluster info event to the consensus write cache");
+    }
 
     /* Recalcute the checksum because the log_end_pos is changed */
     uint32 checksum;
     if (!error && opt_consensus_checksum) {
       if (!calc_consensus_crc(consensus_log_manager.get_log_cache(),
                               checksum)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to calc consensus entry crc");
+        LogPluginErr(
+            ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+            "calculate the consensus entry crc for a consensus cluster "
+            "info event");
         error = 1;
       } else {
         log.checksum = checksum;
@@ -1788,14 +1699,14 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
               binlog_file, log.flag, log.term,
               consensus_log_manager.get_log_cache()->length(), log.checksum,
               true)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to write consensus log event");
+        LogPluginErr(ERROR_LEVEL,
+                     ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
         error = 1;
       } else if (stream_copy(consensus_log_manager.get_log_cache(),
                              (Basic_ostream *)binlog_file)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to copy consensus log cache to "
-            "binlog file");
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+                     "copy a consensus cluster info event from the "
+                     "consensus write cache to the binlog file");
         error = 1;
       }
     }
@@ -1809,14 +1720,12 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
       consensus_log_manager.get_log_cache()->reset();
     }
 
-    sql_print_information("Large event: cache the current log, size(%lu).",
-                          log.buf_size);
-
     /* Save real data to cache */
     if (consensus_log_manager.get_log_cache()->write(log.buffer,
-                                                      log.buf_size)) {
-      sql_print_error(
-          "append_consensue_log_entry: failed to write consensus log cache");
+                                                     log.buf_size)) {
+      LogPluginErr(
+          ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+          "write a slice of a large event to the consensus write cache");
       error = 1;
     } else {
       std::string empty_log = consensus_log_manager.get_empty_log();
@@ -1830,14 +1739,13 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
        */
       if (write_consensus_log_event(binlog_file, log.flag, log.term,
                                     empty_log.length(), log.checksum, true)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to write consensus log event");
+        LogPluginErr(ERROR_LEVEL,
+                     ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
         error = 1;
       } else if (empty_log_writer.write((const uchar *)empty_log.c_str(),
                                         empty_log.length())) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to write empty consensus log "
-            "event");
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+                     "write an empty entry to the binlog file");
         error = 1;
       }
     }
@@ -1849,13 +1757,11 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
         binlog_checksum_options != binary_log::BINLOG_CHECKSUM_ALG_OFF,
         payload_start_pos, true, true);
 
-    sql_print_information("Large event: cache the current log, size(%lu).",
-                          log.buf_size);
-
     if (consensus_log_manager.get_log_cache()->write(log.buffer,
                                                      log.buf_size)) {
-      sql_print_error(
-          "append_consensue_log_entry: failed to write consensus log cache");
+      LogPluginErr(
+          ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+          "write the last slice of a large event to the consensus write cache");
       error = 1;
     } else {
       DBUG_EXECUTE_IF("crash_during_large_event_receive", { DBUG_SUICIDE(); });
@@ -1868,23 +1774,23 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
           consensus_log_manager.get_log_cache());
       if (ev_ts > 0) consensus_log_manager.set_event_timestamp(ev_ts);
 
-      sql_print_information(
-          "Large event end: write the whole event, size(%lu).",
-          consensus_log_manager.get_log_cache()->length());
+      LogPluginErr(INFORMATION_LEVEL,
+                   ER_CONSENSUS_LOG_APPEND_LARGE_EVENT_END_ENTRY,
+                   consensus_log_manager.get_log_cache()->length());
 
       /* Write the whole event to binlog file */
       if (write_consensus_log_event(
               binlog_file, log.flag, log.term,
               consensus_log_manager.get_log_cache()->length(), log.checksum,
               true)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to write consensus log event");
+        LogPluginErr(ERROR_LEVEL,
+                     ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
         error = 1;
       } else if (stream_copy(consensus_log_manager.get_log_cache(),
                              &consensus_log_writer)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to copy consensus log "
-            "cache to binlog file");
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+                     "copy the whole large event from the consensus write "
+                     "cache to the binlog file");
         error = 1;
       }
     }
@@ -1898,8 +1804,8 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
         nullptr, binlog_checksum_options != binary_log::BINLOG_CHECKSUM_ALG_OFF,
         payload_start_pos, false, true);
     if (payload_reviser.revise_buffer((uchar *)log.buffer, log.buf_size)) {
-      sql_print_error(
-          "append_consensue_log_entry: failed to revise consensus log");
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+                   "revise a consensus log event");
       error = 1;
     } else {
       uint32 ev_ts =
@@ -1913,14 +1819,13 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
       /* Write the revised event to binlog file */
       if (write_consensus_log_event(binlog_file, log.flag, log.term,
                                     log.buf_size, log.checksum, true)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to write consensus log event");
+        LogPluginErr(ERROR_LEVEL,
+                     ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED);
         error = 1;
       } else if (write_buffer_to_binlog_file(
                      binlog_file, (const uchar *)log.buffer, log.buf_size)) {
-        sql_print_error(
-            "append_consensue_log_entry: failed to write payload to binlog "
-            "file");
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
+                     "write the payload to binlog file");
         error = 1;
       } else if (rli != nullptr) {
         store_gtid_for_consensus_log((const char *)log.buffer, rli);
@@ -1931,43 +1836,42 @@ static int append_consensue_log_entry(ConsensusLogEntry &log,
   return error;
 }
 
-int append_consensus_log(MYSQL_BIN_LOG *binlog, ConsensusLogEntry &log,
-                         uint64 *index, Relay_log_info *rli, bool with_check) {
+int consensus_append_log_entry(MYSQL_BIN_LOG *binlog, ConsensusLogEntry &log,
+                               uint64 *index, Relay_log_info *rli,
+                               bool with_check) {
   int error = 0;
   DBUG_TRACE;
 
   mysql_mutex_lock(binlog->get_log_lock());
   bool add_to_cache = true;
   if (with_check) {
-    mysql_mutex_lock(consensus_log_manager.get_log_term_lock());
+    mysql_mutex_lock(consensus_state_process.get_log_term_lock());
     if (rpl_consensus_log_get_term() != log.term) {
-      mysql_mutex_unlock(consensus_log_manager.get_log_term_lock());
+      mysql_mutex_unlock(consensus_state_process.get_log_term_lock());
       mysql_mutex_unlock(binlog->get_log_lock());
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_TERM_MISMATCH,
+                   rpl_consensus_log_get_term(), log.term);
       /* set index to 0 to mark it fail */
       *index = 0;
       /* return 0 do not let it abort */
       return 0;
     }
-    mysql_mutex_unlock(consensus_log_manager.get_log_term_lock());
+    mysql_mutex_unlock(consensus_state_process.get_log_term_lock());
   }
 
   *index = consensus_log_manager.get_current_index();
   if (*index != log.index &&
       log.index != 0)  // leader write empty log entry with index 0
   {
-    sql_print_error(
-        "Consensus Index mismatch, system current index is %llu, "
-        "but the log index is %llu.",
-        *index, log.index);
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_INDEX_MISMATCH, *index,
+                 log.index);
     mysql_mutex_unlock(binlog->get_log_lock());
     *index = 0;
     return 0;
   }
 
-  sql_print_information("append_consensus_log: the current index(%lu)", *index);
-
-  error = append_consensue_log_entry(log, binlog->get_binlog_file(),
-                                     add_to_cache, rli);
+  error =
+      append_one_log_entry(log, binlog->get_binlog_file(), add_to_cache, rli);
 
   if (!error) error = binlog->flush_and_sync(false);
 
@@ -1988,9 +1892,9 @@ err:
   return error;
 }
 
-int append_multi_consensus_logs(MYSQL_BIN_LOG *binlog,
-                                std::vector<ConsensusLogEntry> &logs,
-                                uint64 *max_index, Relay_log_info *rli) {
+int consensus_append_multi_log_entries(MYSQL_BIN_LOG *binlog,
+                                       std::vector<ConsensusLogEntry> &logs,
+                                       uint64 *max_index, Relay_log_info *rli) {
   int error = 0;
   bool add_to_cache = true;
   uint64 flush_index = 0;
@@ -2000,31 +1904,22 @@ int append_multi_consensus_logs(MYSQL_BIN_LOG *binlog,
 
   for (auto iter = logs.begin(); iter != logs.end(); iter++) {
     if (consensus_log_manager.get_current_index() != iter->index) {
-      sql_print_error(
-          "Consensus Index Mismatch, system current index is %llu, "
-          "but the log index is %llu.",
-          consensus_log_manager.get_current_index(), iter->index);
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_INDEX_MISMATCH,
+                   consensus_log_manager.get_current_index(), iter->index);
       *max_index = 0;
       break;
     }
 
     flush_index = consensus_log_manager.get_current_index();
-    sql_print_information("append_multi_consensus_logs: the current index(%lu)",
-                          flush_index);
 
-    error = append_consensue_log_entry(*iter, binlog->get_binlog_file(),
-                                       add_to_cache, rli);
-
-    if (error) {
-      sql_print_error(
-          "append_multi_consensus_logs: write consensus log entry %ld error",
-          flush_index);
-      break;
-    }
+    error = append_one_log_entry(*iter, binlog->get_binlog_file(), add_to_cache,
+                                 rli);
+    if (error) break;
 
     if (add_to_cache)
       consensus_log_manager.get_fifo_cache_manager()->add_log_to_cache(
           iter->term, flush_index, iter->buf_size, iter->buffer, iter->outer,
+
           iter->flag, iter->checksum);
 
     *max_index = flush_index;
@@ -2058,17 +1953,17 @@ static int add_to_consensus_log_file_index(
        ++iter) {
     Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
     if (binlog_file_reader.open(iter->c_str())) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-             binlog_file_reader.get_error_str());
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                   binlog_file_reader.get_error_str());
       return 1;
     }
     binlog_file_reader.seek(BIN_LOG_HEADER_SIZE);
 
-    Log_event *ev = NULL;
+    Log_event *ev = nullptr;
     bool find_prev_consensus_log = false;
 
     while (!find_prev_consensus_log &&
-           (ev = binlog_file_reader.read_event_object()) != NULL) {
+           (ev = binlog_file_reader.read_event_object()) != nullptr) {
       switch (ev->get_type_code()) {
         case binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT: {
           Previous_consensus_index_log_event *prev_consensus_index_ev =
@@ -2093,8 +1988,8 @@ static int add_to_consensus_log_file_index(
     }
 
     if (!find_prev_consensus_log) {
-      sql_print_error("log file %s do not contain prev_consensus_log_ev",
-                      iter->c_str());
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_UNEXPECTED_EVENT,
+                   iter->c_str());
       return 1;
     }
   }
@@ -2102,7 +1997,7 @@ static int add_to_consensus_log_file_index(
   return 0;
 }
 
-int build_consensus_log_index(MYSQL_BIN_LOG *binlog) {
+int consensus_build_log_file_index(MYSQL_BIN_LOG *binlog) {
   int error = 0;
   std::vector<std::string> consensuslog_file_name_vector;
   DBUG_TRACE;
@@ -2118,10 +2013,10 @@ int build_consensus_log_index(MYSQL_BIN_LOG *binlog) {
   return 0;
 }
 
-int write_cache_to_consensus_log(THD *thd, MYSQL_BIN_LOG *binlog,
-                                 Gtid_log_event &gtid_event,
-                                 binlog_cache_data *cache_data,
-                                 bool have_checksum) {
+int write_binlog_cache_to_consensus_log(THD *thd, MYSQL_BIN_LOG *binlog,
+                                        Gtid_log_event &gtid_event,
+                                        binlog_cache_data *cache_data,
+                                        bool have_checksum) {
   DBUG_TRACE;
   Binlog_cache_storage *cache = binlog_cache_get_storage(cache_data);
 
@@ -2131,8 +2026,8 @@ int write_cache_to_consensus_log(THD *thd, MYSQL_BIN_LOG *binlog,
   if (likely(binlog->is_open()))  // Should always be true
   {
     if (!cache->is_empty()) {
-      if (write_cache_consensus_log(thd, gtid_event, cache_data,
-                                    binlog->get_binlog_file(), have_checksum))
+      if (do_write_binlog_cache(thd, gtid_event, cache_data,
+                                binlog->get_binlog_file(), have_checksum))
         goto err;
 
       // TODO: wesql cluster, handle incident event
@@ -2142,7 +2037,8 @@ int write_cache_to_consensus_log(THD *thd, MYSQL_BIN_LOG *binlog,
     binlog->update_thd_next_event_pos(thd);
   }
   // update stats if monitoring is active
-  update_trx_compression(cache_data, thd->owned_gtid, gtid_event.immediate_commit_timestamp);
+  update_trx_compression(cache_data, thd->owned_gtid,
+                         gtid_event.immediate_commit_timestamp);
   return false;
 err:
   return true;
@@ -2154,19 +2050,16 @@ int rotate_consensus_log(THD *thd, bool force_rotate) {
 
   DBUG_EXECUTE_IF("crash_before_rotate_consensus_log", DBUG_SUICIDE(););
   DEBUG_SYNC(thd, "before_rotate_consensus_log");
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
-  MYSQL_BIN_LOG *binlog =
-      consensus_log_manager.get_status() == BINLOG_WORKING
-          ? consensus_log_manager.get_binlog()
-          : &consensus_log_manager.get_relay_log_info()->relay_log;
+
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+  MYSQL_BIN_LOG *binlog = consensus_state_process.get_consensus_log();
 
   /* do not rotate in middle of a large trx */
-  if (consensus_log_manager.get_status() != BINLOG_WORKING &&
+  if (consensus_state_process.get_status() !=
+          Consensus_Log_System_Status::BINLOG_WORKING &&
       !consensus_log_manager.get_enable_rotate()) {
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
-    sql_print_error(
-        "Fail to rotate log because the last consensus log entry is in "
-        "middle of a large transaction.");
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_ROTATE_IN_TRX_ERROR);
     my_error(ER_CONSENSUS_FOLLOWER_NOT_ALLOWED, MYF(0));
     error = 1;
     goto err;
@@ -2174,7 +2067,7 @@ int rotate_consensus_log(THD *thd, bool force_rotate) {
 
   error = binlog->rotate_and_purge(thd, force_rotate);
 
-  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
 
 err:
   return error;
@@ -2184,16 +2077,13 @@ int reencrypt_consensus_logs() {
   int error = 0;
   DBUG_TRACE;
 
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
-  MYSQL_BIN_LOG *binlog =
-      consensus_log_manager.get_status() == BINLOG_WORKING
-          ? consensus_log_manager.get_binlog()
-          : &consensus_log_manager.get_relay_log_info()->relay_log;
+  MYSQL_BIN_LOG *binlog = consensus_state_process.get_consensus_log();
 
   error = binlog->reencrypt_logs();
 
-  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
   return error;
 }
 
@@ -2206,19 +2096,17 @@ int purge_consensus_logs_on_conditions(ulong purge_time, ulong purge_size,
   if (purge_time > 0) {
     std::string log_name;
     // get the log index by target time
-    consensus_log_manager.get_log_file_index()->
-          get_first_log_should_purge_by_time(purge_time, log_name, target_index);
-    sql_print_information(
-        "Consensus purge logs before time: %d, log: %s, "
-        "target_index:%llu",
-        purge_time, log_name.c_str(), target_index);
+    consensus_log_manager.get_log_file_index()
+        ->get_first_log_should_purge_by_time(purge_time, log_name,
+                                             target_index);
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_PURGE_BEFORE_TIME_LOG,
+                 purge_time, log_name.c_str(), target_index);
   } else if (to_log != nullptr) {
     target_index =
         consensus_log_manager.get_log_file_index()->get_start_index_of_file(
             to_log);
-    sql_print_information(
-        "Consensus purge logs before file: %s, target_index: %llu", to_log,
-        target_index);
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_PURGE_BEFORE_FILE_LOG, to_log,
+                 target_index);
   } else if (purge_size > 0) {
     // TODO: purge logs by total size.
   }
@@ -2248,9 +2136,14 @@ static int consensus_truncate_log(MYSQL_BIN_LOG *log, uint64 consensus_index) {
 
   mysql_mutex_assert_owner(log->get_log_lock());
 
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index) ||
-      consensus_find_pos_by_index(file_name.c_str(), start_index,
-                                  consensus_index, &offset)) {
+  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
+                 "truncating consensus log");
+    error = 1;
+  } else if (consensus_find_pos_by_index(file_name.c_str(), start_index,
+                                         consensus_index, &offset)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_INDEX_IN_FILE_ERROR,
+                 consensus_index, file_name.c_str());
     error = 1;
   } else if (log->truncate_log(file_name.c_str(), offset, nullptr)) {
     error = 1;
@@ -2267,7 +2160,6 @@ static int consensus_truncate_log(MYSQL_BIN_LOG *log, uint64 consensus_index) {
 
   return error;
 }
-
 
 /**
   Converts a datetime String value to its my_time_t representation.
@@ -2294,7 +2186,8 @@ static int convert_archive_stop_datetime(const char *str, ulong &my_time) {
     the next existing day, like in mysqld. Maybe this could be changed when
     mysqld is changed too (with its "strict" mode?).
   */
-  my_time = (ulong)my_tz_SYSTEM->TIME_to_gmt_sec(&l_time, &dummy_in_dst_time_gap);
+  my_time =
+      (ulong)my_tz_SYSTEM->TIME_to_gmt_sec(&l_time, &dummy_in_dst_time_gap);
 
   return 0;
 }
@@ -2311,24 +2204,24 @@ static int consensus_get_next_index(const char *file_name,
                                     const ulong stop_datetime,
                                     bool &reached_stop_point,
                                     uint64 &current_term) {
-  Log_event *ev = NULL;
-  Consensus_log_event *consensus_log_ev = NULL;
-  Previous_consensus_index_log_event *consensus_prev_ev = NULL;
+  Log_event *ev = nullptr;
+  Consensus_log_event *consensus_log_ev = nullptr;
+  Previous_consensus_index_log_event *consensus_prev_ev = nullptr;
   uint64 next_index = 0;
   uint64 current_flag = 0;
   DBUG_TRACE;
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
   if (binlog_file_reader.open(file_name)) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-           binlog_file_reader.get_error_str());
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
     return 0;
   }
   binlog_file_reader.seek(BIN_LOG_HEADER_SIZE);
 
   reached_stop_point = false;
   while (!reached_stop_point &&
-         (ev = binlog_file_reader.read_event_object()) != NULL) {
+         (ev = binlog_file_reader.read_event_object()) != nullptr) {
     switch (ev->get_type_code()) {
       case binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT:
         consensus_prev_ev = (Previous_consensus_index_log_event *)ev;
@@ -2370,14 +2263,16 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
   std::vector<ConsensusLogIndexEntry> consensus_file_entry_vector;
   char log_dirname[FN_REFLEN], last_log_dirname[FN_REFLEN];
   size_t log_dirname_len = 0, last_log_dirname_len = 0;
-  Relay_log_info *rli_info = consensus_log_manager.get_relay_log_info();
-  MYSQL_BIN_LOG *relay_log = &rli_info->relay_log;
-  uint64 next_index = last_index + 1;
   uint64 last_term = 0;
   ConsensusLogIndex consensus_log_index;
   bool add_new_file = false;
   ulong stop_datetime = 0;
   bool reached_stop_point = false;
+
+  Relay_log_info *rli_info = consensus_state_process.get_relay_log_info();
+  MYSQL_BIN_LOG *relay_log = &rli_info->relay_log;
+  uint64 next_index = last_index + 1;
+
   DBUG_TRACE;
 
   MYSQL_BIN_LOG archive_log(nullptr, true);
@@ -2395,11 +2290,9 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
 #endif
   archive_log.init_pthread_objects();
 
-  sql_print_information(
-      "Starting archive recovery from %s, last log index: %llu, recovery "
-      "target time: %s",
-      opt_archive_log_index_name, last_index,
-      opt_archive_recovery_stop_datetime_str);
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_RECOVERY_LOG,
+               opt_archive_log_index_name, last_index,
+               opt_archive_recovery_stop_datetime_str);
 
   consensus_log_index.init();
 
@@ -2407,15 +2300,15 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
       convert_archive_stop_datetime(opt_archive_recovery_stop_datetime_str,
                                     stop_datetime)) {
     consensus_log_index.cleanup();
-    LogErr(ERROR_LEVEL, ER_WRONG_DATETIME_SPEC,
-           opt_archive_recovery_stop_datetime_str);
+    LogPluginErr(ERROR_LEVEL, ER_WRONG_DATETIME_SPEC,
+                 opt_archive_recovery_stop_datetime_str);
     return 1;
   }
 
   /* Skip archived recovery if archive-log-index is not valid */
   if (archive_log.open_index_file(opt_archive_log_index_name, nullptr, true)) {
-    sql_print_warning("Failed to open archive log index file %s",
-                      opt_archive_log_index_name);
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_OPEN_FOR_LOGGING,
+           opt_archive_log_index_name, errno);
     consensus_log_index.cleanup();
     return 0;
   }
@@ -2443,16 +2336,12 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
     uint64 file_next_index = 0;
     auto next_file_iter = std::next(file_iter);
 
-    sql_print_information(
-        "Processing archive log file %s with start index %llu, The expected "
-        "next index is %llu",
-        file_iter->file_name.c_str(), file_iter->index, next_index);
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_LOG_RROCESS_LOG,
+                 file_iter->file_name.c_str(), file_iter->index, next_index);
 
     if (next_index < file_iter->index) {
-      sql_print_error(
-          "The archive log file %s with start index %llu is not continuous "
-          "with the previous log. The expected next index is %llu",
-          file_iter->file_name.c_str(), file_iter->index, next_index);
+      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_LOG_NOT_CONTINUOUS_ERROR,
+                   file_iter->file_name.c_str(), file_iter->index, next_index);
       error = 1;
       goto ret;
     } else if (next_index > file_iter->index) {
@@ -2466,23 +2355,22 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
             last_term);
       }
       if (file_next_index == 0) {
-        LogErr(ERROR_LEVEL, ER_CONSENSUS_GET_NEXT_INDEX_FAILED,
-               file_iter->file_name.c_str());
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_GET_NEXT_INDEX_FAILED,
+                     file_iter->file_name.c_str());
         error = 1;
         goto ret;
       }
 
       if (next_index >= file_next_index) {
         /* [file_iter->index, current_end_index] had been covered */
-        sql_print_information(
-            "Ignored archive binlog file %s. Its end index %llu is less than "
-            "%llu as expected.",
-            file_iter->file_name.c_str(), file_next_index - 1, next_index);
+        LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_RECOVERY_IGNORE_LOG,
+                     file_iter->file_name.c_str(), file_next_index - 1,
+                     next_index);
         continue;
       }
 
-      sql_print_information("Truncating consensus binlog to index %llu.",
-                            file_iter->index);
+      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_RECOVERY_TRUNCATE_LOG,
+                   file_iter->index);
 
       /* Truncate duplicate binlog events from last file */
       if (file_iter->index < first_index) {
@@ -2493,9 +2381,8 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
       }
     }
 
-    sql_print_information(
-        "Generation a new binlog file from archive binlog file %s.",
-        file_iter->file_name.c_str());
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_RECOVERY_GENERATE_LOG,
+                 file_iter->file_name.c_str());
 
     if ((error = relay_log->new_relay_log_from_archive(
              file_iter->file_name.c_str(), false)))
@@ -2503,7 +2390,7 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
 
     consensus_log_manager.get_log_file_index()->add_to_index_list(
         consensus_log_manager.get_current_index(), file_iter->timestamp,
-        file_iter->file_name,
+        std::string(relay_log->get_log_fname()),
         0 /* binlog_file_get_current_pos(relay_log->get_binlog_file()) */,
         false);
 
@@ -2535,21 +2422,20 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
     }
 
     if (next_index == 0) {
-      LogErr(ERROR_LEVEL, ER_CONSENSUS_GET_NEXT_INDEX_FAILED,
-             next_file_iter->file_name.c_str());
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_GET_NEXT_INDEX_FAILED,
+                   next_file_iter->file_name.c_str());
       error = 1;
       goto ret;
     }
 
-    sql_print_information(
-        "The next index of current archive binlog file %s is %llu.",
-        file_iter->file_name.c_str(), next_index);
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_RECOVERY_ADVANCE_NEXT_INDEX,
+                 relay_log->get_log_fname(), next_index);
 
     /* Truncate binlog events after stop timestamp */
     if (stop_datetime > 0 && reached_stop_point) {
-      sql_print_information(
-          "Reached stop point of archive recovery. The next index is %llu.",
-          next_index);
+      LogPluginErr(SYSTEM_LEVEL,
+                   ER_CONSENSUS_ARCHIVE_RECOVERY_REACHED_STOP_POINT,
+                   next_index);
       if ((error = consensus_truncate_log(relay_log, next_index))) goto ret;
     }
 
@@ -2557,7 +2443,7 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
     consensus_log_manager.set_sync_index(next_index - 1);
     consensus_log_manager.set_current_index(next_index);
   }
-  if (last_term > 0) consensus_log_manager.set_current_term(last_term);
+  if (last_term > 0) consensus_state_process.set_current_term(last_term);
 
 ret:
   mysql_mutex_unlock(relay_log->get_log_lock());

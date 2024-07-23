@@ -41,7 +41,7 @@ class Consensus_applier_info : public Rpl_info {
 
   virtual const char *get_for_channel_str(
       bool upper_case [[maybe_unused]]) const override {
-    return NULL;
+    return nullptr;
   }
 
   static void set_nullable_fields(MY_BITMAP *nullable_fields);

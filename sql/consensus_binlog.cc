@@ -41,16 +41,16 @@ bool MYSQL_BIN_LOG::open_for_consensus(
     PSI_file_key log_file_key,
 #endif
     const char *log_name, bool set_flags) {
-  DBUG_ENTER("MYSQL_BIN_LOG::open_for_consensus");
   my_off_t file_off = 0;
   MY_STAT info;
   uchar new_flags;
+  DBUG_TRACE;
 
   write_error = 0;
   myf flags = MY_WME | MY_NABP | MY_WAIT_IF_FULL;
 
   if (!(name = my_strdup(key_memory_MYSQL_LOG_name, log_name, MYF(MY_WME)))) {
-    DBUG_RETURN(true);
+    return true;
   }
 
   db[0] = 0;
@@ -97,7 +97,7 @@ bool MYSQL_BIN_LOG::open_for_consensus(
   mysql_mutex_unlock(&LOCK_sync);
 
   atomic_log_state = LOG_OPENED;
-  DBUG_RETURN(false);
+  return false;
 
 err:
   mysql_mutex_unlock(&LOCK_sync);
@@ -110,9 +110,9 @@ err:
     LogErr(ERROR_LEVEL, ER_BINLOG_CANT_OPEN_FOR_LOGGING, log_name, errno);
 
   my_free(name);
-  name = NULL;
+  name = nullptr;
   atomic_log_state = LOG_CLOSED;
-  DBUG_RETURN(true);
+  return true;
 }
 
 int MYSQL_BIN_LOG::get_file_names(std::vector<std::string> &file_name_vector) {
@@ -122,12 +122,11 @@ int MYSQL_BIN_LOG::get_file_names(std::vector<std::string> &file_name_vector) {
   // find last log name according to the binlog index
   if (!my_b_inited(&index_file)) {
     mysql_mutex_unlock(&LOCK_index);
-    sql_print_error("build consenus log index failed, can't init index file");
     return 1;
   }
   if ((error = find_log_pos(&log_info, NullS, false))) {
     if (error != LOG_INFO_EOF) {
-      sql_print_error("find_log_pos() failed (error: %d)", error);
+      LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
       mysql_mutex_unlock(&LOCK_index);
       return error;
     }
@@ -139,7 +138,7 @@ int MYSQL_BIN_LOG::get_file_names(std::vector<std::string> &file_name_vector) {
         !(error = find_next_log(&log_info, false /*need_lock_index=true*/)));
   }
   if (error != LOG_INFO_EOF) {
-    sql_print_error("find_log_pos() failed (error: %d)", error);
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
     mysql_mutex_unlock(&LOCK_index);
     return error;
   } else {
@@ -217,11 +216,14 @@ int MYSQL_BIN_LOG::truncate_logs_from_index(
 
   mysql_mutex_assert_owner(&LOCK_index);
 
-  if ((error = find_log_pos(&log_info, NullS, false))) goto err;
+  if ((error = find_log_pos(&log_info, NullS, false))) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
+    goto err;
+  }
+
   if (open_crash_safe_index_file()) {
-    sql_print_error(
-        "MYSQL_BIN_LOG::truncate_logs_from_index failed to "
-        "open the crash safe index file.");
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_OPEN_TMP_INDEX,
+           "MYSQL_BIN_LOG::truncate_logs_from_index");
     goto err;
   }
 
@@ -232,6 +234,8 @@ int MYSQL_BIN_LOG::truncate_logs_from_index(
                               strlen(log_info.log_file_name))) ||
           (error =
                my_b_write(&crash_safe_index_file, (const uchar *)"\n", 1))) {
+        LogErr(ERROR_LEVEL, ER_BINLOG_CANT_APPEND_LOG_TO_TMP_INDEX,
+               log_info.log_file_name);
         break;
       }
 
@@ -244,25 +248,22 @@ int MYSQL_BIN_LOG::truncate_logs_from_index(
   }
 
   if (close_crash_safe_index_file()) {
-    sql_print_error(
-        "MYSQL_BIN_LOG::truncate_logs_from_index failed to "
-        "close the crash safe index file.");
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_CLOSE_TMP_INDEX,
+           "MYSQL_BIN_LOG::truncate_logs_from_index");
     goto err;
   }
   DBUG_EXECUTE_IF("fault_injection_copy_part_file", DBUG_SUICIDE(););
 
   if (move_crash_safe_index_file_to_index_file(false)) {
-    sql_print_error(
-        "MYSQL_BIN_LOG::remove_logs_from_index failed to "
-        "move crash safe index file to index file.");
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_MOVE_TMP_TO_INDEX,
+           "MYSQL_BIN_LOG::remove_logs_from_index");
     goto err;
   }
   adjust_linfo_offsets(log_info.index_file_start_offset);
   return 0;
 
 err:
-  sql_print_error("truncate log from index failed");
-  return 1;
+  return -1;
 }
 
 int MYSQL_BIN_LOG::truncate_files_after(const char *file_name,
@@ -278,8 +279,8 @@ int MYSQL_BIN_LOG::truncate_files_after(const char *file_name,
   // delete file
   for (std::vector<std::string>::iterator iter = delete_vector.begin();
        !error && iter != delete_vector.end(); iter++) {
-    sql_print_error("MYSQL_BIN_LOG::truncate_files_after truncate log file %s",
-                    (*iter).c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSENSUS_LOG_TRUNCATE_FILES, "file",
+           (*iter).c_str());
     if (mysql_file_delete(key_file_binlog, (*iter).c_str(), MYF(0))) {
       error = 1;
       break;
@@ -296,17 +297,16 @@ int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
   int error = 0;
   const char *save_name = nullptr;
 
-  sql_print_information(
-      "MYSQL_BIN_LOG::truncate_log, truncate %s to %d, is_consensus_write %d",
-      file_name, offset, is_consensus_write);
+  LogErr(SYSTEM_LEVEL, ER_CONSENSUS_TRUNCATE_LOG, file_name, offset,
+         is_consensus_write);
 
   mysql_mutex_assert_owner(&LOCK_log);
 
   if (rli) mysql_mutex_lock(&rli->data_lock);
 
   if (!is_active(file_name)) {
-    sql_print_information(
-        "MYSQL_BIN_LOG::truncate_log, truncate files after %s ", file_name);
+    LogErr(SYSTEM_LEVEL, ER_CONSENSUS_LOG_TRUNCATE_FILES, "files after",
+           file_name);
 
     mysql_mutex_lock(&LOCK_index);
 
@@ -317,8 +317,8 @@ int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
     close(LOG_CLOSE_TO_BE_OPENED, false, false);
 
     if (truncate_files_after(file_name, false)) {
-      sql_print_error("Failed to truncate the binlog file after %s.",
-                      file_name);
+      LogErr(ERROR_LEVEL, ER_CONSENSUS_LOG_TRUNCATE_FILES_AFTER_ERROR,
+             file_name);
       abort();
     }
 
@@ -340,28 +340,29 @@ int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
   }
 
   assert(is_active(file_name));
-
-  sql_print_information("MYSQL_BIN_LOG::truncate_log, truncate files %s to %d",
-                        file_name, offset);
-
-  // truncate not cross binlog file.
-  mysql_mutex_lock(&LOCK_sync);
-  if (m_binlog_file->truncate(offset)) {
+  if (is_active(file_name)) {
+    mysql_mutex_lock(&LOCK_sync);
+    if (m_binlog_file->truncate(offset)) {
+      mysql_mutex_unlock(&LOCK_sync);
+      LogErr(ERROR_LEVEL, ER_CONSENSUS_LOG_TRUNCATE_OFFSET_ERROR, file_name,
+             offset);
+      error = 1;
+      goto err;
+    }
+    atomic_binlog_end_pos = offset;
     mysql_mutex_unlock(&LOCK_sync);
-    sql_print_error("Failed to truncate the binlog file.");
-    error = 1;
-    goto err;
   }
-  atomic_binlog_end_pos = offset;
-  mysql_mutex_unlock(&LOCK_sync);
 
 err:
   if (rli) {
     mysql_mutex_unlock(&rli->data_lock);
+
     if (!error) rli->notify_relay_log_truncated();
   }
+
   if (name == nullptr)
     name = const_cast<char *>(save_name);  // restore old file-name
+
   return error;
 }
 
@@ -371,10 +372,6 @@ int MYSQL_BIN_LOG::switch_and_seek_log(const char *file_name, uint64 offset,
   myf flags = MY_WME | MY_NABP;
 
   mysql_mutex_assert_owner(&LOCK_log);
-
-  sql_print_information(
-      "MYSQL_BIN_LOG::seek_pos, seek %s to %d, is_consensus_write %d",
-      file_name, offset, is_consensus_write);
 
   if (!is_active(file_name)) {
     if (need_lock_index) mysql_mutex_lock(&LOCK_index);
@@ -445,9 +442,8 @@ bool MYSQL_BIN_LOG::open_exist_consensus_binlog(const char *log_name,
                                                 bool need_lock_index) {
   LOG_INFO log_info;
   int error = 1;
+  DBUG_TRACE;
 
-  // lock_index must be acquired *before* sid_lock.
-  DBUG_ENTER("MYSQL_BIN_LOG::open_exist_consensus_binlog");
   DBUG_PRINT("enter", ("base filename: %s", log_name));
 
   mysql_mutex_assert_owner(get_log_lock());
@@ -455,12 +451,12 @@ bool MYSQL_BIN_LOG::open_exist_consensus_binlog(const char *log_name,
   // find last log name according to the binlog index
   if (!my_b_inited(&index_file)) {
     cleanup();
-    DBUG_RETURN(true);
+    return true;
   }
   if ((error = find_log_pos(&log_info, NullS, need_lock_index))) {
     if (error != LOG_INFO_EOF) {
-      sql_print_error("find_log_pos() failed (error: %d)", error);
-      DBUG_RETURN(true);
+      LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
+      return true;
     }
   }
 
@@ -471,8 +467,8 @@ bool MYSQL_BIN_LOG::open_exist_consensus_binlog(const char *log_name,
   }
 
   if (error != LOG_INFO_EOF) {
-    sql_print_error("find_log_pos() failed (error: %d)", error);
-    DBUG_RETURN(true);
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
+    return true;
   }
 
   // #ifdef HAVE_REPLICATION
@@ -488,7 +484,7 @@ bool MYSQL_BIN_LOG::open_exist_consensus_binlog(const char *log_name,
           m_key_file_log,
 #endif
           log_name, set_flags)) {
-    DBUG_RETURN(true); /* all warnings issued */
+    return true;
   }
 
   max_size = max_size_arg;
@@ -502,7 +498,7 @@ bool MYSQL_BIN_LOG::open_exist_consensus_binlog(const char *log_name,
   m_dependency_tracker.rotate();
 
   update_binlog_end_pos();
-  DBUG_RETURN(false);
+  return false;
 }
 
 static enum_read_gtids_from_binlog_status read_gtids_from_consensus_binlog(
@@ -604,7 +600,7 @@ static enum_read_gtids_from_binlog_status read_gtids_from_consensus_binlog(
           least one Gtid_log_event, so that we can distinguish the return values
           GOT_GTID and GOT_PREVIOUS_GTIDS. We don't need to read anything else
           from the relay log.
-          When this is a binary log, if all_gtids is requested (i.e., NOT NULL),
+          When this is a binary log, if all_gtids is requested (i.e., NOT nullptr),
           we should continue to read all gtids. If just first_gtid was
           requested, we will be done after storing this Gtid_log_event info on
           it.

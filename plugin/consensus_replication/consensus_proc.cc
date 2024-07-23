@@ -67,7 +67,7 @@ bool Sql_cmd_consensus_proc::check_addr_format(const char *node_addr) {
 }
 
 bool Sql_cmd_consensus_option_last_proc::check_parameter() {
-  std::size_t actual_size = (m_list == NULL ? 0 : m_list->size());
+  std::size_t actual_size = (m_list == nullptr ? 0 : m_list->size());
   std::size_t define_size = m_proc->get_parameters()->size();
 
   /* last param is option */
@@ -109,8 +109,8 @@ bool Sql_cmd_consensus_proc_change_leader::pc_execute(THD *thd) {
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
   res =
-      rpl_consensus_transfer_leader(std::string(ip_port->val_str(NULL)->ptr()));
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+      rpl_consensus_transfer_leader(std::string(ip_port->val_str(nullptr)->ptr()));
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -137,9 +137,9 @@ bool Sql_cmd_consensus_proc_add_learner::pc_execute(THD *thd) {
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
   std::vector<std::string> info_vector;
-  info_vector.push_back(ip_port->val_str(NULL)->ptr());
+  info_vector.push_back(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_add_learners(info_vector);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -175,9 +175,9 @@ bool Sql_cmd_consensus_proc_add_follower::pc_execute(THD *thd) {
   int res = 0;
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
-  std::string addr(ip_port->val_str(NULL)->ptr());
+  std::string addr(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_add_follower(addr);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -214,9 +214,9 @@ bool Sql_cmd_consensus_proc_drop_learner::pc_execute(THD *thd) {
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
   std::vector<std::string> info_vector;
-  info_vector.push_back(ip_port->val_str(NULL)->ptr());
+  info_vector.push_back(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_drop_learners(info_vector);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -242,9 +242,9 @@ bool Sql_cmd_consensus_proc_upgrade_learner::pc_execute(THD *thd) {
   int res = 0;
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
-  std::string addr(ip_port->val_str(NULL)->ptr());
+  std::string addr(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_upgrade_learner(addr);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -270,9 +270,9 @@ bool Sql_cmd_consensus_proc_downgrade_follower::pc_execute(THD *thd) {
   int res = 0;
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
-  std::string addr(ip_port->val_str(NULL)->ptr());
+  std::string addr(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_downgrade_follower(addr);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -299,7 +299,7 @@ bool Sql_cmd_consensus_proc_refresh_learner_meta::pc_execute(THD *thd) {
   int res = 0;
   std::vector<std::string> info_vector;
   res = rpl_consensus_sync_all_learners(info_vector);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -325,7 +325,7 @@ bool Sql_cmd_consensus_proc_configure_follower::pc_execute(THD *thd) {
   int res = 0;
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
-  std::string addr(ip_port->val_str(NULL)->ptr());
+  std::string addr(ip_port->val_str(nullptr)->ptr());
   Item_int *w = dynamic_cast<Item_int *>(*(it++));
 
   if (!w) {
@@ -342,7 +342,7 @@ bool Sql_cmd_consensus_proc_configure_follower::pc_execute(THD *thd) {
     force_sync = fs ? fs->val_uint() : 0;
   }
   res = rpl_consensus_configure_member(addr, force_sync, election_weight);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res != 0 && res != 1)
@@ -368,9 +368,9 @@ bool Sql_cmd_consensus_proc_configure_learner::pc_execute(THD *thd) {
   int res = 0;
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
-  std::string addr(ip_port->val_str(NULL)->ptr());
+  std::string addr(ip_port->val_str(nullptr)->ptr());
   Item_string *s = dynamic_cast<Item_string *>(*(it++));
-  std::string source(s->val_str(NULL)->ptr());
+  std::string source(s->val_str(nullptr)->ptr());
   /* use_applied is option, default 0 */
   bool use_applied = 0;
   if (m_list->size() == m_proc->get_parameters()->size()) {
@@ -379,7 +379,7 @@ bool Sql_cmd_consensus_proc_configure_learner::pc_execute(THD *thd) {
   }
 
   res = rpl_consensus_configure_learner(addr, source, use_applied);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res != 0 && res != 1)
@@ -404,7 +404,7 @@ Sql_cmd *Consensus_proc_force_single_mode::evoke_cmd(
 bool Sql_cmd_consensus_proc_force_single_mode::pc_execute(THD *thd) {
   int res = 0;
   res = rpl_consensus_force_single_leader();
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -428,7 +428,7 @@ Sql_cmd *Consensus_proc_force_promote::evoke_cmd(
 
 bool Sql_cmd_consensus_proc_force_promote::pc_execute(THD *thd) {
   rpl_consensus_force_promote();
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, 0);
   return false;
@@ -461,7 +461,7 @@ bool Sql_cmd_consensus_proc_fix_cluster_id::pc_execute(THD *thd) {
   uint64_t cluster_id = ci->val_uint();
   res = rpl_consensus_set_cluster_id(cluster_id);
   opt_cluster_id = cluster_id;
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -487,7 +487,7 @@ bool Sql_cmd_consensus_proc_fix_matchindex::pc_execute(THD *thd) {
   int res = 0;
   auto it = VisibleFields(*m_list).begin();
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
-  std::string addr(ip_port->val_str(NULL)->ptr());
+  std::string addr(ip_port->val_str(nullptr)->ptr());
   Item_int *mi = dynamic_cast<Item_int *>(*(it++));
 
   if (!mi) {
@@ -498,7 +498,7 @@ bool Sql_cmd_consensus_proc_fix_matchindex::pc_execute(THD *thd) {
 
   uint64_t matchindex = mi->val_uint();
   rpl_consensus_force_fix_match_index(addr, matchindex);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -682,7 +682,7 @@ bool Sql_cmd_consensus_proc_purge_log::pc_execute(THD *thd) {
 
   uint64 index = item->val_uint();
   res = rpl_consensus_force_purge_log(false /* local */, index);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -717,7 +717,7 @@ bool Sql_cmd_consensus_proc_local_purge_log::pc_execute(THD *thd) {
 
   uint64 index = item->val_uint();
   res = rpl_consensus_force_purge_log(true /* local */, index);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -752,7 +752,7 @@ bool Sql_cmd_consensus_proc_force_purge_log::pc_execute(THD *thd) {
 
   uint64 index = item->val_uint();
   res = consensus_log_manager.purge_log(index);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -789,7 +789,7 @@ bool Sql_cmd_consensus_proc_drop_prefetch_channel::pc_execute(THD *thd) {
   uint64 channel_id = item->val_uint();
   res = consensus_log_manager.get_prefetch_manager()->drop_prefetch_channel(
       channel_id);
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -828,7 +828,7 @@ bool Sql_cmd_consensus_proc_activate_failpoint::pc_execute(THD *thd) {
     return true;
   }
   auto fp = alisql::FailPointRegistry::getGlobalFailPointRegistry().find(
-      std::string(fail_point_name->val_str(NULL)->ptr()));
+      std::string(fail_point_name->val_str(nullptr)->ptr()));
   if (!fp) {
     my_error(ER_CONSENSUS_COMMAND_ERROR, MYF(0), res,
              rpl_consensus_paxos_default_error());
@@ -872,7 +872,7 @@ bool Sql_cmd_consensus_proc_activate_failpoint::pc_execute(THD *thd) {
 
   // CONSENSUS_PARAM_INPUT_VALUE
   Item_string *item_input_value = dynamic_cast<Item_string *>(*(it++));
-  std::string input_value = std::string(item_input_value->val_str(NULL)->ptr());
+  std::string input_value = std::string(item_input_value->val_str(nullptr)->ptr());
   alisql::FailPointData fail_point_data;
   switch (input_type) {
     case alisql::FailPointData::kInt:
@@ -901,15 +901,13 @@ bool Sql_cmd_consensus_proc_activate_failpoint::pc_execute(THD *thd) {
              rpl_consensus_paxos_default_error());
     return true;
   }
-  sql_print_information(
-      "A consensus libary failpoint '%s' is going to activate, type: %d, "
-      "exec_count: %d, input_type: %d, probability: %1.2f",
-      fail_point_name->val_str(NULL)->ptr(), type, exec_count, input_type,
-      probability);
+  LogPluginErr(INFORMATION_LEVEL, ER_COSENNSUS_FAILPOINT_ACTIVE,
+               fail_point_name->val_str(nullptr)->ptr(), type, exec_count,
+               input_type, probability);
 
   fp->activate(type, exec_count, fail_point_data, probability);
 
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
 
@@ -937,19 +935,18 @@ bool Sql_cmd_consensus_proc_deactivate_failpoint::pc_execute(THD *thd) {
   // CONSENSUS_PARAM_FAILPOINT_NAM
   Item_string *fail_point_name = dynamic_cast<Item_string *>(*(it++));
   auto fp = alisql::FailPointRegistry::getGlobalFailPointRegistry().find(
-      std::string(fail_point_name->val_str(NULL)->ptr()));
+      std::string(fail_point_name->val_str(nullptr)->ptr()));
   if (!fp) {
     my_error(ER_CONSENSUS_COMMAND_ERROR, MYF(0), res,
              rpl_consensus_paxos_default_error());
     return true;
   }
-  sql_print_information(
-      "A consensus libary failpoint '%s' is going to deactivate",
-      fail_point_name->val_str(NULL)->ptr());
+  LogPluginErr(INFORMATION_LEVEL, ER_COSENNSUS_FAILPOINT_DEACTIVE,
+               fail_point_name->val_str(nullptr)->ptr());
 
   fp->deactivate();
 
-  LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
 

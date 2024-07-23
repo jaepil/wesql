@@ -5,4 +5,4 @@ insert into t1 values (REPEAT('test',100));
 # Kill and restart: --consensus_replication_max_log_size=512 --consensus_replication_large_trx=OFF
 insert into t1 values ("test");
 insert into t1 values (REPEAT('test',100));
-ERROR HY000: The consensus log is too large for cluster, please split the transcation to small ones.
+ERROR HY000: The consensus log is too large for consensus replication, please split the transcation to small ones.

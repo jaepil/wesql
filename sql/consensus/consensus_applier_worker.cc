@@ -1,9 +1,14 @@
 #include "consensus_applier_worker.h"
 
+#include "mysqld_error.h"
+
 #include "sql/current_thd.h"  // current_thd
 #include "sql/handler.h"
-#include "sql/log.h"
 #include "sql/mysqld.h"
+
+#include "sql/log.h"
+#include "my_loglevel.h"
+#include "mysql/components/services/log_builtins.h"
 
 const char *info_consensus_applier_worker_fields[] = {"number_of_lines", "id",
                                                       "consensus_apply_index"};
@@ -53,11 +58,10 @@ Creates or reads information from the repository, initializing the
 Consensus_info.
 */
 int Consensus_applier_worker::init_info(bool on_recovery) {
-  DBUG_ENTER("Consensus_applier_worker::init_info");
-
   enum_return_check check_return = ERROR_CHECKING_REPOSITORY;
+  DBUG_TRACE;
 
-  if (inited) DBUG_RETURN(0);
+  if (inited) return 0;
 
   mysql_mutex_init(key_LOCK_consensus_applier_worker,
                    &LOCK_Consensus_applier_worker, MY_MUTEX_INIT_FAST);
@@ -76,29 +80,32 @@ int Consensus_applier_worker::init_info(bool on_recovery) {
   inited = 1;
   if (flush_info(true, true)) goto err;
 
-  DBUG_RETURN(0);
+  return 0;
 err:
   handler->end_info();
   inited = 0;
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_READ_METADATA_ERROR,
+         "consensus_applier_worker");
   abort();
-  DBUG_RETURN(1);
+  return 1;
 }
 
 void Consensus_applier_worker::end_info() {
-  DBUG_ENTER("Consensus_applier_worker::end_info");
+  DBUG_TRACE;
 
-  if (!inited) DBUG_VOID_RETURN;
+  if (!inited) return;
 
   mysql_mutex_destroy(&LOCK_Consensus_applier_worker);
   handler->end_info();
   inited = 0;
-  DBUG_VOID_RETURN;
+  return;
 }
 
 int Consensus_applier_worker::flush_info(bool force, bool need_commit) {
-  DBUG_ENTER("Consensus_applier_worker::flush_info");
   int error = 0;
-  if (!inited) DBUG_RETURN(0);
+  DBUG_TRACE;
+
+  if (!inited) return 0;
   /*
   We update the sync_period at this point because only here we
   now that we are handling a master info. This needs to be
@@ -121,24 +128,25 @@ int Consensus_applier_worker::flush_info(bool force, bool need_commit) {
   }
 
   mysql_mutex_unlock(&LOCK_Consensus_applier_worker);
-  DBUG_RETURN(error);
+  return error;
 
 err:
-  sql_print_error("Consensus_applier_worker::flush_info error.");
   mysql_mutex_unlock(&LOCK_Consensus_applier_worker);
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_WRITE_METADATA_ERROR,
+         "consensus_applier_worker");
   abort();
-  DBUG_RETURN(1);
+  return 1;
 }
 
 bool Consensus_applier_worker::set_info_search_keys(Rpl_info_handler *to) {
-  DBUG_ENTER("Consensus_applier_worker::set_info_search_keys");
+  DBUG_TRACE;
   /* primary keys are Id */
-  if (to->set_info(LINE_FOR_ID - 1, (int)internal_id)) DBUG_RETURN(true);
-  DBUG_RETURN(false);
+  if (to->set_info(LINE_FOR_ID - 1, (int)internal_id)) return true;
+  return false;
 }
 
 bool Consensus_applier_worker::read_info(Rpl_info_handler *from) {
-  DBUG_ENTER("Consensus_applier_worker::read_info");
+  DBUG_TRACE;
 
   ulong temp_apply_index = 0;
   int temp_internal_id = 0;
@@ -146,26 +154,26 @@ bool Consensus_applier_worker::read_info(Rpl_info_handler *from) {
 
   if (from->prepare_info_for_read() ||
       !!from->get_info(number_of_lines, sizeof(number_of_lines), ""))
-    DBUG_RETURN(true);
+    return true;
 
   if (!!from->get_info(&temp_internal_id, 0) ||
       !!from->get_info(&temp_apply_index, 0))
-    DBUG_RETURN(true);
+    return true;
 
   internal_id = (uint)temp_internal_id;
   consensus_apply_index = temp_apply_index;
 
-  DBUG_RETURN(false);
+  return false;
 }
 
 bool Consensus_applier_worker::write_info(Rpl_info_handler *to) {
-  DBUG_ENTER("Consensus_applier_worker::write_info");
+  DBUG_TRACE;
   if (to->prepare_info_for_write() ||
       to->set_info((int)get_number_fields()) ||
       to->set_info((int)internal_id) ||
       to->set_info((ulong)consensus_apply_index))
-    DBUG_RETURN(true);
-  DBUG_RETURN(false);
+    return true;
+  return false;
 }
 
 size_t Consensus_applier_worker::get_number_fields() {
@@ -176,7 +184,7 @@ size_t Consensus_applier_worker::get_number_fields() {
 void Consensus_applier_worker::set_nullable_fields(MY_BITMAP *nullable_fields) {
   bitmap_init(nullable_fields, nullptr,
               Consensus_applier_worker::get_number_fields());
-  bitmap_set_all(nullable_fields);       // All fields may be NULL except for
+  bitmap_set_all(nullable_fields);       // All fields may be nullptr except for
   bitmap_clear_bit(nullable_fields, 0);  // NUMBER_OF_LINES
 }
 
@@ -210,6 +218,7 @@ bool Consensus_applier_worker::reset_recovery_info() {
 
 int Consensus_applier_worker::init_worker(ulong i) {
   DBUG_TRACE;
+
   if (init_info(false)) return 1;
 
   id = i;

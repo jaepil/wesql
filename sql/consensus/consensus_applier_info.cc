@@ -1,11 +1,13 @@
 #include "consensus_applier_info.h"
 #include "consensus_info_factory.h"
 
+#include "mutex_lock.h"
+#include "mysqld_error.h"
+
 #include "sql/log.h"
 #include "my_loglevel.h"
 #include "mysql/components/services/log_builtins.h"
 
-#include "mutex_lock.h"
 #include "sql/current_thd.h"
 #include "sql/handler.h"
 #include "sql/mysqld.h"
@@ -52,11 +54,10 @@ Creates or reads information from the repository, initializing the
 Consensus_info.
 */
 int Consensus_applier_info::init_info() {
-  DBUG_ENTER("Consensus_applier_info::init_info");
-
   enum_return_check check_return = ERROR_CHECKING_REPOSITORY;
+  DBUG_TRACE;
 
-  if (inited) DBUG_RETURN(0);
+  if (inited) return 0;
 
   mysql_mutex_init(key_LOCK_consensus_applier_info,
                    &LOCK_consensus_applier_info, MY_MUTEX_INIT_FAST);
@@ -72,29 +73,32 @@ int Consensus_applier_info::init_info() {
   inited = 1;
   if (flush_info(true, true)) goto err;
 
-  DBUG_RETURN(0);
+  return 0;
 err:
   handler->end_info();
   inited = 0;
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_READ_METADATA_ERROR,
+         "consensus_applier_info");
   abort();
-  DBUG_RETURN(1);
+  return 1;
 }
 
 void Consensus_applier_info::end_info() {
-  DBUG_ENTER("Consensus_applier_info::end_info");
+  DBUG_TRACE;
 
-  if (!inited) DBUG_VOID_RETURN;
+  if (!inited) return;
 
   mysql_mutex_destroy(&LOCK_consensus_applier_info);
   handler->end_info();
   inited = 0;
-  DBUG_VOID_RETURN;
+  return;
 }
 
 int Consensus_applier_info::flush_info(bool force, bool need_commit) {
-  DBUG_ENTER("Consensus_applier_info::flush_info");
   int error = 0;
-  if (!inited) DBUG_RETURN(0);
+  DBUG_TRACE;
+
+  if (!inited) return 0;
   /*
   We update the sync_period at this point because only here we
   now that we are handling a master info. This needs to be
@@ -117,48 +121,48 @@ int Consensus_applier_info::flush_info(bool force, bool need_commit) {
   }
 
   mysql_mutex_unlock(&LOCK_consensus_applier_info);
-  DBUG_RETURN(error);
+  return error;
 
 err:
-  sql_print_error("Consensus_applier_info::flush_info error.");
   mysql_mutex_unlock(&LOCK_consensus_applier_info);
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_WRITE_METADATA_ERROR,
+         "consensus_applier_info");
   abort();
-  DBUG_RETURN(1);
+  return 1;
 }
 
 bool Consensus_applier_info::set_info_search_keys(Rpl_info_handler *to) {
-  DBUG_ENTER("Consensus_applier_info::set_info_search_keys");
+  DBUG_TRACE;
   if (to->set_info(0, (int)get_number_fields()))
-    DBUG_RETURN(true);
-  DBUG_RETURN(false);
+    return true;
+  return false;
 }
 
 bool Consensus_applier_info::read_info(Rpl_info_handler *from) {
-  DBUG_ENTER("Consensus_applier_info::read_info");
-
   char number_of_lines[FN_REFLEN] = {0};
   ulong temp_apply_index = 0;
+  DBUG_TRACE;
 
   if (from->prepare_info_for_read() ||
       !!from->get_info(number_of_lines, sizeof(number_of_lines), ""))
-    DBUG_RETURN(true);
+    return true;
 
   if (!!from->get_info(&recovery_parallel_workers, 0) ||
       !!from->get_info(&temp_apply_index, 0))
-    DBUG_RETURN(true);
+    return true;
 
   consensus_apply_index = temp_apply_index;
 
-  DBUG_RETURN(false);
+  return false;
 }
 
 bool Consensus_applier_info::write_info(Rpl_info_handler *to) {
-  DBUG_ENTER("Consensus_applier_info::write_info");
+  DBUG_TRACE;
   if (to->prepare_info_for_write() || to->set_info((int)get_number_fields()) ||
       to->set_info(recovery_parallel_workers) ||
       to->set_info((ulong)consensus_apply_index))
-    DBUG_RETURN(true);
-  DBUG_RETURN(false);
+    return true;
+  return false;
 }
 
 size_t Consensus_applier_info::get_number_fields() {
@@ -173,12 +177,14 @@ void Consensus_applier_info::set_nullable_fields(MY_BITMAP *nullable_fields) {
 
 int Consensus_applier_info::commit_positions(uint64 event_consensus_index,
                                              bool to_flush) {
+  DBUG_TRACE;
   saved_consensus_apply_index = get_consensus_apply_index();
   set_consensus_apply_index(event_consensus_index);
   return to_flush ? flush_info(true) : 0;
 }
 
 int Consensus_applier_info::rollback_positions() {
+  DBUG_TRACE;
   set_consensus_apply_index(saved_consensus_apply_index);
   return 0;
 }
@@ -208,7 +214,7 @@ bool Consensus_applier_info::mts_finalize_recovery() {
     /*
       If an error occurs during the above create_consensus_applier_woker call,
       the newly created worker object gets deleted within the above function
-      call itself and only NULL is returned. Hence the following check has been
+      call itself and only nullptr is returned. Hence the following check has been
       added to verify that a valid worker object exists.
     */
     if (w) {

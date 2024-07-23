@@ -18,6 +18,12 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "sql/consensus/consensus_info.h"
+
+#include "mysqld_error.h"
+#include "sql/log.h"
+#include "my_loglevel.h"
+#include "mysql/components/services/log_builtins.h"
+
 #include "sql/current_thd.h"
 #include "sql/handler.h"
 #include "sql/log.h"
@@ -67,11 +73,10 @@ Creates or reads information from the repository, initializing the
 Consensus_info.
 */
 int Consensus_info::init_info() {
-  DBUG_ENTER("Consensus_info::init_info");
-
   enum_return_check check_return = ERROR_CHECKING_REPOSITORY;
+  DBUG_TRACE;
 
-  if (inited) DBUG_RETURN(0);
+  if (inited) return 0;
 
   mysql_mutex_init(key_LOCK_consensus_info, &LOCK_consensus_info,
                    MY_MUTEX_INIT_FAST);
@@ -87,29 +92,31 @@ int Consensus_info::init_info() {
   inited = 1;
   if (flush_info(true, true)) goto err;
 
-  DBUG_RETURN(0);
+  return 0;
 err:
   handler->end_info();
   inited = 0;
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_READ_METADATA_ERROR, "consensus_info");
   abort();
-  DBUG_RETURN(1);
+  return 1;
 }
 
 void Consensus_info::end_info() {
-  DBUG_ENTER("Consensus_info::end_info");
+  DBUG_TRACE;
 
-  if (!inited) DBUG_VOID_RETURN;
+  if (!inited) return;
 
   mysql_mutex_destroy(&LOCK_consensus_info);
   handler->end_info();
   inited = 0;
-  DBUG_VOID_RETURN;
+  return;
 }
 
 int Consensus_info::flush_info(bool force, bool need_commit) {
-  DBUG_ENTER("Consensus_info::flush_info");
   int error = 0;
-  if (!inited) DBUG_RETURN(0);
+  DBUG_TRACE;
+
+  if (!inited) return 0;
   /*
   We update the sync_period at this point because only here we
   now that we are handling a master info. This needs to be
@@ -132,24 +139,22 @@ int Consensus_info::flush_info(bool force, bool need_commit) {
   }
 
   mysql_mutex_unlock(&LOCK_consensus_info);
-  DBUG_RETURN(error);
+  return error;
 err:
-  sql_print_error("Consensus_info::flush_info error.");
   mysql_mutex_unlock(&LOCK_consensus_info);
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_WRITE_METADATA_ERROR, "consensus_info");
   abort();
-  DBUG_RETURN(1);
+  return 1;
 }
 
 bool Consensus_info::set_info_search_keys(Rpl_info_handler *to) {
-  DBUG_ENTER("Consensus_info::set_info_search_keys");
+  DBUG_TRACE;
   if (to->set_info(0, (int)get_number_info_consensus_fields()))
-    DBUG_RETURN(true);
-  DBUG_RETURN(false);
+    return true;
+  return false;
 }
 
 bool Consensus_info::read_info(Rpl_info_handler *from) {
-  DBUG_ENTER("Consensus_info::read_info");
-
   ulong temp_vote_for = 0;
   ulong temp_current_term = 0;
   ulong temp_recover_status = 0;
@@ -159,11 +164,12 @@ bool Consensus_info::read_info(Rpl_info_handler *from) {
   char temp_cluster_info[CLUSTER_CONF_STR_LENGTH];
   char temp_cluster_learner_info[CLUSTER_CONF_STR_LENGTH];
   ulong temp_cluster_recover_index = 0;
+  DBUG_TRACE;
 
   if (from->prepare_info_for_read() ||
       !!from->get_info(consensus_config_name, sizeof(consensus_config_name),
                        ""))
-    DBUG_RETURN(true);
+    return true;
 
   if (!!from->get_info(&temp_vote_for, 0) ||
       !!from->get_info(&temp_current_term, 0) ||
@@ -176,7 +182,7 @@ bool Consensus_info::read_info(Rpl_info_handler *from) {
       !!from->get_info(temp_cluster_learner_info,
                        sizeof(temp_cluster_learner_info), "") ||
       !!from->get_info(&temp_cluster_recover_index, 0))
-    DBUG_RETURN(true);
+    return true;
 
   vote_for = temp_vote_for;
   current_term = temp_current_term;
@@ -189,11 +195,11 @@ bool Consensus_info::read_info(Rpl_info_handler *from) {
       std::string(temp_cluster_learner_info, strlen(temp_cluster_learner_info));
   cluster_recover_index = temp_cluster_recover_index;
 
-  DBUG_RETURN(false);
+  return false;
 }
 
 bool Consensus_info::write_info(Rpl_info_handler *to) {
-  DBUG_ENTER("ConsensusLogManager::write_info");
+  DBUG_TRACE;
   if (to->prepare_info_for_write() ||
       to->set_info((int)get_number_info_consensus_fields()) ||
       to->set_info((ulong)vote_for) || to->set_info((ulong)current_term) ||
@@ -203,8 +209,8 @@ bool Consensus_info::write_info(Rpl_info_handler *to) {
       to->set_info((ulong)cluster_id) || to->set_info(cluster_info.c_str()) ||
       to->set_info(cluster_learner_info.c_str()) ||
       to->set_info((ulong)cluster_recover_index))
-    DBUG_RETURN(true);
-  DBUG_RETURN(false);
+    return true;
+  return false;
 }
 
 size_t Consensus_info::get_number_info_consensus_fields() {

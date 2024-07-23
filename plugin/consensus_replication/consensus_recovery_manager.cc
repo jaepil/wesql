@@ -19,12 +19,12 @@
 
 #include "consensus_recovery_manager.h"
 
-#include "mysql/plugin.h"  // MYSQL_STORAGE_ENGINE_PLUGIN
-#include "mysql/thread_pool_priv.h"
+#include "mysqld_error.h"
+#include "my_loglevel.h"
+#include "mysql/components/services/log_builtins.h"
 #include "sql/log.h"
+
 #include "sql/log_event.h"
-#include "sql/mysqld.h"
-#include "sql/sql_parse.h"
 
 #define SECOND_PHASE_KEY "second_phase"
 
@@ -37,10 +37,9 @@ void ConsensusRecoveryManager::add_trx_to_binlog_map(my_xid xid,
     this->recover_term = current_term;
   }
 
-  sql_print_information(
-      "ConsensusRecoveryManager add trx to binlog normal transactions map, transaction id %d, "
-      "consensus index %llu",
-      xid, current_index);
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_TRX_LOGS,
+               "insert into transactions map(xid, consensus_index)", xid,
+               current_index, enum_ha_recover_xa_state::COMMITTED);
 
   total_trx_index_map[xid] = current_index;
 }
@@ -58,10 +57,11 @@ void ConsensusRecoveryManager::add_trx_to_binlog_xa_map(
     this->recover_term = current_term;
   }
 
-  sql_print_information(
-      "ConsensusRecoveryManager add trx to binlog XA tansactions map, transaction id %s, "
-      "consensus index %llu",
-      xid->get_data(), current_index);
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS,
+               "insert into external transactions map(xid, consensus_index)",
+               xid->get_data(), current_index,
+               second_phase ? enum_ha_recover_xa_state::COMMITTED
+                            : enum_ha_recover_xa_state::PREPARED_IN_TC);
 
   total_xa_trx_index_map[xid_str] = current_index;
 }
@@ -85,6 +85,7 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
   for (auto iter = se_xa_map.begin(); iter != se_xa_map.end(); iter++) {
     my_xid xid = iter->first.get_my_xid();
     bool found = false;
+    uint64 current_index = 0;
 
     if (!xid) {  // Externally coordinated transaction
       std::string xid_str(reinterpret_cast<const char *>(iter->first.key()),
@@ -97,22 +98,28 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
       auto iter_xa_trx_map = xa_trx_index_map.find(xid_str);
       if (iter_xa_trx_map != xa_trx_index_map.end()) {
         found = true;
+        current_index = iter_xa_trx_map->second;
         xa_trx_index_map.erase(iter_xa_trx_map);
       }
-      sql_print_information(
-          "ConsensusRecoveryManager found a transaction %s with state %d "
-          "which was %s binlog XA transactions map",
-          iter->first.get_data(), iter->second, found ? "in" : "not in");
+
+      LogPluginErr(
+          INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS,
+          found ? "found a transaction in external transactions map"
+                : "found a transaction not in external transactions map",
+          iter->first.get_data(), found ? current_index : 0, iter->second);
     } else {
       auto iter_trx_map = trx_index_map.find(xid);
       if (iter_trx_map != trx_index_map.end()) {
         found = true;
+        current_index = iter_trx_map->second;
         trx_index_map.erase(iter_trx_map);
       }
-      sql_print_information(
-          "ConsensusRecoveryManager found a prepared-in-se transaction %d "
-          "which was %s binlog normal transactions map",
-          xid, found ? "in" : "not in");
+
+      LogPluginErr(
+          INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_TRX_LOGS,
+          found ? "found a prepared-in-se transaction in transactions map"
+                : "found a prepared-in-se transaction not in transactions map",
+          xid, found ? current_index : 0, iter->second);
     }
   }
 
@@ -129,10 +136,6 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
       max_committed_index = iter_xa_trx_map->second;
   }
 
-  sql_print_information(
-      "ConsensusRecoveryManager found max committed index %llu in engines",
-      max_committed_index);
-
   // Erase trxs after max committed index from binlog xa_list(xa_map)
   for (auto iter = xa_map.begin(); iter != xa_map.end(); iter++) {
     std::string xid_str(reinterpret_cast<const char *>(iter->first.key()),
@@ -147,11 +150,12 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
     auto iter_xa_trx_map = total_xa_trx_index_map.find(xid_str);
     if (iter_xa_trx_map != total_xa_trx_index_map.end() &&
         iter_xa_trx_map->second > max_committed_index) {
+      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS,
+                   "erase a prepared external transaction from binlog external "
+                   "transactions list",
+                   iter->first.get_data(), iter_xa_trx_map->second,
+                   enum_ha_recover_xa_state::PREPARED_IN_SE);
       xa_map.erase(iter);
-      sql_print_information(
-          "ConsensusRecoveryManager erase a prepared XA transaction %s with "
-          "consensus index %llu from binlog XA transactions list",
-          iter->first.get_data(), iter_xa_trx_map->second);
     }
   }
 
@@ -167,11 +171,11 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
 
     if (iter_trx_map != total_trx_index_map.end() &&
         iter_trx_map->second > max_committed_index) {
+      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS,
+                   "erase a prepared transaction from binlog transactions list",
+                   xid, iter_trx_map->second,
+                   enum_ha_recover_xa_state::PREPARED_IN_SE);
       commit_list.erase(iter);
-      sql_print_information(
-          "ConsensusRecoveryManager erase a prepared transaction %d with "
-          "consensus index %lld from commit_list",
-          xid, iter_trx_map->second);
     }
   }
 

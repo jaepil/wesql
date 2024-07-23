@@ -32,12 +32,8 @@
 #include "m_ctype.h"
 #include "m_string.h"
 #include "my_base.h"
-#include "my_compiler.h"
-#include "my_dbug.h"
 #include "my_inttypes.h"
-#include "my_loglevel.h"
 #include "my_psi_config.h"
-#include "my_sys.h"
 #include "mysqld_error.h"
 
 #include "sql/log.h"
@@ -48,13 +44,8 @@
 #include "sql/field.h"
 #include "sql/handler.h"
 #include "sql/mysqld.h"  // key_source_info_run_lock
-#include "sql/rpl_filter.h"
-#include "sql/rpl_info.h"
-#include "sql/rpl_info_dummy.h"         // Rpl_info_dummy
-#include "sql/rpl_info_file.h"          // Rpl_info_file
 #include "sql/rpl_info_table.h"         // Rpl_info_table
 #include "sql/rpl_info_table_access.h"  // Rpl_info_table_access
-#include "sql/rpl_rli.h"
 #include "sql/system_variables.h"
 
 Consensus_info_factory::struct_table_data
@@ -73,14 +64,14 @@ Consensus_info_factory::struct_file_data
     Consensus_info_factory::consensus_applier_worker_file_data;
 
 Consensus_info *Consensus_info_factory::create_consensus_info() {
-  Consensus_info *consensus_info = NULL;
-  Rpl_info_handler *handler_src = NULL;
-  Rpl_info_handler *handler_dest = NULL;
-  // uint instances = 1;
+  Consensus_info *consensus_info = nullptr;
+  Rpl_info_handler *handler_src = nullptr;
+  Rpl_info_handler *handler_dest = nullptr;
   const char *msg =
       "Failed to allocate memory for the consensus info "
       "structure";
-  DBUG_ENTER("Consensus_info_factory::create_consensus_info");
+  DBUG_TRACE;
+
   if (!(consensus_info = new Consensus_info(
 #ifdef HAVE_PSI_INTERFACE
             &key_consensus_info_run_lock, &key_consensus_info_data_lock,
@@ -95,14 +86,14 @@ Consensus_info *Consensus_info_factory::create_consensus_info() {
           &handler_src, &handler_dest, &msg))
     goto err;
   if (handler_dest->get_rpl_info_type() != INFO_REPOSITORY_TABLE) {
-    sql_print_error("Consensus: Wrong repository. Respository should be TABLE");
+    LogErr(ERROR_LEVEL, ER_RPL_REPO_SHOULD_BE_TABLE);
     goto err;
   }
 
   consensus_info->set_rpl_info_handler(handler_dest);
   if (consensus_info->set_info_search_keys(handler_dest)) goto err;
   delete handler_src;
-  DBUG_RETURN(consensus_info);
+  return consensus_info;
 err:
   delete handler_src;
   delete handler_dest;
@@ -111,11 +102,11 @@ err:
     The handler was previously deleted so we need to remove
     any reference to it.
     */
-    consensus_info->set_rpl_info_handler(NULL);
+    consensus_info->set_rpl_info_handler(nullptr);
     delete consensus_info;
   }
-  sql_print_error("Error creating consensus info: %s.", msg);
-  DBUG_RETURN(NULL);
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_CREATE_METADATA_ERROR, "consensus_info", msg);
+  return nullptr;
 }
 
 void Consensus_info_factory::init_consensus_repo_metadata() {
@@ -134,14 +125,14 @@ void Consensus_info_factory::init_consensus_repo_metadata() {
 
 Consensus_applier_info *
 Consensus_info_factory::create_consensus_applier_info() {
-  Consensus_applier_info *consensus_applier_info = NULL;
-  Rpl_info_handler *handler_src = NULL;
-  Rpl_info_handler *handler_dest = NULL;
-  // uint instances = 1;
+  Consensus_applier_info *consensus_applier_info = nullptr;
+  Rpl_info_handler *handler_src = nullptr;
+  Rpl_info_handler *handler_dest = nullptr;
   const char *msg =
       "Failed to allocate memory for the consensus applier info "
       "structure";
-  DBUG_ENTER("Consensus_info_factory::create_consensus_applier_info");
+  DBUG_TRACE;
+
   if (!(consensus_applier_info = new Consensus_applier_info(
 #ifdef HAVE_PSI_INTERFACE
             &key_consensus_info_run_lock, &key_consensus_info_data_lock,
@@ -156,14 +147,14 @@ Consensus_info_factory::create_consensus_applier_info() {
           INFO_REPOSITORY_TABLE, &handler_src, &handler_dest, &msg))
     goto err;
   if (handler_dest->get_rpl_info_type() != INFO_REPOSITORY_TABLE) {
-    sql_print_error("Consensus: Wrong repository. Respository should be TABLE");
+    LogErr(ERROR_LEVEL, ER_RPL_REPO_SHOULD_BE_TABLE);
     goto err;
   }
 
   consensus_applier_info->set_rpl_info_handler(handler_dest);
   if (consensus_applier_info->set_info_search_keys(handler_dest)) goto err;
   delete handler_src;
-  DBUG_RETURN(consensus_applier_info);
+  return consensus_applier_info;
 err:
   delete handler_src;
   delete handler_dest;
@@ -172,11 +163,12 @@ err:
     The handler was previously deleted so we need to remove
     any reference to it.
     */
-    consensus_applier_info->set_rpl_info_handler(NULL);
+    consensus_applier_info->set_rpl_info_handler(nullptr);
     delete consensus_applier_info;
   }
-  sql_print_error("Error creating consensus info: %s.", msg);
-  DBUG_RETURN(nullptr);
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_CREATE_METADATA_ERROR,
+               "consensus_applier_info", msg);
+  return nullptr;
 }
 
 void Consensus_info_factory::init_consensus_applier_repo_metadata() {
@@ -198,14 +190,14 @@ void Consensus_info_factory::init_consensus_applier_repo_metadata() {
 Consensus_applier_worker *
 Consensus_info_factory::create_consensus_applier_woker(uint worker_id,
                                                        bool on_recovery) {
-  Consensus_applier_worker *consensus_applier_worker = NULL;
-  Rpl_info_handler *handler_src = NULL;
-  Rpl_info_handler *handler_dest = NULL;
-  // uint instances = 1;
+  Consensus_applier_worker *consensus_applier_worker = nullptr;
+  Rpl_info_handler *handler_src = nullptr;
+  Rpl_info_handler *handler_dest = nullptr;
   const char *msg =
       "Failed to allocate memory for the consensus applier worker"
       "structure";
-  DBUG_ENTER("Consensus_info_factory::create_consensus_applier_woker");
+  DBUG_TRACE;
+
   if (!(consensus_applier_worker = new Consensus_applier_worker(
 #ifdef HAVE_PSI_INTERFACE
             &key_consensus_info_run_lock, &key_consensus_info_data_lock,
@@ -220,7 +212,7 @@ Consensus_info_factory::create_consensus_applier_woker(uint worker_id,
           INFO_REPOSITORY_TABLE, &handler_src, &handler_dest, &msg))
     goto err;
   if (handler_dest->get_rpl_info_type() != INFO_REPOSITORY_TABLE) {
-    sql_print_error("Consensus: Wrong repository. Respository should be TABLE");
+    LogErr(ERROR_LEVEL, ER_RPL_REPO_SHOULD_BE_TABLE);
     goto err;
   }
 
@@ -230,7 +222,7 @@ Consensus_info_factory::create_consensus_applier_woker(uint worker_id,
   if (consensus_applier_worker->init_info(on_recovery)) goto err;
 
   delete handler_src;
-  DBUG_RETURN(consensus_applier_worker);
+  return consensus_applier_worker;
 err:
   delete handler_src;
   delete handler_dest;
@@ -239,11 +231,12 @@ err:
     The handler was previously deleted so we need to remove
     any reference to it.
     */
-    consensus_applier_worker->set_rpl_info_handler(NULL);
+    consensus_applier_worker->set_rpl_info_handler(nullptr);
     delete consensus_applier_worker;
   }
-  sql_print_error("Error creating consensus applier worker: %s.", msg);
-  DBUG_RETURN(nullptr);
+  LogErr(ERROR_LEVEL, ER_CONSENSUS_CREATE_METADATA_ERROR,
+               "consensus_applier_worker", msg);
+  return nullptr;
 }
 
 /**

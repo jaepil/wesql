@@ -1,18 +1,21 @@
 #include "consensus_binlog_recovery.h"
 #include "consensus_binlog.h"
 #include "consensus_log_manager.h"
+#include "consensus_meta.h"
 #include "consensus_recovery_manager.h"
+#include "consensus_state_process.h"
 #include "system_variables.h"
 
 #include "my_loglevel.h"
-#include "sql/log.h"
 #include "mysql/components/services/log_builtins.h"
+#include "sql/log.h"
 
 #include "mysql/plugin.h"
 #include "scope_guard.h"  // Scope_guard
+
 #include "sql/binlog.h"
 #include "sql/binlog/decompressing_event_object_istream.h"  // binlog::Decompressing_event_object_istream
-#include "sql/binlog/recovery.h"         // binlog::Binlog_recovery
+#include "sql/binlog/recovery.h"  // binlog::Binlog_recovery
 #include "sql/binlog_istream.h"
 #include "sql/binlog_ostream.h"
 #include "sql/log_event.h"
@@ -29,10 +32,10 @@ static int consensus_ha_recover(ConsensusRecoveryManager *recovery_manager,
   xarecover_st info;
   Xa_state_list *se_xa_list;
   Xa_state_list xa_list{*binlog_xid_map};
-  DBUG_TRACE;
   info.commit_list = commit_list;
   info.dry_run = false;
   info.list = nullptr;
+  DBUG_TRACE;
 
   // destruct se_xa_list when this function returns
   std::unique_ptr<MEM_ROOT> mem_root{nullptr};
@@ -45,15 +48,15 @@ static int consensus_ha_recover(ConsensusRecoveryManager *recovery_manager,
 
   assert(total_ha_2pc > 1);
 
-  if (info.commit_list) LogErr(SYSTEM_LEVEL, ER_XA_STARTING_RECOVERY);
+  if (info.commit_list) LogPluginErr(SYSTEM_LEVEL, ER_XA_STARTING_RECOVERY);
 
   for (info.len = MAX_XID_LIST_SIZE;
        info.list == nullptr && info.len > MIN_XID_LIST_SIZE; info.len /= 2) {
     info.list = new (std::nothrow) XA_recover_txn[info.len];
   }
   if (!info.list) {
-    LogErr(ERROR_LEVEL, ER_SERVER_OUTOFMEMORY,
-           static_cast<int>(info.len * sizeof(XID)));
+    LogPluginErr(ERROR_LEVEL, ER_SERVER_OUTOFMEMORY,
+                 static_cast<int>(info.len * sizeof(XID)));
     return 1;
   }
   auto clean_up_guard = create_scope_guard([&] { delete[] info.list; });
@@ -77,8 +80,9 @@ static int consensus_ha_recover(ConsensusRecoveryManager *recovery_manager,
   }
 
   if (info.found_foreign_xids)
-    LogErr(WARNING_LEVEL, ER_XA_RECOVER_FOUND_XA_TRX, info.found_foreign_xids);
-  if (info.commit_list) LogErr(SYSTEM_LEVEL, ER_XA_RECOVERY_DONE);
+    LogPluginErr(WARNING_LEVEL, ER_XA_RECOVER_FOUND_XA_TRX,
+                 info.found_foreign_xids);
+  if (info.commit_list) LogPluginErr(SYSTEM_LEVEL, ER_XA_RECOVERY_DONE);
 
   return 0;
 }
@@ -186,9 +190,8 @@ void Consensus_binlog_recovery::after_process_xa_prepare_event(
   XID xid;
   DBUG_TRACE;
   xid = ev.get_xid();
-  recovery_manager.add_trx_to_binlog_xa_map(
-      &xid, false, this->current_index,
-      this->current_term);
+  recovery_manager.add_trx_to_binlog_xa_map(&xid, false, this->current_index,
+                                            this->current_term);
 }
 
 void Consensus_binlog_recovery::after_process_atomic_ddl(
@@ -262,9 +265,9 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
         break;
       }
       case binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT: {
-          this->process_previous_consensus_index_event(
-              dynamic_cast<Previous_consensus_index_log_event &>(*ev));
-          start_index = this->current_index + 1;
+        this->process_previous_consensus_index_event(
+            dynamic_cast<Previous_consensus_index_log_event &>(*ev));
+        start_index = this->current_index + 1;
         break;
       }
       default: {
@@ -284,8 +287,8 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
       }
     }
 
-    if (!this->m_is_malformed && !this->begin_consensus && !is_gtid_event(ev.get()) &&
-        !is_session_control_event(ev.get())) {
+    if (!this->m_is_malformed && !this->begin_consensus &&
+        !is_gtid_event(ev.get()) && !is_session_control_event(ev.get())) {
       this->valid_index = this->current_index;
       this->m_valid_pos = this->m_reader.position();
     }
@@ -329,13 +332,13 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
   if (this->has_failures()) return (*this);
 
   if (ha_recover) {
-    consensus_log_manager.set_recovery_index_hwl(
+    consensus_state_process.set_recovery_index_hwl(
         recovery_manager.max_committed_index > 0
             ? recovery_manager.max_committed_index
             : start_index - 1);
   } else if (!log_recover_only) {
     assert(ha_recover_end_pos == 0);
-    consensus_log_manager.set_recovery_index_hwl(this->valid_index);
+    consensus_state_process.set_recovery_index_hwl(this->valid_index);
   }
 
   consensus_log_manager.set_cache_index(this->valid_index);
@@ -344,9 +347,10 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
   consensus_log_manager.set_enable_rotate(enable_rotate);
   consensus_log_manager.set_event_timestamp(this->current_ev_ts);
 
-  LogErr(SYSTEM_LEVEL, ER_CONSENSUS_LOG_RECOVERY_FINISHED,
-         recovery_manager.max_committed_index, this->valid_index,
-         log_recover_only ? 0 : consensus_log_manager.get_recovery_index_hwl());
+  LogPluginErr(
+      SYSTEM_LEVEL, ER_CONSENSUS_LOG_RECOVERY_FINISHED,
+      recovery_manager.max_committed_index, this->valid_index,
+      log_recover_only ? 0 : consensus_state_process.get_recovery_index_hwl());
 
   return (*this);
 }
@@ -357,21 +361,21 @@ uint64 get_applier_start_index() {
   ulonglong start_apply_index;
   uint64 next_index;
   DBUG_TRACE;
-  Consensus_info *consensus_info = consensus_log_manager.get_consensus_info();
-  Consensus_applier_info *applier_info =
-      consensus_log_manager.get_applier_info();
+  Consensus_info *consensus_info = consensus_meta.get_consensus_info();
+  Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
 
   first_index = consensus_log_manager.get_log_file_index()->get_first_index();
   recover_status = consensus_info->get_recover_status();
-  assert(consensus_log_manager.get_status() == BINLOG_WORKING);
+  assert(consensus_state_process.get_status() ==
+         Consensus_Log_System_Status::BINLOG_WORKING);
   start_apply_index = consensus_info->get_start_apply_index();
-  uint64 last_applied_index = consensus_log_manager.get_recovery_index_hwl();
+  uint64 last_applied_index = consensus_state_process.get_recovery_index_hwl();
 
-  LogErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_APPLIED_INDEX_START,
-         recover_status, first_index, start_apply_index, last_applied_index,
-         applier_info->get_consensus_apply_index());
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_APPLIED_INDEX_START,
+               recover_status, first_index, start_apply_index,
+               last_applied_index, applier_info->get_consensus_apply_index());
 
-  if (recover_status == BINLOG_WORKING) {
+  if (recover_status == Consensus_Log_System_Status::BINLOG_WORKING) {
     if (opt_cluster_recover_from_backup || consistent_snapshot_recovery ||
         start_apply_index == 0) {
       next_index = last_applied_index < first_index
@@ -381,8 +385,8 @@ uint64 get_applier_start_index() {
       consensus_info->set_start_apply_index(last_applied_index);
       if (consensus_info->flush_info(true, true)) {
         next_index = 0;
-        LogErr(ERROR_LEVEL, ER_CONSENSUS_FATAL_ERROR,
-               "Error flush consensus info set start apply index");
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FATAL_ERROR,
+                     "Error flush consensus info set start apply index");
       }
     } else {
       assert(start_apply_index >= first_index);
@@ -401,7 +405,8 @@ uint64 get_applier_start_index() {
                            consensus_recovery_index, false);
   }
 
-  LogErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_APPLIED_INDEX_STOP, next_index);
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_APPLIED_INDEX_STOP,
+               next_index);
 
   return next_index;
 }
@@ -425,10 +430,10 @@ int gtid_init_after_consensus_setup(uint64 last_index, const char *log_name) {
   Gtid_set gtids_in_binlog_not_in_table(global_sid_map, global_sid_lock);
 
   uint64 recover_status =
-      consensus_log_manager.get_consensus_info()->get_recover_status();
+      consensus_meta.get_consensus_info()->get_recover_status();
 
-  MYSQL_BIN_LOG *log = consensus_log_manager.get_binlog();
-  assert(log != NULL);
+  MYSQL_BIN_LOG *log = consensus_state_process.get_binlog();
+  assert(log != nullptr);
   if (log->consensus_init_gtid_sets(
           &gtids_in_binlog, &purged_gtids_from_binlog,
           opt_source_verify_checksum, true,
@@ -439,7 +444,8 @@ int gtid_init_after_consensus_setup(uint64 last_index, const char *log_name) {
 
   /* Add unsaved set of GTIDs into gtid_executed table */
   if (!opt_cluster_log_type_instance &&
-      recover_status == BINLOG_WORKING &&  // just for leader
+      recover_status ==
+          Consensus_Log_System_Status::BINLOG_WORKING &&  // just for leader
       !gtids_in_binlog.is_empty() &&
       !gtids_in_binlog.is_subset(executed_gtids)) {
     gtids_in_binlog_not_in_table.add_gtid_set(&gtids_in_binlog);
@@ -503,33 +509,36 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
   LOG_INFO log_info;
   Log_event *ev = nullptr;
   int error = 0;
-  bool should_execute_ha_recover = false;
   bool should_retrieve_logs_end = false;
   char log_name[FN_REFLEN];
   my_off_t valid_pos = 0;
   my_off_t binlog_size = 0;
+  bool should_ha_recover;
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
 
   DBUG_TRACE;
 
   if (ha_recover_end_file != nullptr)
-    LogErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_USING, ha_recover_end_file,
-           ha_recover_end_pos);
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_USING,
+                 ha_recover_end_file, ha_recover_end_pos);
 
   if ((error = binlog->find_log_pos(&log_info, ha_recover_end_file,
                                     true /*need_lock_index=true*/))) {
     if (ha_recover_end_file != nullptr || error != LOG_INFO_EOF)
-      LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
     else {
-      error = 0;
-      should_execute_ha_recover = true;
+      /* should execute ha_recover */
+      error = ha_recover();
+      if (error)
+        LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
     }
-    goto err;
+    return error;
   }
 
   if (ha_recover_end_file != nullptr) {
     strmake(log_name, log_info.log_file_name, sizeof(log_name) - 1);
-    /* Should retrieve latest log file if ha_recover_end_file is not the latest */
+    /* Should retrieve latest log file if ha_recover_end_file is not the latest
+     */
     error = binlog->find_next_log(&log_info, true /*need_lock_index=true*/);
     if (!error) should_retrieve_logs_end = true;
   } else {
@@ -538,16 +547,36 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
     } while (!(error = binlog->find_next_log(&log_info,
                                              true /*need_lock_index=true*/)));
     if (error != LOG_INFO_EOF) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
-      goto err;
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
+      return 1;
     }
   }
 
   if (binlog_file_reader.open(log_name)) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-           binlog_file_reader.get_error_str());
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
     return 1;
   }
+
+  ev = binlog_file_reader.read_event_object();
+  if (!ev) {
+    my_off_t binlog_size = binlog_file_reader.ifile()->length();
+    LogPluginErr(ERROR_LEVEL, ER_READ_LOG_EVENT_FAILED,
+                 binlog_file_reader.get_error_str(), binlog_size,
+                 binary_log::UNKNOWN_EVENT);
+    return 1;
+  }
+
+  if (ev->get_type_code() != binary_log::FORMAT_DESCRIPTION_EVENT) {
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_MALFORMED_LOG, log_name,
+                 0, binlog_file_reader.position(),
+                 Log_event::get_type_str(ev->get_type_code()));
+    delete ev;
+    return 1;
+  }
+
+  LogPluginErr(INFORMATION_LEVEL, ER_BINLOG_RECOVERING_AFTER_CRASH_USING,
+               log_name);
 
   /*
     If the binary log was not properly closed it means that the server
@@ -563,37 +592,35 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
     total_ha_2pc == 1, to find the last valid group of events written.
     Later we will take this value and truncate the log if need be.
   */
-  if ((ev = binlog_file_reader.read_event_object()) &&
-      ev->get_type_code() == binary_log::FORMAT_DESCRIPTION_EVENT) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_RECOVERING_AFTER_CRASH_USING, log_name);
-    bool ha_recover =
-        (!opt_cluster_log_type_instance &&
-         (ha_recover_end_file != nullptr ||  // consist recovery
-          ev->common_header->flags & LOG_EVENT_BINLOG_IN_USE_F ||
-          DBUG_EVALUATE_IF("eval_force_bin_log_recovery", true, false)));
-
-    Consensus_binlog_recovery bl_recovery{binlog_file_reader};
-    error =
-        bl_recovery
-            .consensus_recover(
-                ha_recover,
-                ha_recover_end_file != nullptr ? ha_recover_end_pos : 0, false)
-            .has_failures();
-    valid_pos = bl_recovery.get_valid_pos();
-    binlog_size = binlog_file_reader.ifile()->length();
-    if (error) {
-      if (bl_recovery.is_binlog_malformed())
-        LogErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_MALFORMED_LOG, log_name,
-               valid_pos, binlog_file_reader.position(),
-               bl_recovery.get_failure_message().data());
-      if (bl_recovery.has_engine_recovery_failed())
-        LogErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
-    }
-    should_execute_ha_recover = !ha_recover;
-  } else
-    should_execute_ha_recover = true;
+  should_ha_recover =
+      (!opt_cluster_log_type_instance &&
+       (ha_recover_end_file != nullptr ||  // consist recovery
+        ev->common_header->flags & LOG_EVENT_BINLOG_IN_USE_F ||
+        DBUG_EVALUATE_IF("eval_force_bin_log_recovery", true, false)));
 
   delete ev;
+
+  Consensus_binlog_recovery bl_recovery{binlog_file_reader};
+  bl_recovery.consensus_recover(
+      should_ha_recover,
+      ha_recover_end_file != nullptr ? ha_recover_end_pos : 0, false);
+  valid_pos = bl_recovery.get_valid_pos();
+  binlog_size = binlog_file_reader.ifile()->length();
+
+  if (bl_recovery.is_binlog_malformed()) {
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_MALFORMED_LOG, log_name,
+                 valid_pos, binlog_file_reader.position(),
+                 bl_recovery.get_failure_message().data());
+    return 1;
+  }
+
+  if (bl_recovery.has_engine_recovery_failed()) {
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
+    if (!should_retrieve_logs_end && valid_pos > 0)
+      (void)truncate_binlog_file_to_valid_pos(log_name, valid_pos, binlog_size,
+                                              true);
+    return 1;
+  }
 
   /* Recovery consensus log status if needed when PITR */
   if (should_retrieve_logs_end) {
@@ -606,52 +633,66 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
                                              true /*need_lock_index=true*/)));
 
     if (error != LOG_INFO_EOF) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
-      goto err;
-    }
-
-    if (binlog_file_reader.open(log_name)) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
-             binlog_file_reader.get_error_str());
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
       return 1;
     }
 
+    if (binlog_file_reader.open(log_name)) {
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                   binlog_file_reader.get_error_str());
+      return 1;
+    }
+
+    ev = binlog_file_reader.read_event_object();
+    if (!ev) {
+      my_off_t binlog_size = binlog_file_reader.ifile()->length();
+      LogPluginErr(ERROR_LEVEL, ER_READ_LOG_EVENT_FAILED,
+                   binlog_file_reader.get_error_str(), binlog_size,
+                   binary_log::UNKNOWN_EVENT);
+      return 1;
+    }
+
+    if (ev->get_type_code() != binary_log::FORMAT_DESCRIPTION_EVENT) {
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_MALFORMED_LOG,
+                   log_name, 0, binlog_file_reader.position(),
+                   Log_event::get_type_str(ev->get_type_code()));
+      delete ev;
+      return 1;
+    }
+
+    delete ev;
+
     /* Scan the log file and recovery consensus log status */
-    if ((ev = binlog_file_reader.read_event_object()) &&
-        ev->get_type_code() == binary_log::FORMAT_DESCRIPTION_EVENT) {
-      Consensus_binlog_recovery bl_recovery{binlog_file_reader};
-      error = bl_recovery.consensus_recover(false, 0, true).has_failures();
-      valid_pos = bl_recovery.get_valid_pos();
-      binlog_size = binlog_file_reader.ifile()->length();
-      if (error) {
-        if (bl_recovery.is_binlog_malformed())
-          LogErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_MALFORMED_LOG, log_name,
-                 valid_pos, binlog_file_reader.position(),
-                 bl_recovery.get_failure_message().data());
-        if (bl_recovery.has_engine_recovery_failed())
-          LogErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
-      }
+    Consensus_binlog_recovery bl_scan{binlog_file_reader};
+    bl_scan.consensus_recover(false, 0, true);
+    valid_pos = bl_scan.get_valid_pos();
+    binlog_size = binlog_file_reader.ifile()->length();
+
+    if (bl_scan.is_binlog_malformed()) {
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_MALFORMED_LOG,
+                   log_name, valid_pos, binlog_file_reader.position(),
+                   bl_scan.get_failure_message().data());
+      return 1;
     }
   }
 
   /* Trim the crashed binlog file to last valid transaction
     or event (non-transaction) base on valid_pos. */
-  if (!error && valid_pos > 0) {
+  if (valid_pos > 0) {
     if (ha_recover_end_file != nullptr && recover_end_file != nullptr) {
       strncpy(recover_end_file, log_name, FN_REFLEN);
       recover_end_pos = valid_pos;
     }
-
     error = truncate_binlog_file_to_valid_pos(log_name, valid_pos, binlog_size,
                                               true);
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_CRASHED_BINLOG_TRIMMED, log_name,
-           binlog_size, valid_pos, valid_pos);
+    LogPluginErr(INFORMATION_LEVEL, ER_BINLOG_CRASHED_BINLOG_TRIMMED, log_name,
+                 binlog_size, valid_pos, valid_pos);
   }
 
-err:
-  if (should_execute_ha_recover) {
+  if (!should_ha_recover) {
     error = ha_recover();
-    if (error) LogErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
+    if (error)
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
   }
 
   return error;

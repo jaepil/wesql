@@ -21,7 +21,6 @@
 #define CONSENSUS_FIFO_CACHE_MANAGER_INCLUDE
 
 #include <atomic>
-#include <string>
 #include <thread>
 #include "sql/mysqld.h"
 

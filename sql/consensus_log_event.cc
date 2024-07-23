@@ -37,23 +37,20 @@ Consensus_log_event::Consensus_log_event(uint32 flag_arg, uint64 term_arg,
       Log_event(header(), footer())
 #endif
 {
-  DBUG_ENTER(
-      "Consensus_log_event::Consensus_log_event(int, uint64, uint64, uint64)");
+  DBUG_TRACE;
   Log_event_type event_type = binary_log::CONSENSUS_LOG_EVENT;
   common_header->type_code = event_type;
   common_header->data_written = LOG_EVENT_HEADER_LEN + get_data_size();
   common_header->set_is_valid(true);
   common_header->flags |= LOG_EVENT_IGNORABLE_F;
-  DBUG_VOID_RETURN;
+  return;
 }
 Consensus_log_event::Consensus_log_event(
     const char *buffer, uint event_len,
     const Format_description_event *description_event)
     : binary_log::Consensus_event(buffer, event_len, description_event),
       Log_event(header(), footer()) {
-  DBUG_ENTER(
-      "Consensus_log_event::Consensus_log_event(const char *,"
-      " uint, const Format_description_log_event *");
+  DBUG_TRACE;
 #ifndef DBUG_OFF
   uint8_t const common_header_len = description_event->common_header_len;
   uint8 const post_header_len =
@@ -62,7 +59,7 @@ Consensus_log_event::Consensus_log_event(
              ("event_len: %u; common_header_len: %d; post_header_len: %d",
               event_len, common_header_len, post_header_len));
 #endif
-  DBUG_VOID_RETURN;
+  return;
 }
 size_t Consensus_log_event::to_string(char *buffer) const {
   char *p = buffer;
@@ -97,7 +94,7 @@ size_t Consensus_log_event::to_string(char *buffer) const {
 }
 #ifdef MYSQL_SERVER
 uint32 Consensus_log_event::write_data_header_to_memory(uchar *buffer) {
-  DBUG_ENTER("Consensus_log_event::write_data_header_to_memory");
+  DBUG_TRACE;
   uchar *ptr_buffer = buffer;
   memcpy(ptr_buffer, &flag, sizeof(flag));
   ptr_buffer += ENCODED_FLAG_LENGTH;
@@ -114,15 +111,14 @@ uint32 Consensus_log_event::write_data_header_to_memory(uchar *buffer) {
                       flag, term, index, length, reserve));
 #endif
   assert(ptr_buffer == (buffer + POST_HEADER_LENGTH));
-  DBUG_RETURN(POST_HEADER_LENGTH);
+  return POST_HEADER_LENGTH;
 }
 
 bool Consensus_log_event::write_data_header(Basic_ostream *ostream) {
-  DBUG_ENTER("Consensus_log_event::write_data_header");
+  DBUG_TRACE;
   uchar buffer[POST_HEADER_LENGTH];
   write_data_header_to_memory(buffer);
-  DBUG_RETURN(
-      wrapper_my_b_safe_write(ostream, (uchar *)buffer, POST_HEADER_LENGTH));
+  return wrapper_my_b_safe_write(ostream, (uchar *)buffer, POST_HEADER_LENGTH);
 }
 
 #endif
@@ -150,12 +146,13 @@ void Consensus_log_event::print(FILE *file [[maybe_unused]],
 #endif
 #if defined(MYSQL_SERVER)
 int Consensus_log_event::do_apply_event(Relay_log_info const *rli) {
-  DBUG_ENTER("Consensus_log_event::do_apply_event");
+  DBUG_TRACE;
   assert(rli->info_thd == thd);
-  DBUG_RETURN(0);
+  return 0;
 }
 
 int Consensus_log_event::do_update_pos(Relay_log_info *rli) {
+  DBUG_TRACE;
   rli->inc_event_relay_log_pos();
   return 0;
 }
@@ -174,13 +171,13 @@ Previous_consensus_index_log_event::Previous_consensus_index_log_event(
       Log_event(header(), footer())
 #endif
 {
-  DBUG_ENTER("Consensus_log_event::Consensus_log_event(bool, uint64, uint64)");
+  DBUG_TRACE;
   Log_event_type event_type = binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT;
   common_header->type_code = event_type;
   common_header->data_written = LOG_EVENT_HEADER_LEN + get_data_size();
   common_header->set_is_valid(true);
   common_header->flags |= LOG_EVENT_IGNORABLE_F;
-  DBUG_VOID_RETURN;
+  return;
 }
 
 Previous_consensus_index_log_event::Previous_consensus_index_log_event(
@@ -189,9 +186,7 @@ Previous_consensus_index_log_event::Previous_consensus_index_log_event(
     : binary_log::Previous_consensus_index_event(buffer, event_len,
                                                  description_event),
       Log_event(header(), footer()) {
-  DBUG_ENTER(
-      "Consensus_log_event::Consensus_log_event(const char *,"
-      " uint, const Format_description_log_event *");
+  DBUG_TRACE;
 #ifndef DBUG_OFF
   uint8_t const common_header_len = description_event->common_header_len;
   uint8 const post_header_len =
@@ -201,7 +196,7 @@ Previous_consensus_index_log_event::Previous_consensus_index_log_event(
              ("event_len: %u; common_header_len: %d; post_header_len: %d",
               event_len, common_header_len, post_header_len));
 #endif
-  DBUG_VOID_RETURN;
+  return;
 }
 
 size_t Previous_consensus_index_log_event::to_string(char *buffer) const {
@@ -219,7 +214,7 @@ size_t Previous_consensus_index_log_event::to_string(char *buffer) const {
 #ifdef MYSQL_SERVER
 uint32 Previous_consensus_index_log_event::write_data_header_to_memory(
     uchar *buffer) {
-  DBUG_ENTER("Consensus_log_event::write_data_header_to_memory");
+  DBUG_TRACE;
   uchar *ptr_buffer = buffer;
   memcpy(ptr_buffer, &index, sizeof(index));
   ptr_buffer += ENCODED_INDEX_LENGTH;
@@ -227,15 +222,14 @@ uint32 Previous_consensus_index_log_event::write_data_header_to_memory(
   DBUG_PRINT("info", ("index=%lld", index));
 #endif
   assert(ptr_buffer == (buffer + POST_HEADER_LENGTH));
-  DBUG_RETURN(POST_HEADER_LENGTH);
+  return POST_HEADER_LENGTH;
 }
 bool Previous_consensus_index_log_event::write_data_header(
     Basic_ostream *ostream) {
-  DBUG_ENTER("Consensus_log_event::write_data_header");
+  DBUG_TRACE;
   uchar buffer[POST_HEADER_LENGTH];
   write_data_header_to_memory(buffer);
-  DBUG_RETURN(
-      wrapper_my_b_safe_write(ostream, (uchar *)buffer, POST_HEADER_LENGTH));
+  return wrapper_my_b_safe_write(ostream, (uchar *)buffer, POST_HEADER_LENGTH);
 }
 #endif
 #ifdef MYSQL_SERVER
@@ -261,11 +255,12 @@ void Previous_consensus_index_log_event::print(
 #if defined(MYSQL_SERVER)
 int Previous_consensus_index_log_event::do_apply_event(
     Relay_log_info const *rli) {
-  DBUG_ENTER("Consensus_log_event::do_apply_event");
+  DBUG_TRACE;
   assert(rli->info_thd == thd);
-  DBUG_RETURN(0);
+  return 0;
 }
 int Previous_consensus_index_log_event::do_update_pos(Relay_log_info *rli) {
+  DBUG_TRACE;
   rli->inc_event_relay_log_pos();
   return 0;
 }
@@ -283,13 +278,13 @@ Consensus_cluster_info_log_event::Consensus_cluster_info_log_event(
       Log_event(header(), footer())
 #endif
 {
-  DBUG_ENTER("Consensus_log_event::Consensus_log_event(int, uint64, uint64)");
+  DBUG_TRACE;
   Log_event_type event_type = binary_log::CONSENSUS_CLUSTER_INFO_EVENT;
   common_header->type_code = event_type;
   common_header->data_written = LOG_EVENT_HEADER_LEN + get_data_size();
   common_header->set_is_valid(true);
   common_header->flags |= LOG_EVENT_IGNORABLE_F;
-  DBUG_VOID_RETURN;
+  return;
 }
 
 Consensus_cluster_info_log_event::Consensus_cluster_info_log_event(
@@ -298,9 +293,7 @@ Consensus_cluster_info_log_event::Consensus_cluster_info_log_event(
     : binary_log::Consensus_cluster_info_event(buffer, event_len,
                                                description_event),
       Log_event(header(), footer()) {
-  DBUG_ENTER(
-      "Consensus_log_event::Consensus_log_event(const char *,"
-      " uint, const Format_description_log_event *");
+  DBUG_TRACE;
 #ifndef DBUG_OFF
   uint8_t const common_header_len = description_event->common_header_len;
   uint8 const post_header_len =
@@ -310,7 +303,7 @@ Consensus_cluster_info_log_event::Consensus_cluster_info_log_event(
              ("event_len: %u; common_header_len: %d; post_header_len: %d",
               event_len, common_header_len, post_header_len));
 #endif
-  DBUG_VOID_RETURN;
+  return;
 }
 size_t Consensus_cluster_info_log_event::to_string(char *buffer) const {
   char *p = buffer;
@@ -326,7 +319,7 @@ size_t Consensus_cluster_info_log_event::to_string(char *buffer) const {
 #ifdef MYSQL_SERVER
 uint32 Consensus_cluster_info_log_event::write_data_header_to_memory(
     uchar *buffer) {
-  DBUG_ENTER("Consensus_log_event::write_data_header_to_memory");
+  DBUG_TRACE;
   uchar *ptr_buffer = buffer;
   memcpy(ptr_buffer, &info_length, sizeof(info_length));
   ptr_buffer += ENCODED_INFO_LENGTH_LENGTH;
@@ -334,15 +327,15 @@ uint32 Consensus_cluster_info_log_event::write_data_header_to_memory(
   DBUG_PRINT("info", ("info_length=%u", info_length));
 #endif
   assert(ptr_buffer == (buffer + POST_HEADER_LENGTH));
-  DBUG_RETURN(POST_HEADER_LENGTH);
+  return POST_HEADER_LENGTH;
 }
 
 bool Consensus_cluster_info_log_event::write_data_header(
     Basic_ostream *ostream) {
-  DBUG_ENTER("Consensus_log_event::write_data_header");
+  DBUG_TRACE;
   uchar buffer[POST_HEADER_LENGTH];
   write_data_header_to_memory(buffer);
-  DBUG_RETURN(
+  return (
       wrapper_my_b_safe_write(ostream, (uchar *)buffer, POST_HEADER_LENGTH) ||
       wrapper_my_b_safe_write(ostream, reinterpret_cast<const uchar *>(info),
                               info_length));
@@ -371,11 +364,12 @@ void Consensus_cluster_info_log_event::print(
 #if defined(MYSQL_SERVER)
 int Consensus_cluster_info_log_event::do_apply_event(
     Relay_log_info const *rli) {
-  DBUG_ENTER("Consensus_cluster_info_log_event::do_apply_event");
+  DBUG_TRACE;
   assert(rli->info_thd == thd);
-  DBUG_RETURN(0);
+  return 0;
 }
 int Consensus_cluster_info_log_event::do_update_pos(Relay_log_info *rli) {
+  DBUG_TRACE;
   rli->inc_event_relay_log_pos();
   return 0;
 }
@@ -391,22 +385,20 @@ Consensus_empty_log_event::Consensus_empty_log_event()
       Log_event(header(), footer())
 #endif
 {
-  DBUG_ENTER("Consensusempty_log_event::Consensusempty_log_event()");
+  DBUG_TRACE;
   Log_event_type event_type = binary_log::CONSENSUS_EMPTY_EVENT;
   common_header->type_code = event_type;
   common_header->data_written = LOG_EVENT_HEADER_LEN;
   common_header->set_is_valid(true);
   common_header->flags |= LOG_EVENT_IGNORABLE_F;
-  DBUG_VOID_RETURN;
+  return;
 }
 Consensus_empty_log_event::Consensus_empty_log_event(
     const char *buffer, uint event_len,
     const Format_description_event *description_event)
     : binary_log::Consensus_empty_event(buffer, event_len, description_event),
       Log_event(header(), footer()) {
-  DBUG_ENTER(
-      "Consensus_empty_log_event::Consensus_empty_log_event(const char *,"
-      " uint, const Format_description_log_event *");
+  DBUG_TRACE;
 #ifndef DBUG_OFF
   uint8_t const common_header_len = description_event->common_header_len;
   uint8 const post_header_len =
@@ -415,7 +407,7 @@ Consensus_empty_log_event::Consensus_empty_log_event(
              ("event_len: %u; common_header_len: %d; post_header_len: %d",
               event_len, common_header_len, post_header_len));
 #endif
-  DBUG_VOID_RETURN;
+  return;
 }
 
 size_t Consensus_empty_log_event::to_string(char *buffer) const {
@@ -449,11 +441,12 @@ void Consensus_empty_log_event::print(
 #endif
 #if defined(MYSQL_SERVER)
 int Consensus_empty_log_event::do_apply_event(Relay_log_info const *rli) {
-  DBUG_ENTER("Consensus_empty_log_event::do_apply_event");
+  DBUG_TRACE;
   assert(rli->info_thd == thd);
-  DBUG_RETURN(0);
+  return 0;
 }
 int Consensus_empty_log_event::do_update_pos(Relay_log_info *rli) {
+  DBUG_TRACE;
   rli->inc_event_relay_log_pos();
   return 0;
 }

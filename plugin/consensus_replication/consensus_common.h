@@ -20,11 +20,10 @@
 #ifndef CONSENSUS_CORE_INCLUDED
 #define CONSENSUS_CORE_INCLUDED
 
-#include <algorithm>
 #include <vector>
 
 #include "lex_string.h"
-#include "my_alloc.h"
+#include "my_inttypes.h"
 
 #define CONSENSUS_MAX_NODE_NUMBER 100
 

@@ -1,6 +1,6 @@
 #include <stddef.h>
 
-#include "consensus_log_manager.h"
+#include "consensus_state_process.h"
 #include "observer_trans.h"
 #include "plugin.h"
 #include "rpl_consensus.h"
@@ -9,7 +9,9 @@
 #include "my_loglevel.h"
 #include "sql/log.h"
 #include "mysql/components/services/log_builtins.h"
+
 #include "sql/debug_sync.h"
+#include "sql/mysqld.h"
 #include "sql/sql_lex.h"
 
 int consensus_replication_trans_before_dml(Trans_param *param, int &out) {
@@ -17,10 +19,9 @@ int consensus_replication_trans_before_dml(Trans_param *param, int &out) {
 
   out = 0;
 
-  /* If the plugin is not running, before commit should return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) {
-    return 0;
-  }
+  if (opt_initialize) return 0;
+
+  if (!plugin_is_consensus_replication_running()) return 0;
 
   /*
    The first check to be made is if the session binlog is active
@@ -71,10 +72,11 @@ int consensus_replication_trans_begin(Trans_param *param [[maybe_unused]],
   out = 0;
 
   /* If the plugin is not running, before commit should return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled() ||
-      !current_thd) {
+  if (opt_initialize || !current_thd) {
     return 0;
   }
+
+  if (!plugin_is_consensus_replication_running()) return 0;
 
   if (!rpl_consensus_inited) {
     current_thd->consensus_context.binlog_disabled =
@@ -83,7 +85,7 @@ int consensus_replication_trans_begin(Trans_param *param [[maybe_unused]],
     return 0;
   }
 
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
   if (rpl_consensus_inited && (!current_thd->slave_thread ||
                                param->rpl_channel_type != CR_APPLIER_CHANNEL)) {
@@ -92,7 +94,7 @@ int consensus_replication_trans_begin(Trans_param *param [[maybe_unused]],
       out = ER_CONSENSUS_NOT_SUPPORT;
     } else if ((!rpl_consensus_is_leader() ||
                 rpl_consensus_get_term() !=
-                    consensus_log_manager.get_current_term()) &&
+                    consensus_state_process.get_current_term()) &&
                (current_thd->system_thread == SYSTEM_THREAD_EVENT_WORKER ||
                 disabled_command_on_consensus_follower(
                     current_thd->lex->sql_command))) {
@@ -107,9 +109,9 @@ int consensus_replication_trans_begin(Trans_param *param [[maybe_unused]],
 
   // store current term
   current_thd->consensus_context.consensus_term =
-      consensus_log_manager.get_current_term();
+      consensus_state_process.get_current_term();
 
-  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
 
   return 0;
 }
@@ -126,6 +128,11 @@ int consensus_replication_trans_before_rollback(Trans_param *) {
 
 int consensus_replication_trans_after_commit(Trans_param *) {
   DBUG_TRACE;
+
+  if (opt_initialize) return 0;
+
+  /* If the plugin is not running, return success. */
+  if (!plugin_is_consensus_replication_running()) return 0;
 
   if (!rpl_consensus_inited && current_thd &&
       current_thd->consensus_context.binlog_disabled) {

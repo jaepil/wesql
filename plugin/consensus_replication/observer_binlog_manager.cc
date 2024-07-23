@@ -1,10 +1,10 @@
-
 #include <stddef.h>
 
 #include "consensus_applier.h"
 #include "consensus_binlog.h"
 #include "consensus_binlog_recovery.h"
 #include "consensus_log_manager.h"
+#include "consensus_state_process.h"
 #include "observer_binlog_manager.h"
 #include "plugin.h"
 #include "system_variables.h"
@@ -22,14 +22,14 @@ static int consensus_binlog_manager_binlog_recovery(
   my_off_t binlog_end_pos = 0;
 
   /* If the plugin is not enabled, return success. */
-  if (!opt_bin_log || !plugin_is_consensus_replication_enabled()) return 0;
+  if (!opt_bin_log) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  if (build_consensus_log_index(param->binlog)) return 1;
+  if (consensus_build_log_file_index(param->binlog)) return 1;
 
-  assert(param->binlog == consensus_log_manager.get_binlog());
+  assert(param->binlog == consensus_state_process.get_binlog());
 
   return opt_initialize
              ? 0
@@ -48,13 +48,13 @@ static int consensus_binlog_manager_after_binlog_recovery(
   DBUG_TRACE;
   int error = 0;
 
-  /* If the plugin is not enabled, return success. */
-  if (!opt_bin_log || !plugin_is_consensus_replication_enabled()) return 0;
+  /* If the binlog is not enabled, return success. */
+  if (!opt_bin_log) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  assert(param->binlog == consensus_log_manager.get_binlog());
+  assert(param->binlog == consensus_state_process.get_binlog());
 
   /* Open a new binlog file if not exits */
   std::vector<std::string> binlog_file_list;
@@ -100,9 +100,6 @@ static int consensus_binlog_manager_new_file(
   int error = 0;
   uint32 tv_sec = 0;
 
-  /* If the plugin is not enabled, return success. */
-  if (!opt_bin_log || !plugin_is_consensus_replication_enabled()) return 0;
-
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
@@ -130,22 +127,32 @@ static int consensus_binlog_manager_new_file(
 static int consensus_binlog_manager_after_purge_file(
     Binlog_manager_param *param, const char *log_file_name) {
   DBUG_TRACE;
+  int error = 0;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  return consensus_binlog_after_purge_file(param->binlog, log_file_name);
+  if (!param->binlog->is_relay_log) {
+    std::string file_name = std::string(log_file_name);
+    consensus_log_manager.get_log_file_index()->truncate_before(file_name);
+
+    global_sid_lock->wrlock();
+    error = param->binlog->consensus_init_gtid_sets(
+        nullptr, const_cast<Gtid_set *>(gtid_state->get_lost_gtids()),
+        opt_source_verify_checksum, false);
+    global_sid_lock->unlock();
+  }
+
+  return error;
 }
 
 static int consensus_binlog_manager_before_flush(Binlog_manager_param *param) {
   DBUG_TRACE;
   int error = 0;
 
-  /* If the plugin is not enabled, before commit should return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -154,23 +161,23 @@ static int consensus_binlog_manager_before_flush(Binlog_manager_param *param) {
   if (opt_cluster_log_type_instance) return 1;
 
   THD *thd = param->thd;
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
   /* Check server status */
-  mysql_mutex_lock(consensus_log_manager.get_log_term_lock());
-  if (consensus_log_manager.get_status() !=
+  mysql_mutex_lock(consensus_state_process.get_log_term_lock());
+  if (consensus_state_process.get_status() !=
           Consensus_Log_System_Status::BINLOG_WORKING ||
       thd->consensus_context.consensus_term !=
-          consensus_log_manager.get_current_term() ||
+          consensus_state_process.get_current_term() ||
       rpl_consensus_log_get_term() !=
-          consensus_log_manager.get_current_term() ||
-      rpl_consensus_get_term() != consensus_log_manager.get_current_term()) {
+          consensus_state_process.get_current_term() ||
+      rpl_consensus_get_term() != consensus_state_process.get_current_term()) {
     error = 1;
   }
-  mysql_mutex_unlock(consensus_log_manager.get_log_term_lock());
+  mysql_mutex_unlock(consensus_state_process.get_log_term_lock());
 
   if (error) {
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
     thd->mark_transaction_to_rollback(true);
     thd->commit_error = THD::CE_COMMIT_ERROR;
     my_error(ER_BINLOG_LOGGING_IMPOSSIBLE, MYF(0), "Consensus Not Leader");
@@ -187,21 +194,19 @@ static int consensus_binlog_manager_write_transaction(
     binlog_cache_data *cache_data, bool have_checksum) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  return write_cache_to_consensus_log(param->thd, param->binlog, *gtid_event,
-                                      cache_data, have_checksum);
+  return write_binlog_cache_to_consensus_log(
+      param->thd, param->binlog, *gtid_event, cache_data, have_checksum);
 }
 
 static int consensus_binlog_manager_after_write(Binlog_manager_param *) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -218,8 +223,7 @@ static int consensus_binlog_manager_after_flush(Binlog_manager_param *param,
                                                 bool &delay_update_binlog_pos) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -232,8 +236,7 @@ static int consensus_binlog_manager_after_sync(Binlog_manager_param *param,
                                                bool &delay_update_binlog_pos) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -246,8 +249,7 @@ static int consensus_binlog_manager_after_enrolling_stage(
     Binlog_manager_param *param, int stage) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -258,7 +260,8 @@ static int consensus_binlog_manager_after_enrolling_stage(
     return 0;
 
   DEBUG_SYNC(param->thd, "consensus_replication_after_sync");
-  DBUG_EXECUTE_IF("consensus_replication_crash_after_sync", { DBUG_SUICIDE(); });
+  DBUG_EXECUTE_IF("consensus_replication_crash_after_sync",
+                  { DBUG_SUICIDE(); });
 
   uint64 group_max_log_index = 0;
   for (THD *head = param->thd; head; head = head->next_to_commit) {
@@ -308,10 +311,10 @@ static int consensus_binlog_manager_after_enrolling_stage(
                   { DBUG_SUICIDE(); });
 
   // Release consensus log lock for leader
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_commit_lock());
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_commit_lock());
   param->thd->consensus_context.commit_locked = true;
   assert(param->thd->consensus_context.status_locked);
-  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
   param->thd->consensus_context.status_locked = false;
 
   return 0;
@@ -321,8 +324,7 @@ static int consensus_binlog_manager_before_finish_in_engines(
     Binlog_manager_param *param, bool finish_commit) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -331,7 +333,7 @@ static int consensus_binlog_manager_before_finish_in_engines(
 
   // Consensus log lock has not released
   if (finish_commit && thd->consensus_context.status_locked) {
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
     thd->consensus_context.status_locked = false;
   }
 
@@ -362,8 +364,7 @@ static int consensus_binlog_manager_after_finish_commit(
     Binlog_manager_param *param) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -371,7 +372,7 @@ static int consensus_binlog_manager_after_finish_commit(
   THD *thd = param->thd;
 
   if (thd->consensus_context.commit_locked) {
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_commit_lock());
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_commit_lock());
     thd->consensus_context.commit_locked = false;
   }
 
@@ -388,8 +389,7 @@ static int consensus_binlog_manager_before_rotate(Binlog_manager_param *param,
 
   do_rotate = true;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -398,11 +398,11 @@ static int consensus_binlog_manager_before_rotate(Binlog_manager_param *param,
 
   /* Check server status */
   assert(!thd->consensus_context.status_locked);
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
-  if (consensus_log_manager.get_status() !=
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+  if (consensus_state_process.get_status() !=
       Consensus_Log_System_Status::BINLOG_WORKING) {
     do_rotate = false;
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
   } else {
     thd->consensus_context.status_locked = true;
   }
@@ -413,8 +413,7 @@ static int consensus_binlog_manager_before_rotate(Binlog_manager_param *param,
 static int consensus_binlog_manager_after_rotate(Binlog_manager_param *param) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -422,7 +421,7 @@ static int consensus_binlog_manager_after_rotate(Binlog_manager_param *param) {
   THD *thd = param->thd;
 
   if (thd->consensus_context.status_locked) {
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
     thd->consensus_context.status_locked = false;
   }
 
@@ -433,8 +432,7 @@ static int consensus_binlog_manager_rotate_and_purge(
     Binlog_manager_param *param, bool force_rotate) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -445,8 +443,7 @@ static int consensus_binlog_manager_rotate_and_purge(
 static int consensus_binlog_manager_reencrypt_logs(Binlog_manager_param *) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
@@ -461,8 +458,7 @@ static int consensus_binlog_manager_purge_logs(Binlog_manager_param *,
                                                bool auto_purge) {
   DBUG_TRACE;
 
-  /* If the plugin is not enabled, return success. */
-  if (opt_initialize || !plugin_is_consensus_replication_enabled()) return 0;
+  if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;

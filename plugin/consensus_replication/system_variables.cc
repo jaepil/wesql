@@ -33,7 +33,6 @@ bool opt_cluster_force_change_meta;
 bool opt_cluster_force_reset_meta;
 ulonglong opt_consensus_log_cache_size;
 bool opt_consensus_disable_fifo_cache;
-bool opt_consensus_prefetch_fast_fetch;
 ulonglong opt_consensus_prefetch_cache_size;
 ulonglong opt_consensus_prefetch_window_size;
 ulonglong opt_consensus_prefetch_wakeup_ratio;
@@ -64,13 +63,13 @@ bool opt_weak_consensus_mode;
 bool opt_consensus_replicate_with_cache_log;
 ulonglong opt_consensus_force_sync_epoch_diff = 0;
 ulonglong opt_appliedindex_force_delay;
-char *opt_consensus_flow_control = NULL;
+char *opt_consensus_flow_control = nullptr;
 ulonglong opt_consensus_check_commit_index_interval = 0;
 bool opt_consensus_auto_reset_match_index = 1;
 bool opt_consensus_learner_heartbeat;
 bool opt_consensus_auto_leader_transfer;
 ulonglong opt_consensus_auto_leader_transfer_check_seconds;
-bool opt_consensus_enabled = true;
+bool opt_consensus_enabled = false;
 
 static void fix_consensus_checksum(MYSQL_THD, SYS_VAR *, void *,
                                    const void *save) {
@@ -86,8 +85,6 @@ static MYSQL_SYSVAR_BOOL(
 static void fix_consensus_disable_election(MYSQL_THD, SYS_VAR *, void *,
                                            const void *save) {
   opt_consensus_disable_election = *static_cast<const bool *>(save);
-  if (!rpl_consensus_get_consensus_async() && opt_consensus_disable_election)
-    sql_print_warning("Disable election while cluster is not in weak mode.");
   rpl_consensus_set_disable_election(opt_consensus_disable_election,
                                      opt_consensus_disable_election);
 }
@@ -108,20 +105,6 @@ static MYSQL_SYSVAR_BOOL(dynamic_easyindex, opt_consensus_dynamic_easyindex,
                          PLUGIN_VAR_OPCMDARG,
                          "Enable dynamic easy addr cidx. Enabled by default.",
                          nullptr, fix_consensus_dynamic_easyindex, true);
-
-static void handle_weak_consensus_mode(MYSQL_THD, SYS_VAR *, void *,
-                                       const void *save) {
-  /* set to smart mode */
-  opt_weak_consensus_mode = *static_cast<const bool *>(save);
-  replica_exec_mode_options =
-      opt_weak_consensus_mode ? RBR_EXEC_MODE_LAST_BIT : RBR_EXEC_MODE_STRICT;
-  rpl_consensus_set_consensus_async(opt_weak_consensus_mode);
-}
-
-static MYSQL_SYSVAR_BOOL(weak_mode, opt_weak_consensus_mode,
-                         PLUGIN_VAR_OPCMDARG,
-                         "set server to weak consensus mode", nullptr,
-                         handle_weak_consensus_mode, false);
 
 static void handle_consensus_replicate_with_cache_log(MYSQL_THD, SYS_VAR *,
                                                       void *,
@@ -172,10 +155,6 @@ static MYSQL_SYSVAR_BOOL(
     PLUGIN_VAR_OPCMDARG, /* optional var */
     "disable consensus fifo cache (run with weak consensus mode)", nullptr,
     nullptr, false);
-
-static MYSQL_SYSVAR_BOOL(prefetch_fast_fetch, opt_consensus_prefetch_fast_fetch,
-                         PLUGIN_VAR_OPCMDARG, "prefetch speed optimize",
-                         nullptr, nullptr, false);
 
 static MYSQL_SYSVAR_BOOL(enabled, opt_consensus_enabled, PLUGIN_VAR_OPCMDARG,
                          "enable consensus cluster", nullptr, nullptr,
@@ -480,8 +459,6 @@ static void fix_consensus_flow_control(MYSQL_THD, SYS_VAR *, void *var_ptr,
     int64 fc;
     if (std::sscanf(kv.c_str(), "%s %ld", addr, &fc) == 2) {
       serverid = rpl_consensus_get_server_id(addr);
-      sql_print_warning("Add consensus server %llu flow control %ld", serverid,
-                        fc);
       rpl_consensus_set_flow_control(serverid, fc);
     }
   }
@@ -698,13 +675,11 @@ SYS_VAR *consensus_replication_system_vars[] = {
     MYSQL_SYSVAR(checksum),
     MYSQL_SYSVAR(disable_election),
     MYSQL_SYSVAR(dynamic_easyindex),
-    MYSQL_SYSVAR(weak_mode),
     MYSQL_SYSVAR(with_cache_log),
     MYSQL_SYSVAR(force_sync_epoch_diff),
     MYSQL_SYSVAR(cluster_id),
     MYSQL_SYSVAR(log_cache_size),
     MYSQL_SYSVAR(disable_fifo_cache),
-    MYSQL_SYSVAR(prefetch_fast_fetch),
     MYSQL_SYSVAR(enabled),
     MYSQL_SYSVAR(prefetch_cache_size),
     MYSQL_SYSVAR(prefetch_window_size),

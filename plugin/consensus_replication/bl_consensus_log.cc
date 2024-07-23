@@ -19,14 +19,20 @@
 
 #include "bl_consensus_log.h"
 #include "consensus_log_manager.h"
+#include "consensus_meta.h"
+#include "consensus_state_process.h"
 
 BLConsensusLog::BLConsensusLog() {}
 BLConsensusLog::~BLConsensusLog() {}
 
 void BLConsensusLog::init(uint64 mock_start_index_arg,
-                          ConsensusLogManager *consensus_log_manager_arg) {
+                          ConsensusLogManager *consensus_log_manager_arg,
+                          ConsensusMeta *consensus_meta_arg,
+                          ConsensusStateProcess *consensus_state_process_arg) {
   mock_start_index = mock_start_index_arg;
   consensusLogManager_ = consensus_log_manager_arg;
+  consensusMeta_ = consensus_meta_arg;
+  consensusStateProcess_ = consensus_state_process_arg;
 }
 
 int BLConsensusLog::getEntry(uint64_t logIndex, alisql::LogEntry &entry,
@@ -192,35 +198,35 @@ void BLConsensusLog::truncateForward(uint64_t lastIndex) {
 }
 
 int BLConsensusLog::getMetaData(const std::string &key, uint64_t *value) {
-  if (consensusLogManager_->get_consensus_info()->init_info())
+  if (consensusMeta_->get_consensus_info()->init_info())
     return 1;
   if (key == "@keyVoteFor_@")
-    *value = consensusLogManager_->get_consensus_info()->get_vote_for();
+    *value = consensusMeta_->get_consensus_info()->get_vote_for();
   else if (key == "@keyCurrentTerm_@")
-    *value = consensusLogManager_->get_consensus_info()->get_current_term();
+    *value = consensusMeta_->get_consensus_info()->get_current_term();
   else if (key == "@keyLastLeaderTerm_@")
-    *value = consensusLogManager_->get_consensus_info()->get_last_leader_term();
+    *value = consensusMeta_->get_consensus_info()->get_last_leader_term();
   else if (key == "@keyLastLeaderLogIndex_@")
     *value =
-        consensusLogManager_->get_consensus_info()->get_start_apply_index();
+        consensusMeta_->get_consensus_info()->get_start_apply_index();
   else if (key == "@keyScanIndex_@")
     *value =
-        consensusLogManager_->get_consensus_info()->get_cluster_recover_index();
+        consensusMeta_->get_consensus_info()->get_cluster_recover_index();
   else if (key == "@keyClusterId_@")
-    *value = consensusLogManager_->get_consensus_info()->get_cluster_id();
+    *value = consensusMeta_->get_consensus_info()->get_cluster_id();
   else
     assert(0);
   return 0;
 }
 
 int BLConsensusLog::getMetaData(const std::string &key, std::string &value) {
-  if (consensusLogManager_->get_consensus_info()->init_info())
+  if (consensusMeta_->get_consensus_info()->init_info())
     return 1;
   if (key == "@keyMemberConfigure_@")
-    value = consensusLogManager_->get_consensus_info()->get_cluster_info();
+    value = consensusMeta_->get_consensus_info()->get_cluster_info();
   else if (key == "@keyLearnerConfigure_@")
     value =
-        consensusLogManager_->get_consensus_info()->get_cluster_learner_info();
+        consensusMeta_->get_consensus_info()->get_cluster_learner_info();
   else
     assert(0);
   return 0;
@@ -228,22 +234,22 @@ int BLConsensusLog::getMetaData(const std::string &key, std::string &value) {
 
 int BLConsensusLog::setMetaData(const std::string &key, const uint64_t value) {
   if (key == "@keyVoteFor_@")
-    consensusLogManager_->get_consensus_info()->set_vote_for(value);
+    consensusMeta_->get_consensus_info()->set_vote_for(value);
   else if (key == "@keyCurrentTerm_@")
-    consensusLogManager_->get_consensus_info()->set_current_term(value);
+    consensusMeta_->get_consensus_info()->set_current_term(value);
   else if (key == "@keyLastLeaderTerm_@")
-    consensusLogManager_->set_start_apply_term_if_need(value);
+    consensusMeta_->set_start_apply_term_if_need(value);
   else if (key == "@keyLastLeaderLogIndex_@")
-    consensusLogManager_->set_start_apply_index_if_need(value);
+    consensusMeta_->set_start_apply_index_if_need(value);
   else if (key == "@keyScanIndex_@")
-    consensusLogManager_->get_consensus_info()->set_cluster_recover_index(
+    consensusMeta_->get_consensus_info()->set_cluster_recover_index(
         value);
   else if (key == "@keyClusterId_@")
-    consensusLogManager_->get_consensus_info()->set_cluster_id(value);
+    consensusMeta_->get_consensus_info()->set_cluster_id(value);
   else
     assert(0);
 
-  if (consensusLogManager_->get_consensus_info()->flush_info(true, true)) {
+  if (consensusMeta_->get_consensus_info()->flush_info(true, true)) {
     abort();
     return 1;
   }
@@ -253,13 +259,13 @@ int BLConsensusLog::setMetaData(const std::string &key, const uint64_t value) {
 int BLConsensusLog::setMetaData(const std::string &key,
                                 const std::string &value) {
   if (key == "@keyMemberConfigure_@")
-    consensusLogManager_->get_consensus_info()->set_cluster_info(value);
+    consensusMeta_->get_consensus_info()->set_cluster_info(value);
   else if (key == "@keyLearnerConfigure_@")
-    consensusLogManager_->get_consensus_info()->set_cluster_learner_info(value);
+    consensusMeta_->get_consensus_info()->set_cluster_learner_info(value);
   else
     assert(0);
 
-  if (consensusLogManager_->get_consensus_info()->flush_info(true, true)) {
+  if (consensusMeta_->get_consensus_info()->flush_info(true, true)) {
     abort();
     return 1;
   }
@@ -267,9 +273,9 @@ int BLConsensusLog::setMetaData(const std::string &key,
 }
 
 void BLConsensusLog::setTerm(uint64_t term) {
-  mysql_mutex_lock(consensusLogManager_->get_log_term_lock());
+  mysql_mutex_lock(consensusStateProcess_->get_log_term_lock());
   this->currentTerm_ = term;
-  mysql_mutex_unlock(consensusLogManager_->get_log_term_lock());
+  mysql_mutex_unlock(consensusStateProcess_->get_log_term_lock());
 }
 
 uint64_t BLConsensusLog::getLength() {
@@ -288,5 +294,5 @@ void BLConsensusLog::packLogEntry(uchar *buffer, size_t buf_size, uint64 term,
 }
 
 bool BLConsensusLog::isStateMachineHealthy() {
-  return consensusLogManager_->is_state_machine_ready();
+  return consensusStateProcess_->is_state_machine_ready();
 }

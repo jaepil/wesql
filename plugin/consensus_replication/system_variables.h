@@ -9,7 +9,6 @@ extern ulonglong opt_cluster_id;
 extern bool opt_cluster_log_type_instance;
 extern ulonglong opt_consensus_log_cache_size;
 extern bool opt_consensus_disable_fifo_cache;
-extern bool opt_consensus_prefetch_fast_fetch;
 extern ulonglong opt_consensus_prefetch_cache_size;
 extern ulonglong opt_consensus_prefetch_window_size;
 extern ulonglong opt_consensus_prefetch_wakeup_ratio;

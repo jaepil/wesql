@@ -20,13 +20,12 @@
 
 #include "consensus_common.h"
 #include "consensus_log_manager.h"
-#include "system_variables.h"
-#include "consensus_common.h"
+#include "consensus_state_process.h"
 #include "rpl_consensus.h"  // ConsensusLogManager and alisql::Paxos
+#include "system_variables.h"
 
-
-#include "sql/rpl_rli.h"
 #include "mysql/psi/mysql_file.h"
+#include "sql/rpl_rli.h"
 
 namespace im {
 
@@ -47,7 +46,7 @@ void collect_show_global_results(
     result->role.str =
         strmake_root(mem_root, ci.role.c_str(), ci.role.length());
     result->role.length = ci.role.length();
-    const char *res = NULL;
+    const char *res = nullptr;
     if (ci.force_sync)
       res = "Yes";
     else
@@ -77,7 +76,7 @@ void collect_show_global_results(
 
 void collect_show_local_results(MEM_ROOT *mem_root,
                                 Consensus_show_local_result *result) {
-  const char *res = NULL;
+  const char *res = nullptr;
   cluster_local_info cli;
   rpl_consensus_get_cluster_local_info(&cli);
   result->id = cli.server_id;
@@ -95,11 +94,11 @@ void collect_show_local_results(MEM_ROOT *mem_root,
   result->vote_for = cli.voted_for;
   result->applied_index = cli.last_apply_index;
 
-  Consensus_Log_System_Status rw_status = consensus_log_manager.get_status();
+  Consensus_Log_System_Status rw_status = consensus_state_process.get_status();
   if (opt_cluster_log_type_instance) {
     res = "No";
   } else {
-    if (rw_status == BINLOG_WORKING)
+    if (rw_status == Consensus_Log_System_Status::BINLOG_WORKING)
       res = "Yes";
     else
       res = "No";
@@ -125,13 +124,10 @@ void collect_show_logs_results(
   size_t length;
   size_t cur_dir_len;
 
-  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_status_lock());
-  MYSQL_BIN_LOG *log =
-      consensus_log_manager.get_status() == BINLOG_WORKING
-          ? &mysql_bin_log
-          : &consensus_log_manager.get_relay_log_info()->relay_log;
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+  MYSQL_BIN_LOG *log = consensus_state_process.get_consensus_log();
   if (!log->is_open()) {
-    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
     my_error(ER_NO_BINARY_LOGGING, MYF(0));
     return;
   }
@@ -142,7 +138,7 @@ void collect_show_logs_results(
 
   log->raw_get_current_log(&cur);           // dont take mutex
   mysql_mutex_unlock(log->get_log_lock());  // lockdep, OK
-  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_status_lock());
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
 
   cur_dir_len = dirname_length(cur.log_file_name);
 

@@ -19,86 +19,98 @@
 
 #include "consensus_prefetch_manager.h"
 #include "consensus_log_manager.h"
+#include "consensus_state_process.h"
 #include "plugin_psi.h"
 #include "system_variables.h"
 
+#include "mysqld_error.h"
+#include "my_loglevel.h"
+#include "mysql/components/services/log_builtins.h"
+#include "sql/log.h"
+
 #include "mysql/thread_pool_priv.h"
 #include "sql/binlog.h"
-#include "sql/log.h"
 #include "sql/rpl_rli.h"
 #include "sql/sql_thd_internal_api.h"
 
 int ConsensusPreFetchChannel::init(uint64 id, uint64 max_cache_size,
                                    uint64 prefetch_window_size,
                                    uint64 prefetch_wakeup_ratio) {
-  if (!inited) {
-    channel_id = id;
-    max_prefetch_cache_size = max_cache_size;
-    mysql_mutex_init(key_LOCK_prefetch_channel, &LOCK_prefetch_channel,
-                     MY_MUTEX_INIT_FAST);
-    mysql_mutex_init(key_LOCK_prefetch_request, &LOCK_prefetch_request,
-                     MY_MUTEX_INIT_FAST);
-    mysql_cond_init(key_COND_prefetch_channel_cond, &COND_prefetch_channel);
-    mysql_cond_init(key_COND_prefetch_request_cond, &COND_prefetch_request);
-    first_index_in_cache = 0;
-    is_running = true;
-    stop_prefetch_flag = false;
-    current_prefetch_request = 0;
-    prefetch_cache_size = 0;
-    prefetching = false;
-    stop_prefetch_request = false;
-    from_beginning = false;
-    window_size = prefetch_window_size;
-    wakeup_ratio = prefetch_wakeup_ratio;
-    ref_count = 0;
-    if (mysql_thread_create(key_thread_prefetch, &prefetch_thread_handle, NULL,
-                            run_prefetch, (void *)this)) {
-      sql_print_error("Fail to create thread run_prefetch.");
-      abort();
-    }
-    inited = true;
+  DBUG_TRACE;
+  assert (!inited);
+  channel_id = id;
+  max_prefetch_cache_size = max_cache_size;
+
+  mysql_mutex_init(key_LOCK_prefetch_channel, &LOCK_prefetch_channel,
+                   MY_MUTEX_INIT_FAST);
+  mysql_mutex_init(key_LOCK_prefetch_request, &LOCK_prefetch_request,
+                   MY_MUTEX_INIT_FAST);
+  mysql_cond_init(key_COND_prefetch_channel_cond, &COND_prefetch_channel);
+  mysql_cond_init(key_COND_prefetch_request_cond, &COND_prefetch_request);
+
+  first_index_in_cache = 0;
+  is_running = true;
+  stop_prefetch_flag = false;
+  current_prefetch_request = 0;
+  prefetch_cache_size = 0;
+  from_beginning = false;
+  window_size = prefetch_window_size;
+  wakeup_ratio = prefetch_wakeup_ratio;
+  ref_count = 0;
+
+  if (mysql_thread_create(key_thread_prefetch, &prefetch_thread_handle, nullptr,
+                          run_prefetch, (void *)this)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_CREATE_THRERD_ERROR, "run_prefetch");
+    abort();
   }
+
+  inited = true;
   return 0;
 }
 
 int ConsensusPreFetchChannel::cleanup() {
-  if (inited) {
-    mysql_mutex_lock(&LOCK_prefetch_request);
-    is_running = false;
-    current_prefetch_request = 0;
-    mysql_mutex_unlock(&LOCK_prefetch_request);
-    mysql_mutex_lock(&LOCK_prefetch_channel);
-    stop_prefetch_flag = true;
-    from_beginning = true;
-    mysql_mutex_unlock(&LOCK_prefetch_channel);
-    mysql_cond_broadcast(&COND_prefetch_channel);
-    mysql_cond_broadcast(&COND_prefetch_request);
-    my_thread_join(&prefetch_thread_handle, NULL);
-    // wait all get request end
-    while (ref_count != 0) {
-      my_sleep(1000);
-    }
-    mysql_mutex_destroy(&LOCK_prefetch_channel);
-    mysql_mutex_destroy(&LOCK_prefetch_request);
-    mysql_cond_destroy(&COND_prefetch_channel);
-    mysql_cond_destroy(&COND_prefetch_request);
-    prefetching = false;
-    inited = false;
+  DBUG_TRACE;
+
+  if (!inited) return 0;
+
+  mysql_mutex_lock(&LOCK_prefetch_request);
+  is_running = false;
+  current_prefetch_request = 0;
+  mysql_cond_broadcast(&COND_prefetch_channel);
+  mysql_mutex_unlock(&LOCK_prefetch_request);
+
+  mysql_mutex_lock(&LOCK_prefetch_channel);
+  stop_prefetch_flag = true;
+  from_beginning = true;
+  mysql_cond_broadcast(&COND_prefetch_request);
+  mysql_mutex_unlock(&LOCK_prefetch_channel);
+
+  my_thread_join(&prefetch_thread_handle, nullptr);
+  // wait all get request end
+  while (ref_count != 0) {
+    my_sleep(1000);
   }
+
+  mysql_mutex_destroy(&LOCK_prefetch_channel);
+  mysql_mutex_destroy(&LOCK_prefetch_request);
+  mysql_cond_destroy(&COND_prefetch_channel);
+  mysql_cond_destroy(&COND_prefetch_request);
+
+  inited = false;
   return 0;
 }
 
 int ConsensusPreFetchChannel::add_log_to_prefetch_cache(
     uint64 term, uint64 index, size_t buf_size, uchar *buffer, bool outer,
     uint flag, uint64 checksum) {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_prefetch_channel);
 
   if (stop_prefetch_flag || from_beginning) {
     mysql_mutex_unlock(&LOCK_prefetch_channel);
-    sql_print_information(
-        "channel_id %llu prefetch stop, stop_prefetch_flag is %d, "
-        "from_beginning is %d",
-        channel_id, stop_prefetch_flag, from_beginning);
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_PREFETCH_STOPPED,
+                 channel_id, stop_prefetch_flag, from_beginning);
     return INTERRUPT;
   }
 
@@ -110,12 +122,10 @@ int ConsensusPreFetchChannel::add_log_to_prefetch_cache(
   } else if (first_index_in_cache != 0 &&
              (index < first_index_in_cache ||
               index > first_index_in_cache + prefetch_cache.size())) {
-    sql_print_information(
-        "Consensus prefetch add cache not fit the range , channel_id %llu the "
-        "first index in cache is  %llu, the last index is %llu, the required "
-        "index is %llu",
-        channel_id, first_index_in_cache.load(),
-        first_index_in_cache + prefetch_cache.size() - 1, index);
+    LogPluginErr(INFORMATION_LEVEL,
+                 ER_CONSENSUS_LOG_PREFETCH_CACHE_ADD_OUT_OF_RANGE, channel_id,
+                 first_index_in_cache.load(),
+                 first_index_in_cache + prefetch_cache.size() - 1, index);
     for (auto iter = prefetch_cache.begin(); iter != prefetch_cache.end();
          ++iter) {
       if (iter->buf_size > 0) my_free(iter->buffer);
@@ -128,20 +138,15 @@ int ConsensusPreFetchChannel::add_log_to_prefetch_cache(
   while (prefetch_cache_size + buf_size > max_prefetch_cache_size &&
          prefetch_cache.size() > 0) {
     if (index > current_prefetch_request.load()) {
-      if ((!stop_prefetch_flag) && (!from_beginning))
+      if (!stop_prefetch_flag && !from_beginning)
         mysql_cond_wait(&COND_prefetch_channel, &LOCK_prefetch_channel);
       mysql_mutex_unlock(&LOCK_prefetch_channel);
       return FULL;
     } else {
-      /* decrease the window */
-      /*
-      sql_print_information("Consensus prefetch is full but still in window, "
-          "channel_id %llu the first index in cache is  %llu, the last index is
-      %llu, " "the required index is %llu, the last request index is %llu, "
-          "Just shrunk the window temporarily.\n",
-          channel_id, first_index_in_cache.load(), first_index_in_cache +
-      prefetch_cache.size() -1, index, current_prefetch_request.load());
-      */
+      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_PREFETCH_CACHE_SHRINK,
+                   channel_id, first_index_in_cache.load(),
+                   first_index_in_cache + prefetch_cache.size() - 1, index,
+                   current_prefetch_request.load());
       ConsensusLogEntry old_log = prefetch_cache.front();
       if (old_log.buf_size > 0) my_free(old_log.buffer);
       prefetch_cache_size -= old_log.buf_size;
@@ -150,14 +155,13 @@ int ConsensusPreFetchChannel::add_log_to_prefetch_cache(
     }
   }
 
-  if (prefetch_cache.size() == 0) {
-    first_index_in_cache = index;
-  }
-
   uchar *new_buffer = (uchar *)my_memdup(key_memory_prefetch_mem_root,
                                          (char *)buffer, buf_size, MYF(MY_WME));
   ConsensusLogEntry new_log = {term,  index, buf_size, new_buffer,
                                outer, flag,  checksum};
+  if (prefetch_cache.size() == 0) {
+    first_index_in_cache = index;
+  }
   prefetch_cache.push_back(new_log);
   prefetch_cache_size += buf_size;
 
@@ -169,15 +173,17 @@ void ConsensusPreFetchChannel::add_log_to_large_trx_table(uint64 term,
                                                           uint64 index,
                                                           bool outer,
                                                           uint flag) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_prefetch_channel);
   assert(flag & (Consensus_log_event_flag::FLAG_LARGE_TRX |
                  Consensus_log_event_flag::FLAG_LARGE_TRX_END));
-  ConsensusLogEntry new_log = {term, index, 0, NULL, outer, flag, 0};
+  ConsensusLogEntry new_log = {term, index, 0, nullptr, outer, flag, 0};
   large_trx_table.insert(std::make_pair(index, new_log));
   mysql_mutex_unlock(&LOCK_prefetch_channel);
 }
 
 void ConsensusPreFetchChannel::clear_large_trx_table() {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_prefetch_channel);
   large_trx_table.clear();
   mysql_mutex_unlock(&LOCK_prefetch_channel);
@@ -187,6 +193,8 @@ int ConsensusPreFetchChannel::get_log_from_prefetch_cache(
     uint64 index, uint64 *term, std::string &log_content, bool *outer,
     uint *flag, uint64 *checksum) {
   int error = SUCCESS;
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_prefetch_channel);
 
   if (channel_id == 0) {
@@ -197,12 +205,9 @@ int ConsensusPreFetchChannel::get_log_from_prefetch_cache(
       *outer = it->second.outer;
       *flag = it->second.flag;
       log_content.assign("");
-      sql_print_information(
-          "Consensus prefetch cache: get large trx consensus log(%llu) from "
-          "large_trx_table.",
-          index);
       mysql_mutex_unlock(&LOCK_prefetch_channel);
-      dec_ref_count();
+      LogPluginErr(INFORMATION_LEVEL,
+                   ER_CONSENSUS_LOG_PREFETCH_CACHE_HIT_LARGE_TRX_TABLE, index);
       return SUCCESS;
     }
   }
@@ -211,10 +216,8 @@ int ConsensusPreFetchChannel::get_log_from_prefetch_cache(
       first_index_in_cache == 0 /* if fifo cache is empty */) {
     error = EMPTY;
   } else if (index < first_index_in_cache) {
-    sql_print_information(
-        "Consensus prefetch cache already swap out , channel_id %llu the first "
-        "index in cache is  %llu, the required index is %llu",
-        channel_id, first_index_in_cache.load(), index);
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_PREFETCH_CACHE_SWAP_OUT,
+                 channel_id, first_index_in_cache.load(), index);
     for (auto iter = prefetch_cache.begin(); iter != prefetch_cache.end();
          ++iter) {
       if (iter->buf_size > 0) my_free(iter->buffer);
@@ -224,10 +227,9 @@ int ConsensusPreFetchChannel::get_log_from_prefetch_cache(
     prefetch_cache_size = 0;
     error = ALREADY_SWAP_OUT;
   } else if (index >= first_index_in_cache + prefetch_cache.size()) {
-    sql_print_information(
-        "Consensus prefetch cache out of range , channel_id %llu the max index "
-        "in cache is  %llu, the required index is %llu",
-        channel_id, first_index_in_cache + prefetch_cache.size() - 1, index);
+    LogPluginErr(INFORMATION_LEVEL,
+                 ER_CONSENSUS_LOG_PREFETCH_CACHE_OUT_OF_RANGE, channel_id,
+                 first_index_in_cache + prefetch_cache.size() - 1, index);
     while (prefetch_cache.size() > window_size) {
       ConsensusLogEntry old_log = prefetch_cache.front();
       if (old_log.buf_size > 0) my_free(old_log.buffer);
@@ -245,7 +247,7 @@ int ConsensusPreFetchChannel::get_log_from_prefetch_cache(
     *checksum = log_entry.checksum;
     log_content.assign((char *)(log_entry.buffer), log_entry.buf_size);
 
-    // truncate before , retain window_size or 1/2 max_cacache_size
+    // truncate before , retain window_size or 1/2 max_cache_size
     // because consensus layer will always fetch index and index-1
     // at least retain two entries
     while (first_index_in_cache + window_size < index ||
@@ -265,17 +267,18 @@ int ConsensusPreFetchChannel::get_log_from_prefetch_cache(
   else
     from_beginning = false;
 
-  mysql_mutex_unlock(&LOCK_prefetch_channel);
-
   if (prefetch_cache_size * wakeup_ratio <= max_prefetch_cache_size ||
       error == OUT_OF_RANGE || error == ALREADY_SWAP_OUT)
     mysql_cond_broadcast(&COND_prefetch_channel);
-  dec_ref_count();  // decrease ref count
+
+  mysql_mutex_unlock(&LOCK_prefetch_channel);
+
   return error;
 }
 
 bool ConsensusPreFetchChannel::log_exist(uint64 index) {
   bool exist = false;
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_prefetch_channel);
   if (index >= first_index_in_cache &&
       index < first_index_in_cache + prefetch_cache.size()) {
@@ -286,7 +289,10 @@ bool ConsensusPreFetchChannel::log_exist(uint64 index) {
 }
 
 int ConsensusPreFetchChannel::reset_prefetch_cache() {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_prefetch_channel);
+
   large_trx_table.clear();
   for (auto iter = prefetch_cache.begin(); iter != prefetch_cache.end();
        iter++) {
@@ -294,16 +300,20 @@ int ConsensusPreFetchChannel::reset_prefetch_cache() {
     prefetch_cache_size -= iter->buf_size;
   }
   prefetch_cache.clear();
+
   first_index_in_cache = 0;
   assert(prefetch_cache_size == 0);
   prefetch_cache_size = 0;
   from_beginning = true;
-  mysql_mutex_unlock(&LOCK_prefetch_channel);
   mysql_cond_broadcast(&COND_prefetch_channel);
+
+  mysql_mutex_unlock(&LOCK_prefetch_channel);
+
   return 0;
 }
 
 int ConsensusPreFetchChannel::enable_prefetch_channel() {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_prefetch_channel);
   stop_prefetch_flag = false;
   mysql_mutex_unlock(&LOCK_prefetch_channel);
@@ -311,14 +321,20 @@ int ConsensusPreFetchChannel::enable_prefetch_channel() {
 }
 
 int ConsensusPreFetchChannel::disable_prefetch_channel() {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_prefetch_channel);
+
   stop_prefetch_flag = true;
-  mysql_mutex_unlock(&LOCK_prefetch_channel);
   mysql_cond_broadcast(&COND_prefetch_channel);
+
+  mysql_mutex_unlock(&LOCK_prefetch_channel);
   return 0;
 }
 
 int ConsensusPreFetchChannel::start_prefetch_thread() {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_prefetch_channel);
   stop_prefetch_flag = false;
   mysql_mutex_unlock(&LOCK_prefetch_channel);
@@ -326,40 +342,48 @@ int ConsensusPreFetchChannel::start_prefetch_thread() {
   mysql_mutex_lock(&LOCK_prefetch_request);
   is_running = true;
   mysql_mutex_unlock(&LOCK_prefetch_request);
-  if (mysql_thread_create(key_thread_prefetch, &prefetch_thread_handle, NULL,
+
+  if (mysql_thread_create(key_thread_prefetch, &prefetch_thread_handle, nullptr,
                           run_prefetch, (void *)this)) {
-    sql_print_error("Fail to create thread run_prefetch.");
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_CREATE_THRERD_ERROR, "run_prefetch");
     abort();
   }
+
   return 0;
 }
 
 int ConsensusPreFetchChannel::stop_prefetch_thread() {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_prefetch_request);
   is_running = false;
-  mysql_mutex_unlock(&LOCK_prefetch_request);
   mysql_cond_broadcast(&COND_prefetch_request);
+  mysql_mutex_unlock(&LOCK_prefetch_request);
 
   mysql_mutex_lock(&LOCK_prefetch_channel);
   stop_prefetch_flag = true;
-  mysql_mutex_unlock(&LOCK_prefetch_channel);
   mysql_cond_broadcast(&COND_prefetch_channel);
+  mysql_mutex_unlock(&LOCK_prefetch_channel);
 
-  my_thread_join(&prefetch_thread_handle, NULL);
+  my_thread_join(&prefetch_thread_handle, nullptr);
   return 0;
 }
 
 int ConsensusPreFetchChannel::truncate_prefetch_cache(uint64 index) {
-  mysql_mutex_lock(&LOCK_prefetch_channel);
+  DBUG_TRACE;
+
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_PREFETCH_CACHE_TRUNCATE,
+               "before", channel_id, first_index_in_cache.load(),
+               prefetch_cache.size());
+
   /* truncate large_trx_table */
+  mysql_mutex_lock(&LOCK_prefetch_channel);
+
   if (channel_id == 0) {
     auto it = large_trx_table.lower_bound(index);
     large_trx_table.erase(it, large_trx_table.end());
   }
-  sql_print_information(
-      "Consensus Prefetch Channel %llu before truncate , first index of cache "
-      "is %llu, cache size is %u",
-      channel_id, first_index_in_cache.load(), prefetch_cache.size());
+
   if (max_prefetch_cache_size == 0 || prefetch_cache.size() == 0) {
     mysql_mutex_unlock(&LOCK_prefetch_channel);
     return 0;
@@ -383,37 +407,43 @@ int ConsensusPreFetchChannel::truncate_prefetch_cache(uint64 index) {
     }
   }
 
-  sql_print_information(
-      "Consensus Prefetch Channel %llu truncate , first index of cache is "
-      "%llu, cache size is %u",
-      channel_id, first_index_in_cache.load(), prefetch_cache.size());
   mysql_mutex_unlock(&LOCK_prefetch_channel);
+
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_PREFETCH_CACHE_TRUNCATE,
+               "after", channel_id, first_index_in_cache.load(),
+               prefetch_cache.size());
   return 0;
 }
 
 int ConsensusPreFetchChannel::set_prefetch_request(uint64 index) {
-  if (stop_prefetch_request || index == 0) return 0;
+  DBUG_TRACE;
+
+  if (index == 0) return 0;
+
   mysql_mutex_lock(&LOCK_prefetch_request);
   current_prefetch_request = index;
-  mysql_mutex_unlock(&LOCK_prefetch_request);
   mysql_cond_broadcast(&COND_prefetch_request);
+  mysql_mutex_unlock(&LOCK_prefetch_request);
+
   return 0;
 }
 
 uint64 ConsensusPreFetchChannel::get_prefetch_request() {
-  // if queue is empty, this function will return 0
   uint64 index = 0;
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_prefetch_request);
   index = current_prefetch_request;
   if (index == 0) {
-    // no current request
     mysql_cond_wait(&COND_prefetch_request, &LOCK_prefetch_request);
   }
   mysql_mutex_unlock(&LOCK_prefetch_request);
+
   return index;
 }
 
 int ConsensusPreFetchChannel::clear_prefetch_request() {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_prefetch_request);
   current_prefetch_request = 0;
   mysql_mutex_unlock(&LOCK_prefetch_request);
@@ -421,33 +451,37 @@ int ConsensusPreFetchChannel::clear_prefetch_request() {
 }
 
 int ConsensusPreFetchManager::init(uint64 max_prefetch_cache_size_arg) {
-  if (!inited) {
-    key_LOCK_prefetch_channels_hash =
-        key_rwlock_ConsensusLog_prefetch_channels_hash;
-    mysql_rwlock_init(key_LOCK_prefetch_channels_hash,
-                      &LOCK_prefetch_channels_hash);
-    max_prefetch_cache_size = max_prefetch_cache_size_arg;
-    prefetch_window_size = 10;
-    prefetch_wakeup_ratio = 2;
-    inited = true;
-  }
+  DBUG_TRACE;
+  mysql_rwlock_init(key_rwlock_ConsensusLog_prefetch_channels_hash,
+                    &LOCK_prefetch_channels_hash);
+
+  max_prefetch_cache_size = max_prefetch_cache_size_arg;
+  prefetch_window_size = 10;
+  prefetch_wakeup_ratio = 2;
+
+  inited = true;
+
   return 0;
 }
 
 int ConsensusPreFetchManager::cleanup() {
-  if (inited) {
-    mysql_rwlock_destroy(&LOCK_prefetch_channels_hash);
-    for (auto iter = prefetch_channels_hash.begin();
-         iter != prefetch_channels_hash.end(); ++iter) {
-      iter->second->cleanup();
-      delete iter->second;
-    }
-    inited = false;
+  DBUG_TRACE;
+
+  if (!inited) return 0;
+
+  mysql_rwlock_destroy(&LOCK_prefetch_channels_hash);
+  for (auto iter = prefetch_channels_hash.begin();
+       iter != prefetch_channels_hash.end(); ++iter) {
+    iter->second->cleanup();
+    delete iter->second;
   }
+
+  inited = false;
   return 0;
 }
 
 int ConsensusPreFetchManager::trunc_log_from_prefetch_cache(uint64 index) {
+  DBUG_TRACE;
   mysql_rwlock_wrlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
        iter != prefetch_channels_hash.end(); ++iter) {
@@ -459,7 +493,9 @@ int ConsensusPreFetchManager::trunc_log_from_prefetch_cache(uint64 index) {
 
 ConsensusPreFetchChannel *ConsensusPreFetchManager::get_prefetch_channel(
     uint64 channel_id) {
-  ConsensusPreFetchChannel *channel = NULL;
+  ConsensusPreFetchChannel *channel = nullptr;
+  DBUG_TRACE;
+
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   auto it = prefetch_channels_hash.find(channel_id);
   if (it != prefetch_channels_hash.end()) {
@@ -467,9 +503,10 @@ ConsensusPreFetchChannel *ConsensusPreFetchManager::get_prefetch_channel(
     channel->inc_ref_count();
   }
   mysql_rwlock_unlock(&LOCK_prefetch_channels_hash);
-  if (channel == NULL) {
-    // try create new channel
+
+  if (channel == nullptr) {
     mysql_rwlock_wrlock(&LOCK_prefetch_channels_hash);
+
     it = prefetch_channels_hash.find(channel_id);
     if (it == prefetch_channels_hash.end()) {
       channel = new ConsensusPreFetchChannel();
@@ -482,27 +519,37 @@ ConsensusPreFetchChannel *ConsensusPreFetchManager::get_prefetch_channel(
       channel = it->second;
     }
     channel->inc_ref_count();
+
     mysql_rwlock_unlock(&LOCK_prefetch_channels_hash);
   }
+
   return channel;
 }
 
 int ConsensusPreFetchManager::reset_prefetch_cache() {
   int error = 0;
+  DBUG_TRACE;
+
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
+
   for (auto iter = prefetch_channels_hash.begin();
        iter != prefetch_channels_hash.end(); ++iter) {
     error = iter->second->reset_prefetch_cache();
     if (error) break;
   }
+
   mysql_rwlock_unlock(&LOCK_prefetch_channels_hash);
+
   return error;
 }
 
 int ConsensusPreFetchManager::drop_prefetch_channel(uint64 channel_id) {
   int error = 0;
-  ConsensusPreFetchChannel *channel = NULL;
+  ConsensusPreFetchChannel *channel = nullptr;
+  DBUG_TRACE;
+
   mysql_rwlock_wrlock(&LOCK_prefetch_channels_hash);
+
   auto iter = prefetch_channels_hash.find(channel_id);
   if (iter == prefetch_channels_hash.end()) {
     error = 1;
@@ -510,7 +557,9 @@ int ConsensusPreFetchManager::drop_prefetch_channel(uint64 channel_id) {
     channel = iter->second;
     prefetch_channels_hash.erase(channel_id);
   }
+
   mysql_rwlock_unlock(&LOCK_prefetch_channels_hash);
+
   if (!error) {
     channel->cleanup();
     delete channel;
@@ -520,6 +569,7 @@ int ConsensusPreFetchManager::drop_prefetch_channel(uint64 channel_id) {
 
 int ConsensusPreFetchManager::set_max_prefetch_cache_size(
     uint64 max_prefetch_cache_size_arg) {
+  DBUG_TRACE;
   max_prefetch_cache_size = max_prefetch_cache_size_arg;
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
@@ -532,6 +582,7 @@ int ConsensusPreFetchManager::set_max_prefetch_cache_size(
 
 int ConsensusPreFetchManager::set_prefetch_window_size(
     uint64 prefetch_window_size_arg) {
+  DBUG_TRACE;
   prefetch_window_size = prefetch_window_size_arg;
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
@@ -544,6 +595,7 @@ int ConsensusPreFetchManager::set_prefetch_window_size(
 
 int ConsensusPreFetchManager::set_prefetch_wakeup_ratio(
     uint64 prefetch_wakeup_ratio_arg) {
+  DBUG_TRACE;
   prefetch_wakeup_ratio = prefetch_wakeup_ratio_arg;
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
@@ -554,19 +606,8 @@ int ConsensusPreFetchManager::set_prefetch_wakeup_ratio(
   return 0;
 }
 
-int ConsensusPreFetchManager::stop_prefetch_channel_request(uint64 channel_id,
-                                                            bool flag) {
-  mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
-  for (auto iter = prefetch_channels_hash.begin();
-       iter != prefetch_channels_hash.end(); ++iter) {
-    if (iter->first == channel_id)
-      iter->second->set_stop_prefetch_request(flag);
-  }
-  mysql_rwlock_unlock(&LOCK_prefetch_channels_hash);
-  return 0;
-}
-
 int ConsensusPreFetchManager::enable_all_prefetch_channels() {
+  DBUG_TRACE;
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
        iter != prefetch_channels_hash.end(); ++iter) {
@@ -577,6 +618,7 @@ int ConsensusPreFetchManager::enable_all_prefetch_channels() {
 }
 
 int ConsensusPreFetchManager::disable_all_prefetch_channels() {
+  DBUG_TRACE;
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
        iter != prefetch_channels_hash.end(); ++iter) {
@@ -587,6 +629,7 @@ int ConsensusPreFetchManager::disable_all_prefetch_channels() {
 }
 
 int ConsensusPreFetchManager::start_prefetch_threads() {
+  DBUG_TRACE;
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
        iter != prefetch_channels_hash.end(); ++iter) {
@@ -597,6 +640,7 @@ int ConsensusPreFetchManager::start_prefetch_threads() {
 }
 
 int ConsensusPreFetchManager::stop_prefetch_threads() {
+  DBUG_TRACE;
   mysql_rwlock_rdlock(&LOCK_prefetch_channels_hash);
   for (auto iter = prefetch_channels_hash.begin();
        iter != prefetch_channels_hash.end(); ++iter) {
@@ -607,29 +651,31 @@ int ConsensusPreFetchManager::stop_prefetch_threads() {
 }
 
 void *run_prefetch(void *arg) {
-  if (my_thread_init()) return NULL;
   ConsensusPreFetchChannel *channel = (ConsensusPreFetchChannel *)arg;
+  DBUG_TRACE;
+
+  if (my_thread_init()) return nullptr;
+
   THD *thd = create_thd(false, true, true, channel->get_PSI_thread_key(), 0);
   while (channel->is_running) {
     uint64 index = channel->get_prefetch_request();
     if (index == 0) {
-      // mysql_cond_wait is invoked in get_prefetch_request
       continue;
     }
 
-    // get log
     if (!channel->log_exist(index)) {
-      sql_print_information(
-          "Consensus prefetch channel %llu try to fetch index : %llu",
-          channel->get_channel_id(), index);
+      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_RUN_PREFETCH,
+                   channel->get_channel_id(), index);
       if (consensus_log_manager.prefetch_log_directly(
               thd, channel->get_channel_id(), index)) {
         channel->clear_prefetch_request();
       }
-    } else
+    } else {
       channel->clear_prefetch_request();
+    }
   }
+
   destroy_thd(thd);
   my_thread_end();
-  return NULL;
+  return nullptr;
 }

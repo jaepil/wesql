@@ -26,7 +26,9 @@
 #include "consensus_applier.h"
 #include "consensus_binlog.h"
 #include "consensus_log_manager.h"
+#include "consensus_meta.h"
 #include "consensus_proc.h"
+#include "consensus_state_process.h"
 #include "i_s_consensus.h"
 #include "observer_applier.h"
 #include "observer_binlog_manager.h"
@@ -178,7 +180,10 @@ static int initialize_plugin_and_join(Binlog_context_info *infos) {
   error = consensus_log_manager.init(opt_consensus_log_cache_size,
                                      opt_consensus_prefetch_cache_size,
                                      opt_consensus_start_index);
-  consensus_log_manager.set_binlog(infos->binlog);
+  consensus_meta.init();
+  consensus_applier.init();
+  consensus_state_process.init();
+  consensus_state_process.set_binlog(infos->binlog);
 
   lv.consensus_replication_running = true;
 
@@ -208,8 +213,9 @@ int plugin_consensus_replication_stop(char **) {
   lv.plugin_stop_lock->unlock();
   LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RPL_IS_STOPPED);
 
-  sql_print_information("Shutting down consensus module");
-
+  consensus_state_process.cleanup();
+  consensus_applier.cleanup();
+  consensus_meta.cleanup();
   consensus_log_manager.cleanup();
 
   return 0;
@@ -219,6 +225,8 @@ int plugin_consensus_replication_init(MYSQL_PLUGIN plugin_info) {
   // Struct that holds startup and runtime requirements
   Trans_context_info startup_pre_reqs;
   Binlog_context_info binlog_context;
+
+  DBUG_TRACE;
 
   // Initialize plugin local variables.
   lv.init();
@@ -248,8 +256,6 @@ int plugin_consensus_replication_init(MYSQL_PLUGIN plugin_info) {
 
   if (check_if_server_properly_configured(startup_pre_reqs)) {
     /* purecov: begin inspected */
-    LogPluginErr(ERROR_LEVEL,
-                 ER_CONSENSUS_RPL_FAILED_TO_REGISTER_SERVER_STATE_OBSERVER);
     return 1;
     /* purecov: end */
   }
@@ -301,6 +307,8 @@ int plugin_consensus_replication_init(MYSQL_PLUGIN plugin_info) {
 }
 
 int plugin_consensus_replication_deinit(void *p) {
+  DBUG_TRACE;
+
   // If plugin was not initialized, there is nothing to do here.
   if (lv.plugin_info_ptr == nullptr) return 0;
 
@@ -402,6 +410,8 @@ static int check_if_server_properly_configured(
 
 bool acquire_transaction_control_services() {
   bool ret = false;
+  DBUG_TRACE;
+
   // Acquire the 'mysql_before_commit_transaction_control' service.
   if (nullptr == lv.svc_mysql_before_commit_transaction_control) {
     my_h_service h_mysql_before_commit_transaction_control = nullptr;
@@ -453,6 +463,8 @@ end:
 
 bool release_transaction_control_services() {
   bool ret = false;
+  DBUG_TRACE;
+
   // Release the 'mysql_before_commit_transaction_control' service.
   if (nullptr != lv.svc_mysql_before_commit_transaction_control) {
     my_h_service h_mysql_before_commit_transaction_control =

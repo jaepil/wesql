@@ -22,6 +22,7 @@
 #include "sql/log.h"
 
 int ConsensusLogIndex::init() {
+  DBUG_TRACE;
   mysql_mutex_init(key_mutex_ConsensusLog_index, &LOCK_consensuslog_index,
                    MY_MUTEX_INIT_FAST);
   inited = true;
@@ -29,6 +30,7 @@ int ConsensusLogIndex::init() {
 }
 
 int ConsensusLogIndex::cleanup() {
+  DBUG_TRACE;
   if (inited) {
     mysql_mutex_destroy(&LOCK_consensuslog_index);
   }
@@ -36,9 +38,10 @@ int ConsensusLogIndex::cleanup() {
 }
 
 int ConsensusLogIndex::add_to_index_list(uint64 start_index, ulong timestamp,
-                                         std::string &log_name,
+                                         const std::string &log_name,
                                          ulonglong log_size /* = 0 */,
                                          bool remove_dup /* = false */) {
+  DBUG_TRACE;
   // init log_size to 0, used for automically purge, will be updated
   // when the first time it is calculated in purge condition check.
   // see: ConsensusLogIndex::update_log_size_by_name
@@ -57,6 +60,7 @@ int ConsensusLogIndex::add_to_index_list(uint64 start_index, ulong timestamp,
 }
 
 int ConsensusLogIndex::clear_all() {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   total_log_size = 0;
   index_list.clear();
@@ -65,6 +69,7 @@ int ConsensusLogIndex::clear_all() {
 }
 
 int ConsensusLogIndex::truncate_before(std::string &log_name) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   // Truncate newer log files. The iterator begins from the older to the newer.
   // Decrease total_log_size when iterating the entries that will be truncated.
@@ -82,6 +87,7 @@ int ConsensusLogIndex::truncate_before(std::string &log_name) {
 }
 
 int ConsensusLogIndex::truncate_after(std::string &log_name) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   // Truncate newer log files. The iterator begins from the older to the newer.
   // Recompute total_log_size not decrease it, because we do not have to iterate
@@ -99,6 +105,7 @@ int ConsensusLogIndex::truncate_after(std::string &log_name) {
 }
 
 ulonglong ConsensusLogIndex::get_total_log_size() {
+  DBUG_TRACE;
   ulonglong ret = 0;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   ret = total_log_size;
@@ -109,6 +116,7 @@ ulonglong ConsensusLogIndex::get_total_log_size() {
 int ConsensusLogIndex::get_log_file_from_index(uint64 consensus_index,
                                                std::string &log_name,
                                                uint64 &start_index) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   if (index_list.empty() || consensus_index < index_list.begin()->first) {
     mysql_mutex_unlock(&LOCK_consensuslog_index);
@@ -125,6 +133,7 @@ int ConsensusLogIndex::get_log_file_from_index(uint64 consensus_index,
 }
 
 int ConsensusLogIndex::get_log_file_list(std::vector<std::string> &file_list) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   for (auto iter = index_list.begin(); iter != index_list.end(); ++iter) {
     file_list.push_back(iter->second.file_name);
@@ -135,6 +144,7 @@ int ConsensusLogIndex::get_log_file_list(std::vector<std::string> &file_list) {
 
 int ConsensusLogIndex::get_log_file_entry_list(
     std::vector<ConsensusLogIndexEntry> &file_list) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   for (auto iter = index_list.begin(); iter != index_list.end(); ++iter) {
     file_list.push_back(iter->second);
@@ -145,6 +155,7 @@ int ConsensusLogIndex::get_log_file_entry_list(
 
 int ConsensusLogIndex::get_first_log_should_purge_by_size(
       ulonglong purge_target_size, std::string &log_name, uint64 &index) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   ulonglong current_size = total_log_size;
   for (auto iter = index_list.begin(); iter != index_list.end(); ++iter) {
@@ -155,16 +166,13 @@ int ConsensusLogIndex::get_first_log_should_purge_by_size(
       break;
     }
   }
-  sql_print_information(
-      "get_first_log_should_purge_by_size: %s,target log size:%d, "
-      "current_size: %d, index: %d",
-      log_name.c_str(), purge_target_size, current_size, index);
   mysql_mutex_unlock(&LOCK_consensuslog_index);
   return 0;
 }
 
 int ConsensusLogIndex::get_first_log_should_purge_by_time(
       ulong timestamp, std::string &log_name, uint64 &index) {
+  DBUG_TRACE;
   bool found = false;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   // purge the logs before the timestamp
@@ -183,6 +191,7 @@ int ConsensusLogIndex::get_first_log_should_purge_by_time(
 }
 
 uint64 ConsensusLogIndex::get_first_index() {
+  DBUG_TRACE;
   uint64 first_index = 0;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   auto iter = index_list.begin();
@@ -192,6 +201,7 @@ uint64 ConsensusLogIndex::get_first_index() {
 }
 
 uint64 ConsensusLogIndex::get_start_index_of_file(const std::string &log_name) {
+  DBUG_TRACE;
   uint64 index = 0;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   for (auto riter = index_list.rbegin(); riter != index_list.rend(); ++riter) {
@@ -207,6 +217,8 @@ uint64 ConsensusLogIndex::get_start_index_of_file(const std::string &log_name) {
 int ConsensusLogIndex::get_lower_bound_pos_of_index(
     const uint64 start_index, const uint64 consensus_index, uint64 &pos,
     bool &matched) {
+  DBUG_TRACE;
+
   matched = false;
 
   mysql_mutex_lock(&LOCK_consensuslog_index);
@@ -238,6 +250,8 @@ int ConsensusLogIndex::get_lower_bound_pos_of_index(
 void ConsensusLogIndex::update_pos_map_by_start_index(uint64 start_index,
                                                      uint64 consensus_index,
                                                      uint64 pos) {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_consensuslog_index);
 
   auto iter_next = index_list.upper_bound(start_index);
@@ -256,7 +270,10 @@ void ConsensusLogIndex::update_pos_map_by_start_index(uint64 start_index,
 void ConsensusLogIndex::update_pos_map_by_file_name(std::string &log_name,
                                                     uint64 consensus_index,
                                                     uint64 pos) {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_consensuslog_index);
+
   for (auto riter = index_list.rbegin(); riter != index_list.rend(); ++riter) {
     if (log_name == riter->second.file_name) {
       uint next_index = 0;
@@ -280,6 +297,8 @@ void ConsensusLogIndex::update_pos_map_by_file_name(std::string &log_name,
 
 int ConsensusLogIndex::truncate_pos_map_of_file(uint64 start_index,
                                                 uint64 consensus_index) {
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_consensuslog_index);
 
   auto iter = index_list.upper_bound(start_index);
@@ -296,6 +315,8 @@ int ConsensusLogIndex::truncate_pos_map_of_file(uint64 start_index,
 
 std::string ConsensusLogIndex::get_last_log_file_name() {
   std::string ret;
+  DBUG_TRACE;
+
   mysql_mutex_lock(&LOCK_consensuslog_index);
   ret = (index_list.rbegin())->second.file_name;
   mysql_mutex_unlock(&LOCK_consensuslog_index);
@@ -303,14 +324,12 @@ std::string ConsensusLogIndex::get_last_log_file_name() {
 }
 
 int ConsensusLogIndex::update_log_size_by_name(const std::string &log_name, ulonglong log_size) {
+  DBUG_TRACE;
   mysql_mutex_lock(&LOCK_consensuslog_index);
   // A reverse iterator is used to update the log_size, because the log_size is always 
   // updated when rotating the last log.
   for (auto iter = index_list.rbegin(); iter != index_list.rend(); ++iter) {
     if (log_name == iter->second.file_name) {
-      sql_print_information("update_log_size_by_name: %s,%d,%d",
-                          log_name.c_str(),
-                          log_size,iter->second.log_size);
       if (iter->second.log_size != 0) {
         if (log_size > iter->second.log_size) {
           ulonglong increment = log_size - iter->second.log_size;

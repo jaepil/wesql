@@ -86,8 +86,6 @@ class ConsensusPreFetchChannel {
 
   int stop_prefetch_thread();
 
-  void set_prefetching(bool prefetching_arg) { prefetching = prefetching_arg; }
-
   void set_window_size(uint64 window_size_arg) {
     window_size = window_size_arg;
   }
@@ -97,10 +95,6 @@ class ConsensusPreFetchChannel {
   void set_wakeup_ratio(uint64 wakeup_ratio_arg) {
     wakeup_ratio = wakeup_ratio_arg;
   }
-
-  void set_stop_prefetch_request(bool flag) { stop_prefetch_request = flag; }
-
-  bool get_stop_preftch_request() { return stop_prefetch_request; }
 
   void inc_ref_count() { ref_count++; }
 
@@ -137,8 +131,6 @@ class ConsensusPreFetchChannel {
   my_thread_handle prefetch_thread_handle;
   bool is_running;  // used to coordinate prefetch thread
   bool inited;
-  std::atomic<bool> prefetching;
-  std::atomic<bool> stop_prefetch_request;
   std::atomic<uint64> window_size;
   std::atomic<uint64> wakeup_ratio;
   std::atomic<int>
@@ -195,7 +187,6 @@ class ConsensusPreFetchManager {
 
  private:
   bool inited;
-  PSI_rwlock_key key_LOCK_prefetch_channels_hash;
   mysql_rwlock_t LOCK_prefetch_channels_hash;  // used to protect log cache
   std::map<uint64, ConsensusPreFetchChannel *> prefetch_channels_hash;
   std::atomic<uint64> max_prefetch_cache_size;

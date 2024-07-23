@@ -13,6 +13,8 @@ SET(CONSENSUS_REPLICATION_SOURCES
   consensus_fifo_cache_manager.cc
   consensus_log_index.cc
   consensus_log_manager.cc
+  consensus_meta.cc
+  consensus_state_process.cc
   consensus_prefetch_manager.cc
   consensus_proc.cc
   consensus_recovery_manager.cc

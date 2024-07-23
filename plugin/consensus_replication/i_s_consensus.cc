@@ -1,6 +1,7 @@
 #include <sys/types.h>
 
 #include "consensus_log_manager.h"
+#include "consensus_state_process.h"
 #include "i_s_consensus.h"
 #include "plugin.h"
 #include "rpl_consensus.h"
@@ -49,7 +50,6 @@ static int i_s_common_deinit(void *) {
 }
 
 int fill_wesql_cluster_global(THD *thd, Table_ref *tables, Item *) {
-  DBUG_ENTER("fill_wesql_cluster_global");
   int res = 0;
   TABLE *table = tables->table;
   std::string has_voted;
@@ -57,15 +57,16 @@ int fill_wesql_cluster_global(THD *thd, Table_ref *tables, Item *) {
   std::string pipelining;
   std::string use_applied;
   std::vector<cluster_global_info> cgis;
+  DBUG_TRACE;
 
-  if (!is_consensus_replication_enabled()) DBUG_RETURN(res);
+  if (!is_consensus_replication_enabled()) return res;
 
   // if node is not LEADER, global information is empty
   if (rpl_consensus_get_cluster_global_info(&cgis, true) == 0) {
     if (schema_table_store_record(thd, table))
-      DBUG_RETURN(1);
+      return 1;
     else
-      DBUG_RETURN(res);
+      return res;
   }
 
   for (auto e : cgis) {
@@ -114,21 +115,21 @@ int fill_wesql_cluster_global(THD *thd, Table_ref *tables, Item *) {
                                      system_charset_info);
     table->field[field_num++]->store(use_applied.c_str(), use_applied.length(),
                                      system_charset_info);
-    if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+    if (schema_table_store_record(thd, table)) return 1;
   }
 
-  DBUG_RETURN(res);
+  return res;
 }
 
 int fill_wesql_cluster_local(THD *thd, Table_ref *tables, Item *) {
-  DBUG_ENTER("fill_wesql_cluster_local");
   int res = 0;
   TABLE *table = tables->table;
+  DBUG_TRACE;
 
-  if (!is_consensus_replication_enabled()) DBUG_RETURN(res);
+  if (!is_consensus_replication_enabled()) return res;
 
   // get from local log manager
-  Consensus_Log_System_Status rw_status = consensus_log_manager.get_status();
+  Consensus_Log_System_Status rw_status = consensus_state_process.get_status();
   std::string rw_status_str;
   std::string instance_type;
   cluster_local_info cli;
@@ -136,17 +137,18 @@ int fill_wesql_cluster_local(THD *thd, Table_ref *tables, Item *) {
   /* not a stable leader if server_ready_for_rw is no and
    * consensus_auto_leader_transfer is on */
   if (cli.role == "Leader" && opt_consensus_auto_leader_transfer &&
-      (opt_cluster_log_type_instance || rw_status == RELAY_LOG_WORKING))
+      (opt_cluster_log_type_instance ||
+       rw_status == Consensus_Log_System_Status::RELAY_LOG_WORKING))
     cli.role = "Prepared";
 
   if (opt_cluster_log_type_instance) {
     rw_status_str = "No";
   } else {
     switch (rw_status) {
-      case BINLOG_WORKING:
+      case Consensus_Log_System_Status::BINLOG_WORKING:
         rw_status_str = "Yes";
         break;
-      case RELAY_LOG_WORKING:
+      case Consensus_Log_System_Status::RELAY_LOG_WORKING:
         rw_status_str = "No";
         break;
     }
@@ -179,18 +181,19 @@ int fill_wesql_cluster_local(THD *thd, Table_ref *tables, Item *) {
   table->field[field_num++]->store(instance_type.c_str(),
                                    instance_type.length(), system_charset_info);
 
-  if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+  if (schema_table_store_record(thd, table)) return 1;
 
-  DBUG_RETURN(res);
+  return res;
 }
 
 int fill_wesql_cluster_health(THD *thd, Table_ref *tables, Item *) {
-  DBUG_ENTER("fill_wesql_cluster_health");
-  if (!is_consensus_replication_enabled()) DBUG_RETURN(0);
+  DBUG_TRACE;
+
+  if (!is_consensus_replication_enabled()) return 0;
   TABLE *table = tables->table;
 
   std::vector<cluster_helthy_info> hi;
-  if (rpl_consensus_get_helthy_info(&hi) == 0) DBUG_RETURN(0);
+  if (rpl_consensus_get_helthy_info(&hi) == 0) return 0;
 
   for (auto e : hi) {
     int field_num = 0;
@@ -210,18 +213,18 @@ int fill_wesql_cluster_health(THD *thd, Table_ref *tables, Item *) {
     table->field[field_num++]->store((longlong)e.log_delay, true);
     table->field[field_num++]->store((longlong)e.apply_delay, true);
 
-    if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+    if (schema_table_store_record(thd, table)) return 1;
   }
 
-  DBUG_RETURN(0);
+  return 0;
 }
 
 int fill_wesql_cluster_learner_source(THD *thd, Table_ref *tables, Item *) {
-  DBUG_ENTER("fill_wesql_cluster_learner_source");
   int res = 0;
   TABLE *table = tables->table;
+  DBUG_TRACE;
 
-  if (!is_consensus_replication_enabled()) DBUG_RETURN(res);
+  if (!is_consensus_replication_enabled()) return res;
 
   // get from consensus alg layer
   uint64 learner_id = 0;
@@ -277,21 +280,21 @@ int fill_wesql_cluster_learner_source(THD *thd, Table_ref *tables, Item *) {
     table->field[field_num++]->store((longlong)learner_match_index, true);
     table->field[field_num++]->store((longlong)learner_next_index, true);
     table->field[field_num++]->store((longlong)learner_applied_index, true);
-    if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+    if (schema_table_store_record(thd, table)) return 1;
   }
   if (learner_source_count == 0) {
-    if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+    if (schema_table_store_record(thd, table)) return 1;
   }
 
-  DBUG_RETURN(res);
+  return res;
 }
 
 int fill_wesql_cluster_prefetch_channel(THD *thd, Table_ref *tables, Item *) {
-  DBUG_ENTER("fill_wesql_cluster_prefetch_channel");
   int res = 0;
   TABLE *table = tables->table;
+  DBUG_TRACE;
 
-  if (!is_consensus_replication_enabled()) DBUG_RETURN(res);
+  if (!is_consensus_replication_enabled()) return res;
 
   // get from consensus alg layer
   ConsensusPreFetchManager *prefetch_mgr =
@@ -299,8 +302,6 @@ int fill_wesql_cluster_prefetch_channel(THD *thd, Table_ref *tables, Item *) {
   prefetch_mgr->lock_prefetch_channels_hash(true);
   for (auto iter = prefetch_mgr->get_channels_hash()->begin();
        iter != prefetch_mgr->get_channels_hash()->end(); ++iter) {
-    std::string stop_flag_str =
-        iter->second->get_stop_preftch_request() ? "YES" : "NO";
     int field_num = 0;
     table->field[field_num++]->store((longlong)iter->second->get_channel_id(),
                                      true);
@@ -312,22 +313,20 @@ int fill_wesql_cluster_prefetch_channel(THD *thd, Table_ref *tables, Item *) {
         (longlong)iter->second->get_prefetch_cache_size(), true);
     table->field[field_num++]->store(
         (longlong)iter->second->get_current_request(), true);
-    table->field[field_num++]->store(
-        stop_flag_str.c_str(), stop_flag_str.length(), system_charset_info);
 
-    if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+    if (schema_table_store_record(thd, table)) return 1;
   }
 
   prefetch_mgr->unlock_prefetch_channels_hash();
-  DBUG_RETURN(res);
+  return res;
 }
 
 int fill_wesql_cluster_consensus_status(THD *thd, Table_ref *tables, Item *) {
-  DBUG_ENTER("fill_wesql_cluster_consensus_status");
   int res = 0;
   TABLE *table = tables->table;
+  DBUG_TRACE;
 
-  if (!is_consensus_replication_enabled()) DBUG_RETURN(0);
+  if (!is_consensus_replication_enabled()) return 0;
 
   // get from consensus alg layer
   uint64 id = server_id;
@@ -347,17 +346,17 @@ int fill_wesql_cluster_consensus_status(THD *thd, Table_ref *tables, Item *) {
   table->field[field_num++]->store((longlong)cs.count_log_meta_get_in_cache,
                                    true);
   table->field[field_num++]->store((longlong)cs.count_log_meta_get_total, true);
-  if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+  if (schema_table_store_record(thd, table)) return 1;
 
-  DBUG_RETURN(res);
+  return res;
 }
 
 int fill_wesql_cluster_consensus_membership_change(THD *thd, Table_ref *tables,
                                                    Item *) {
-  DBUG_ENTER("fill_wesql_cluster_consensus_membership_change");
   TABLE *table = tables->table;
+  DBUG_TRACE;
 
-  if (!is_consensus_replication_enabled()) DBUG_RETURN(0);
+  if (!is_consensus_replication_enabled()) return 0;
 
   std::vector<cluster_memebership_change> cmcs;
   rpl_consensus_get_member_changes(&cmcs);
@@ -368,10 +367,10 @@ int fill_wesql_cluster_consensus_membership_change(THD *thd, Table_ref *tables,
                                      system_charset_info);
     table->field[field_num++]->store(e.command.c_str(), e.command.length(),
                                      system_charset_info);
-    if (schema_table_store_record(thd, table)) DBUG_RETURN(1);
+    if (schema_table_store_record(thd, table)) return 1;
   }
 
-  DBUG_RETURN(0);
+  return 0;
 }
 
 ST_FIELD_INFO wesql_cluster_global_fields_info[] = {
@@ -451,7 +450,6 @@ ST_FIELD_INFO wesql_cluster_prefetch_channel_info[] = {
     {"CACHE_SIZE", MY_INT64_NUM_DECIMAL_DIGITS, MYSQL_TYPE_LONGLONG, 0, 0, 0,
      0},
     {"CURRENT_REQUEST", NAME_CHAR_LEN, MYSQL_TYPE_STRING, 0, 0, 0, 0},
-    {"STOP_FLAG", 10, MYSQL_TYPE_STRING, 0, 0, 0, 0},
     {0, 0, MYSQL_TYPE_STRING, 0, 0, 0, 0}};
 
 ST_FIELD_INFO wesql_cluster_consensus_status_fields_info[] = {
