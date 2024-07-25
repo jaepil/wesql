@@ -73,7 +73,7 @@ int ConsensusMeta::change_meta_if_needed() {
 
     if (!opt_cluster_info) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_CHANGE_META_ERROR,
-                   "because consensus_replication_cluster_info "
+                   "consensus_replication_cluster_info "
                    "must be set when the server is "
                    "running with --initialize(-insecure)");
       return -1;
@@ -101,11 +101,10 @@ int ConsensusMeta::update_consensus_info() {
     if (opt_cluster_id) consensus_info->set_cluster_id(opt_cluster_id);
 
     if (!opt_cluster_info) {
-      LogPluginErr(
-          ERROR_LEVEL, ER_CONSENSUS_CHANGE_META_ERROR,
-          "failed to change meta, because consensus_replication_cluster_info "
-          "must be set when the server is "
-          "running with --initialize(-insecure)");
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_CHANGE_META_ERROR,
+                   "consensus_replication_cluster_info "
+                   "must be set when the server is "
+                   "running with --initialize(-insecure)");
       return -1;
     }
 

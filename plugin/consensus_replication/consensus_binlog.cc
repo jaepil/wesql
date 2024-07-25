@@ -976,7 +976,7 @@ static int read_log_by_index(const char *file_name, uint64 start_index,
           *flag = cflag;
           *checksum = ccrc32;
         } else if (!found && cindex > consensus_index) {
-          LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_READ_MALFORMED_LOG,
+          LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_READ_MALFORMED_LOG, file_name,
                        consensus_index, start_index, cindex);
           abort();
         }
@@ -1038,7 +1038,7 @@ static int read_log_by_index(const char *file_name, uint64 start_index,
 
   if (!found) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_BY_INDEX_ERROR,
-                 lower_start_pos, consensus_index);
+                 consensus_index, lower_start_pos);
   }
 
   return (int)!found;

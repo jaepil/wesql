@@ -177,8 +177,8 @@ int start_consensus_apply_threads(Master_info *mi) {
 
   if (start_slave_threads(true /*need_lock_slave=true*/,
                           false /*wait_for_start=false*/, mi, thread_mask)) {
-    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_APPLIER_LOGS,
-                 "failed to start worker threads");
+    LogPluginErr(ERROR_LEVEL, ER_FAILED_TO_START_REPLICA_THREAD,
+                 mi->get_channel());
     error = 1;
   }
 
@@ -217,12 +217,14 @@ int check_exec_consensus_log_end_condition(Relay_log_info *rli) {
              consensus_state_process.get_current_term()) <
          consensus_applier.get_real_apply_index()) {
     if (sql_slave_killed(rli->info_thd, rli)) {
-      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_APPLIER_THREAD_STOP);
+      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_APPLIER_THREAD_STOP,
+                   "applier thread was killed");
       return 1;
     }
 
     if (rpl_consensus_is_shutdown()) {
-      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_APPLIER_THREAD_STOP);
+      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_APPLIER_THREAD_STOP,
+                   "consensus service was shutdown");
       return 1;
     }
 

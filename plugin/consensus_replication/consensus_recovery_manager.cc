@@ -164,14 +164,14 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
     xa_list.add(iter->first, iter->second);
   }
 
-  // Erase trxs after max committed index from commit_list 
+  // Erase trxs after max committed index from commit_list
   for (auto iter = commit_list.begin(); iter != commit_list.end(); iter++) {
     my_xid xid = *iter;
     auto iter_trx_map = total_trx_index_map.find(xid);
 
     if (iter_trx_map != total_trx_index_map.end() &&
         iter_trx_map->second > max_committed_index) {
-      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS,
+      LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_TRX_LOGS,
                    "erase a prepared transaction from binlog transactions list",
                    xid, iter_trx_map->second,
                    enum_ha_recover_xa_state::PREPARED_IN_SE);
