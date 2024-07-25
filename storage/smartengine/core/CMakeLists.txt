@@ -756,6 +756,7 @@ set(TESTS
         unittest/write_batch/write_batch_test.cc
         #unittest/write_batch_with_index_test.cc
         unittest/objstore/objstore_test.cc
+        unittest/objstore/objstore_bench.cc
 )
 
 set(BENCHMARKS
