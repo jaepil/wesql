@@ -117,6 +117,7 @@ static int se_init_func(void *const p)
   se_hton->checkpoint = se_checkpoint;
   se_hton->create_backup_snapshot = se_create_backup_snapshot;
   se_hton->incremental_backup = se_incremental_backup;
+  se_hton->cleanup_tmp_backup_dir = se_cleanup_tmp_backup_dir;
   se_hton->release_backup_snapshot = se_release_backup_snapshot;
   se_hton->list_backup_snapshots = se_list_backup_snapshots;
 

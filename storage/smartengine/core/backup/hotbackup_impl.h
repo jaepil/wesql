@@ -50,6 +50,8 @@ public:
   virtual int init(db::DB *db, const char *backup_tmp_dir_path = nullptr) override;
   // Create backup tmp dir
   virtual int create_tmp_dir(db::DB *db) override;
+  // Cleanup backup tmp dir
+  virtual int cleanup_tmp_dir(db::DB *db) override;
   // Get backup status
   virtual int get_backup_status(const char *&status) override;
   // Set backup status

@@ -798,6 +798,25 @@ int se_incremental_backup(THD *thd) {
   return ret;
 }
 
+int se_cleanup_tmp_backup_dir(THD *thd)
+{
+  int ret = 0;
+
+  util::BackupSnapshot *backup_instance = util::BackupSnapshot::get_instance();
+  if (FAILED(backup_instance->lock_one_step())) {
+    SE_LOG(WARN, "fail to accquire exclusive lock", K(ret));
+  } else if (FAILED(backup_instance->cleanup_tmp_dir(se_db))) {
+    my_printf_error(ER_UNKNOWN_ERROR, "SE: failed to cleanup tmp dir for backup", MYF(0));
+  } else {
+    // do nothing
+  }
+
+  if (Status::kInitTwice != ret) {
+    backup_instance->unlock_one_step();
+  }
+  return ret;
+}
+
 int release_current_backup_snapshot(THD *thd, uint64_t backup_snapshot_id) {
   int ret = Status::kOk;
   util::BackupSnapshot *backup_instance = util::BackupSnapshot::get_instance();

@@ -44,6 +44,8 @@ int BackupSnapshot::init(DB *db, const char *backup_tmp_dir_path)
 
 int BackupSnapshot::create_tmp_dir(DB *db) { return Status::kNotSupported; }
 
+int BackupSnapshot::cleanup_tmp_dir(db::DB *db) { return Status::kNotSupported; }
+
 int BackupSnapshot::lock_instance() { return Status::kNotSupported; }
 
 int BackupSnapshot::unlock_instance() { return Status::kNotSupported; }
@@ -411,17 +413,13 @@ int BackupSnapshotImpl::create_tmp_dir(DB *db)
   return ret;
 }
 
-// clean tmp files
-int BackupSnapshotImpl::do_cleanup(DB *db)
+int BackupSnapshotImpl::cleanup_tmp_dir(DB *db)
 {
   int ret = Status::kOk;
   if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
   } else {
-    StorageManager::cleanup_backup_snapshot(cur_meta_snapshots_);
-
-    // delete tmp dir
     std::vector<std::string> all_files;
     if (FAILED(db->GetEnv()->GetChildren(backup_tmp_dir_path_, &all_files).code())) {
       if (Status::kNotFound != ret) {
@@ -452,6 +450,22 @@ int BackupSnapshotImpl::do_cleanup(DB *db)
   return ret;
 }
 
+// clean tmp files
+int BackupSnapshotImpl::do_cleanup(DB *db)
+{
+  int ret = Status::kOk;
+  if (IS_NULL(db)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "db is nullptr", K(ret));
+  } else if (FAILED(StorageManager::cleanup_backup_snapshot(cur_meta_snapshots_))) {
+    SE_LOG(WARN, "Failed to cleanup backup snapshot", K(ret));
+  } else if (FAILED(cleanup_tmp_dir(db))) {
+    SE_LOG(WARN, "Failed to cleanup tmp dir", K(ret));
+  } else {
+    SE_LOG(DEBUG, "Success to cleanup tmp dir", K(ret));
+  }
+  return ret;
+}
 
 } // namespace util
 } // namespace smartengine
