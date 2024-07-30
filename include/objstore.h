@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <memory>
 
 namespace objstore {
 
@@ -44,8 +45,13 @@ enum Errors {
   SE_OBJECT_ALREADY_IN_ACTIVE_TIER,
   SE_OBJECT_NOT_IN_ACTIVE_TIER,
 
-  // privilege errors
+  // object store common errors
   SE_ACCESS_DENIED,
+  SE_OBJSTORE_INVALID_ARGUMENT,
+
+  // object store errors, for aliyun
+  SE_SYMLINK_TARGET_NOT_EXIST,
+  SE_TOO_MANY_BUCKETS,
 
   // not-retryable generic errors, for s3, like:
   // INCOMPLETE_SIGNATURE
@@ -73,8 +79,19 @@ class Status {
   Status(Errors error_code, int cloud_provider_err_code,
          std::string_view error_msg)
       : error_code_(error_code),
-        cloud_provider_err_code_(cloud_provider_err_code),
-        error_msg_(error_msg) {}
+        cloud_provider_err_code_(cloud_provider_err_code) {
+          error_msg_ = std::string("cloud provider error: ") + std::to_string(cloud_provider_err_code) 
+                               + ", error code: " + std::to_string(error_code)
+                               + ", error message: " + std::string(error_msg);
+        }
+  Status(Errors error_code, const std::string &cloud_provider_err_code_str,
+         std::string_view error_msg)
+      : error_code_(error_code),
+        cloud_provider_err_code_str_(cloud_provider_err_code_str) {
+          error_msg_ = std::string("cloud provider error: ") + cloud_provider_err_code_str
+                               + ", error code: " + std::to_string(error_code)
+                               + ", error message: " + std::string(error_msg);
+        }
   ~Status() = default;
 
   bool is_succ() const { return error_code_ == 0; }
@@ -85,6 +102,9 @@ class Status {
   void set_cloud_provider_err_code(int cloud_provider_err_code) {
     cloud_provider_err_code_ = cloud_provider_err_code;
   }
+  void set_cloud_provider_err_code(const std::string &cloud_provider_err_code_str) {
+    cloud_provider_err_code_str_ = cloud_provider_err_code_str;
+  }
   int cloud_provider_err_code() const { return cloud_provider_err_code_; }
 
   void set_error_msg(std::string_view error_msg) { error_msg_ = error_msg; }
@@ -93,6 +113,7 @@ class Status {
  private:
   Errors error_code_{SE_SUCCESS};
   int cloud_provider_err_code_{0};
+  std::string cloud_provider_err_code_str_;
   std::string error_msg_;
 };
 

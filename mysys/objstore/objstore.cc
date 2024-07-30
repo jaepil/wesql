@@ -18,12 +18,15 @@
 
 #include "mysys/objstore/local.h"
 #include "mysys/objstore/s3.h"
+#include "mysys/objstore/aliyun_oss.h"
 
 namespace objstore {
 
 void init_objstore_provider(const std::string_view &provider) {
   if (provider == "aws") {
     init_aws_api();
+  } else if (provider == "aliyun") {
+    init_aliyun_api();
   } else if (provider == "local") {
     // do nothing
   }
@@ -34,6 +37,8 @@ void cleanup_objstore_provider(ObjectStore *objstore) {
     std::string_view provider = objstore->get_provider();
     if (provider == "aws") {
       shutdown_aws_api();
+    } else if (provider == "aliyun") {
+      shutdown_aliyun_api();
     } else if (provider == "local") {
       // do nothing
     }
@@ -46,6 +51,8 @@ ObjectStore *create_object_store(const std::string_view &provider,
                                  bool use_https) {
   if (provider == "aws") {
     return create_s3_objstore(region, endpoint, use_https);
+  } else if (provider == "aliyun") {
+    return create_aliyun_oss_objstore(region, endpoint);
   } else if (provider == "local") {
     return create_local_objstore(region, endpoint, use_https);
   } else {
@@ -62,6 +69,8 @@ ObjectStore *create_object_store_for_test(const std::string_view &provider,
     return create_s3_objstore_for_test(region, endpoint, use_https, bucket_dir);
   } else if (provider == "local") {
     return create_local_objstore(region, endpoint, use_https);
+  } else if (provider == "aliyun") {
+    return create_aliyun_oss_objstore_for_test(region, endpoint, bucket_dir);
   } else {
     return nullptr;
   }

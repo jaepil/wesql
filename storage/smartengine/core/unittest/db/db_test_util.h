@@ -169,13 +169,13 @@ class SpecialEnv : public util::EnvWrapper {
 
   virtual bool IsObjectStoreInited() const override { return target()->IsObjectStoreInited(); }
 
-
-   virtual common::Status InitObjectStore(const std::string_view provider,
-                                          const std::string_view region,
-                                          const std::string_view *endpoint,
-                                          bool use_https,
-                                          const std::string_view bucket,
-                                          const std::string_view bucket_subdir_for_test) override {
+  virtual common::Status InitObjectStore(const std::string_view provider,
+                                         const std::string_view region,
+                                         const std::string_view *endpoint,
+                                         bool use_https,
+                                         const std::string_view bucket,
+                                         const std::string_view bucket_subdir_for_test) override
+  {
     return target()->InitObjectStore(provider, region, endpoint, use_https, bucket, bucket_subdir_for_test);
   }
 

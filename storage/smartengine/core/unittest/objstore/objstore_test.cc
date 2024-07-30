@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 
 #include "objstore.h"
 #include "storage/storage_common.h"
@@ -27,6 +28,11 @@ namespace smartengine {
 using namespace common;
 using namespace util;
 namespace obj {
+
+const std::string ALIYUN_PROVIDER = "aliyun";
+const std::string S3_PROVIDER = "aws";
+const std::string ALIYUN_ENDPOINT = "oss-cn-hangzhou.aliyuncs.com";
+
 class ObjstoreTest : public testing::TestWithParam<std::string>
 {
 public:
@@ -39,7 +45,16 @@ public:
 
     provider_ = GetParam();
 
-    auto s = env_->InitObjectStore(provider_, region_, nullptr, false, bucket_, "");
+    if (provider_ == ALIYUN_PROVIDER) {
+      // aliyun
+      bucket_ = bucket_aliyun_;
+      endpoint_ = new std::string_view(ALIYUN_ENDPOINT);
+    } else if (provider_ == S3_PROVIDER) {
+      // s3
+      bucket_ = bucket_s3_;
+    }
+
+    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "");
     ASSERT_OK(s);
     s = env_->GetObjectStore(obs);
     ASSERT_OK(s);
@@ -48,6 +63,12 @@ public:
     objstore::Status ss;
     ss = obs->delete_bucket(bucket_);
     ASSERT_TRUE(ss.is_succ() || ss.error_code() == objstore::SE_NO_SUCH_BUCKET);
+    if (provider_ == ALIYUN_PROVIDER) {
+      // In Alibaba Cloud OSS, once a bucket is deleted, 
+      // it cannot be immediately recreated with the same name for a period of time. 
+      // Therefore, each time a bucket is created, it should have a unique name.
+      bucket_ = bucket_aliyun_ + std::to_string(getCurrentTimeMillis());
+    }
     ss = obs->create_bucket(bucket_);
     if (!ss.is_succ()) {
       std::cout << "set up:" << ss.error_code() << " " << ss.error_message() << std::endl;
@@ -58,7 +79,7 @@ public:
   objstore::ObjectStore *create_objstore_client()
   {
     objstore::init_objstore_provider(provider_);
-    return objstore::create_object_store(provider_, region_, nullptr, false);
+    return objstore::create_object_store(provider_, region_, endpoint_, false);
   }
 
   void release_objstore_client(objstore::ObjectStore *client)
@@ -77,8 +98,20 @@ public:
     ASSERT_TRUE(ss.is_succ());
 
     env_->DestroyObjectStore();
+    delete endpoint_;
   }
   objstore::Status create_bucket()
+  {
+    if (provider_ == ALIYUN_PROVIDER) {
+      bucket_ = bucket_aliyun_ + std::to_string(getCurrentTimeMillis());
+    }
+    objstore::Status ss = obj_store_->create_bucket(bucket_);
+    if (!ss.is_succ()) {
+      std::cout << "create bucket:" << ss.error_code() << " " << ss.error_message() << std::endl;
+    }
+    return ss;
+  }
+  objstore::Status create_same_bucket_for_aliyun()
   {
     objstore::Status ss = obj_store_->create_bucket(bucket_);
     if (!ss.is_succ()) {
@@ -154,24 +187,32 @@ public:
     return ss;
   }
 
+  static int64_t getCurrentTimeMillis() {
+    auto now = std::chrono::system_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+  }
+
 protected:
   Env *env_;
   EnvOptions env_options_;
   objstore::ObjectStore *obj_store_;
 
   std::string provider_;
-  std::string bucket_ = "wesql-s3-ut-test";
+  std::string bucket_;
+  std::string bucket_s3_ = "wesql-s3-ut-test";
+  std::string bucket_aliyun_ = "wesql-aliyun-ut-test";
   std::string region_ = "cn-northwest-1";
+  std::string_view *endpoint_ = nullptr;
 };
 
 INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
-                        testing::Values("aws"
-                                        // TODO(ljc): enable this after support aliyun oss
-                                        // , "aliyun"
+                        testing::Values(
+                                        "aliyun",
+                                        "aws"
                                         ));
 
-TEST_P(ObjstoreTest, reinitAwsApi)
+TEST_P(ObjstoreTest, reinitObjStoreApi)
 {
   objstore::ObjectStore *obs = nullptr;
 
@@ -193,7 +234,7 @@ TEST_P(ObjstoreTest, reinitAwsApi)
   env_->GetObjectStore(obs);
   ASSERT_TRUE(obs == nullptr);
 
-  auto s = env_->InitObjectStore(provider_, region_, nullptr, false, bucket_, "");
+  auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "");
   ASSERT_OK(s);
   s = env_->GetObjectStore(obs);
   ASSERT_OK(s);
@@ -234,14 +275,23 @@ TEST_P(ObjstoreTest, createBucket)
   ss = create_bucket();
   ASSERT_TRUE(ss.is_succ());
 
-  ss = create_bucket();
-  ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
+  if (provider_ == S3_PROVIDER) {
+    ss = create_bucket();
+    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
+  } else if (provider_ == ALIYUN_PROVIDER) {
+    ss = create_same_bucket_for_aliyun();
+    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_EXISTS);
+  }
 
   objstore::ObjectStore *new_client = create_objstore_client();
   ASSERT_TRUE(new_client != nullptr);
 
   ss = new_client->create_bucket(bucket_);
-  ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
+  if (provider_ == S3_PROVIDER) {
+    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
+  } else if (provider_ == ALIYUN_PROVIDER) {
+    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_EXISTS);
+  }
 
   release_objstore_client(new_client);
 }
@@ -262,9 +312,16 @@ TEST_P(ObjstoreTest, operateObject)
   ASSERT_TRUE(ss.is_succ());
   ASSERT_EQ(data, "est");
 
+  ss = get_object_range(key, data, 1, raw_data.size() - 1);
+  ASSERT_TRUE(ss.is_succ());
+  ASSERT_EQ(data, "est_put_object_data");
+
   ss = get_object_range(key, data, 1, 300);
   ASSERT_TRUE(ss.is_succ());
   ASSERT_EQ(data, "est_put_object_data");
+
+  ss = get_object_range(key, data, 30, 10);
+  ASSERT_TRUE(!ss.is_succ());
 
   ss = delete_object(key);
   ASSERT_TRUE(ss.is_succ());
@@ -349,6 +406,19 @@ TEST_P(ObjstoreTest, operateObjectFromFile)
   // remove the temp file
   remove(data_file_path.c_str());
   remove(output_file_path.c_str());
+}
+
+TEST_P(ObjstoreTest, noSuckKey) {
+  std::string key = "test_put_object_key";
+  std::string data = "test-data";
+  objstore::Status ss = put_object(key, data);
+  ASSERT_TRUE(ss.is_succ());
+
+  ss = delete_object(key);
+  ASSERT_TRUE(ss.is_succ());
+  ss = get_object(key, data);
+  ASSERT_TRUE(!ss.is_succ());
+  ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_KEY);
 }
 
 } // namespace obj
