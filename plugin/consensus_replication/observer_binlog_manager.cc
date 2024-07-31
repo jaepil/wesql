@@ -136,7 +136,8 @@ static int consensus_binlog_manager_after_purge_file(
 
   if (!param->binlog->is_relay_log) {
     std::string file_name = std::string(log_file_name);
-    consensus_log_manager.get_log_file_index()->truncate_before(file_name);
+    if (param->binlog == consensus_state_process.get_consensus_log())
+      consensus_log_manager.get_log_file_index()->truncate_before(file_name);
 
     global_sid_lock->wrlock();
     error = param->binlog->consensus_init_gtid_sets(

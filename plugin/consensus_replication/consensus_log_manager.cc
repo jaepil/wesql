@@ -470,6 +470,8 @@ int ConsensusLogManager::purge_log(uint64 consensus_index) {
   uint64 purge_index = 0;
   DBUG_TRACE;
 
+  if (consensus_index == 0) return 0;
+
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
   if (consensus_state_process.get_status() ==
@@ -501,9 +503,12 @@ int ConsensusLogManager::purge_log(uint64 consensus_index) {
 
   Relay_log_info *rli_info = consensus_state_process.get_relay_log_info();
   MYSQL_BIN_LOG *log = consensus_state_process.get_consensus_log();
+  MYSQL_BIN_LOG *binlog = nullptr;
 
   if (consensus_state_process.get_status() ==
       Consensus_Log_System_Status::RELAY_LOG_WORKING) {
+    binlog = consensus_state_process.get_binlog();
+    binlog->lock_index();
     mysql_mutex_lock(&rli_info->data_lock);
   }
 
@@ -525,6 +530,18 @@ int ConsensusLogManager::purge_log(uint64 consensus_index) {
   if (consensus_state_process.get_status() ==
       Consensus_Log_System_Status::RELAY_LOG_WORKING) {
     mysql_mutex_unlock(&rli_info->data_lock);
+
+    if (!error) {
+      LOG_INFO log_info;
+      if ((error = binlog->find_log_pos(&log_info, file_name.c_str(), false))) {
+        LogPluginErr(ERROR_LEVEL, ER_BINLOG_CANT_FIND_LOG_IN_INDEX, error);
+      } else {
+        binlog->reopen_log_index(false);
+        binlog->adjust_linfo_offsets(log_info.index_file_start_offset);
+      }
+    }
+
+    binlog->unlock_index();
   }
 
   mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());

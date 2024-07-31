@@ -256,7 +256,7 @@ int MYSQL_BIN_LOG::truncate_logs_from_index(
 
   if (move_crash_safe_index_file_to_index_file(false)) {
     LogErr(ERROR_LEVEL, ER_BINLOG_CANT_MOVE_TMP_TO_INDEX,
-           "MYSQL_BIN_LOG::remove_logs_from_index");
+           "MYSQL_BIN_LOG::truncate_logs_from_index");
     goto err;
   }
   adjust_linfo_offsets(log_info.index_file_start_offset);
@@ -420,6 +420,55 @@ err:
     name = nullptr;
   }
   atomic_log_state = LOG_CLOSED;
+  return error;
+}
+
+int MYSQL_BIN_LOG::reopen_log_index(bool need_lock_index) {
+  int error = 0;
+  File fd = -1;
+  DBUG_TRACE;
+
+  if (need_lock_index)
+    mysql_mutex_lock(&LOCK_index);
+  else
+    mysql_mutex_assert_owner(&LOCK_index);
+
+  if (my_b_inited(&index_file)) {
+    end_io_cache(&index_file);
+    mysql_file_close(index_file.file, MYF(0));
+  }
+
+  if ((fd = mysql_file_open(key_file_binlog_index, index_file_name, O_RDWR,
+                            MYF(MY_WME))) < 0 ||
+      init_io_cache_ext(&index_file, fd, IO_SIZE, READ_CACHE,
+                        mysql_file_seek(fd, 0L, MY_SEEK_END, MYF(0)), false,
+                        MYF(MY_WME | MY_WAIT_IF_FULL),
+                        key_file_binlog_index_cache)) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_FAILED_TO_OPEN_INDEX_FILE_AFTER_REBUILDING,
+           index_file_name);
+    goto fatal_err;
+  }
+
+  if (need_lock_index) mysql_mutex_unlock(&LOCK_index);
+  return error;
+
+fatal_err:
+  /*
+    This situation is very very rare to happen (unless there is some serious
+    memory related issues like OOM) and should be treated as fatal error.
+    Hence it is better to bring down the server without respecting
+    'binlog_error_action' value here.
+  */
+  exec_binlog_error_action_abort(
+      "MySQL server failed to update the "
+      "binlog.index file's content properly. "
+      "It might not be in sync with available "
+      "binlogs and the binlog.index file state is in "
+      "unrecoverable state. Aborting the server.");
+  /*
+    Server is aborted in the above function.
+    This is dead code to make compiler happy.
+   */
   return error;
 }
 

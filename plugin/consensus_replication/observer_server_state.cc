@@ -23,6 +23,7 @@
 #include <stddef.h>
 
 #include "consensus_applier.h"
+#include "consensus_binlog.h"
 #include "consensus_meta.h"
 #include "consensus_state_process.h"
 #include "observer_server_state.h"
@@ -96,7 +97,7 @@ int consensus_replication_before_handle_connection(Server_state_param *) {
   if (DBUG_EVALUATE_IF("expire_logs_always_at_start", false, true))
     log->auto_purge_at_server_startup();
   else if (expire_logs_days > 0 || binlog_expire_logs_seconds > 0)
-    log->purge_logs_before_date(time(nullptr), true);
+    purge_consensus_logs_on_conditions(time(nullptr), 0, nullptr, true);
 
   return 0;
 }
