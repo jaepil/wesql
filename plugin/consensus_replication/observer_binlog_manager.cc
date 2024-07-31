@@ -19,7 +19,6 @@
 static int consensus_binlog_manager_binlog_recovery(
     Binlog_manager_param *param) {
   DBUG_TRACE;
-  my_off_t binlog_end_pos = 0;
 
   /* If the plugin is not enabled, return success. */
   if (!opt_bin_log) return 0;
@@ -38,9 +37,9 @@ static int consensus_binlog_manager_binlog_recovery(
                           param->binlog, consistent_recovery_start_binlog,
                           consistent_recovery_start_position,
                           consistent_recovery_end_binlog,
-                          consistent_recovery_end_position)
+                          &consistent_recovery_end_position)
                     : consensus_binlog_recovery(param->binlog, nullptr, 0,
-                                                nullptr, binlog_end_pos));
+                                                nullptr, nullptr));
 }
 
 static int consensus_binlog_manager_after_binlog_recovery(

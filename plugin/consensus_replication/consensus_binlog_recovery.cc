@@ -505,7 +505,7 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
                               const char *ha_recover_end_file,
                               my_off_t ha_recover_end_pos,
                               char *recover_end_file,
-                              my_off_t &recover_end_pos) {
+                              my_off_t *recover_end_pos) {
   LOG_INFO log_info;
   Log_event *ev = nullptr;
   int error = 0;
@@ -614,6 +614,12 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
     return 1;
   }
 
+  if (ha_recover_end_file != nullptr && valid_pos < ha_recover_end_pos) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_CONSIST_RECOVERY_INVALID_POSITION,
+                 log_name, valid_pos, binlog_size, ha_recover_end_file);
+    return 1;
+  }
+
   if (bl_recovery.has_engine_recovery_failed()) {
     LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
     if (!should_retrieve_logs_end && valid_pos > 0)
@@ -679,14 +685,12 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
   /* Trim the crashed binlog file to last valid transaction
     or event (non-transaction) base on valid_pos. */
   if (valid_pos > 0) {
-    if (ha_recover_end_file != nullptr && recover_end_file != nullptr) {
+    if (recover_end_file != nullptr && recover_end_pos != nullptr) {
       strncpy(recover_end_file, log_name, FN_REFLEN);
-      recover_end_pos = valid_pos;
+      *recover_end_pos = valid_pos;
     }
     error = truncate_binlog_file_to_valid_pos(log_name, valid_pos, binlog_size,
                                               true);
-    LogPluginErr(INFORMATION_LEVEL, ER_BINLOG_CRASHED_BINLOG_TRIMMED, log_name,
-                 binlog_size, valid_pos, valid_pos);
   }
 
   if (!should_ha_recover) {
