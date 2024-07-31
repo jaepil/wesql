@@ -197,6 +197,7 @@ Status DBImpl::WriteImplAsync(const WriteOptions& write_options,
 
   if (merged_binlog_pos.valid() &&
       this->global_binlog_pos_.compare(merged_binlog_pos) < 0) {
+    SE_LOG(INFO, "update se global binlog position", K(merged_binlog_pos.file_name_), K(merged_binlog_pos.offset_));
     this->global_binlog_pos_ = merged_binlog_pos;
   }
 
