@@ -72,8 +72,6 @@ void rpl_consensus_init(bool is_learner, uint64 mock_start_index,
         cluster_str_config, 0, nullptr, opt_consensus_io_thread_cnt,
         opt_consensus_worker_thread_cnt, alisql_server,
         opt_consensus_easy_pool_size, opt_consensus_heartbeat_thread_cnt);
-
-    if (opt_cluster_log_type_instance) consensus_ptr->setAsLogType(true);
   } else {
     // startup as learner node, config string arg pass empty
     consensus_ptr->initAsLearner(
@@ -82,6 +80,7 @@ void rpl_consensus_init(bool is_learner, uint64 mock_start_index,
         opt_consensus_easy_pool_size, opt_consensus_heartbeat_thread_cnt);
   }
   consensus_ptr->initAutoPurgeLog(false, false, nullptr);  // disable autoPurge
+  consensus_ptr->setAsLogType(opt_cluster_log_type_instance);
 
   if (opt_cluster_force_single_mode)  // use nuclear weapon
     consensus_ptr->forceSingleLeader();
