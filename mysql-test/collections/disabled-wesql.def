@@ -185,8 +185,6 @@ binlog.binlog_reencrypt_logs                     : WL#21509040 encrypt binlog
 binlog.binlog_rotate_binlog_master_key_errors    : WL#21509040 encrypt binlog
 binlog.binlog_rotate_binlog_master_key_crash_recovery_at_startup : WL#21509040 encrypt binlog
 binlog.binlog_encryption_random_access           : WL#21509040 encrypt binlog
-binlog.binlog_encryption_random_access           : WL#21509040 encrypt binlog
-binlog.binlog_encryption_random_access           : WL#21509040 encrypt binlog
 binlog.binlog_rotate_binlog_master_key_crash_recovery : WL#21509040 binlog encrypt
 binlog.binlog_expire_logs_days_deprecation       : WL#21509040 binlog expire
 binlog.binlog_purge_binary_logs_stall             : WL#21509040 disable temp

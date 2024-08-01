@@ -101,6 +101,12 @@ The following options may be given as the first argument:
  socket creation.
  --binlog-archive    Indicate if consistent snapshot archive enable.
  (Defaults to on; use --skip-binlog-archive to disable.)
+ --binlog-archive-expire-auto-purge 
+ Controls whether the server shall automatically purge
+ persistent binary log files or not. If this variable is
+ set to FALSE then the server will not purge persistent
+ binary log files automatically.
+ (Defaults to on; use --skip-binlog-archive-expire-auto-purge to disable.)
  --binlog-archive-expire-seconds=# 
  If non-zero, persistent binlog will be purged after
  binlog_archive_expire_seconds seconds. If zero, only the
@@ -415,8 +421,6 @@ The following options may be given as the first argument:
  (milliseconds)
  --consensus-replication-prefetch-cache-size=# 
  Max cached logs size
- --consensus-replication-prefetch-fast-fetch 
- prefetch speed optimize
  --consensus-replication-prefetch-wakeup-ratio=# 
  prefetch wakeup ratio 
  --consensus-replication-prefetch-window-size=# 
@@ -439,8 +443,6 @@ The following options may be given as the first argument:
  --consensus-replication-sync-follower-meta-interva=# 
  Interval of leader sync follower's meta for learner
  source
- --consensus-replication-weak-mode 
- set server to weak consensus mode
  --consensus-replication-with-cache-log 
  set server to replicate with cache log
  --consensus-replication-worker-thread-cnt=# 
@@ -454,6 +456,14 @@ The following options may be given as the first argument:
  --consistent-snapshot-archive-period=# 
  A consistent snapshot is created to archive at the given
  interval
+ --consistent-snapshot-compression 
+ Indicate if consistent snapshot compression enable.
+ --consistent-snapshot-expire-auto-purge 
+ Controls whether the server shall automatically purge
+ consistent snapshot or not. If this variable is set to
+ FALSE then the server will not purge persistent
+ consistent snapshot automatically.
+ (Defaults to on; use --skip-consistent-snapshot-expire-auto-purge to disable.)
  --consistent-snapshot-expire-seconds=# 
  If non-zero, consistent snapshot will be purged after
  consistent_snapshot_expire_seconds seconds. If zero, only
@@ -947,18 +957,21 @@ The following options may be given as the first argument:
  --no-dd-upgrade     Abort restart if automatic upgrade or downgrade of the
  data dictionary is needed. Deprecated option. Use
  --upgrade=NONE instead.
- --objstore-bucket[=name] 
+ --objstore-bucket=name 
  The object store bucket to store record. If
  table_on_objstore is true, objstore_bucket must not be
  empty.
- --objstore-endpoint[=name] 
+ --objstore-endpoint=name 
  The endpoint of object store. If need, user can specify
  the endpoint of object store. Ususally it's need to
  provide on non-AWS environment.
- --objstore-provider[=name] 
+ --objstore-mtr-test-bucket-dir[=name] 
+ The object store bucket sub dir to store record. for mtr
+ test only
+ --objstore-provider=name 
  The provider of object store. If table_on_objstore is
  true, objstore_provider must not be empty.
- --objstore-region[=name] 
+ --objstore-region=name 
  The region of object store. If table_on_objstore is true,
  objstore_region must not be empty.
  --objstore-use-https 
@@ -1319,21 +1332,21 @@ The following options may be given as the first argument:
  --recovery-from-objstore 
  Recovery binlog and consistent snapshot from object
  store.
- --recovery-objstore-bucket[=name] 
+ --recovery-objstore-bucket=name 
  The object store bucket to store record as the source of
  recovery during instance initialization. If
  recovery_from_objstore is true, recovery_objstore_bucket
  must not be empty.
- --recovery-objstore-endpoint[=name] 
+ --recovery-objstore-endpoint=name 
  The endpoint of object store as the source of recovery
  during instance initialization. If need, user can specify
  the endpoint of object store. Ususally it's need to
  provide on non-AWS environment.
- --recovery-objstore-provider[=name] 
+ --recovery-objstore-provider=name 
  The provider of object store as the source of recovery
  during instance.If recovery_from_objstore is true,
  recovery_objstore_provider must not be empty.
- --recovery-objstore-region[=name] 
+ --recovery-objstore-region=name 
  The region of object store as the source of recovery
  during instance initialization.If recovery_from_objstore
  is true, recovery_objstore_region must not be empty.
@@ -2190,6 +2203,7 @@ back-log 151
 big-tables FALSE
 bind-address *
 binlog-archive TRUE
+binlog-archive-expire-auto-purge TRUE
 binlog-archive-expire-seconds 2592000
 binlog-archive-slice-max-size 4194304
 binlog-cache-size 32768
@@ -2280,7 +2294,6 @@ consensus-replication-new-follower-threshold 10000
 consensus-replication-optimistic-heartbeat FALSE
 consensus-replication-pipelining-timeout 1
 consensus-replication-prefetch-cache-size 67108864
-consensus-replication-prefetch-fast-fetch FALSE
 consensus-replication-prefetch-wakeup-ratio 2
 consensus-replication-prefetch-window-size 10
 consensus-replication-purged-gtid 
@@ -2291,12 +2304,13 @@ consensus-replication-reset-prefetch-cache FALSE
 consensus-replication-send-timeout 0
 consensus-replication-start-index 1
 consensus-replication-sync-follower-meta-interva 1
-consensus-replication-weak-mode FALSE
 consensus-replication-with-cache-log FALSE
 consensus-replication-worker-thread-cnt 4
 consistent-snapshot-archive TRUE
-consistent-snapshot-archive-dir archive_tmp
+consistent-snapshot-archive-dir (No default value)
 consistent-snapshot-archive-period 600
+consistent-snapshot-compression FALSE
+consistent-snapshot-expire-auto-purge TRUE
 consistent-snapshot-expire-seconds 0
 console FALSE
 create-admin-listener-thread FALSE
@@ -2443,6 +2457,7 @@ new FALSE
 no-dd-upgrade FALSE
 objstore-bucket objbucket
 objstore-endpoint (No default value)
+objstore-mtr-test-bucket-dir 
 objstore-provider local
 objstore-region local_objstore_region
 objstore-use-https FALSE
