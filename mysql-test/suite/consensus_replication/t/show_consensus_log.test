@@ -9,6 +9,7 @@ flush logs;
 flush logs;
 flush logs;
 create database test1;
+--source include/wait_follower_catchup.inc
 call dbms_consensus.purge_log(100000000);
 --replace_column 1 # 2 # 3 #
 show consensus logs;
