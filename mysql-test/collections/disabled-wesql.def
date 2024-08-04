@@ -360,6 +360,44 @@ rpl.rpl_perfschema_connect_status : BUG#000 WeSQL does not support executing res
 rpl.rpl_row_jsondiff_error : BUG#000 WeSQL does not support executing reset master on slave
 rpl.rpl_trx_boundary_parser_relay_log_recovery : BUG#000 WeSQL does not support executing reset master on slave
 rpl.rpl_perfschema_applier_status_by_coordinator : BUG#000 WeSQL does not support executing reset master on slave
+rpl.rpl_binlog_cache_temp_file_encryption_myisam : BUG#000 disable myisam engine
+rpl.rpl_binlog_cache_temp_file_encryption        : BUG#000 WeSQL use multiple binlog cache
+rpl.rpl_encryption_master_key_generation_recovery   : BUG#000 issue#438 Restart mysqld not create a new binlog if enable encryption
+rpl.rpl_encryption_master_key_rotation_at_startup   : BUG#000 issue#438 Restart mysqld not create a new binlog if enable encryption
+rpl.rpl_encryption                                  : BUG#000 issue#438 Restart mysqld not create a new binlog if enable encryption
+rpl.rpl_half_atomic_ddl                             : BUG#000 issue#443
+rpl.rpl_non_atomic_ddl                              : BUG#000 issue#443
+rpl.rpl_err_ignoredtable                            : BUG#000 kill connection without reset flags.finalized, see issue#416's comment
+rpl.rpl_kill_query                                  : BUG#000 kill connection without reset flags.finalized, see issue#416's comment
+rpl.rpl_drop_temp_tbl_with_rewrite_db               : BUG#000 issue#416 can not generate 'drop temporary table' to binlog when disconnect
+rpl.rpl_000013                                      : BUG#000 issue#416 can not generate 'drop temporary table' to binlog when disconnect
+rpl.rpl_stm_gtid_disconnect_drop_temporary_table    : BUG#000 issue#416 can not generate 'drop temporary table' to binlog when disconnect
+rpl.rpl_temp_table                                  : BUG#000 issue#416 can not generate 'drop temporary table' to binlog when disconnect
+rpl.rpl_row_mixed_create_drop_temporary_in_event    : BUG#000 issue#416 can not generate 'drop temporary table' to binlog when disconnect
+rpl.rpl_trunc_temp                                  : BUG#000 issue#416 can not generate 'drop temporary table' to binlog when disconnect
+rpl.rpl_stm_rewrt_db                                : BUG#000 issue#416 can not drop temporary table when disconnect
+rpl.rpl_stm_create_drop_temporary_in_event          : BUG#000 issue#416 can not drop temporary table when disconnect
+rpl.rpl_create_drop_temp_table                      : BUG#000 issue#416 can not drop temporary table when disconnect
+rpl.rpl_stm_until                                   : BUG#000 start slave sql_thread until stop at consensus event of a DDL, issue#444
+rpl.rpl_xa_survive_disconnect_lsu_off               : BUG#000 issue#445 restarting master resets sequence_number to 1 without rotating binlog
+rpl.rpl_xa_survive_disconnect_table                 : BUG#000 issue#445 restarting master resets sequence_number to 1 without rotating binlog
+rpl.rpl_xa_survive_disconnect                       : BUG#000 issue#445 restarting master resets sequence_number to 1 without rotating binlog
+rpl.rpl_replicate_rewrite_db                        : BUG#000 issue#445 restarting master resets sequence_number to 1 without rotating binlog
+rpl.rpl_crash_safe_master                           : BUG#000 issue#445 restarting master resets sequence_number to 1 without rotating binlog
+rpl.rpl_xa_survive_crash_debug                      : BUG#000 issue#445 restarting master resets sequence_number to 1 without rotating binlog
+rpl.rpl_replica_load_tmpdir_not_exist               : BUG#000 replica's replica-load-tmpdir is manually set to an error dir
+rpl.rpl_group_replication_commands                  : BUG#000 START GROUP_REPLICATION command unusable
+rpl.rpl_group_replication_start_stop_gr_error       : BUG#000 START GROUP_REPLICATION command unusable
+rpl.rpl_bug41902                                    : BUG#000 consensus reset master have at least one binlog file
+rpl.rpl_mts_replica_preserve_commit_order_error     : BUG#000 replica has consensus log which cause apply events again
+rpl.rpl_mts_database_transaction_retry              : BUG#000 replica has consensus log which cause apply events again
+rpl.rpl_mts_logical_clock_crash                     : BUG#000 replica has consensus log which cause apply events again
+rpl.rpl_multi_source_mts_recovery                   : BUG#000 replica has consensus log which cause apply events again
+rpl.rpl_parallel_recovery                           : BUG#000 replica has consensus log which cause apply events again
+rpl.rpl_mts_spco_deadlock_slave_trans_retries_hang  : BUG#000 replica has consensus log which cause apply events again
+rpl.rpl_row_hash_scan_sanity                        : BUG#000 replica has consensus log which cause apply events again
+rpl.rpl_4threads_deadlock                           : BUG#000 wesql plugin return in purge_logs HOOK, not exec sync point
+rpl.rpl_replication_observers_example_plugin_channels_initialization    : BUG#000 Repository conversion is possible when only default channel exists
 
 rpl_gtid.rpl_wait_for_executed_gtid_set_no_timeout: BUG#000 unstable
 
