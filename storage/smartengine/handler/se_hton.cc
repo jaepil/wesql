@@ -654,7 +654,14 @@ bool se_is_supported_system_table(const char *db,
                                   const char *table_name,
                                   bool is_sql_layer_system_table)
 {
-  static const char* supported_system_tables[]= { "help_topic",
+  static const char* supported_system_tables[]= {
+#ifdef WESQL_CLUSTER
+                                                  "consensus_info",
+                                                  "consensus_applier_info",
+                                                  "consensus_applier_worker",
+#endif
+                                                  "gtid_executed",
+                                                  "help_topic",
                                                   "help_category",
                                                   "help_relation",
                                                   "help_keyword",

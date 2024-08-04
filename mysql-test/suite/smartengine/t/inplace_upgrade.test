@@ -209,7 +209,8 @@ USE information_schema;
 --echo "--smartengine=1 should have smartengine info tables"
 SHOW TABLES LIKE 'SMARTENGINE%';
 --sorted_result
-SELECT DISTINCT(SUBTABLE_ID), TABLE_NAME, SUBTABLE_NAME FROM information_schema.SMARTENGINE_SUBTABLE;
+--replace_column 1 #
+SELECT DISTINCT(SUBTABLE_ID), TABLE_NAME, SUBTABLE_NAME FROM information_schema.SMARTENGINE_SUBTABLE WHERE TABLE_NAME NOT LIKE 'mysql.%';
 
 DROP TABLE test.t1;
 DROP TABLE test.t2;
