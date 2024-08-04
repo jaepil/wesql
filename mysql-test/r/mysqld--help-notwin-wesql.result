@@ -357,9 +357,6 @@ The following options may be given as the first argument:
  (Defaults to on; use --skip-consensus-replication-dynamic-easyindex to disable.)
  --consensus-replication-election-timeout=# 
  Consensus election timeout
- --consensus-replication-enabled 
- enable consensus cluster
- (Defaults to on; use --skip-consensus-replication-enabled to disable.)
  --consensus-replication-flow-control=name 
  consensus flow control (<-1: no log send, -1: only send
  log during heartbeat, 0: no flow control, >0: [TODO] flow
@@ -2266,7 +2263,6 @@ consensus-replication-disable-election FALSE
 consensus-replication-disable-fifo-cache FALSE
 consensus-replication-dynamic-easyindex TRUE
 consensus-replication-election-timeout 5000
-consensus-replication-enabled TRUE
 consensus-replication-flow-control 
 consensus-replication-force-change-meta FALSE
 consensus-replication-force-recover-index 0

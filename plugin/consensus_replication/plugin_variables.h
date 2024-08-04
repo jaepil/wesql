@@ -37,6 +37,7 @@ struct plugin_consensus_local_variables {
 
     plugin_running_lock = nullptr;
     plugin_stop_lock = nullptr;
+    consensus_replication_running = false;
 
     reg_srv = nullptr;
     svc_mysql_before_commit_transaction_control = nullptr;

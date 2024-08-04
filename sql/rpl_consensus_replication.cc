@@ -112,7 +112,7 @@ bool is_consensus_replication_enabled() {
   if (plugin != nullptr) {
     st_mysql_consensus_replication *plugin_handle =
         (st_mysql_consensus_replication *)plugin_decl(plugin)->info;
-    result = plugin_handle->is_enabled();
+    result = plugin_handle->is_running();
     plugin_unlock(nullptr, plugin);
   }
 

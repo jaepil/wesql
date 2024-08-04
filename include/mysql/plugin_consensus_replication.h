@@ -13,19 +13,14 @@ struct st_mysql_consensus_replication {
   int interface_version;
 
   /*
-    This function is used to check consensus replication enabled.
+    This function is used to get the current consensus replication running status.
   */
-  bool (*is_enabled)();
+  bool (*is_running)();
 
   /*
     This function is used to check consensus applier status.
   */
   bool (*is_applier_running)();
-
-  /*
-    This function is used to get the current consensus replication running status.
-  */
-  bool (*is_running)();
 
   /*
     This function is used to check log mode.

@@ -72,11 +72,6 @@ static struct plugin_consensus_local_variables lv;
 static int check_if_server_properly_configured(
     const Trans_context_info &startup_pre_reqs);
 
-/*
-  Auxiliary public functions.
-*/
-bool plugin_is_consensus_replication_enabled() { return opt_consensus_enabled; }
-
 bool plugin_is_consensus_replication_running() {
   return lv.consensus_replication_running;
 }
@@ -102,9 +97,8 @@ static bool plugin_show_consensus_log_events(void *thd) {
 */
 struct st_mysql_consensus_replication consensus_replication_descriptor = {
     MYSQL_CONSENSUS_REPLICATION_INTERFACE_VERSION,
-    plugin_is_consensus_replication_enabled,
-    plugin_is_consensus_replication_applier_running,
     plugin_is_consensus_replication_running,
+    plugin_is_consensus_replication_applier_running,
     plugin_is_consensus_replication_log_mode,
     plugin_show_consensus_logs,
     plugin_show_consensus_log_events};
@@ -231,8 +225,6 @@ int plugin_consensus_replication_init(MYSQL_PLUGIN plugin_info) {
   // Initialize plugin local variables.
   lv.init();
 
-  if (!plugin_is_consensus_replication_enabled()) return 0;
-
 // Register all PSI keys at the time plugin init
 #ifdef HAVE_PSI_INTERFACE
   register_all_consensus_replication_psi_keys();
@@ -251,14 +243,6 @@ int plugin_consensus_replication_init(MYSQL_PLUGIN plugin_info) {
 
   Checkable_rwlock::Guard g(*lv.plugin_running_lock,
                             Checkable_rwlock::WRITE_LOCK);
-
-  cr_get_server_startup_prerequirements(startup_pre_reqs, binlog_context);
-
-  if (check_if_server_properly_configured(startup_pre_reqs)) {
-    /* purecov: begin inspected */
-    return 1;
-    /* purecov: end */
-  }
 
   lv.plugin_info_ptr = plugin_info;
 
@@ -299,8 +283,19 @@ int plugin_consensus_replication_init(MYSQL_PLUGIN plugin_info) {
 
   init_consensus_package_context();
 
+  cr_get_server_startup_prerequirements(startup_pre_reqs, binlog_context);
+
+  if (check_if_server_properly_configured(startup_pre_reqs)) {
+    /* purecov: begin inspected */
+    return 1;
+    /* purecov: end */
+  }
+
   if (initialize_plugin_and_join(&binlog_context)) {
+    /* purecov: begin inspected */
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_RPL_FAILED_TO_START_ON_BOOT);
+    return 1;
+    /* purecov: end */
   }
 
   return 0;

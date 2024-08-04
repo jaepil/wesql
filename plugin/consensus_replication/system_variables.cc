@@ -69,7 +69,6 @@ bool opt_consensus_auto_reset_match_index = 1;
 bool opt_consensus_learner_heartbeat;
 bool opt_consensus_auto_leader_transfer;
 ulonglong opt_consensus_auto_leader_transfer_check_seconds;
-bool opt_consensus_enabled = false;
 
 static void fix_consensus_checksum(MYSQL_THD, SYS_VAR *, void *,
                                    const void *save) {
@@ -155,15 +154,6 @@ static MYSQL_SYSVAR_BOOL(
     PLUGIN_VAR_OPCMDARG, /* optional var */
     "disable consensus fifo cache (run with weak consensus mode)", nullptr,
     nullptr, false);
-
-static MYSQL_SYSVAR_BOOL(enabled, opt_consensus_enabled, PLUGIN_VAR_OPCMDARG,
-                         "enable consensus cluster", nullptr, nullptr,
-#ifdef DEFAULT_WESQL_CLUSTER_OFF
-                         false
-#else
-                         true
-#endif
-);
 
 static void fix_consensus_prefetch_cache_size(MYSQL_THD, SYS_VAR *,
                                               void *, const void *save) {
@@ -680,7 +670,6 @@ SYS_VAR *consensus_replication_system_vars[] = {
     MYSQL_SYSVAR(cluster_id),
     MYSQL_SYSVAR(log_cache_size),
     MYSQL_SYSVAR(disable_fifo_cache),
-    MYSQL_SYSVAR(enabled),
     MYSQL_SYSVAR(prefetch_cache_size),
     MYSQL_SYSVAR(prefetch_window_size),
     MYSQL_SYSVAR(prefetch_wakeup_ratio),

@@ -63,7 +63,6 @@ extern bool opt_consensus_auto_reset_match_index;
 extern bool opt_consensus_learner_heartbeat;
 extern bool opt_consensus_auto_leader_transfer;
 extern ulonglong opt_consensus_auto_leader_transfer_check_seconds;
-extern bool opt_consensus_enabled;
 
 extern SYS_VAR *consensus_replication_system_vars[];
 
