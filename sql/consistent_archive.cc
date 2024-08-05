@@ -827,18 +827,24 @@ bool Consistent_archive::archive_consistent_snapshot() {
 
   // force rotate binlog, wait for binlog rotate complete
   if (mysql_bin_log.is_open() && m_binlog_file[0] != '\0') {
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, m_binlog_file);
+    err_msg.assign("binlog wait for persistent: ");
+    err_msg.append(m_binlog_file);
+    err_msg.append("/");
+    err_msg.append(std::to_string(m_binlog_pos));
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     // wait archive binlog complete.
     auto errval =
         binlog_archive_wait_for_update(thd, m_binlog_file, m_binlog_pos);
     if (errval != 0) {
       release_se_snapshot(m_se_snapshot_id);
       m_se_snapshot_id = 0;
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-             "binlog archive wait for update failed");
+      err_msg.append(" failed.");
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
       ret = true;
       goto err;
     }
+    err_msg.append(" end.");
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str()); 
   } else {
     err_msg.assign("no persistent binlog: ");
     if (m_binlog_file[0] != '\0') {

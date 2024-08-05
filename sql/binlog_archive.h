@@ -67,7 +67,7 @@ class Binlog_archive {
   bool is_thread_alive() const { return m_thd_state.is_thread_alive(); }
   bool is_thread_running() const { return m_thd_state.is_running(); }
   static Binlog_archive *get_instance();
-  int archive_event(uchar *event_ptr,
+  int archive_event(File_reader &reader, uchar *event_ptr,
                     uint32 event_len, const char *log_file, my_off_t log_pos);
   int flush_events();
   bool stop_waiting_for_update(char *log_file_name, my_off_t log_pos);
@@ -117,19 +117,21 @@ class Binlog_archive {
   Format_description_event m_description_event;
   objstore::ObjectStore *binlog_objstore;
   mysql_mutex_t m_rotate_lock;
-  my_off_t m_binlog_archive_last_event_pos;
+  my_off_t m_binlog_archive_last_event_end_pos; //  The last binlog event position persisted to objstore.
   my_off_t m_slice_bytes_written;
-  my_off_t m_binlog_last_event_pos;
+  my_off_t m_binlog_write_last_event_end_pos; // The last binlog event position writed to persistent cache.
+  my_off_t m_mysql_binlog_start_pos; // mysql binlog archive start position.
   std::unique_ptr<IO_CACHE_ostream> m_slice_pipeline_head;
   std::string m_binlog_archive_slice_name;
   bool m_binlog_archive_first_slice;
   Diagnostics_area m_diag_area;
   String m_packet;
+  bool m_binlog_in_transaction;
   int new_binlog_slice(const char *log_file, my_off_t log_pos);
   int archive_init();
   int archive_cleanup();
-  int archive_binlog();
-  int archive_binlog_file(File_reader &reader, my_off_t start_pos);
+  int archive_binlogs();
+  int archive_binlog(File_reader &reader, my_off_t start_pos);
   std::pair<my_off_t, int> get_binlog_end_pos(File_reader &reader);
   int archive_events(File_reader &reader, my_off_t end_pos);
   int read_format_description_event(File_reader &reader);

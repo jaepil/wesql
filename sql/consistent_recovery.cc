@@ -44,6 +44,7 @@ static void root_directory(std::string in, std::string *out, std::string *left);
 static void recursive_create_dir(const std::string &dir,
                                  const std::string &root);
 static int convert_str_to_datetime(const char *str, ulong &my_time);
+static bool is_number(const char *str, ulonglong *res, bool allow_wildcards);
 
 Consistent_recovery::Consistent_recovery()
     : m_recovery_type(CONSISTENT_RECOVERY_NONE),
@@ -683,7 +684,7 @@ bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg,
   if (m_state == CONSISTENT_RECOVERY_STATE_NONE ||
       m_state == CONSISTENT_RECOVERY_STATE_END)
     return false;
-  err_msg.assign("Recovery binlog:");
+  err_msg.assign("recovery binlog to ");
   err_msg.append(m_binlog_file);
   err_msg.append("/");
   err_msg.append(std::to_string(m_binlog_pos));
@@ -1136,6 +1137,10 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(
  */
 int Consistent_recovery::merge_slice_to_binlog_file(
     const char *to_binlog_file) {
+  std::streamsize binlog_size = 0;
+  my_off_t slice_number = 0;
+  std::string err_msg;
+
   // List the binlog file all slice.
   std::string binlog_keyid;
   std::vector<objstore::ObjectMeta> objects;
@@ -1150,7 +1155,6 @@ int Consistent_recovery::merge_slice_to_binlog_file(
       std::string_view(m_objstore_bucket), binlog_keyid, start_after, finished,
       objects);
   if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
-    std::string err_msg;
     err_msg.assign("Failed to binlog files: ");
     err_msg.append(BINLOG_ARCHIVE_SUBDIR);
     err_msg.append(" error=");
@@ -1179,7 +1183,6 @@ int Consistent_recovery::merge_slice_to_binlog_file(
     ss = recovery_objstore->get_object_to_file(
         std::string_view(m_objstore_bucket), object.key, binlog_slice_name);
     if (!ss.is_succ()) {
-      std::string err_msg;
       err_msg.assign("Failed to download binlog file: ");
       err_msg.append(" key=");
       err_msg.append(object.key);
@@ -1194,7 +1197,6 @@ int Consistent_recovery::merge_slice_to_binlog_file(
     std::ofstream binlog_file;
     binlog_file.open(binlog_name, std::ofstream::app);
     if (!binlog_file.is_open()) {
-      std::string err_msg;
       err_msg.assign("Failed to open binlog file: ");
       err_msg.append(binlog_name);
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
@@ -1203,7 +1205,6 @@ int Consistent_recovery::merge_slice_to_binlog_file(
     std::ifstream binlog_slice;
     binlog_slice.open(binlog_slice_name, std::ifstream::in);
     if (!binlog_slice.is_open()) {
-      std::string err_msg;
       err_msg.assign("Failed to open binlog slice file: ");
       err_msg.append(binlog_slice_name);
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
@@ -1211,15 +1212,38 @@ int Consistent_recovery::merge_slice_to_binlog_file(
     }
     binlog_file << binlog_slice.rdbuf();
     binlog_slice.close();
+    // seek file end and get file size.
+    binlog_file.seekp(0, std::ios::end);
+    binlog_size = binlog_file.tellp();
     binlog_file.close();
+    if (is_number(object.key.c_str() + binlog_keyid.length(), &slice_number,
+                  false)) {
+      if (static_cast<my_off_t>(binlog_size) != slice_number) {
+        err_msg.assign("Failed to get binlog slice : ");
+        err_msg.append(object.key);
+        err_msg.append(" binlog total size = ");
+        err_msg.append(std::to_string(binlog_size));
+        LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+                                  err_msg.c_str());
+        return 1;
+      }
+    }
     // remove binlog slice file
     remove_file(binlog_slice_name);
   }
+  err_msg.assign("binlog ");
+  err_msg.append(binlog_name);
+  err_msg.append(" size=");
+  err_msg.append(std::to_string(binlog_size));
+  err_msg.append(" last slice number=");
+  err_msg.append(std::to_string(slice_number));
+  LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+                            err_msg.c_str());
+
   if (my_chmod(binlog_name.c_str(),
                USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
                    OTHERS_WRITE | OTHERS_READ,
                MYF(MY_WME))) {
-    std::string err_msg;
     err_msg.assign("Failed to chmod: ");
     err_msg.append(binlog_name);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
