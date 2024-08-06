@@ -54,10 +54,42 @@ select * from t1;
 --connection default
 insert into t1 values (3);
 flush local logs;
+--let $MASTER_BINLOG= query_get_value(SHOW MASTER STATUS, File, 1)
+--let $MASTER_POS= query_get_value(SHOW MASTER STATUS, Position, 1)
+--connection learner
+--replace_result $MASTER_BINLOG MASTER_BINLOG $MASTER_POS MASTER_POS
+eval SELECT MASTER_POS_WAIT('$MASTER_BINLOG', $MASTER_POS, 0, "testsync") >= 0;
+select * from t1;
+
+--connection default
 #purge force consensus_log before 10000000;
 call dbms_consensus.force_purge_log(10000000);
+--let $MASTER_BINLOG= query_get_value(SHOW MASTER STATUS, File, 1)
+--let $MASTER_POS= query_get_value(SHOW MASTER STATUS, Position, 1)
+--connection learner
+--replace_result $MASTER_BINLOG MASTER_BINLOG $MASTER_POS MASTER_POS
+eval SELECT MASTER_POS_WAIT('$MASTER_BINLOG', $MASTER_POS, 0, "testsync") >= 0;
+select * from t1;
+
+--connection default
 insert into t1 values (4);
+--let $MASTER_BINLOG= query_get_value(SHOW MASTER STATUS, File, 1)
+--let $MASTER_POS= query_get_value(SHOW MASTER STATUS, Position, 1)
+--connection learner
+--replace_result $MASTER_BINLOG MASTER_BINLOG $MASTER_POS MASTER_POS
+eval SELECT MASTER_POS_WAIT('$MASTER_BINLOG', $MASTER_POS, 0, "testsync") >= 0;
+select * from t1;
+
+--connection default
 flush local logs;
+--let $MASTER_BINLOG= query_get_value(SHOW MASTER STATUS, File, 1)
+--let $MASTER_POS= query_get_value(SHOW MASTER STATUS, Position, 1)
+--connection learner
+--replace_result $MASTER_BINLOG MASTER_BINLOG $MASTER_POS MASTER_POS
+eval SELECT MASTER_POS_WAIT('$MASTER_BINLOG', $MASTER_POS, 0, "testsync") >= 0;
+select * from t1;
+
+--connection default
 insert into t1 values (5);
 insert into t1 values (6);
 select * from t1;
@@ -139,6 +171,28 @@ insert into t1 values (4);
 flush local logs;
 #purge force consensus_log before 10000000;
 call dbms_consensus.force_purge_log(10000000);
+
+--let $MASTER_BINLOG= query_get_value(SHOW MASTER STATUS, File, 1)
+--let $MASTER_POS= query_get_value(SHOW MASTER STATUS, Position, 1)
+
+--connection learner2
+--replace_result $MASTER_BINLOG MASTER_BINLOG $MASTER_POS MASTER_POS
+eval SELECT MASTER_POS_WAIT('$MASTER_BINLOG', $MASTER_POS, 0, "testsync") >= 0;
+select * from t1;
+
+--connection default
+#purge force consensus_log before 10000000;
+call dbms_consensus.force_purge_log(10000000);
+
+--connection foll
+--source include/wait_apply_catchup.inc
+--let $MASTER_BINLOG= query_get_value(SHOW MASTER STATUS, File, 1)
+--let $MASTER_POS= query_get_value(SHOW MASTER STATUS, Position, 1)
+
+--connection learner2
+--replace_result $MASTER_BINLOG MASTER_BINLOG $MASTER_POS MASTER_POS
+eval SELECT MASTER_POS_WAIT('$MASTER_BINLOG', $MASTER_POS, 0, "testsync") >= 0;
+select * from t1;
 
 --connection default
 insert into t1 values (5);
