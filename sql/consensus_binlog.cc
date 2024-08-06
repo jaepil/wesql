@@ -292,7 +292,7 @@ int MYSQL_BIN_LOG::truncate_files_after(const char *file_name,
   return error;
 }
 
-int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
+int MYSQL_BIN_LOG::truncate_log(const char *file_name, my_off_t offset,
                                 Relay_log_info *rli) {
   int error = 0;
   const char *save_name = nullptr;
@@ -322,8 +322,7 @@ int MYSQL_BIN_LOG::truncate_log(const char *file_name, uint64 offset,
       abort();
     }
 
-    close(LOG_CLOSE_INDEX | LOG_CLOSE_TO_BE_OPENED,
-          false, false);
+    close(LOG_CLOSE_INDEX | LOG_CLOSE_TO_BE_OPENED, false, false);
 
     if (open_index_file(index_file_name, nullptr, false) ||
         open_exist_consensus_binlog(save_name, max_size, false, false)) {
@@ -366,7 +365,7 @@ err:
   return error;
 }
 
-int MYSQL_BIN_LOG::switch_and_seek_log(const char *file_name, uint64 offset,
+int MYSQL_BIN_LOG::switch_and_seek_log(const char *file_name, my_off_t offset,
                                        bool need_lock_index) {
   int error = 0;
   myf flags = MY_WME | MY_NABP;
@@ -1442,7 +1441,7 @@ err:
 }
 
 void binlog_update_end_pos(MYSQL_BIN_LOG *binlog, const char *file,
-                               my_off_t pos) {
+                           my_off_t pos) {
   binlog->update_binlog_end_pos(file, pos);
 }
 
@@ -1488,8 +1487,8 @@ void update_trx_compression(binlog_cache_data *cache_data, Gtid &owned_gtid,
 int truncate_binlog_file_to_valid_pos(const char *log_name, my_off_t valid_pos,
                                       my_off_t binlog_size, bool update) {
   std::unique_ptr<MYSQL_BIN_LOG::Binlog_ofile> ofile(
-        MYSQL_BIN_LOG::Binlog_ofile::open_existing(key_file_binlog, log_name,
-                                                   MYF(MY_WME)));
+      MYSQL_BIN_LOG::Binlog_ofile::open_existing(key_file_binlog, log_name,
+                                                 MYF(MY_WME)));
 
   if (!ofile) {
     LogErr(ERROR_LEVEL, ER_BINLOG_CANT_OPEN_CRASHED_BINLOG);

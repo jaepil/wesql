@@ -6,9 +6,9 @@
 #include "rpl_consensus.h"
 #include "system_variables.h"
 
-#include "mysqld_error.h"
 #include "my_loglevel.h"
 #include "mysql/components/services/log_builtins.h"
+#include "mysqld_error.h"
 #include "sql/log.h"
 
 #include "sql/binlog.h"
@@ -89,7 +89,7 @@ int mts_recovery_max_consensus_index() {
   DBUG_TRACE;
 
   int error = 0;
-  ulonglong max_consensus_apply_index = 0;
+  uint64 max_consensus_apply_index = 0;
   Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
 
   if (applier_info->recovery_parallel_workers == 0) {
@@ -311,9 +311,9 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
   DBUG_TRACE;
 
   uint64 recover_status = 0;
-  ulonglong start_apply_index = 0;
+  uint64 start_apply_index = 0;
   uint64 rli_appliedindex = 0;
-  uint64 log_pos = 0;
+  my_off_t log_pos = 0;
   char log_name[FN_REFLEN];
   uint64 first_index;
   Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
@@ -653,7 +653,7 @@ bool applier_mts_recovery_groups(Relay_log_info *rli) {
 
     int error = 0;
     char log_name[FN_REFLEN];
-    uint64 log_pos = 0;
+    my_off_t log_pos = 0;
     uint64 next_index = consensus_log_manager.get_next_trx_index(
         applier_info->get_consensus_apply_index(), false);
     if (consensus_log_manager.get_log_position(next_index, false, log_name,

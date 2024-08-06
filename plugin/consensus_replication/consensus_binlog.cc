@@ -43,10 +43,6 @@
 
 using binary_log::checksum_crc32;
 
-static int get_lower_bound_pos_of_index(const uint64 start_index,
-                                        const uint64 consensus_index,
-                                        uint64 &pos, bool &matched);
-
 /**
   Auxiliary class to copy serialized events to the binary log and
   correct some of the fields that are not known until just before
@@ -124,7 +120,7 @@ class Consensuslog_event_writer : public Basic_ostream {
         length -= LOG_EVENT_HEADER_LEN;
         buffer += LOG_EVENT_HEADER_LEN;
       } else {
-        my_off_t scan_bytes = std::min<uint64>(length, event_len);
+        my_off_t scan_bytes = std::min<my_off_t>(length, event_len);
         bool fill_checksum = false;
 
         // The whole event will be copied, need fill the checksum
@@ -180,7 +176,7 @@ class Consensuslog_event_writer : public Basic_ostream {
           header_len = 0;
         }
       } else {
-        my_off_t write_bytes = std::min<uint64>(length, event_len);
+        my_off_t write_bytes = std::min<my_off_t>(length, event_len);
         bool write_checksum = false;
 
         // The whole event will be copied, need add the checksum
@@ -231,7 +227,7 @@ class Consensuslog_event_writer : public Basic_ostream {
 };
 
 static bool write_consensus_log_event(MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
-                                      uint flag, uint64 term, uint64 length,
+                                      uint flag, uint64 term, my_off_t length,
                                       uint64 checksum,
                                       bool consensus_append = false);
 
@@ -272,15 +268,15 @@ int copy_from_consensus_log_cache(IO_CACHE_binlog_cache_storage *from,
   return ret;
 }
 
-static int do_write_large_event(THD *thd, ulonglong total_trx_size,
-                                Log_event *ev, ulonglong event_len,
-                                ulonglong total_event_len, bool have_checksum,
+static int do_write_large_event(THD *thd, my_off_t total_trx_size,
+                                Log_event *ev, my_off_t event_len,
+                                my_off_t total_event_len, bool have_checksum,
                                 MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
-                                ulonglong &total_batch_size,
-                                ulonglong &flushed_size) {
+                                my_off_t &total_batch_size,
+                                my_off_t &flushed_size) {
   int error = 0;
   uint flag = 0;
-  ulonglong ev_footer_size = have_checksum ? BINLOG_CHECKSUM_LEN : 0;
+  my_off_t ev_footer_size = have_checksum ? BINLOG_CHECKSUM_LEN : 0;
   uint32 ev_crc = 0;
   DBUG_TRACE;
 
@@ -297,7 +293,7 @@ static int do_write_large_event(THD *thd, ulonglong total_trx_size,
    * Use consensus log writer to revise the event, because the end_log_pos is
    * changed
    */
-  ulonglong event_start_pos =
+  my_off_t event_start_pos =
       binlog_file_get_current_pos(binlog_file) +
       /* consensus log event for each batch */
       batches * (Consensus_log_event::get_event_length() + ev_footer_size) +
@@ -311,10 +307,10 @@ static int do_write_large_event(THD *thd, ulonglong total_trx_size,
   uchar *buffer =
       (uchar *)my_malloc(key_memory_thd_main_mem_root,
                          opt_consensus_large_event_split_size, MYF(MY_WME));
-  ulonglong start_pos = 0,
-            end_pos = opt_consensus_large_event_split_size;  // first batch
+  my_off_t start_pos = 0,
+           end_pos = opt_consensus_large_event_split_size;  // first batch
   while (start_pos < total_event_len) {
-    ulonglong batch_size = end_pos - start_pos;
+    my_off_t batch_size = end_pos - start_pos;
 
     assert(batch_size <= opt_consensus_large_event_split_size);
 
@@ -468,7 +464,7 @@ static int large_trx_flush_log_cache(THD *thd,
   uint32 crc32 = 0;
   uchar *batch_content = nullptr;
   DBUG_TRACE;
-  ulonglong batch_size = log_cache->length();
+  my_off_t batch_size = log_cache->length();
 
   if (consensus_log_manager.get_first_event_in_file()) {
     flag |= Consensus_log_event_flag::FLAG_ROTATE;
@@ -513,7 +509,7 @@ static int large_trx_flush_log_cache(THD *thd,
   return 0;
 }
 
-static int do_write_large_trx(THD *thd, ulonglong total_trx_size,
+static int do_write_large_trx(THD *thd, my_off_t total_trx_size,
                               bool have_checksum, Gtid_log_event &gtid_event,
                               binlog_cache_data *cache_data,
                               MYSQL_BIN_LOG::Binlog_ofile *binlog_file) {
@@ -521,8 +517,8 @@ static int do_write_large_trx(THD *thd, ulonglong total_trx_size,
   Log_event *ev = nullptr;
   uint flag = 0;
   bool fisrt_event_in_batch = false;
-  ulonglong batch_size = 0, total_batch_size = 0;
-  ulonglong ev_footer_size = have_checksum ? BINLOG_CHECKSUM_LEN : 0;
+  my_off_t batch_size = 0, total_batch_size = 0;
+  my_off_t ev_footer_size = have_checksum ? BINLOG_CHECKSUM_LEN : 0;
   DBUG_TRACE;
 
   /* Init binlog cache data reader */
@@ -553,8 +549,8 @@ static int do_write_large_trx(THD *thd, ulonglong total_trx_size,
 
   while (!error && (ev = payload_event_istream.read_event_object(
                         fd_ev, false, &default_alloc)) != nullptr) {
-    ulonglong event_len = uint4korr(ev->temp_buf + EVENT_LEN_OFFSET);
-    ulonglong event_total_len = event_len + ev_footer_size;
+    my_off_t event_len = uint4korr(ev->temp_buf + EVENT_LEN_OFFSET);
+    my_off_t event_total_len = event_len + ev_footer_size;
     batch_size = log_cache->length();
 
     assert(ev->common_header->type_code !=
@@ -612,7 +608,7 @@ static int do_write_large_trx(THD *thd, ulonglong total_trx_size,
     }
 
     if (event_total_len > opt_consensus_max_log_size) {
-      ulonglong flush_size = 0;
+      my_off_t flush_size = 0;
       /* current ev is large event */
       assert(batch_size == 0 && fisrt_event_in_batch);
       error = do_write_large_event(thd, total_trx_size, ev, event_len,
@@ -673,35 +669,10 @@ void consensus_before_commit(THD *thd) {
   }
 }
 
-void consensus_update_pos_map_by_file_name(std::string &filename,
-                                           Consensus_log_event *ev,
-                                           uint64 start_pos, uint64 next_pos,
-                                           bool &next_set) {
-  DBUG_TRACE;
-  /* Normal consensus entry or first part of large event */
-  if (!next_set &&
-      !(ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB_END) &&
-      (!(ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB) ||
-       (ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB_START))) {
-    consensus_log_manager.get_log_file_index()->update_pos_map_by_file_name(
-        filename, ev->get_index(), start_pos);
-  }
-
-  /* Not large event */
-  if (!(ev->get_flag() & (Consensus_log_event_flag::FLAG_BLOB |
-                          Consensus_log_event_flag::FLAG_BLOB_START |
-                          Consensus_log_event_flag::FLAG_BLOB_END))) {
-    consensus_log_manager.get_log_file_index()->update_pos_map_by_file_name(
-        filename, ev->get_index() + 1, next_pos);
-    next_set = true;
-  } else {
-    next_set = false;
-  }
-}
-
-void update_pos_map_by_start_index(const uint64 start_index,
-                                   Consensus_log_event *ev, uint64 start_pos,
-                                   uint64 end_pos, bool &next_set) {
+void update_pos_map_by_start_index(ConsensusLogIndex *log_file_index,
+                                   const uint64 start_index,
+                                   Consensus_log_event *ev, my_off_t start_pos,
+                                   my_off_t end_pos, bool &next_set) {
   DBUG_TRACE;
   /* Normal consensus entry or first part of large event. And not set by
    * previous consensus event */
@@ -709,29 +680,29 @@ void update_pos_map_by_start_index(const uint64 start_index,
       !(ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB_END) &&
       (!(ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB) ||
        (ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB_START))) {
-    consensus_log_manager.get_log_file_index()->update_pos_map_by_start_index(
-        start_index, ev->get_index(), start_pos);
+    log_file_index->update_pos_map_by_start_index(start_index, ev->get_index(),
+                                                  start_pos);
   }
 
   /* Not large event. Set next index pos by end position */
   if (!(ev->get_flag() & (Consensus_log_event_flag::FLAG_BLOB |
                           Consensus_log_event_flag::FLAG_BLOB_START |
                           Consensus_log_event_flag::FLAG_BLOB_END))) {
-    consensus_log_manager.get_log_file_index()->update_pos_map_by_start_index(
-        start_index, ev->get_index() + 1, end_pos);
+    log_file_index->update_pos_map_by_start_index(start_index,
+                                                  ev->get_index() + 1, end_pos);
     next_set = true;
   } else {
     next_set = false;
   }
 }
 
-static int get_lower_bound_pos_of_index(const uint64 start_index,
+static int get_lower_bound_pos_of_index(ConsensusLogIndex *log_file_index,
+                                        const uint64 start_index,
                                         const uint64 consensus_index,
-                                        uint64 &pos, bool &matched) {
+                                        my_off_t &pos, bool &matched) {
   DBUG_TRACE;
-  int res =
-      consensus_log_manager.get_log_file_index()->get_lower_bound_pos_of_index(
-          start_index, consensus_index, pos, matched);
+  int res = log_file_index->get_lower_bound_pos_of_index(
+      start_index, consensus_index, pos, matched);
 
   LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_RETRIEVE_LOW_BOUND_POS,
                consensus_index, start_index, pos, matched);
@@ -739,14 +710,15 @@ static int get_lower_bound_pos_of_index(const uint64 start_index,
   return res;
 }
 
-int consensus_find_log_by_index(uint64 consensus_index, std::string &file_name,
+int consensus_find_log_by_index(ConsensusLogIndex *log_file_index,
+                                uint64 consensus_index, std::string &file_name,
                                 uint64 &start_index) {
-  return consensus_log_manager.get_log_file_index()->get_log_file_from_index(
-      consensus_index, file_name, start_index);
+  return log_file_index->get_log_file_from_index(consensus_index, file_name,
+                                                 start_index);
 }
 
 static int fetch_log_by_offset(Binlog_file_reader &binlog_file_reader,
-                               uint64 start_pos, uint64 end_pos,
+                               my_off_t start_pos, my_off_t end_pos,
                                Consensus_cluster_info_log_event *rci_ev,
                                std::string &log_content) {
   DBUG_TRACE;
@@ -775,9 +747,10 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
   DBUG_TRACE;
 
   bool next_set = false;
-  uint64 lower_start_pos;
+  my_off_t lower_start_pos;
   bool matched;
-  get_lower_bound_pos_of_index(file_start_index, start_index, lower_start_pos,
+  get_lower_bound_pos_of_index(consensus_log_manager.get_log_file_index(),
+                               file_start_index, start_index, lower_start_pos,
                                matched);
   if (lower_start_pos == 0) lower_start_pos = BIN_LOG_HEADER_SIZE;
 
@@ -791,8 +764,8 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
   Log_event *ev = nullptr;
   Consensus_cluster_info_log_event *rci_ev = nullptr;
   Consensus_log_event *consensus_log_ev = nullptr;
-  uint64 start_pos = binlog_file_reader.position();
-  uint64 end_pos = start_pos;
+  my_off_t start_pos = binlog_file_reader.position();
+  my_off_t end_pos = start_pos;
 
   uint64 current_index = 0;
   uint64 current_term = 0;
@@ -825,7 +798,8 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
       current_crc32 = consensus_log_ev->get_reserve();
       end_pos = start_pos = binlog_file_reader.position();
 
-      update_pos_map_by_start_index(file_start_index, consensus_log_ev,
+      update_pos_map_by_start_index(consensus_log_manager.get_log_file_index(),
+                                    file_start_index, consensus_log_ev,
                                     binlog_file_reader.event_start_pos(),
                                     start_pos + consensus_log_length, next_set);
       delete ev;
@@ -866,8 +840,8 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
       blob_crc32_list.push_back(current_crc32);
 
       /* Split large event to multi slices */
-      uint64 split_len = opt_consensus_large_event_split_size;
-      uint64 blob_start_pos = start_pos, blob_end_pos = start_pos + split_len;
+      my_off_t split_len = opt_consensus_large_event_split_size;
+      my_off_t blob_start_pos = start_pos, blob_end_pos = start_pos + split_len;
       for (size_t i = 0; i < blob_index_list.size(); ++i) {
         if (blob_index_list[i] + prefetch_channel->get_window_size() >=
             start_index) {
@@ -928,17 +902,18 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
   return 0;
 }
 
-static int read_log_by_index(const char *file_name, uint64 start_index,
+static int read_log_by_index(ConsensusLogIndex *log_file_index,
+                             const char *file_name, uint64 start_index,
                              uint64 consensus_index, uint64 *consensus_term,
                              std::string &log_content, bool *outer, uint *flag,
                              uint64 *checksum, bool need_content) {
-  uint64 lower_start_pos;
+  my_off_t lower_start_pos;
   bool next_set = false;
   bool matched;
   DBUG_TRACE;
 
-  get_lower_bound_pos_of_index(start_index, consensus_index, lower_start_pos,
-                               matched);
+  get_lower_bound_pos_of_index(log_file_index, start_index, consensus_index,
+                               lower_start_pos, matched);
   if (lower_start_pos == 0) lower_start_pos = BIN_LOG_HEADER_SIZE;
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
@@ -953,9 +928,9 @@ static int read_log_by_index(const char *file_name, uint64 start_index,
   Consensus_log_event *consensus_log_ev = nullptr;
   bool found = false;
   bool stop_scan = false;
-  uint64 start_pos = lower_start_pos;
-  uint64 end_pos = start_pos;
-  uint64 consensus_log_length = 0;
+  my_off_t start_pos = lower_start_pos;
+  my_off_t end_pos = start_pos;
+  my_off_t consensus_log_length = 0;
   uint64 cindex, cterm, cflag, ccrc32;
   std::vector<uint64> blob_index_list;
 
@@ -981,7 +956,8 @@ static int read_log_by_index(const char *file_name, uint64 start_index,
           abort();
         }
         update_pos_map_by_start_index(
-            start_index, consensus_log_ev, binlog_file_reader.event_start_pos(),
+            log_file_index, start_index, consensus_log_ev,
+            binlog_file_reader.event_start_pos(),
             binlog_file_reader.position() + consensus_log_ev->get_length(),
             next_set);
         break;
@@ -998,9 +974,9 @@ static int read_log_by_index(const char *file_name, uint64 start_index,
                 assert(consensus_index >= blob_index_list[0] &&
                        consensus_index <= cindex);
                 /* It means the required index is between a blob event */
-                uint64 split_len = opt_consensus_large_event_split_size;
-                uint64 blob_start_pos = start_pos,
-                       blob_end_pos = start_pos + split_len;
+                my_off_t split_len = opt_consensus_large_event_split_size;
+                my_off_t blob_start_pos = start_pos,
+                         blob_end_pos = start_pos + split_len;
                 for (size_t i = 0; i < blob_index_list.size(); ++i) {
                   if (blob_index_list[i] == consensus_index) {
                     fetch_log_by_offset(binlog_file_reader, blob_start_pos,
@@ -1044,7 +1020,8 @@ static int read_log_by_index(const char *file_name, uint64 start_index,
   return (int)!found;
 }
 
-int consensus_get_log_entry(uint64 consensus_index, uint64 *consensus_term,
+int consensus_get_log_entry(ConsensusLogIndex *log_file_index,
+                            uint64 consensus_index, uint64 *consensus_term,
                             std::string &log_content, bool *outer, uint *flag,
                             uint64 *checksum, bool need_content) {
   std::string file_name;
@@ -1052,13 +1029,14 @@ int consensus_get_log_entry(uint64 consensus_index, uint64 *consensus_term,
   int ret = 0;
   DBUG_TRACE;
 
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+  if (consensus_find_log_by_index(log_file_index, consensus_index, file_name,
+                                  start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
                  "getting log entry");
     ret = 1;
-  } else if (read_log_by_index(file_name.c_str(), start_index, consensus_index,
-                               consensus_term, log_content, outer, flag,
-                               checksum, need_content)) {
+  } else if (read_log_by_index(log_file_index, file_name.c_str(), start_index,
+                               consensus_index, consensus_term, log_content,
+                               outer, flag, checksum, need_content)) {
     ret = 1;
   }
 
@@ -1073,7 +1051,8 @@ int consensus_prefetch_log_entries(THD *thd, uint64 channel_id,
   DBUG_TRACE;
 
   // use another io_cache , so do not need lock LOCK_log
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+  if (consensus_find_log_by_index(consensus_log_manager.get_log_file_index(),
+                                  consensus_index, file_name, start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
                  "prefetching log entries");
     ret = 1;
@@ -1103,10 +1082,11 @@ static void store_gtid_for_consensus_log(const char *buf, Relay_log_info *rli) {
   }
 }
 
-uint64 consensus_get_trx_end_index(uint64 firstIndex) {
+uint64 consensus_get_trx_end_index(ConsensusLogIndex *log_file_index,
+                                   uint64 firstIndex) {
   std::string file_name;
   uint64 start_index;
-  uint64 start_pos;
+  my_off_t start_pos;
   bool matched;
   Log_event *ev = nullptr;
   Consensus_log_event *consensus_log_ev = nullptr;
@@ -1115,16 +1095,16 @@ uint64 consensus_get_trx_end_index(uint64 firstIndex) {
   uint64 currentFlag = 0;
   DBUG_TRACE;
 
-  // use another io_cache , so do not need lock LOCK_log
-  if (consensus_find_log_by_index(firstIndex, file_name, start_index)) {
+  if (consensus_find_log_by_index(log_file_index, firstIndex, file_name,
+                                  start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, firstIndex,
                  "getting trx end index");
     return 0;
   }
 
   /* Search lower bound of pos from cached pos map */
-  (void)get_lower_bound_pos_of_index(start_index, firstIndex, start_pos,
-                                     matched);
+  (void)get_lower_bound_pos_of_index(log_file_index, start_index, firstIndex,
+                                     start_pos, matched);
   if (start_pos == 0) start_pos = BIN_LOG_HEADER_SIZE;
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
@@ -1160,15 +1140,16 @@ uint64 consensus_get_trx_end_index(uint64 firstIndex) {
    2. ending of the previous index
    3. beginning of the binlog file
 */
-int consensus_find_pos_by_index(const char *file_name, const uint64 start_index,
-                                const uint64 consensus_index, uint64 *pos) {
-  uint64 start_pos;
+int consensus_find_pos_by_index(ConsensusLogIndex *log_file_index,
+                                const char *file_name, const uint64 start_index,
+                                const uint64 consensus_index, my_off_t *pos) {
+  my_off_t start_pos;
   bool next_set = false;
   bool matched;
   DBUG_TRACE;
 
-  get_lower_bound_pos_of_index(start_index, consensus_index, start_pos,
-                               matched);
+  get_lower_bound_pos_of_index(log_file_index, start_index, consensus_index,
+                               start_pos, matched);
   if (matched) {
     *pos = start_pos;
     return 0;
@@ -1199,7 +1180,8 @@ int consensus_find_pos_by_index(const char *file_name, const uint64 start_index,
           *pos = binlog_file_reader.position() + consensus_log_ev->get_length();
         }
         update_pos_map_by_start_index(
-            start_index, consensus_log_ev, binlog_file_reader.event_start_pos(),
+            log_file_index, start_index, consensus_log_ev,
+            binlog_file_reader.event_start_pos(),
             binlog_file_reader.position() + consensus_log_ev->get_length(),
             next_set);
         break;
@@ -1227,20 +1209,22 @@ int consensus_find_pos_by_index(const char *file_name, const uint64 start_index,
   return !found;
 }
 
-int consensus_get_log_position(uint64 consensus_index, char *log_name,
-                               uint64 *pos) {
+int consensus_get_log_position(ConsensusLogIndex *log_file_index,
+                               uint64 consensus_index, char *log_name,
+                               my_off_t *pos) {
   std::string file_name;
   uint64 start_index;
   int ret = 0;
   DBUG_TRACE;
 
   // use another io_cache , so do not need lock LOCK_log
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+  if (consensus_find_log_by_index(log_file_index, consensus_index, file_name,
+                                  start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
                  "getting log position");
     ret = 1;
-  } else if (consensus_find_pos_by_index(file_name.c_str(), start_index,
-                                         consensus_index, pos)) {
+  } else if (consensus_find_pos_by_index(log_file_index, file_name.c_str(),
+                                         start_index, consensus_index, pos)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_INDEX_IN_FILE_ERROR,
                  consensus_index, file_name.c_str());
     ret = 1;
@@ -1264,7 +1248,7 @@ static bool check_auto_purge_size_condition() {
   if (binlog_purge_size == 0) return true;
 
   // get the size of the binary logs
-  ulonglong total_binlog_size =
+  my_off_t total_binlog_size =
       consensus_log_manager.get_log_file_index()->get_total_log_size();
 
   if (total_binlog_size < binlog_purge_size) return true;
@@ -1303,9 +1287,10 @@ bool consensus_show_log_events(THD *thd) {
         consensus_log_manager.get_log_file_index()->get_first_index();
     uint64 consensus_index =
         lex_ci->log_index < first_index ? first_index : lex_ci->log_index;
-    uint64 pos = BIN_LOG_HEADER_SIZE;
+    my_off_t pos = BIN_LOG_HEADER_SIZE;
 
-    if (consensus_get_log_position(consensus_index, search_file_name, &pos)) {
+    if (consensus_get_log_position(consensus_log_manager.get_log_file_index(),
+                                   consensus_index, search_file_name, &pos)) {
       mysql_rwlock_unlock(
           consensus_state_process.get_consensuslog_status_lock());
       my_error(ER_CONSENSUS_INDEX_NOT_VALID, MYF(0)); /* purecov: inspected */
@@ -1370,8 +1355,8 @@ bool consensus_show_logs(THD *thd) {
   while ((length = my_b_gets(index_file, fname, sizeof(fname))) > 1) {
     size_t dir_len;
     int encrypted_header_size = 0;
-    ulonglong file_length = 0;  // Length if open fails
-    fname[--length] = '\0';     // remove the newline
+    my_off_t file_length = 0;  // Length if open fails
+    fname[--length] = '\0';    // remove the newline
 
     protocol->start_row();
     dir_len = dirname_length(fname);
@@ -1387,7 +1372,7 @@ bool consensus_show_logs(THD *thd) {
       /* this is an old log, open it and find the size */
       if ((file = mysql_file_open(key_file_binlog, fname, O_RDONLY, MYF(0))) >=
           0) {
-        file_length = (ulonglong)mysql_file_seek(file, 0L, MY_SEEK_END, MYF(0));
+        file_length = (my_off_t)mysql_file_seek(file, 0L, MY_SEEK_END, MYF(0));
         mysql_file_close(file, MYF(0));
       }
     }
@@ -1484,7 +1469,7 @@ static uint32 abstract_event_timestamp_from_buffer(uchar *buf, size_t len) {
 }
 
 static bool write_consensus_log_event(MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
-                                      uint flag, uint64 term, uint64 length,
+                                      uint flag, uint64 term, my_off_t length,
                                       uint64 checksum, bool consensus_append) {
   DBUG_TRACE;
   Consensus_log_event rev(flag, term, consensus_log_manager.get_current_index(),
@@ -1518,7 +1503,7 @@ static int do_write_binlog_cache(THD *thd, Gtid_log_event &gtid_event,
   DBUG_TRACE;
 
   Binlog_cache_storage *cache_storage = binlog_cache_get_storage(cache_data);
-  ulonglong total_trx_size =
+  my_off_t total_trx_size =
       cache_storage->length() +       /* binlog cache data */
       gtid_event.get_event_length() + /* gtid event */
       (have_checksum ? (binlog_cache_get_event_counter(cache_data) + 1) *
@@ -1642,7 +1627,7 @@ static int append_one_log_entry(ConsensusLogEntry &log,
   int error = 0;
   DBUG_TRACE;
 
-  ulonglong payload_start_pos =
+  my_off_t payload_start_pos =
       binlog_file_get_current_pos(binlog_file) +
       (Consensus_log_event::get_event_length() +
        (binlog_checksum_options != binary_log::BINLOG_CHECKSUM_ALG_OFF
@@ -2131,17 +2116,19 @@ static int consensus_truncate_log(MYSQL_BIN_LOG *log, uint64 consensus_index) {
   int error = 0;
   std::string file_name;
   uint64 start_index = 0;
-  uint64 offset;
+  my_off_t offset;
   DBUG_TRACE;
 
   mysql_mutex_assert_owner(log->get_log_lock());
 
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+  if (consensus_find_log_by_index(consensus_log_manager.get_log_file_index(),
+                                  consensus_index, file_name, start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
                  "truncating consensus log");
     error = 1;
-  } else if (consensus_find_pos_by_index(file_name.c_str(), start_index,
-                                         consensus_index, &offset)) {
+  } else if (consensus_find_pos_by_index(
+                 consensus_log_manager.get_log_file_index(), file_name.c_str(),
+                 start_index, consensus_index, &offset)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_INDEX_IN_FILE_ERROR,
                  consensus_index, file_name.c_str());
     error = 1;
@@ -2200,10 +2187,9 @@ static int convert_archive_stop_datetime(const char *str, ulong &my_time) {
   @retval 0	ok
   @retval 1	error
 */
-static int consensus_get_next_index(const char *file_name,
-                                    const ulong stop_datetime,
-                                    bool &reached_stop_point,
-                                    uint64 &current_term) {
+int consensus_get_next_index(const char *file_name, bool skip_large_trx,
+                             const ulong stop_datetime, const my_off_t stop_pos,
+                             bool &reached_stop_point, uint64 &current_term) {
   Log_event *ev = nullptr;
   Consensus_log_event *consensus_log_ev = nullptr;
   Previous_consensus_index_log_event *consensus_prev_ev = nullptr;
@@ -2235,7 +2221,10 @@ static int consensus_get_next_index(const char *file_name,
             (ulong)consensus_log_ev->common_header->when.tv_sec >
                 stop_datetime) {
           reached_stop_point = true;
-        } else if (!(current_flag & Consensus_log_event_flag::FLAG_LARGE_TRX)) {
+        } else if (stop_pos > 0 && binlog_file_reader.position() > stop_pos) {
+          reached_stop_point = true;
+        } else if (!skip_large_trx ||
+                   !(current_flag & Consensus_log_event_flag::FLAG_LARGE_TRX)) {
           next_index = consensus_log_ev->get_index() + 1;
         }
         break;
@@ -2351,8 +2340,8 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
       } else {
         // Get the stop(next) index for last archive file
         file_next_index = consensus_get_next_index(
-            file_iter->file_name.c_str(), stop_datetime, reached_stop_point,
-            last_term);
+            file_iter->file_name.c_str(), true, 0, stop_datetime,
+            reached_stop_point, last_term);
       }
       if (file_next_index == 0) {
         LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_GET_NEXT_INDEX_FAILED,
@@ -2409,16 +2398,16 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
       } else {
         // Get the stop(next) index for last archive file
         next_index = consensus_get_next_index(file_iter->file_name.c_str(),
-                                              stop_datetime, reached_stop_point,
-                                              last_term);
+                                              true, 0, stop_datetime,
+                                              reached_stop_point, last_term);
       }
     } else if (file_next_index != 0) {
       next_index = file_next_index;
     } else {
       // Get the stop(next) index for last archive file
-      next_index =
-          consensus_get_next_index(file_iter->file_name.c_str(), stop_datetime,
-                                   reached_stop_point, last_term);
+      next_index = consensus_get_next_index(file_iter->file_name.c_str(), true,
+                                            0, stop_datetime,
+                                            reached_stop_point, last_term);
     }
 
     if (next_index == 0) {

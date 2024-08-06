@@ -39,10 +39,10 @@ class Consensus_applier_worker : public Rpl_info {
 
   static void set_nullable_fields(MY_BITMAP *nullable_fields);
 
-  inline void set_consensus_apply_index(ulonglong log_index) {
+  inline void set_consensus_apply_index(uint64 log_index) {
     consensus_apply_index = log_index;
   }
-  inline ulonglong get_consensus_apply_index() { return consensus_apply_index; }
+  inline uint64 get_consensus_apply_index() { return consensus_apply_index; }
 
   uint64 saved_consensus_apply_index;
 

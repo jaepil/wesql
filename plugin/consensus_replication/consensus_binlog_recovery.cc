@@ -107,8 +107,8 @@ class Consensus_binlog_recovery : public binlog::Binlog_recovery {
   uint64 current_length{0};
   uint64 valid_index{0};
   uint current_flag{0};
-  uint64 start_pos{BIN_LOG_HEADER_SIZE};
-  uint64 end_pos{BIN_LOG_HEADER_SIZE};
+  my_off_t start_pos{BIN_LOG_HEADER_SIZE};
+  my_off_t end_pos{BIN_LOG_HEADER_SIZE};
   uint32 current_ev_ts{0};
 
   void after_process_xa_prepare_event(XA_prepare_log_event const &ev);
@@ -256,7 +256,8 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
         this->begin_consensus = true;
         if (start_index > 0) {
           update_pos_map_by_start_index(
-              start_index, dynamic_cast<Consensus_log_event *>(ev.get()),
+              consensus_log_manager.get_log_file_index(), start_index,
+              dynamic_cast<Consensus_log_event *>(ev.get()),
               this->m_reader.event_start_pos(),
               this->m_reader.position() +
                   (dynamic_cast<Consensus_log_event *>(ev.get()))->get_length(),
@@ -358,7 +359,7 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
 uint64 get_applier_start_index() {
   uint64 first_index;
   uint64 recover_status;
-  ulonglong start_apply_index;
+  uint64 start_apply_index;
   uint64 next_index;
   DBUG_TRACE;
   Consensus_info *consensus_info = consensus_meta.get_consensus_info();

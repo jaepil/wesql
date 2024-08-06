@@ -148,8 +148,8 @@ void collect_show_logs_results(
   while ((length = my_b_gets(index_file, fname, sizeof(fname))) > 1) {
     size_t dir_len;
     int encrypted_header_size = 0;
-    ulonglong file_length = 0;  // Length if open fails
-    fname[--length] = '\0';     // remove the newline
+    my_off_t file_length = 0;  // Length if open fails
+    fname[--length] = '\0';    // remove the newline
 
     Consensus_show_logs_result *result =
         new (mem_root) Consensus_show_logs_result();
@@ -167,7 +167,7 @@ void collect_show_logs_results(
       /* this is an old log, open it and find the size */
       if ((file = mysql_file_open(key_file_binlog, fname, O_RDONLY, MYF(0))) >=
           0) {
-        file_length = (ulonglong)mysql_file_seek(file, 0L, MY_SEEK_END, MYF(0));
+        file_length = (my_off_t)mysql_file_seek(file, 0L, MY_SEEK_END, MYF(0));
         mysql_file_close(file, MYF(0));
       }
     }

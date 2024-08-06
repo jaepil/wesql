@@ -26,8 +26,8 @@
 #include "consensus_state_process.h"
 #include "plugin.h"
 #include "plugin_psi.h"
-#include "system_variables.h"
 #include "rpl_consensus.h"
+#include "system_variables.h"
 
 #include "mysql/psi/mysql_file.h"
 #include "mysql/thread_pool_priv.h"
@@ -123,7 +123,7 @@ int ConsensusLogManager::init(uint64 max_fifo_cache_size_arg,
   eev.common_footer->checksum_alg =
       static_cast<enum_binlog_checksum_alg>(binlog_checksum_options);
   eev.write(cache_log);
-  ulonglong buf_size = cache_log->length();
+  my_off_t buf_size = cache_log->length();
   uchar *buffer = (uchar *)my_malloc(key_memory_thd_main_mem_root,
                                      (size_t)buf_size, MYF(MY_WME));
   copy_from_consensus_log_cache(cache_log, buffer, buf_size);
@@ -276,7 +276,8 @@ int ConsensusLogManager::get_log_directly(uint64 consensus_index,
   }
 
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
-  if (consensus_get_log_entry(consensus_index, consensus_term, log_content,
+  if (consensus_get_log_entry(consensus_log_manager.get_log_file_index(),
+                              consensus_index, consensus_term, log_content,
                               outer, flag, checksum, need_content))
     error = 1;
   mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
@@ -361,12 +362,13 @@ uint64_t ConsensusLogManager::get_left_log_size(uint64 start_log_index,
 
 int ConsensusLogManager::get_log_position(uint64 consensus_index,
                                           bool need_lock, char *log_name,
-                                          uint64 *pos) {
+                                          my_off_t *pos) {
   int error = 0;
   DBUG_TRACE;
   if (need_lock)
     mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
-  if (consensus_get_log_position(consensus_index, log_name, pos)) {
+  if (consensus_get_log_position(get_log_file_index(), consensus_index,
+                                 log_name, pos)) {
     error = 1;
   }
   if (need_lock)
@@ -381,7 +383,7 @@ uint64 ConsensusLogManager::get_next_trx_index(uint64 consensus_index,
 
   if (need_lock)
     mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
-  retIndex = consensus_get_trx_end_index(consensus_index);
+  retIndex = consensus_get_trx_end_index(get_log_file_index(), consensus_index);
   if (need_lock)
     mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
 
@@ -399,7 +401,7 @@ uint64 ConsensusLogManager::get_next_trx_index(uint64 consensus_index,
 int ConsensusLogManager::truncate_log(uint64 consensus_index) {
   int error = 0;
   uint64 start_index = 0;
-  uint64 offset;
+  my_off_t offset;
   std::string file_name;
   DBUG_TRACE;
 
@@ -420,12 +422,14 @@ int ConsensusLogManager::truncate_log(uint64 consensus_index) {
                                 Consensus_Log_System_Status::BINLOG_WORKING
                             ? nullptr
                             : rli_info;
-  if (consensus_find_log_by_index(consensus_index, file_name, start_index)) {
+  if (consensus_find_log_by_index(get_log_file_index(), consensus_index,
+                                  file_name, start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
                  "truncating consensus log");
     offset = 0;
     error = 1;
-  } else if (consensus_find_pos_by_index(file_name.c_str(), start_index,
+  } else if (consensus_find_pos_by_index(get_log_file_index(),
+                                         file_name.c_str(), start_index,
                                          consensus_index, &offset)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_INDEX_IN_FILE_ERROR,
                  consensus_index, file_name.c_str());
@@ -513,7 +517,8 @@ int ConsensusLogManager::purge_log(uint64 consensus_index) {
   }
 
   log->lock_index();
-  if (consensus_find_log_by_index(purge_index, file_name, start_index)) {
+  if (consensus_find_log_by_index(get_log_file_index(), purge_index, file_name,
+                                  start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
                  "purging consensus log");
     error = 1;

@@ -445,7 +445,7 @@ int ConsensusStateProcess::init_service() {
 
 int ConsensusStateProcess::recovery_applier_status() {
   uint64 next_index = 0;
-  uint64 log_pos = 0;
+  my_off_t log_pos = 0;
   char log_name[FN_REFLEN];
   DBUG_TRACE;
 

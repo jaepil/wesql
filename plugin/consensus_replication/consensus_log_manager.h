@@ -112,7 +112,7 @@ class ConsensusLogManager {
   int prefetch_log_directly(THD *thd, uint64 channel_id,
                             uint64 consensus_index);
   int get_log_position(uint64 consensus_index, bool need_lock, char *log_name,
-                       uint64 *pos);
+                       my_off_t *pos);
   uint64 get_next_trx_index(uint64 consensus_index, bool need_lock = true);
   int truncate_log(uint64 consensus_index);
   int purge_log(uint64 consensus_index);
@@ -129,15 +129,15 @@ class ConsensusLogManager {
   std::string empty_log_event_content;
   IO_CACHE_binlog_cache_storage *cache_log;  // cache a ConsensusLogEntry, and
                                              // communicate with algorithm layer
-  ConsensusPreFetchManager *prefetch_manager;      // prefetch module
-  ConsensusFifoCacheManager *fifo_cache_manager;   // fifo cache module
-  ConsensusLogIndex *log_file_index;               // consensus log file index
+  ConsensusPreFetchManager *prefetch_manager;     // prefetch module
+  ConsensusFifoCacheManager *fifo_cache_manager;  // fifo cache module
+  ConsensusLogIndex *log_file_index;              // consensus log file index
 
   mysql_rwlock_t LOCK_consensuslog_truncate;
   std::atomic<uint64> current_index;  // last log index in the log system
-  std::atomic<uint64> cache_index;  // last cache log entry
-  std::atomic<uint64> sync_index;   // last log entry
-  std::atomic<bool> enable_rotate;  // do not rotate if in middle of large trx
+  std::atomic<uint64> cache_index;    // last cache log entry
+  std::atomic<uint64> sync_index;     // last log entry
+  std::atomic<bool> enable_rotate;    // do not rotate if in middle of large trx
 
   std::atomic<uint32>
       event_tv_sec;  // last log event timestamp received from leader
