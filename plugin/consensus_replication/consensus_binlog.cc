@@ -893,6 +893,11 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
     delete ev;
   }
 
+  if (binlog_file_reader.has_fatal_error()) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR, file_name,
+                 binlog_file_reader.get_error_str());
+  }
+
   prefetch_channel->dec_ref_count();
   prefetch_channel->clear_prefetch_request();
 
@@ -1012,9 +1017,9 @@ static int read_log_by_index(ConsensusLogIndex *log_file_index,
     delete ev;
   }
 
-  if (!found) {
-    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_BY_INDEX_ERROR,
-                 consensus_index, lower_start_pos);
+  if (binlog_file_reader.has_fatal_error()) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR, file_name,
+                 binlog_file_reader.get_error_str());
   }
 
   return (int)!found;
@@ -1037,6 +1042,8 @@ int consensus_get_log_entry(ConsensusLogIndex *log_file_index,
   } else if (read_log_by_index(log_file_index, file_name.c_str(), start_index,
                                consensus_index, consensus_term, log_content,
                                outer, flag, checksum, need_content)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_BY_INDEX_ERROR,
+                 consensus_index);
     ret = 1;
   }
 
@@ -1131,6 +1138,11 @@ uint64 consensus_get_trx_end_index(ConsensusLogIndex *log_file_index,
     delete ev;
   }
 
+  if (binlog_file_reader.has_fatal_error()) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR,
+                 file_name.c_str(), binlog_file_reader.get_error_str());
+  }
+
   return stop_scan ? currentIndex : 0;
 }
 
@@ -1201,8 +1213,9 @@ int consensus_find_pos_by_index(ConsensusLogIndex *log_file_index,
     }
     delete ev;
   }
+
   if (binlog_file_reader.has_fatal_error()) {
-    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR, file_name,
                  binlog_file_reader.get_error_str());
   }
 
@@ -1972,6 +1985,11 @@ static int add_to_consensus_log_file_index(
       delete ev;
     }
 
+    if (binlog_file_reader.has_fatal_error()) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR, iter->c_str(),
+                   binlog_file_reader.get_error_str());
+    }
+
     if (!find_prev_consensus_log) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_UNEXPECTED_EVENT,
                    iter->c_str());
@@ -2232,6 +2250,11 @@ int consensus_get_next_index(const char *file_name, bool skip_large_trx,
         break;
     }
     delete ev;
+  }
+
+  if (binlog_file_reader.has_fatal_error()) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR, file_name,
+                 binlog_file_reader.get_error_str());
   }
 
   return next_index;
