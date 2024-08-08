@@ -443,15 +443,160 @@ int ConsensusStateProcess::init_service() {
   return 0;
 }
 
+static uint64 get_applier_start_index() {
+  uint64 first_index;
+  uint64 recover_status;
+  uint64 start_apply_index;
+  uint64 next_index;
+  DBUG_TRACE;
+  Consensus_info *consensus_info = consensus_meta.get_consensus_info();
+  Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
+
+  first_index = consensus_log_manager.get_log_file_index()->get_first_index();
+  recover_status = consensus_info->get_recover_status();
+  assert(consensus_state_process.get_status() ==
+         Consensus_Log_System_Status::BINLOG_WORKING);
+  start_apply_index = consensus_info->get_start_apply_index();
+  uint64 last_applied_index = consensus_state_process.get_recovery_index_hwl();
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_APPLIED_INDEX_START,
+               recover_status, first_index, start_apply_index,
+               last_applied_index, applier_info->get_consensus_apply_index());
+
+  if (recover_status == Consensus_Log_System_Status::BINLOG_WORKING) {
+    if (opt_cluster_recover_from_backup || consistent_snapshot_recovery ||
+        start_apply_index == 0) {
+      next_index = last_applied_index < first_index
+                       ? first_index
+                       : consensus_log_manager.get_next_trx_index(
+                             last_applied_index, false);
+      consensus_info->set_start_apply_index(last_applied_index);
+      if (consensus_info->flush_info(true, true)) {
+        next_index = 0;
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FATAL_ERROR,
+                     "Error flush consensus info set start apply index");
+      }
+    } else {
+      assert(start_apply_index >= first_index);
+      next_index =
+          consensus_log_manager.get_next_trx_index(start_apply_index, false);
+    }
+  } else {
+    uint64 consensus_recovery_index =
+        (applier_info->recovery_parallel_workers > 0)
+            ? applier_info->get_mts_consensus_hwm_index()
+            : applier_info->get_consensus_apply_index();
+    next_index = consensus_recovery_index < first_index
+                     ? first_index
+                     : consensus_log_manager.get_next_trx_index(
+                           consensus_recovery_index, false);
+  }
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_APPLIED_INDEX_STOP,
+               next_index);
+
+  return next_index;
+}
+
+/* init executed_gtids/lost_gtids/gtids_only_in_table after consenus module
+ * setup */
+static int gtid_init_after_consensus_setup(uint64 last_index,
+                                           const char *log_name) {
+  DBUG_TRACE;
+  /*
+    Initialize GLOBAL.GTID_EXECUTED and GLOBAL.GTID_PURGED from
+    gtid_executed table and binlog files during server startup.
+    */
+  Gtid_set *executed_gtids =
+      const_cast<Gtid_set *>(gtid_state->get_executed_gtids());
+  Gtid_set *lost_gtids = const_cast<Gtid_set *>(gtid_state->get_lost_gtids());
+  Gtid_set *gtids_only_in_table =
+      const_cast<Gtid_set *>(gtid_state->get_gtids_only_in_table());
+
+  Gtid_set purged_gtids_from_binlog(global_sid_map, global_sid_lock);
+  Gtid_set gtids_in_binlog(global_sid_map, global_sid_lock);
+  Gtid_set gtids_in_binlog_not_in_table(global_sid_map, global_sid_lock);
+
+  uint64 recover_status =
+      consensus_meta.get_consensus_info()->get_recover_status();
+
+  MYSQL_BIN_LOG *log = consensus_state_process.get_binlog();
+  assert(log != nullptr);
+  if (log->consensus_init_gtid_sets(
+          &gtids_in_binlog, &purged_gtids_from_binlog,
+          opt_source_verify_checksum, true,
+          consensus_log_manager.get_start_without_log(), last_index, log_name))
+    return -1;
+
+  global_sid_lock->wrlock();
+
+  /* Add unsaved set of GTIDs into gtid_executed table */
+  if (!opt_cluster_log_type_instance &&
+      recover_status ==
+          Consensus_Log_System_Status::BINLOG_WORKING &&  // just for leader
+      !gtids_in_binlog.is_empty() &&
+      !gtids_in_binlog.is_subset(executed_gtids)) {
+    gtids_in_binlog_not_in_table.add_gtid_set(&gtids_in_binlog);
+    if (!executed_gtids->is_empty()) {
+      gtids_in_binlog_not_in_table.remove_gtid_set(executed_gtids);
+    }
+    if (gtid_state->save(&gtids_in_binlog_not_in_table) == -1) {
+      global_sid_lock->unlock();
+      return -1;
+    }
+    executed_gtids->add_gtid_set(&gtids_in_binlog_not_in_table);
+  }
+
+  /* gtids_only_in_table= executed_gtids - gtids_in_binlog */
+  if (gtids_only_in_table->add_gtid_set(executed_gtids) != RETURN_STATUS_OK) {
+    global_sid_lock->unlock();
+    return -1;
+  }
+  gtids_only_in_table->remove_gtid_set(&gtids_in_binlog);
+  /*
+    lost_gtids = executed_gtids -
+                 (gtids_in_binlog - purged_gtids_from_binlog)
+               = gtids_only_in_table + purged_gtids_from_binlog;
+  */
+  assert(lost_gtids->is_empty());
+  if (lost_gtids->add_gtid_set(gtids_only_in_table) != RETURN_STATUS_OK ||
+      lost_gtids->add_gtid_set(&purged_gtids_from_binlog) != RETURN_STATUS_OK) {
+    global_sid_lock->unlock();
+    return -1;
+  }
+
+  if (consensus_log_manager.get_start_without_log()) {
+    /*
+      Write the previous set of gtids at this point because during
+      the creation of the binary log this is not done as we cannot
+      move the init_gtid_sets() to a place before opening the binary
+      log. This requires some investigation.
+
+      /Alfranio
+    */
+    Previous_gtids_log_event prev_gtids_ev(&gtids_in_binlog);
+
+    global_sid_lock->unlock();
+
+    (prev_gtids_ev.common_footer)->checksum_alg =
+        static_cast<enum_binlog_checksum_alg>(binlog_checksum_options);
+
+    if (log->write_event_to_binlog_and_sync(&prev_gtids_ev)) return -1;
+  } else {
+    global_sid_lock->unlock();
+  }
+
+  return 0;
+}
+
 int ConsensusStateProcess::recovery_applier_status() {
   uint64 next_index = 0;
   my_off_t log_pos = 0;
   char log_name[FN_REFLEN];
   DBUG_TRACE;
 
-  // Load mts recovery end index for snapshot recovery
-  if (!opt_cluster_log_type_instance &&
-      (consistent_snapshot_recovery || opt_cluster_recover_from_snapshot) &&
+  // Load mts recovery end index
+  if (!opt_initialize && !opt_cluster_log_type_instance &&
       mts_recovery_max_consensus_index()) {
     return -1;
   }
