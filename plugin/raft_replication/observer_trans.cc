@@ -42,9 +42,14 @@ int consensus_replication_trans_before_dml(Trans_param *param, int &out) {
         && param->tables_info[table].db_type != DB_TYPE_SMARTENGINE
 #endif
     ) {
+#ifndef WESQL_TEST
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_RPL_NEEDS_TRANSACTIONAL_TABLE,
                    param->tables_info[table].table_name);
       out++;
+#else
+      LogPluginErr(WARNING_LEVEL, ER_CONSENSUS_RPL_NEEDS_TRANSACTIONAL_TABLE,
+                   param->tables_info[table].table_name);
+#endif
     }
   }
 

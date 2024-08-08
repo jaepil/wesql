@@ -163,15 +163,10 @@ main.schema_read_only_cs                                  : BUG#43 execute boots
 main.read_only_persisted_variables                        : BUG#44 core, disable tamporarily
 main.flush2                                               : WL#21509040 --skip-bin-log
 main.mysqldump-no-binlog                                  : BUG#000 do not support no binlog
-main.myisam-blob                                          : BUG#000 disable myisam engine
 main.no_binlog_related_options                            : BUG#000 do not support no binlog
 main.disabled_replication                                 : BUG#000 do not support no binlog
 main.warnings                                             : BUG#000 failed to start with mysqld option --server-id=0
 main.xa_prepared_binlog_off                               : BUG#000 do not support no binlog
-main.system_tables_myisam                                 : BUG#000 disable myisam engine
-main.system_tables_myisam_lctn_2                          : BUG#000 disable myisam engine
-main.myisam_explain_json_non_select_all                   : BUG#000 disable myisam engine
-main.myisam_explain_json_non_select_none                  : BUG#000 disable myisam engine
 
 # Disable temporarilly
 main.skip_grants_flush                                    : BUG#000 query 'SET PASSWORD = 'cant have'' succeeded, should have failed
@@ -302,9 +297,6 @@ main.resource_group_thr_prio_unsupported_debug      : WL#21509040 resource group
 main.resource_group_thr_prio_unsupported            : WL#21509040 resource group
 main.resource_group_bugs                            : WL#21509040 resource group
 main.resource_group_binlog_events                   : WL#21509040 resource group
-main.join_outer                                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam.
-main.join_outer_bka                                 : BUG#000 Temporarily skip the case where the storage engine is MyIsam.
-main.join_outer_bka_nobnl                           : BUG#000 Temporarily skip the case where the storage engine is MyIsam.
 
 lock_order.cycle                                 : BUG#60 disable temp
 
@@ -319,28 +311,11 @@ test_service_sql_api.test_session_info              : WL#21509040 disable temp
 # disalbe binlog binlog_gtid binlog_nogtid temp for consensus replication
 binlog.binlog_table_map_optional_metadata                  : WL#21509040 disable temp
 binlog.binlog_temp_table_prevents_switch_session_binlog_format : WL#21509040 disable temp
-binlog.binlog_truncate_myisam                              : WL#21509040 disable temp
 binlog.binlog_xa_commit_failure                            : WL#21509040 disable temp
 binlog.binlog_xa_handling                                  : WL#21509040 disable temp
 binlog.binlog_xa_prepare_failure                           : WL#21509040 disable temp
 binlog.binlog_xa_rollback_failure                          : WL#21509040 disable temp
 binlog.binlog_xa_trx_split_across_binlog                   : WL#21509040 disable temp
-binlog.binlog_crash_safe_master_checksum_myisam            : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_mixed_load_data                              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_incident                                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_innodb_row_myisam                            : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_killed_simulate                              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_drop_temp_table_on_disconnect_stmt_myisam    : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_stm_blackhole                                : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_stm_delete_all_rows_myisam                   : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_stm_drop_tmp_tbl_myisam                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_stm_user_variables                           : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_rotate_bgc_sync                              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_truncate_kill                                : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_killed                                       : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_row_delete_all_rows_myisam                   : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_stm_row                                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog.binlog_switch_inside_trans                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
 binlog.binlog_open_errors                                  : BUG#000 This case manully truncated prev_consensus_log_ev in binlog
 binlog.binlog_set_trans_dependency_deadlock                : BUG#000 Async execute purge log in consensus plugin makes current_thd NULL
 binlog.binlog_alter_table_not_blocked_by_purge             : BUG#000 Async execute purge log in consensus plugin makes current_thd NULL
@@ -369,28 +344,6 @@ binlog_gtid.binlog_gtid_mysqlpump                               : BUG#000 The pr
 binlog_gtid.binlog_gtid_mysqldump                               : BUG#000 Reset master causes the consensus log to be truncated.
 binlog_gtid.binlog_gtid_exhausted                               : BUG#000 When a commit error occurs, wesql will automatically roll back.
 binlog_gtid.binlog_gtid_binlog_recovery_errors                  : BUG#000 tmp skip
-binlog_gtid.binlog_gtid_purge_binlog_at_startup-wesql           : BUG#000 tmp skip
-binlog_gtid.binlog_gtid_myisam                                  : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_gtid.binlog_gtid_purge_binlog_at_startup                 : BUG#417 Auto purge binlog not working when mysqld starts bug
-binlog_nogtid.binlog_enforce_gtid_consistency_multiple_warnings : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_stm_mix_innodb_myisam                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_myisam                                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_stm_cache_stat                             : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_gtid_next_single_stmt_trx_rollback_myisam  : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_stm_binlog_myisam                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_mixed_cache_stat                           : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_mts_logical_clock                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_row_mix_innodb_myisam                      : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_stm_ctype_cp932_myisam                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_row_binlog_myisam                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_row_ctype_cp932_myisam                     : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_stm_insert_select                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_old_versions                               : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_row_insert_select                          : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_row_kill_create_select_myisam              : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.compression_non_trans                             : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_mysqlbinlog_row_trans_myisam               : BUG#000 Temporarily skip the case where the storage engine is MyIsam
-binlog_nogtid.binlog_nogtid_stm_blackhole                       : BUG#000 Temporarily skip the case where the storage engine is MyIsam
 binlog_nogtid.binlog_bug23533                              : WL#21509040 disable temp
 binlog_nogtid.binlog_gtid_next_single_stmt_trx_rollback    : WL#21509040 disable temp
 binlog_nogtid.binlog_gtid_next_temporary_table             : WL#21509040 disable temp
