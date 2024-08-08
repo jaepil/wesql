@@ -17,15 +17,6 @@
 
 ConsensusMeta consensus_meta;
 
-ConsensusMeta::ConsensusMeta()
-    : inited(false),
-      consensus_info(nullptr),
-      consensus_applier_info(nullptr),
-      already_set_start_index(false),
-      already_set_start_term(false) {}
-
-ConsensusMeta::~ConsensusMeta() {}
-
 int ConsensusMeta::init() {
   DBUG_TRACE;
   Consensus_info_factory::init_consensus_repo_metadata();

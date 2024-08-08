@@ -84,21 +84,6 @@ uint64 show_log_count_in_fifo_cache(THD *, SHOW_VAR *var, char *buff) {
   return 0;
 }
 
-ConsensusLogManager::ConsensusLogManager()
-    : inited(false),
-      first_event_in_file(false),
-      start_without_log(false),
-      prefetch_manager(nullptr),
-      fifo_cache_manager(nullptr),
-      log_file_index(nullptr),
-      current_index(0),
-      cache_index(0),
-      sync_index(0),
-      enable_rotate(true),
-      event_tv_sec(0) {}
-
-ConsensusLogManager::~ConsensusLogManager() {}
-
 int ConsensusLogManager::init(uint64 max_fifo_cache_size_arg,
                               uint64 max_prefetch_cache_size_arg,
                               uint64 fake_current_index_arg) {

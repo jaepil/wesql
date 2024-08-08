@@ -30,18 +30,6 @@ using std::max;
 
 ConsensusStateProcess consensus_state_process;
 
-ConsensusStateProcess::ConsensusStateProcess()
-    : inited(false),
-      current_term(1),
-      current_state_degrade_term(0),
-      recovery_index_hwl(0),
-      status(Consensus_Log_System_Status::BINLOG_WORKING),
-      binlog(nullptr),
-      rli_info(nullptr),
-      consensus_state_change_is_running(false) {}
-
-ConsensusStateProcess::~ConsensusStateProcess() {}
-
 int ConsensusStateProcess::init() {
   mysql_rwlock_init(key_rwlock_ConsensusLog_status_lock,
                     &LOCK_consensuslog_status);
@@ -345,7 +333,6 @@ ConsensusStateChange ConsensusStateProcess::get_stage_change_from_queue() {
   return state_change;
 }
 
-// #ifdef HAVE_REPLICATION
 void *run_consensus_stage_change(void *arg) {
   THD *thd = nullptr;
   DBUG_TRACE;
@@ -402,7 +389,6 @@ void *run_consensus_stage_change(void *arg) {
   my_thread_end();
   return nullptr;
 }
-// #endif
 
 bool ConsensusStateProcess::is_state_machine_ready() {
   assert(rpl_consensus_get_term() >= get_current_term());

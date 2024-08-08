@@ -42,6 +42,7 @@ class ConsensusFifoCacheManager {
   ConsensusFifoCacheManager()
       : inited(false), reserve_list_size(RESERVE_LIST_SIZE) {}
   ~ConsensusFifoCacheManager() {}
+
   int init(uint64 max_log_cache_size_arg);
   int cleanup();
   int add_log_to_cache(uint64 term, uint64 index, size_t buf_size,

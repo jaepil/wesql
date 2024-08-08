@@ -25,8 +25,16 @@ struct ConsensusStateChange {
 
 class ConsensusStateProcess {
  public:
-  ConsensusStateProcess();
-  ~ConsensusStateProcess();
+  ConsensusStateProcess()
+      : inited(false),
+        current_term(1),
+        current_state_degrade_term(0),
+        recovery_index_hwl(0),
+        status(Consensus_Log_System_Status::BINLOG_WORKING),
+        binlog(nullptr),
+        rli_info(nullptr),
+        consensus_state_change_is_running(false) {}
+  ~ConsensusStateProcess() {}
 
   int init();
   int cleanup();

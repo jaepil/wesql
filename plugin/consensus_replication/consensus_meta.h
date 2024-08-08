@@ -7,8 +7,13 @@
 
 class ConsensusMeta {
  public:
-  ConsensusMeta();
-  ~ConsensusMeta();
+  ConsensusMeta()
+      : inited(false),
+        consensus_info(nullptr),
+        consensus_applier_info(nullptr),
+        already_set_start_index(false),
+        already_set_start_term(false) {}
+  ~ConsensusMeta() {}
 
   int init();
   int cleanup();

@@ -89,11 +89,9 @@ static int consensus_ha_recover(ConsensusRecoveryManager *recovery_manager,
 
 class Consensus_binlog_recovery : public binlog::Binlog_recovery {
  public:
-  /**
-    Class constructor.
-   */
-  Consensus_binlog_recovery(Binlog_file_reader &binlog_file_reader);
-  virtual ~Consensus_binlog_recovery() = default;
+  Consensus_binlog_recovery(Binlog_file_reader &binlog_file_reader)
+      : binlog::Binlog_recovery(binlog_file_reader) {}
+  ~Consensus_binlog_recovery(){}
 
   Consensus_binlog_recovery &consensus_recover(bool ha_recover,
                                                my_off_t ha_recover_end_pos,
@@ -121,10 +119,6 @@ class Consensus_binlog_recovery : public binlog::Binlog_recovery {
   void process_previous_consensus_index_event(
       Previous_consensus_index_log_event const &ev);
 };
-
-Consensus_binlog_recovery::Consensus_binlog_recovery(
-    Binlog_file_reader &binlog_file_reader)
-    : binlog::Binlog_recovery(binlog_file_reader) {}
 
 void Consensus_binlog_recovery::process_consensus_log_event(
     Consensus_log_event const &ev) {

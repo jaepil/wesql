@@ -12,8 +12,15 @@ class Relay_log_info;
 
 class ConsensusApplier {
  public:
-  ConsensusApplier();
-  ~ConsensusApplier();
+  ConsensusApplier()
+      : inited(false),
+        apply_index(0),
+        real_apply_index(0),
+        apply_term(0),
+        in_large_trx(false),
+        apply_catchup(false),
+        stop_term(UINT64_MAX) {}
+  ~ConsensusApplier() {}
 
   int init();
   int cleanup();

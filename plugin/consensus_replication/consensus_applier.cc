@@ -30,17 +30,6 @@ typedef uint64_t LOG_INDEX_COORD;
 
 ConsensusApplier consensus_applier;
 
-ConsensusApplier::ConsensusApplier()
-    : inited(false),
-      apply_index(0),
-      real_apply_index(0),
-      apply_term(0),
-      in_large_trx(false),
-      apply_catchup(false),
-      stop_term(UINT64_MAX) {}
-
-ConsensusApplier::~ConsensusApplier() {}
-
 int ConsensusApplier::init() {
   mysql_mutex_init(key_mutex_ConsensusLog_apply_thread_lock,
                    &LOCK_consensus_applier_catchup, MY_MUTEX_INIT_FAST);
