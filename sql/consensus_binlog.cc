@@ -1055,8 +1055,8 @@ err:
 
   @note The new file name is stored last in the index file
 */
-int MYSQL_BIN_LOG::new_relay_log_from_archive(const char *archive_log_name,
-                                              bool need_lock_log) {
+int MYSQL_BIN_LOG::new_file_from_archive(const char *archive_log_name,
+                                         bool need_lock_log) {
   int error = 0;
   bool close_on_error = false;
   char new_name[FN_REFLEN], *new_name_ptr = nullptr, *old_name, *file_to_open;

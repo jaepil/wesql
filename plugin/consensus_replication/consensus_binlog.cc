@@ -2254,12 +2254,10 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
   size_t log_dirname_len = 0, last_log_dirname_len = 0;
   uint64 last_term = 0;
   ConsensusLogIndex consensus_log_index;
-  bool add_new_file = false;
   ulong stop_datetime = 0;
   bool reached_stop_point = false;
 
-  Relay_log_info *rli_info = consensus_state_process.get_relay_log_info();
-  MYSQL_BIN_LOG *relay_log = &rli_info->relay_log;
+  MYSQL_BIN_LOG *relay_log = consensus_state_process.get_binlog();
   uint64 next_index = last_index + 1;
 
   DBUG_TRACE;
@@ -2373,8 +2371,8 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
     LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_RECOVERY_GENERATE_LOG,
                  file_iter->file_name.c_str());
 
-    if ((error = relay_log->new_relay_log_from_archive(
-             file_iter->file_name.c_str(), false)))
+    if ((error = relay_log->new_file_from_archive(file_iter->file_name.c_str(),
+                                                  false)))
       goto ret;
 
     consensus_log_manager.get_log_file_index()->add_to_index_list(
@@ -2382,8 +2380,6 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
         std::string(relay_log->get_log_fname()),
         0 /* binlog_file_get_current_pos(relay_log->get_binlog_file()) */,
         false);
-
-    add_new_file = true;
 
     strmake(last_log_dirname, log_dirname, log_dirname_len);
     last_log_dirname_len = log_dirname_len;
@@ -2438,8 +2434,5 @@ ret:
   mysql_mutex_unlock(relay_log->get_log_lock());
   archive_log.close();
   consensus_log_index.cleanup();
-  if (!error && add_new_file) {
-    error = rli_info->reset_previous_gtid_set_of_consensus_log();
-  }
   return error;
 }
