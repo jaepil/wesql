@@ -696,8 +696,9 @@ void se_post_engine_recover() {
 
   if (mysql_bin_log.is_open()) {
     mysql_bin_log.get_current_log(&log_info);
+    size_t dir_len = dirname_length(log_info.log_file_name);
     SE_LOG(INFO, "initialize se global binlog position", K(log_info.log_file_name), K((uint64_t)log_info.pos));
-    txn_db_impl->GetDBImpl()->set_global_binlog_pos(&log_info.log_file_name[0], log_info.pos);
+    txn_db_impl->GetDBImpl()->set_global_binlog_pos(log_info.log_file_name + dir_len, log_info.pos);
   }
 }
 
