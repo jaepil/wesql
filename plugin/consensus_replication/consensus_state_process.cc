@@ -451,11 +451,20 @@ static uint64 get_applier_start_index() {
 
   if (recover_status == Consensus_Log_System_Status::BINLOG_WORKING) {
     if (opt_cluster_recover_from_backup || consistent_snapshot_recovery ||
-        start_apply_index == 0) {
+        last_applied_index == 0) {
       next_index = last_applied_index < first_index
                        ? first_index
                        : consensus_log_manager.get_next_trx_index(
                              last_applied_index, false);
+      consensus_info->set_start_apply_index(last_applied_index);
+      if (consensus_info->flush_info(true, true)) {
+        next_index = 0;
+        LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FATAL_ERROR,
+                     "Error flush consensus info set start apply index");
+      }
+    } else if (start_apply_index == 0) {
+      next_index =
+          consensus_log_manager.get_next_trx_index(last_applied_index, false);
       consensus_info->set_start_apply_index(last_applied_index);
       if (consensus_info->flush_info(true, true)) {
         next_index = 0;
@@ -624,8 +633,7 @@ int ConsensusStateProcess::recovery_applier_status() {
     }
   }
 
-  if (!opt_initialize && !opt_cluster_log_type_instance &&
-      (opt_cluster_recover_from_snapshot || opt_cluster_recover_from_backup)) {
+  if (!opt_initialize && !opt_cluster_log_type_instance) {
     if (opt_cluster_archive_recovery && opt_archive_log_index_name != nullptr) {
       Consensus_info *consensus_info = consensus_meta.get_consensus_info();
       uint64 recover_status = consensus_info->get_recover_status();
@@ -657,7 +665,7 @@ int ConsensusStateProcess::recovery_applier_status() {
         LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_ARCHIVE_RECOVERY_ADVANCE_TERM,
                      get_current_term());
       }
-    } else if (next_index > 0) {
+    } else if (opt_cluster_recover_from_backup && next_index > 0) {
       consensus_log_manager.truncate_log(next_index);
     }
   }

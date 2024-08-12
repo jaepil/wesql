@@ -54,7 +54,7 @@ extern ulonglong opt_cluster_current_term;
 extern ulonglong opt_cluster_force_recover_index;
 extern bool opt_cluster_rebuild;
 extern bool opt_cluster_recover_from_backup;
-extern bool opt_cluster_recover_from_snapshot;
+extern bool opt_cluster_allow_no_valid_entry;
 extern bool opt_cluster_archive_recovery;
 extern char *opt_archive_log_index_name;
 extern char *opt_archive_recovery_stop_datetime_str;

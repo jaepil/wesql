@@ -25,7 +25,7 @@ ulonglong opt_cluster_current_term;
 ulonglong opt_cluster_force_recover_index;
 bool opt_cluster_rebuild;
 bool opt_cluster_recover_from_backup;
-bool opt_cluster_recover_from_snapshot;
+bool opt_cluster_allow_no_valid_entry;
 bool opt_cluster_archive_recovery;
 char *opt_archive_log_index_name;
 char *opt_archive_recovery_stop_datetime_str;
@@ -598,13 +598,13 @@ static MYSQL_SYSVAR_BOOL(recover_new_cluster, opt_cluster_rebuild,
 static MYSQL_SYSVAR_BOOL(recover_backup, opt_cluster_recover_from_backup,
                          PLUGIN_VAR_NOCMDARG | PLUGIN_VAR_NOPERSIST |
                              PLUGIN_VAR_READONLY,
-                         "recover from the backup created with xtrabackup",
+                         "recover from the backup created with xtrabackup or snapshot",
                          nullptr, nullptr, false);
 
-static MYSQL_SYSVAR_BOOL(recover_snapshot, opt_cluster_recover_from_snapshot,
+static MYSQL_SYSVAR_BOOL(allow_no_valid_entry, opt_cluster_allow_no_valid_entry,
                          PLUGIN_VAR_NOCMDARG | PLUGIN_VAR_NOPERSIST |
                              PLUGIN_VAR_READONLY,
-                         "recover from the backup of cloud storage", nullptr,
+                         "allow consensus log without any valid entry", nullptr,
                          nullptr, false);
 
 static MYSQL_SYSVAR_BOOL(archive_recovery, opt_cluster_archive_recovery,
@@ -709,7 +709,7 @@ SYS_VAR *consensus_replication_system_vars[] = {
     MYSQL_SYSVAR(force_recover_index),
     MYSQL_SYSVAR(recover_new_cluster),
     MYSQL_SYSVAR(recover_backup),
-    MYSQL_SYSVAR(recover_snapshot),
+    MYSQL_SYSVAR(allow_no_valid_entry),
     MYSQL_SYSVAR(force_change_meta),
     MYSQL_SYSVAR(force_reset_meta),
     MYSQL_SYSVAR(force_single_mode),

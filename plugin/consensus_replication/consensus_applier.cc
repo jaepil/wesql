@@ -342,8 +342,6 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
     applier_info->flush_info(true);
   } else {
     uint64 start_index = applier_info->get_consensus_apply_index();
-    uint64 first_index =
-        consensus_log_manager.get_log_file_index()->get_first_index();
     uint64 next_index =
         start_index < first_index
             ? first_index
