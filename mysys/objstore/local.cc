@@ -34,24 +34,18 @@ namespace fs = std::filesystem;
 
 namespace {
 
-int mkdir_p(std::string_view path) {
-  std::error_code errcode;
-  fs::create_directories(path, errcode);
-  // bool created = fs::create_directories(path, errcode);
-  //  assert(created);
-  return errcode.value();
-}
-
-int rm_f(std::string_view path) {
-  std::error_code errcode;
-  fs::remove_all(path, errcode);
-  // bool deleted = fs::remove_all(path, errcode);
-  // assert(deleted);
-  return errcode.value();
-}
-
 // if the path is invalid, an execption will be throw
 bool is_dir_empty(std::string_view path) { return fs::is_empty(path); }
+
+Errors std_err_code_to_objstore_error(std::error_code err_code) {
+  if (!err_code) {
+    return Errors::SE_SUCCESS;
+  }
+  if (err_code.value() == ENOENT) {
+    return Errors::SE_NO_SUCH_KEY;
+  }
+  return Errors::SE_IO_ERROR;
+}
 
 int get_obj_meta_from_file(fs::path path, ObjectMeta &meta) {
   std::error_code errcode;
@@ -136,7 +130,7 @@ Status LocalObjectStore::get_object_to_file(
   std::error_code errcode;
   fs::copy(key_path, output_file_path, fs::copy_options::overwrite_existing,
            errcode);
-  Errors error_code = !errcode ? Errors::SE_SUCCESS : Errors::SE_IO_ERROR;
+  Errors error_code = std_err_code_to_objstore_error(errcode);
   return Status(error_code, errcode.value(), errcode.message());
 }
 
@@ -176,7 +170,9 @@ Status LocalObjectStore::get_object(const std::string_view &bucket,
   std::string key_path = generate_path(bucket, key);
   std::ifstream input_file(key_path, std::ios::binary);
   if (!input_file) {
-    return Status(Errors::SE_IO_ERROR, EIO, "Couldn't open file");
+    std::error_code errcode(errno, std::generic_category());
+    Errors error_code = std_err_code_to_objstore_error(errcode);
+    return Status(error_code, errcode.value(), "Couldn't open file");
   }
 
   input_file.seekg(0, std::ios::end);
@@ -201,7 +197,9 @@ Status LocalObjectStore::get_object(const std::string_view &bucket,
   std::string key_path = generate_path(bucket, key);
   std::ifstream input_file(key_path, std::ios::binary);
   if (!input_file) {
-    return Status(Errors::SE_IO_ERROR, EIO, "Couldn't open file");
+    std::error_code errcode(errno, std::generic_category());
+    Errors error_code = std_err_code_to_objstore_error(errcode);
+    return Status(error_code, errcode.value(), "Couldn't open file"); 
   }
 
   input_file.seekg(0, std::ios::end);
@@ -246,7 +244,7 @@ Status LocalObjectStore::get_object_meta(const std::string_view &bucket,
 Status LocalObjectStore::list_object(const std::string_view &bucket,
                                      const std::string_view &prefix
                                      [[maybe_unused]],
-                                     std::string_view &start_after
+                                     std::string &start_after
                                      [[maybe_unused]],
                                      bool &finished,
                                      std::vector<ObjectMeta> &objects) {
@@ -320,6 +318,78 @@ Status LocalObjectStore::delete_object(const std::string_view &bucket,
     }
   }
   return Status();
+}
+
+Status LocalObjectStore::delete_objects(const std::string_view &bucket,
+                                        const std::vector<std::string_view> &keys) {
+  for (const std::string_view &key : keys) {
+    Status s = delete_object(bucket, key);
+    if (!s.is_succ()) {
+      return s;
+    }
+  }
+  return Status();
+}
+
+Status LocalObjectStore::delete_directory(const std::string_view &bucket, 
+                                          const std::string_view &prefix) {
+  std::string dir_prefix(prefix);
+  if (!dir_prefix.empty() && dir_prefix.back() != '/') {
+    dir_prefix.append("/");
+  }
+  std::string start_after;
+  bool finished = false;
+  std::vector<ObjectMeta> objects;
+  while (!finished) {
+    Status s = list_object(bucket, dir_prefix, start_after, finished, objects);
+    if (!s.is_succ()) {
+      return s;
+    }
+    if (!objects.empty()) {
+      std::vector<std::string_view> object_keys;
+      for (const ObjectMeta &object_meta : objects) {
+        object_keys.emplace_back(object_meta.key);
+      }
+      s = delete_objects(bucket, object_keys);
+      if (!s.is_succ()) {
+        return s;
+      }
+      objects.clear();
+    }
+  }
+  return Status();
+}
+
+Status LocalObjectStore::copy_directory(const std::string_view &bucket [[maybe_unused]],
+                                        const std::string_view &src_dir, 
+                                        const std::string_view &dst_dir) {
+  fs::path src_dir_path = fs::path(src_dir).lexically_normal();
+  fs::path dst_dir_path = fs::path(dst_dir).lexically_normal();
+  if (!fs::exists(src_dir_path) || !fs::is_directory(src_dir_path)) {
+    return Status(Errors::SE_INVALID, EINVAL, std::string(src_dir) + " does not exist or not a directory");
+  }
+  if (!fs::exists(dst_dir_path)) {
+    int ret = mkdir_p(dst_dir_path.native());
+    if (ret != 0) {
+      return Status(Errors::SE_IO_ERROR, ret, std::generic_category().message(ret));
+    }
+  }
+  std::error_code errcode;
+  fs::copy(src_dir_path, dst_dir_path, fs::copy_options::recursive | fs::copy_options::overwrite_existing, errcode);
+  Errors error_code = !errcode ? Errors::SE_SUCCESS : Errors::SE_IO_ERROR;
+  return Status(error_code, errcode.value(), errcode.message());
+}
+
+Status LocalObjectStore::put_objects_from_dir(const std::string_view &src_dir,
+                                              const std::string_view &dst_bucket,
+                                              const std::string_view &dst_dir) {
+  return copy_directory(dst_bucket, src_dir, dst_dir);
+}
+  
+Status LocalObjectStore::get_objects_to_dir(const std::string_view &src_bucket,
+                                            const std::string_view &src_dir,
+                                            const std::string_view &dst_dir) {
+  return copy_directory(src_bucket, src_dir, dst_dir);
 }
 
 bool LocalObjectStore::is_valid_key(const std::string_view &key) {

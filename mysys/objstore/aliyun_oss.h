@@ -70,7 +70,7 @@ class AliyunOssObjectStore : public ObjectStore {
 
   Status list_object(const std::string_view &bucket,
                      const std::string_view &prefix,
-                     std::string_view &start_after, bool &finished,
+                     std::string &start_after, bool &finished,
                      std::vector<ObjectMeta> &objects) override;
 
   Status delete_object(const std::string_view &bucket,
@@ -79,7 +79,11 @@ class AliyunOssObjectStore : public ObjectStore {
   std::string_view get_provider() const override { return provider_; }
 
  private:
+  Status delete_objects(const std::string_view &bucket,
+                        const std::vector<std::string_view> &object_keys) override;
+
   static constexpr std::string_view provider_{"aliyun"};
+  static constexpr int kDeleteObjsNumEach = 1000;
 
   std::string region_;
   AlibabaCloud::OSS::OssClient oss_client_;

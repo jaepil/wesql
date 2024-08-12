@@ -71,7 +71,7 @@ class S3ObjectStore : public ObjectStore {
   // param[out] objects: the object list returned.
   Status list_object(const std::string_view &bucket,
                      const std::string_view &prefix,
-                     std::string_view &start_after, bool &finished,
+                     std::string &start_after, bool &finished,
                      std::vector<ObjectMeta> &objects) override;
 
   Status delete_object(const std::string_view &bucket,
@@ -80,8 +80,10 @@ class S3ObjectStore : public ObjectStore {
   std::string_view get_provider() const override { return provider_; }
 
  private:
-  constexpr static std::string_view provider_{"aws"};
-
+  Status delete_objects(const std::string_view &bucket,
+                        const std::vector<std::string_view> &object_keys) override;
+  static constexpr std::string_view provider_{"aws"};
+  static constexpr int kDeleteObjsNumEach = 1000;
   std::string region_;
   Aws::S3::S3Client s3_client_;
   // now for mtr test only
@@ -89,6 +91,8 @@ class S3ObjectStore : public ObjectStore {
   // TODO(ljc): may add an configuration setting
   int retry_times_on_error_ = 10;
 };
+
+std::string remove_prefix(const std::string &str, const std::string &prefix);
 
 void init_aws_api();
 

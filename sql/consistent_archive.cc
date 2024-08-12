@@ -2663,7 +2663,7 @@ int Consistent_archive::show_innodb_persistent_files(
   int error = 0;
   if (snapshot_objstore != nullptr) {
     bool finished = false;
-    std::string_view start_after = "";
+    std::string start_after;
     // TODO(#84): should check the output parameter `finished`, if false, set
     // `start_after` key and continue to list the next batch of objects.
     objstore::Status ss = snapshot_objstore->list_object(
@@ -2689,7 +2689,7 @@ int Consistent_archive::show_se_persistent_files(
   int error = 0;
   if (snapshot_objstore != nullptr) {
     bool finished = false;
-    std::string_view start_after = "";
+    std::string start_after;
     // TODO(#84): should check the output parameter `finished`, if false, set
     // `start_after` key and continue to list the next batch of objects.
     objstore::Status ss = snapshot_objstore->list_object(

@@ -138,7 +138,7 @@ public:
     return ss;
   }
   objstore::Status list_object(const std::string &prefix,
-                               std::string_view &start_after,
+                               std::string &start_after,
                                bool &finished,
                                std::vector<objstore::ObjectMeta> &objects)
   {

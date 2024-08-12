@@ -208,7 +208,7 @@ Status AliyunOssObjectStore::get_object_meta(const std::string_view &bucket,
 
 Status AliyunOssObjectStore::list_object(const std::string_view &bucket,
                                          const std::string_view &prefix,
-                                         std::string_view &start_after,
+                                         std::string &start_after,
                                          bool &finished,
                                          std::vector<ObjectMeta> &objects) {
   AlibabaCloud::OSS::ListObjectsRequest request((std::string(bucket)));
@@ -254,6 +254,27 @@ Status AliyunOssObjectStore::delete_object(const std::string_view &bucket,
   if (!outcome.isSuccess()) {
     Errors err_type = aliyun_oss_error_to_se_error(outcome.error());
     return Status(err_type, outcome.error().Code(), outcome.error().Message());
+  }
+  return Status();
+}
+
+Status AliyunOssObjectStore::delete_objects(const std::string_view &bucket,
+                                            const std::vector<std::string_view> &object_keys) {
+  AlibabaCloud::OSS::DeleteObjectsRequest request((std::string(bucket)));
+  int cur_size = 0;
+  for (size_t i = 0; i < object_keys.size(); i++) {
+    const std::string_view &key = object_keys[i];
+    request.addKey(std::string(key));
+    cur_size++;
+    if (cur_size == kDeleteObjsNumEach || i == object_keys.size() - 1) {
+      auto outcome = oss_client_.DeleteObjects(request);
+      if (!outcome.isSuccess()) {
+        Errors err_type = aliyun_oss_error_to_se_error(outcome.error());
+        return Status(err_type, outcome.error().Code(), outcome.error().Message()); 
+      }
+      cur_size = 0;
+      request.clearKeyList();
+    }
   }
   return Status();
 }

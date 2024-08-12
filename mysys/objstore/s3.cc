@@ -23,12 +23,15 @@
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/DeleteObjectsRequest.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
+#include <cassert>
 #include <errno.h>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -71,6 +74,8 @@ Errors aws_error_to_objstore_error(const Aws::S3::S3Error &aws_error) {
 }
 
 }  // namespace
+
+namespace fs = std::filesystem;
 
 Status S3ObjectStore::create_bucket(const std::string_view &bucket) {
   Aws::S3::Model::CreateBucketRequest request;
@@ -382,7 +387,7 @@ Status S3ObjectStore::get_object_meta(const std::string_view &bucket,
 
 Status S3ObjectStore::list_object(const std::string_view &bucket,
                                   const std::string_view &prefix,
-                                  std::string_view &start_after, bool &finished,
+                                  std::string &start_after, bool &finished,
                                   std::vector<ObjectMeta> &objects) {
   Aws::S3::Model::ListObjectsRequest request;
   Aws::String full_prefix;
@@ -474,6 +479,67 @@ Status S3ObjectStore::delete_object(const std::string_view &bucket,
   }
 
   return Status();
+}
+
+Status S3ObjectStore::delete_objects(const std::string_view &bucket,
+                                     const std::vector<std::string_view> &object_keys) { 
+  Aws::S3::Model::DeleteObjectsRequest request;
+  Aws::String full_key;
+  Aws::String common_prefix;
+  
+  if (!bucket_dir_.empty()) {
+    common_prefix = bucket_dir_;
+    common_prefix.append("/");
+  }
+
+  std::vector<Aws::S3::Model::ObjectIdentifier> object_identifiers;
+
+  for (size_t i = 0; i < object_keys.size(); i++) {
+    const std::string_view &object_key = object_keys[i];
+    if (bucket_dir_.empty()) {
+      full_key = object_key;
+    } else {
+      full_key = common_prefix;
+      full_key.append(object_key);
+    }
+    const Aws::S3::Model::ObjectIdentifier &identifier = Aws::S3::Model::ObjectIdentifier().WithKey(full_key);
+    object_identifiers.emplace_back(identifier);
+    if (object_identifiers.size() == kDeleteObjsNumEach || i == object_keys.size() - 1) {
+      Aws::S3::Model::Delete delete_object;
+      delete_object.SetObjects(object_identifiers);
+      request.SetBucket(Aws::String(bucket));
+      request.SetDelete(delete_object);
+
+      int retry_times = retry_times_on_error_;
+      Aws::S3::Model::DeleteObjectsOutcome outcome;
+      while (true) {
+        outcome = s3_client_.DeleteObjects(request);
+        if (!outcome.IsSuccess()) {
+          const Aws::S3::S3Error &err = outcome.GetError();
+          bool should_retry = err.ShouldRetry();
+          if (retry_times-- > 0 && should_retry) {
+            continue;
+          }
+          Errors err_type = aws_error_to_objstore_error(err);
+          return Status(err_type, static_cast<int>(err.GetErrorType()),
+                        err.GetMessage());
+        } else {
+          break;
+        }
+      }
+      object_identifiers.clear();
+    }    
+  }
+  
+  return Status();
+}
+
+std::string remove_prefix(const std::string &str, const std::string &prefix) {
+  int pos = str.find(prefix);
+  if (pos == 0) {
+    return str.substr(prefix.size());
+  }
+  return str;
 }
 
 void init_aws_api() {

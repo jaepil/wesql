@@ -52,11 +52,25 @@ class LocalObjectStore : public ObjectStore {
 
   Status list_object(const std::string_view &bucket,
                      const std::string_view &prefix,
-                     std::string_view &start_after, bool &finished,
+                     std::string &start_after, bool &finished,
                      std::vector<ObjectMeta> &objects) override;
 
   Status delete_object(const std::string_view &bucket,
                        const std::string_view &key) override;
+
+  Status delete_objects(const std::string_view &bucket,
+                        const std::vector<std::string_view> &keys) override;
+
+  Status delete_directory(const std::string_view &bucket,
+                          const std::string_view &prefix) override;
+
+  Status put_objects_from_dir(const std::string_view &src_dir,
+                              const std::string_view &dst_bucket,
+                              const std::string_view &dst_dir) override;
+  
+  Status get_objects_to_dir(const std::string_view &src_bucket,
+                            const std::string_view &src_dir,
+                            const std::string_view &dst_dir) override;
 
   std::string_view get_provider() const override { return provider_; }
 
@@ -65,6 +79,9 @@ class LocalObjectStore : public ObjectStore {
   std::string generate_path(const std::string_view &bucket);
   std::string generate_path(const std::string_view &bucket,
                             const std::string_view &key);
+  Status copy_directory(const std::string_view &bucket,
+                        const std::string_view &src_dir,
+                        const std::string_view &dst_dir);
 
  private:
   constexpr static std::string_view provider_{"local"};

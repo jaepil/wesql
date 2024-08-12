@@ -20,7 +20,27 @@
 #include "mysys/objstore/s3.h"
 #include "mysys/objstore/aliyun_oss.h"
 
+#include <filesystem>
+
 namespace objstore {
+
+namespace fs = std::filesystem;
+
+int mkdir_p(std::string_view path) {
+  std::error_code errcode;
+  fs::create_directories(path, errcode);
+  // bool created = fs::create_directories(path, errcode);
+  //  assert(created);
+  return errcode.value();
+}
+
+int rm_f(std::string_view path) {
+  std::error_code errcode;
+  fs::remove_all(path, errcode);
+  // bool deleted = fs::remove_all(path, errcode);
+  // assert(deleted);
+  return errcode.value();
+}
 
 void init_objstore_provider(const std::string_view &provider) {
   if (provider == "aws") {
@@ -43,6 +63,124 @@ void cleanup_objstore_provider(ObjectStore *objstore) {
       // do nothing
     }
   }
+}
+
+Status ObjectStore::delete_directory(const std::string_view &bucket,
+                                     const std::string_view &prefix) {
+  std::string dir_prefix(prefix);
+  if (!prefix.empty() && prefix.back() != '/') {
+    dir_prefix.append("/");
+  }
+  std::string start_after;
+  bool finished = false;
+  std::vector<ObjectMeta> objects;
+  while (!finished) {
+    Status s = list_object(bucket, dir_prefix, start_after, finished, objects);
+    if (!s.is_succ()) {
+      return s;
+    }
+    if (!objects.empty()) {
+      std::vector<std::string_view> object_keys;
+      for (const ObjectMeta &object_meta : objects) {
+        object_keys.emplace_back(object_meta.key);
+      }
+      s = delete_objects(bucket, object_keys);
+      if (!s.is_succ()) {
+        return s;
+      }
+      objects.clear();
+    }
+  }
+  return Status();
+}
+
+Status ObjectStore::put_objects_from_dir(const std::string_view &src_dir,
+                                         const std::string_view &dst_objstore_bucket,
+                                         const std::string_view &dst_objstore_dir) {
+  fs::path src_dir_path = fs::path(src_dir).lexically_normal();
+  std::string dst_objstore_dir_path(dst_objstore_dir);
+  if (!dst_objstore_dir_path.empty() && dst_objstore_dir_path.back() != '/') {
+    dst_objstore_dir_path.append("/");
+  }
+  // check if local dir path exists
+  if (!fs::exists(src_dir_path)) {
+    std::string err_msg = src_dir_path.native() + " does not exist";
+    return Status(Errors::SE_INVALID, EINVAL, err_msg.c_str());
+  }
+  // check if local dir path is a directory
+  if (!fs::is_directory(src_dir_path)) {
+    std::string err_msg = src_dir_path.native() + " is not a directory";
+    return Status(Errors::SE_INVALID, ENOTDIR, err_msg.c_str());
+  }
+
+  for (const fs::directory_entry &entry : fs::recursive_directory_iterator(src_dir_path)) {
+    if (entry.is_regular_file()) {
+      std::string key = fs::relative(entry.path(), src_dir_path);
+      if (!dst_objstore_dir_path.empty()) {
+        key = dst_objstore_dir_path + key;
+      }
+      std::string abs_src_file_path = fs::absolute(entry.path());
+      Status s = put_object_from_file(dst_objstore_bucket, key, abs_src_file_path);
+      if (!s.is_succ()) {
+        return s;
+      }
+    }
+  }
+  return Status();
+}
+
+Status ObjectStore::get_objects_to_dir(const std::string_view &src_objstore_bucket,
+                                       const std::string_view &src_objstore_dir,
+                                       const std::string_view &dst_dir) {
+  fs::path dst_dir_path = fs::path(dst_dir).lexically_normal();
+  std::string src_objstore_dir_path(src_objstore_dir);
+  if (!src_objstore_dir_path.empty() && src_objstore_dir_path.back() != '/') {
+    src_objstore_dir_path.append("/");
+  }
+  // check if the dst directory exists, if not, create it.
+  if (!fs::exists(dst_dir_path)) {
+    int ret = mkdir_p(dst_dir_path.native());
+    if (ret != 0) {
+      return Status(Errors::SE_IO_ERROR, ret, std::generic_category().message(ret));
+    }
+  }
+  if (!fs::is_directory(dst_dir_path)) {
+    std::string err_msg = dst_dir_path.native() + " is not a directory";
+    return Status(Errors::SE_INVALID, ENOTDIR, err_msg.c_str());
+  }
+
+  bool finished = false;
+  std::vector<ObjectMeta> object_metas;
+  Status s;
+  std::string start_after;
+  fs::path last_parent_path;
+  while (!finished) {
+    s = list_object(src_objstore_bucket, src_objstore_dir_path, start_after, finished, object_metas);
+    if (!s.is_succ()) {
+      return s;
+    }
+    fs::path abs_dst_dir_path = fs::absolute(dst_dir_path);
+    for (const ObjectMeta &obj : object_metas) {
+      std::string key = obj.key;
+      if (!src_objstore_dir_path.empty()) {
+        key = remove_prefix(key, src_objstore_dir_path);
+      }
+      fs::path dst_file_path = abs_dst_dir_path / key;
+      if (dst_file_path.parent_path() != last_parent_path && !fs::exists(dst_file_path.parent_path())) {
+        int ret = mkdir_p(dst_file_path.parent_path().native());
+        if (ret != 0) {
+          return Status(Errors::SE_IO_ERROR, ret, std::generic_category().message(ret));
+        }
+        last_parent_path = dst_file_path.parent_path();
+      }
+      s = get_object_to_file(src_objstore_bucket, obj.key, dst_file_path.native());
+      if (!s.is_succ()) {
+        return s;
+      } 
+    }
+    object_metas.clear();
+  }
+  return Status();
 }
 
 ObjectStore *create_object_store(const std::string_view &provider,

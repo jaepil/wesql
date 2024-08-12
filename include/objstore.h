@@ -152,13 +152,28 @@ class ObjectStore {
 
   virtual Status list_object(const std::string_view &bucket,
                              const std::string_view &prefix,
-                             std::string_view &start_after, bool &finished,
+                             std::string &start_after, bool &finished,
                              std::vector<ObjectMeta> &objects) = 0;
 
   virtual Status delete_object(const std::string_view &bucket,
                                const std::string_view &key) = 0;
 
+  virtual Status delete_directory(const std::string_view &bucket,
+                                  const std::string_view &prefix);
+  
+  virtual Status put_objects_from_dir(const std::string_view &src_dir,
+                                      const std::string_view &dst_objstore_bucket,
+                                      const std::string_view &dst_objstore_dir);
+  
+  virtual Status get_objects_to_dir(const std::string_view &src_objstore_bucket,
+                                    const std::string_view &src_objstore_dir,
+                                    const std::string_view &dst_dir);
+
   virtual std::string_view get_provider() const = 0;
+
+ private:
+  virtual Status delete_objects(const std::string_view &bucket,
+                                const std::vector<std::string_view> &object_keys) = 0;
 };
 
 // create ObjectStore based credentials in credentials dir or environment
@@ -179,6 +194,10 @@ void destroy_object_store(ObjectStore *obj_store);
 void init_objstore_provider(const std::string_view &provider);
 
 void cleanup_objstore_provider(ObjectStore *objstore);
+
+int mkdir_p(std::string_view path);
+
+int rm_f(std::string_view path);
 
 }  // namespace objstore
 

@@ -1033,7 +1033,7 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(
   binlog_keyid.append(".");
 
   bool finished = false;
-  std::string_view start_after = "";
+  std::string start_after;
   // Find last binlog.000000n.slice
   objstore::Status ss = recovery_objstore->list_object(
       std::string_view(m_objstore_bucket), binlog_keyid, start_after, finished,
@@ -1150,7 +1150,7 @@ int Consistent_recovery::merge_slice_to_binlog_file(
   binlog_keyid.append(".");
 
   bool finished = false;
-  std::string_view start_after = "";
+  std::string start_after;
   objstore::Status ss = recovery_objstore->list_object(
       std::string_view(m_objstore_bucket), binlog_keyid, start_after, finished,
       objects);
@@ -1489,7 +1489,7 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
     binlog_keyid.append(".");
 
     bool finished = false;
-    std::string_view start_after = "";
+    std::string start_after;
     ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
                                         binlog_keyid, start_after, finished,
                                         objects);

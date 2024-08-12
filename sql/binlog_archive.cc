@@ -638,7 +638,7 @@ void Binlog_archive::run() {
       binlog_keyid.append(".");
 
       bool finished = false;
-      std::string_view start_after = "";
+      std::string start_after;
       std::vector<objstore::ObjectMeta> objects;
 
       // list last binlog slices.
@@ -2539,7 +2539,7 @@ int Binlog_archive::purge_index_entry(ulonglong *decrease_log_space) {
       binlog_keyid.append(".");
 
       bool finished = false;
-      std::string_view start_after = "";
+      std::string start_after;
       do {
         std::vector<objstore::ObjectMeta> tmp_objects;
         objstore::Status ss = binlog_objstore->list_object(
@@ -2712,7 +2712,7 @@ int Binlog_archive::show_binlog_persistent_files(
   int error = 0;
   if (binlog_objstore != nullptr) {
     bool finished = false;
-    std::string_view start_after = "";
+    std::string start_after;
 
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
