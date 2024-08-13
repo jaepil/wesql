@@ -34,7 +34,8 @@ enum ColumnType
   UNPACK_INFO = 4,
   BLOB_COLUMN = 5,
   VARCHAR_COLUMN = 6,
-  FIXED_COLUMN = 7,
+  STRING_COLUMN = 7,
+  FIXED_COLUMN = 8,
   MAX_COLUMN_TYPE,
 };
 
@@ -43,6 +44,7 @@ inline bool is_data_column(ColumnType type)
   return PRIMARY_COLUMN == type ||
          BLOB_COLUMN == type ||
          VARCHAR_COLUMN == type ||
+         STRING_COLUMN == type ||
          FIXED_COLUMN == type;
 }
 

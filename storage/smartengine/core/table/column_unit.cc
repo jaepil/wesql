@@ -160,18 +160,21 @@ int ColumnUnitWriter::build(Slice &unit_data, ColumnUnitInfo &unit_info)
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "SeColumnUnitWriter isn't inited", K(ret));
-  } else if (FAILED(compressor_helper_.compress(raw_unit,
-                                                compress_type_,
-                                                unit_data,
-                                                actual_compress_type))) {
-    SE_LOG(WARN, "fail to compress unit data", K(ret), K(raw_unit), KE_(compress_type), KE(actual_compress_type));
   } else {
     unit_info.column_type_ = column_schema_.get_type();
-    unit_info.compress_type_ = actual_compress_type;
     unit_info.column_count_ = column_count_;
     unit_info.null_column_count_ = null_column_count_;
     unit_info.raw_data_size_ = raw_unit.size();
-    unit_info.data_size_ = unit_data.size();
+
+    if (raw_unit.empty()) {
+      unit_info.compress_type_ = common::kNoCompression;
+      unit_info.data_size_ = 0;
+    } else if (FAILED(compressor_helper_.compress(raw_unit, compress_type_, unit_data, actual_compress_type))) {
+      SE_LOG(WARN, "fail to compress unit data", K(ret), K(raw_unit), KE_(compress_type), KE(actual_compress_type));
+    } else {
+      unit_info.compress_type_ = actual_compress_type;
+      unit_info.data_size_ = unit_data.size();
+    }
 
 #ifndef NDEBUG
     SE_LOG(INFO, "success to build unit", K(unit_info));
@@ -219,6 +222,7 @@ int ColumnUnitWriter::write_normal_column(const Column *column)
   if (column->is_null()) {
     ++null_column_count_;
     ++column_count_;
+  // The column may be empty, like type char(0).
   } else if (FAILED(buf_.write(column->buf(), column->size()))) {
     SE_LOG(WARN, "failed to write normal column data", K(ret));
   } else {

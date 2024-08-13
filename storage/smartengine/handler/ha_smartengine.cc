@@ -2449,6 +2449,8 @@ int ha_smartengine::convert_record_to_storage_format(
     } else if (m_encoder_arr[i].m_field_type == MYSQL_TYPE_VARCHAR) {
       append_varchar_to_storage_format(m_storage_record,
                                        (Field_varstring *)field);
+    } else if (m_encoder_arr[i].m_field_type == MYSQL_TYPE_STRING) {
+      append_string_to_storage_format(m_storage_record, (Field_string *)field);
     } else {
       /* Copy the field data */
       const uint len = field->pack_length_in_rec();
@@ -2488,7 +2490,7 @@ int ha_smartengine::append_blob_to_storage_format(
   storage_record.append(reinterpret_cast<char *>(blob->field_ptr()), length_bytes);
 
   /* Store the blob value itself */
-  char *data_ptr;
+  char *data_ptr = nullptr;
   memcpy(&data_ptr, blob->field_ptr() + length_bytes, sizeof(uchar **));
   storage_record.append(data_ptr, blob->get_length());
 
@@ -2499,7 +2501,7 @@ int ha_smartengine::append_varchar_to_storage_format(
     String &storage_record,
     my_core::Field_varstring *const field_var)
 {
-  uint data_len;
+  uint data_len = 0;
   /* field_var->length_bytes is 1 or 2 */
   if (field_var->get_length_bytes() == 1) {
     data_len = field_var->field_ptr()[0];
@@ -2511,6 +2513,47 @@ int ha_smartengine::append_varchar_to_storage_format(
                         field_var->get_length_bytes() + data_len);
 
   return HA_EXIT_SUCCESS;
+}
+
+int ha_smartengine::append_string_to_storage_format(
+    String &storage_record,
+    my_core::Field_string *const field_str)
+{
+  int ret = HA_EXIT_SUCCESS;
+  char length_buf[schema::RecordFormat::MYSQL_STRING_SIZE_BYTES] = {0};
+  char *val = reinterpret_cast<char *>(field_str->field_ptr());
+  uint16 val_length = field_str->pack_length_in_rec();
+  assert(val_length >= 0);
+
+  if (0 == val_length) {
+    // For string with zero length, do not store any content.
+  } else if (UNLIKELY(field_str->charset()->mbminlen > 1)) {
+    // For an ASCII incompatible string, e.g. UCS-2,
+    // store the data directly.
+    if (UNLIKELY(storage_record.append(val, val_length))) {
+      ret = HA_ERR_INTERNAL_ERROR;
+      SE_LOG(ERROR, "fail to append string value", K(ret), K(val_length));
+    }
+  } else {
+    // For an ASCII compatible string, try to stripe
+    // trailing space to save storage space.
+    se_assert(1 == field_str->charset()->mbminlen);
+    while (val_length > 0 && 0x20 == val[val_length - 1]) {
+      --val_length;
+    }
+    int2store(length_buf, val_length);
+
+    if (UNLIKELY(storage_record.append(length_buf, schema::RecordFormat::MYSQL_STRING_SIZE_BYTES))) {
+      ret = HA_ERR_INTERNAL_ERROR;
+      SE_LOG(ERROR, "fail to append string length", K(ret), K(val_length));
+    } else if (UNLIKELY(storage_record.append(val, val_length))) {
+      ret = HA_ERR_INTERNAL_ERROR;
+      SE_LOG(ERROR, "fail to append string value", K(ret), K(val_length));
+    }
+  }
+  se_assert(HA_EXIT_SUCCESS == ret);
+
+  return ret; 
 }
 
 /*
@@ -3734,12 +3777,28 @@ int ha_smartengine::build_column_schemas(const TABLE *table,
 
         if (MYSQL_TYPE_BLOB == field_encoder->m_field_type || MYSQL_TYPE_JSON == field_encoder->m_field_type) {
           column_schema.set_type(schema::ColumnType::BLOB_COLUMN);
-          Field_blob *blob_field = reinterpret_cast<Field_blob *>(field);
-          column_schema.set_data_size_bytes(blob_field->pack_length() - portable_sizeof_char_ptr);
+          Field_blob *field_blob = reinterpret_cast<Field_blob *>(field);
+          column_schema.unset_fixed();
+          column_schema.set_data_size_bytes(field_blob->pack_length() - portable_sizeof_char_ptr);
         } else if (MYSQL_TYPE_VARCHAR == field_encoder->m_field_type) {
           column_schema.set_type(schema::ColumnType::VARCHAR_COLUMN);
-          Field_varstring *varstr_field = reinterpret_cast<Field_varstring *>(field);
-          column_schema.set_data_size_bytes(varstr_field->get_length_bytes());
+          Field_varstring *field_varstr = reinterpret_cast<Field_varstring *>(field);
+          column_schema.unset_fixed();
+          column_schema.set_data_size_bytes(field_varstr->get_length_bytes());
+        } else if (MYSQL_TYPE_STRING == field_encoder->m_field_type) {
+          column_schema.set_type(schema::ColumnType::STRING_COLUMN); 
+          Field_string *field_str = reinterpret_cast<Field_string *>(field);
+          // The storage format for the MYSQL_TYPE_STRING type varies depending
+          // on whether the character set is compatible with ASCII.For details,
+          // you can refer to the function "append_string_to_storage_format".
+          // Special case: String with zero length is treated as fixed-length type.
+          if (field_str->charset()->mbminlen > 1 || (0 == field->pack_length_in_rec())) {
+            column_schema.set_fixed();
+            column_schema.set_data_size(field->pack_length_in_rec());
+          } else {
+            column_schema.unset_fixed();
+            column_schema.set_data_size_bytes(schema::RecordFormat::MYSQL_STRING_SIZE_BYTES);
+          }
         } else {
           column_schema.set_type(schema::ColumnType::FIXED_COLUMN);
           column_schema.set_fixed();

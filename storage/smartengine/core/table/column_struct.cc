@@ -567,6 +567,7 @@ int ColumnFactory::alloc_column(const ColumnSchema &column_schema, Column *&colu
       case PRIMARY_COLUMN:
       case BLOB_COLUMN:
       case VARCHAR_COLUMN:
+      case STRING_COLUMN:
       case FIXED_COLUMN:
         if (IS_NULL(column = MOD_NEW_OBJECT(ModId::kColumn,
                                             DataColumn,
@@ -614,6 +615,7 @@ int ColumnFactory::free_column(Column *&column)
       case PRIMARY_COLUMN:
       case BLOB_COLUMN:
       case VARCHAR_COLUMN:
+      case STRING_COLUMN:
       case FIXED_COLUMN: {
         DataColumn *data_column = reinterpret_cast<DataColumn *>(column);
         MOD_DELETE_OBJECT(DataColumn, data_column);

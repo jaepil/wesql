@@ -1211,6 +1211,8 @@ int ha_smartengine::convert_new_record_from_old_record(
       auto *field_var = (Field_varstring *)field;
 
       append_varchar_to_storage_format(new_storage_record, field_var);
+    } else if (encoder_arr[i].m_field_type == MYSQL_TYPE_STRING) {
+      append_string_to_storage_format(new_storage_record, (Field_string *)field);
     } else {
       /* Copy the field data */
       const uint len = field->pack_length_in_rec();

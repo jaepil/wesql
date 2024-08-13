@@ -80,7 +80,7 @@ private:
   And optionaly includes following types of columns:
   3. NULL_BITMAP, if there has nullable column.
   4. UNPACK_INFO, for some charset.
-  5. BLOB_COLUMN, VARCHAR_COLUMN, FIXED_COLUMN.*/
+  5. BLOB_COLUMN, VARCHAR_COLUMN, STRING_COLUMN, FIXED_COLUMN.*/
   ColumnSchemaArray column_schemas_;
 };
 

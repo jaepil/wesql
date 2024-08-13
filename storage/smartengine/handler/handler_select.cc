@@ -1314,6 +1314,55 @@ int ha_smartengine::convert_varchar_from_storage_format(
   return HA_EXIT_SUCCESS;
 }
 
+int ha_smartengine::convert_string_from_storage_format(
+    my_core::Field_string *const field_str,
+    SeStringReader *const reader,
+    bool decode)
+{
+  int ret = HA_EXIT_SUCCESS;
+  uint16 pack_length = field_str->pack_length_in_rec();
+  uint16 val_length = 0;
+  const char *val_length_buf = nullptr;
+  const char *val = nullptr;
+
+  assert(pack_length >= 0);
+  if (0 == pack_length) {
+    // For string with zero length, nothing need to read.
+  } else if (UNLIKELY(field_str->charset()->mbminlen > 1)) {
+    // The storage format for the MYSQL_TYPE_STRING type varies depending
+    // on whether the character set is compatible with ASCII.For details,
+    // you can refer to the function "append_string_to_storage_format".
+    if (IS_NULL(val = reader->read(pack_length))) {
+      ret = HA_ERR_INTERNAL_ERROR;
+      SE_LOG(ERROR, "fail to read string val", K(ret), K(pack_length));
+    } else {
+      if (decode) {
+        memcpy(field_str->field_ptr(), val, pack_length);
+      }
+    }
+  } else {
+    if (IS_NULL(val_length_buf = reader->read(schema::RecordFormat::MYSQL_STRING_SIZE_BYTES))) {
+      ret = HA_ERR_INTERNAL_ERROR;
+      SE_LOG(ERROR, "fail to read string length buf", K(ret));
+    } else if (UNLIKELY(pack_length < (val_length = uint2korr(val_length_buf)))) {
+      ret = HA_ERR_INTERNAL_ERROR;
+      SE_LOG(ERROR, "fail to parse value length in storage format", K(ret), K(pack_length), K(val_length));
+    } else if (IS_NULL(val = reader->read(val_length))) {
+      ret = HA_ERR_INTERNAL_ERROR;
+      SE_LOG(ERROR, "fail to read string value", K(ret), K(val_length));
+    } else {
+      if (decode) {
+        memcpy(field_str->field_ptr(), val, val_length);
+        if (pack_length > val_length) {
+          memset(field_str->field_ptr() + val_length, 0x20, pack_length - val_length);
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
 int ha_smartengine::convert_field_from_storage_format(
     my_core::Field *const    field,
     SeStringReader *const reader,
@@ -1504,6 +1553,8 @@ int ha_smartengine::convert_record_from_storage_format(
         } else if (field_dec->m_field_type == MYSQL_TYPE_VARCHAR) {
           err = convert_varchar_from_storage_format(
               (my_core::Field_varstring *) field, &reader, decode);
+        } else if (field_dec->m_field_type == MYSQL_TYPE_STRING) {
+          err = convert_string_from_storage_format((my_core::Field_string *)field, &reader, decode);
         } else {
           err = convert_field_from_storage_format(
               field, &reader, decode, field_dec->m_pack_length_in_rec);

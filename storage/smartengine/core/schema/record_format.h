@@ -48,6 +48,8 @@ struct RecordFormat
   static const int64_t RECORD_UNPACK_DATA_SIZE_BYTES = 2;
   /**byte size of unpack header, include "unpack data flag" and "unpack data size"*/
   static const int64_t RECORD_UNPACK_HEADER_SIZE = RECORD_UNPACK_DATA_FLAG_SIZE + RECORD_UNPACK_DATA_SIZE_BYTES;
+  /**byte size of mysql string type length*/
+  static const int64_t MYSQL_STRING_SIZE_BYTES = 2;
 };
 
 } // namespace schema

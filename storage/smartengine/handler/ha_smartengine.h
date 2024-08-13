@@ -29,7 +29,7 @@
 /* MySQL header files */
 #include "my_icp.h"
 #include "sql_string.h"
-#include "field.h"
+#include "sql/field.h"
 #include "handler.h"   /* handler */
 #include "sql_bitmap.h"
 #include "sql_string.h"
@@ -551,6 +551,11 @@ private:
       SeStringReader *const reader,
       bool decode);
 
+  int convert_string_from_storage_format(
+      my_core::Field_string *const field_str,
+      SeStringReader *const reader,
+      bool decode);
+
   int convert_field_from_storage_format(
       my_core::Field *const field,
       SeStringReader *const reader,
@@ -589,6 +594,10 @@ private:
   int append_varchar_to_storage_format(
       String &storage_record,
       my_core::Field_varstring *const field_var);
+
+  int append_string_to_storage_format(
+      String &storage_record,
+      my_core::Field_string *const field_str);
 
   int convert_record_to_storage_format(
       const common::Slice &pk_packed_slice,
