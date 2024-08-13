@@ -1867,10 +1867,6 @@ int StorageManager::release_extent_resource(bool for_recovery)
     current_meta_ = nullptr;
     if (0 == waiting_delete_versions_.size()) {
       SE_LOG(INFO, "meta snapshot must be referenced by a backup snapshot, can't release now");
-    } else if (storage::MAX_TIER_COUNT != waiting_delete_versions_.size()) {
-      ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "unexpected error, expect all the MAX_TIER_COUNT extent layer version should been recycle", K(ret),
-          "wait_delete_version_size", waiting_delete_versions_.size());
     } else if (FAILED(recycle_unsafe(for_recovery))) {
       SE_LOG(WARN, "fail to recycle unsafe", K(ret));
     } else if (FAILED(lob_extent_mgr_->force_recycle(for_recovery))) {
