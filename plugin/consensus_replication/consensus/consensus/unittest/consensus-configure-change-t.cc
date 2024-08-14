@@ -244,7 +244,7 @@ TEST_F(TwoNodesCluster, LearnerAndMemberRoleSwitches2) {
   EXPECT_EQ(cis[0].role, Paxos::LEADER);
   EXPECT_EQ(cis[1].serverId, 2);
   EXPECT_EQ(cis[1].role, Paxos::FOLLOWER);
-  EXPECT_EQ(cis[2].serverId, 100);
+  EXPECT_EQ(cis[2].serverId, 101);
   EXPECT_EQ(cis[2].role, Paxos::LEARNER);
 
   EXPECT_EQ(0, node1->changeMember(Paxos::CCAddNode, t.getNodeIpAddrRef(3)));
@@ -263,7 +263,7 @@ TEST_F(TwoNodesCluster, LearnerAndMemberRoleSwitches2) {
   EXPECT_EQ(cis[0].role, Paxos::LEADER);
   EXPECT_EQ(cis[1].serverId, 2);
   EXPECT_EQ(cis[1].role, Paxos::FOLLOWER);
-  EXPECT_EQ(cis[2].serverId, 100);
+  EXPECT_EQ(cis[2].serverId, 101);
   EXPECT_EQ(cis[2].role, Paxos::LEARNER);
 
   // Need wait node3 becomes a learner before executing forceSingleLeader, or

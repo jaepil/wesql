@@ -70,17 +70,17 @@ TEST_F(CustomizedThreeNodesCluster, purgeLog_local) {
   std::ignore = t.createRDLogNode().initAsLearner();
   node1->changeLearners(Paxos::CCAddNode, t.getNodesIpAddrVectorRef1(4));
 
-  node1->configureLearner(100, 1);
+  node1->configureLearner(101, 1);
   EXPECT_EQ_EVENTUALLY(node1->learnersToString(),
                        std::string("127.0.0.1:11004$1"), 1000);
 
   uint64_t len = node1->getLog()->getLength();
-  node1->forceFixMatchIndex(100, 2);
+  node1->forceFixMatchIndex(101, 2);
   node1->forcePurgeLog(true /* local */);
   EXPECT_EQ_EVENTUALLY(node1->getLog()->getLength(), len - 2, 5000);
 
   /* test follower purge local */
-  node1->configureLearner(100, 2);
+  node1->configureLearner(101, 2);
 
   t.replicateLogEntry(1, 1, "aaa");
   // node2 has received the latest log entries
@@ -88,7 +88,7 @@ TEST_F(CustomizedThreeNodesCluster, purgeLog_local) {
   // A follower's log should only be purged when the its downstream learner has
   // received the log
   EXPECT_EQ_EVENTUALLY(std::dynamic_pointer_cast<RemoteServer>(
-                           node2->getConfig()->getServer(100))
+                           node2->getConfig()->getServer(101))
                            ->matchIndex,
                        node2->getLastLogIndex(), 6000);
   node2->forcePurgeLog(true /* local */);

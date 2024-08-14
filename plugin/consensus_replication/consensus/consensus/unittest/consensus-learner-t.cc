@@ -38,8 +38,8 @@ TEST_F(ThreeNodesCluster, getServerIdFromAddr) {
   EXPECT_EQ(node1->getServerIdFromAddr("127.0.0.1:11001"), 1);
   EXPECT_EQ(node1->getServerIdFromAddr("127.0.0.1:11002"), 2);
   EXPECT_EQ(node1->getServerIdFromAddr("127.0.0.1:11003"), 3);
-  EXPECT_EQ(node1->getServerIdFromAddr("127.0.0.1:11004"), 100);
-  EXPECT_EQ(node1->getServerIdFromAddr("127.0.0.1:11005"), 101);
+  EXPECT_EQ(node1->getServerIdFromAddr("127.0.0.1:11004"), 101);
+  EXPECT_EQ(node1->getServerIdFromAddr("127.0.0.1:11005"), 102);
 }
 
 TEST_F(ThreeNodesCluster, configure_learner_source) {
@@ -48,9 +48,9 @@ TEST_F(ThreeNodesCluster, configure_learner_source) {
   node1->changeLearners(Paxos::CCAddNode, t.getNodesIpAddrVectorRef2(4, 5));
 
   // set the learnerSource of node4 to node3 (of index 2)
-  node1->configureLearner(100, 2);
-  EXPECT_EQ(node1->getLearnerSource(100), 2);
-  EXPECT_EQ_EVENTUALLY(node2->getLearnerSource(100), 2, 1000);
+  node1->configureLearner(101, 2);
+  EXPECT_EQ(node1->getLearnerSource(101), 2);
+  EXPECT_EQ_EVENTUALLY(node2->getLearnerSource(101), 2, 1000);
   EXPECT_EQ_EVENTUALLY(node4->getCurrentLeader(), 2, 1000);
   EXPECT_EQ_EVENTUALLY(node5->getCurrentLeader(), 1, 1000);
 
@@ -74,14 +74,14 @@ TEST_F(ThreeNodesCluster, configure_learner_source) {
   EXPECT_EQ_EVENTUALLY(node4->getLastLogIndex(), node1->getLastLogIndex(),
                        1000);
 
-  node1->configureLearner(100, 3);
+  node1->configureLearner(101, 3);
   EXPECT_EQ_EVENTUALLY(node4->getCurrentLeader(), 3, 1000);
   t.replicateLogEntry(1, 1, "aaa");
   EXPECT_EQ_EVENTUALLY(node4->getLastLogIndex(), node1->getLastLogIndex(),
                        1000);
 
   // set the learnerSource of node4 to leader
-  node1->configureLearner(100, 0);
+  node1->configureLearner(101, 0);
   EXPECT_EQ_EVENTUALLY(node4->getCurrentLeader(), 1, 1000);
   t.replicateLogEntry(1, 1, "aaa");
   EXPECT_EQ_EVENTUALLY(node4->getLastLogIndex(), node1->getLastLogIndex(),
@@ -89,22 +89,22 @@ TEST_F(ThreeNodesCluster, configure_learner_source) {
 
   // Already fixed! Error may happy when server 1 is leader, and we change
   // learnerSource from 1 to 0.
-  node1->configureLearner(100, 1);
+  node1->configureLearner(101, 1);
   EXPECT_EQ_EVENTUALLY(node4->getCurrentLeader(), 1, 1000);
   t.replicateLogEntry(1, 1, "aaa");
   EXPECT_EQ_EVENTUALLY(node4->getLastLogIndex(), node1->getLastLogIndex(),
                        1000);
 
   // set the learnerSource of node4 to leader
-  node1->configureLearner(100, 0);
+  node1->configureLearner(101, 0);
   EXPECT_EQ_EVENTUALLY(node4->getCurrentLeader(), 1, 1000);
   t.replicateLogEntry(1, 1, "aaa");
   EXPECT_EQ_EVENTUALLY(node4->getLastLogIndex(), node1->getLastLogIndex(),
                        1000);
 
   // set the learnerSource to another learner
-  node1->configureLearner(100, 101);
-  EXPECT_EQ_EVENTUALLY(node4->getCurrentLeader(), 101, 1000);
+  node1->configureLearner(101, 102);
+  EXPECT_EQ_EVENTUALLY(node4->getCurrentLeader(), 102, 1000);
   t.replicateLogEntry(1, 1, "aaa");
   EXPECT_EQ_EVENTUALLY(node4->getLastLogIndex(), node1->getLastLogIndex(),
                        1000);
@@ -112,7 +112,7 @@ TEST_F(ThreeNodesCluster, configure_learner_source) {
   // check if the new added member has the forceSync electionWeight and
   // learnerSource info.
   node1->configureMember(2, false, 8);
-  node1->configureLearner(100, 2);
+  node1->configureLearner(101, 2);
 
   // learn configuration from new learner
   Paxos* node6 = t.createRDLogNode().initAsLearner();
@@ -149,14 +149,14 @@ TEST_F(ThreeNodesCluster, follower_to_learner) {
   EXPECT_EQ_EVENTUALLY(Paxos::LEARNER, node4->getState(), 1000);
   std::vector<Paxos::ClusterInfoType> cis;
   node1->getClusterInfo(cis);
-  EXPECT_EQ(100, cis[3].serverId);
+  EXPECT_EQ(101, cis[3].serverId);
   EXPECT_EQ("127.0.0.1:11004", cis[3].ipPort);
 
   EXPECT_EQ(0, node1->changeMember(Paxos::CCAddNode, t.getNodeIpAddrRef(4)));
   EXPECT_EQ_EVENTUALLY(Paxos::LEARNER, node4->getState(), 1000);
 
   // can't downgrade a learner
-  EXPECT_EQ(PaxosErrorCode::PE_DOWNGRADLEARNER, node1->downgradeMember(100));
+  EXPECT_EQ(PaxosErrorCode::PE_DOWNGRADLEARNER, node1->downgradeMember(101));
 
   node1->leaderTransfer(4);
   EXPECT_EQ_EVENTUALLY(node4->getState(), Paxos::LEADER, 2000);
@@ -171,7 +171,7 @@ TEST_F(ThreeNodesCluster, downgraded_follower_do_not_vote) {
   // last memebership change log entries.
   EXPECT_EQ_EVENTUALLY(node3->getCommitIndex(), node1->getCommitIndex(), 1000);
 
-  auto remoteServer = node1->getConfig()->getServer(100);
+  auto remoteServer = node1->getConfig()->getServer(101);
   EXPECT_NE(remoteServer, nullptr);
   remoteServer->disconnect(nullptr);
 
@@ -242,14 +242,14 @@ TEST_F(ThreeNodesCluster, restart_follower) {
 TEST_F(ThreeNodesCluster, configureChange_affect_learner_meta) {
   std::vector<Paxos::ClusterInfoType> cis;
 
-  Paxos* node4 = t.createRDLogNode().initAsLearner();  // 100
-  Paxos* node5 = t.createRDLogNode().initAsLearner();  // 101
+  Paxos* node4 = t.createRDLogNode().initAsLearner();  // 101
+  Paxos* node5 = t.createRDLogNode().initAsLearner();  // 102
   std::ignore = t.createRDLogNode().initAsLearner();
   node1->changeLearners(Paxos::CCAddNode, t.getNodesIpAddrVectorRef2(4, 5));
   EXPECT_EQ_EVENTUALLY(node4->learnersToString(),
                        "127.0.0.1:11004$0;127.0.0.1:11005$0", 1000);
 
-  // follower -> learner, 102
+  // follower -> learner, 103
   EXPECT_EQ(node1->downgradeMember(2), 0);
   EXPECT_EQ_EVENTUALLY(node2->getState(), Paxos::LEARNER, 3000);
   EXPECT_LOG_GET_METADATA_EQ(
@@ -270,7 +270,7 @@ TEST_F(ThreeNodesCluster, configureChange_affect_learner_meta) {
   EXPECT_LOG_GET_METADATA_EQ(node5, Paxos::keyLearnerConfigure,
                              "0;127.0.0.1:11005$0;127.0.0.1:11002$0", 1000);
 
-  // follower -> learner, 100
+  // follower -> learner, 101
   EXPECT_EQ(0, node1->downgradeMember(3));
   EXPECT_LOG_GET_METADATA_EQ(node4, Paxos::keyMemberConfigure,
                              "127.0.0.1:11001#5;127.0.0.1:11004#5@2", 1000);
@@ -285,29 +285,29 @@ TEST_F(ThreeNodesCluster, configureChange_affect_learner_meta) {
       "127.0.0.1:11003$0;127.0.0.1:11005$0;127.0.0.1:11002$0", 1000);
 
   // configureLearner
-  node1->configureLearner(100, 102);
+  node1->configureLearner(101, 103);
   // add and del some non-existed learners
   node1->changeLearners(Paxos::CCAddNode, t.getNodesIpAddrVectorRefRange(
-                                              0, 6, 12000));  // add 103-109
+                                              0, 6, 12000));  // add 104-110
   node1->changeLearners(Paxos::CCAddNode,
-                        t.getNodesIpAddrVectorRef1(6));  // add 110
+                        t.getNodesIpAddrVectorRef1(6));  // add 111
   node1->changeLearners(Paxos::CCDelNode,
                         t.getNodesIpAddrVectorRefRange(0, 6, 12000));
-  node1->configureLearner(101, 110);
+  node1->configureLearner(102, 111);
   EXPECT_LOG_GET_METADATA_EQ(
       node2, Paxos::keyLearnerConfigure,
-      "127.0.0.1:11003$102;127.0.0.1:11005$110;127.0.0.1:11002$0;"
+      "127.0.0.1:11003$103;127.0.0.1:11005$111;127.0.0.1:11002$0;"
       "0;0;0;0;0;0;0;127.0.0.1:11006$0",
       1000);
   EXPECT_LOG_GET_METADATA_EQ(
       node4, Paxos::keyLearnerConfigure,
-      "127.0.0.1:11003$102;127.0.0.1:11005$110;127.0.0.1:11002$0;"
+      "127.0.0.1:11003$103;127.0.0.1:11005$111;127.0.0.1:11002$0;"
       "0;0;0;0;0;0;0;127.0.0.1:11006$0",
       1000);
-  // configureLearner won't be replicated to 101
+  // configureLearner won't be replicated to 102
   EXPECT_LOG_GET_METADATA_EQ(
       node5, Paxos::keyLearnerConfigure,
-      "127.0.0.1:11003$102;127.0.0.1:11005$110;127.0.0.1:11002$0;"
+      "127.0.0.1:11003$103;127.0.0.1:11005$111;127.0.0.1:11002$0;"
       "0;0;0;0;0;0;0;127.0.0.1:11006$0",
       1000);
 
@@ -317,14 +317,14 @@ TEST_F(ThreeNodesCluster, configureChange_affect_learner_meta) {
   node5->initAsLearner(t.getEmptyNodeIpAddrRef());
   EXPECT_LOG_GET_METADATA_EQ(
       node5, Paxos::keyLearnerConfigure,
-      "127.0.0.1:11003$102;127.0.0.1:11005$110;127.0.0.1:11002$0;"
+      "127.0.0.1:11003$103;127.0.0.1:11005$111;127.0.0.1:11002$0;"
       "0;0;0;0;0;0;0;127.0.0.1:11006$0",
       1000);
 }
 
 TEST_F(ThreeNodesCluster, learner_meta_format) {
-  Paxos* node4 = t.createRDLogNode().initAsLearner();  // 100
-  std::ignore = t.createRDLogNode().initAsLearner();   // 101
+  Paxos* node4 = t.createRDLogNode().initAsLearner();  // 101
+  std::ignore = t.createRDLogNode().initAsLearner();   // 102
   node1->changeLearners(Paxos::CCAddNode, t.getNodesIpAddrVectorRef1(4));
   node1->changeLearners(Paxos::CCAddNode, t.getNodesIpAddrVectorRef1(5));
   EXPECT_LOG_GET_METADATA_EQ(node4, Paxos::keyMemberConfigure,
@@ -406,26 +406,26 @@ TEST_F(CustomizedThreeNodesCluster, learnerSource4) {
       1000);
 
   // a chain of learner
-  node1->configureLearner(100, 2);
-  node1->configureLearner(101, 100);
+  node1->configureLearner(101, 2);
   node1->configureLearner(102, 101);
   node1->configureLearner(103, 102);
   node1->configureLearner(104, 103);
+  node1->configureLearner(105, 104);
   EXPECT_EQ_EVENTUALLY(
       node1->learnersToString(),
-      std::string("127.0.0.1:11004$2;127.0.0.1:11005$100;127.0.0.1:11006$101;"
-                  "127.0.0.1:11007$102;127.0.0.1:11008$103"),
+      std::string("127.0.0.1:11004$2;127.0.0.1:11005$101;127.0.0.1:11006$102;"
+                  "127.0.0.1:11007$103;127.0.0.1:11008$104"),
       2000);
   EXPECT_EQ_EVENTUALLY(
       node2->learnersToString(),
-      std::string("127.0.0.1:11004$2;127.0.0.1:11005$100;127.0.0.1:11006$101;"
-                  "127.0.0.1:11007$102;127.0.0.1:11008$103"),
+      std::string("127.0.0.1:11004$2;127.0.0.1:11005$101;127.0.0.1:11006$102;"
+                  "127.0.0.1:11007$103;127.0.0.1:11008$104"),
       2000);
-  EXPECT_EQ(node2->getLearnerSource(100), 2);
-  EXPECT_EQ(node2->getLearnerSource(101), 100);
+  EXPECT_EQ(node2->getLearnerSource(101), 2);
   EXPECT_EQ(node2->getLearnerSource(102), 101);
   EXPECT_EQ(node2->getLearnerSource(103), 102);
   EXPECT_EQ(node2->getLearnerSource(104), 103);
+  EXPECT_EQ(node2->getLearnerSource(105), 104);
 
   auto index = node1->getLastLogIndex();
   t.replicateLogEntry(1, 15, "aaa");
@@ -435,8 +435,8 @@ TEST_F(CustomizedThreeNodesCluster, learnerSource4) {
   EXPECT_EQ_EVENTUALLY(index + 15, node5->getLastLogIndex(), 3000);
 
   // change learnersource
-  node1->configureLearner(103, 2);
-  EXPECT_EQ_EVENTUALLY(node2->getLearnerSource(103), 2, 1000);
+  node1->configureLearner(104, 2);
+  EXPECT_EQ_EVENTUALLY(node2->getLearnerSource(104), 2, 1000);
 
   index = node1->getLastLogIndex();
   t.replicateLogEntry(1, 15, "aaa");

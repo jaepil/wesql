@@ -430,7 +430,7 @@ TEST(witness, send_by_appliedIndex) {
   sleep(1);
   EXPECT_EQ(paxos1->getState(), Paxos::LEADER);
   paxos1->changeLearners(Paxos::CCAddNode, witnesslist);
-  paxos1->configureLearner(100, 2, true);
+  paxos1->configureLearner(101, 2, true);
 
   /* start witness node */
   std::shared_ptr<MemPaxosLog> mlog = std::make_shared<MemPaxosLog>();
@@ -462,7 +462,7 @@ TEST(witness, send_by_appliedIndex) {
   }
   sleep(1);
   EXPECT_EQ(witness1->getLog()->getLastLogIndex(), 12);
-  paxos1->configureLearner(100, 2, false);
+  paxos1->configureLearner(101, 2, false);
   for (int i = 0; i < 4; ++i) {
     paxos1->replicateLog(le);
     usleep(10000);

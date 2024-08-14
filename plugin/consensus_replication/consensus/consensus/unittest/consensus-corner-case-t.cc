@@ -40,7 +40,7 @@ TEST_F(ThreeNodesCluster,
   /*node1 write a new log and nobody receive */
   node1->set_flow_control(2, -2);
   node1->set_flow_control(3, -2);
-  node1->set_flow_control(100, -2);
+  node1->set_flow_control(101, -2);
   t.replicateLogEntry(1, 1, "aaa");
   EXPECT_EQ_EVENTUALLY(node1->getLastLogIndex(), node2->getLastLogIndex() + 1,
                        3000);
@@ -107,7 +107,7 @@ TEST_F(ThreeNodesCluster,
   /*node1 write a new log and nobody receive */
   node1->set_flow_control(2, -2);
   node1->set_flow_control(3, -2);
-  node1->set_flow_control(100, -2);
+  node1->set_flow_control(101, -2);
   t.replicateLogEntry(1, 1, "aaa");
   EXPECT_EQ_EVENTUALLY(node1->getLastLogIndex(), node2->getLastLogIndex() + 1,
                        3000);
@@ -167,7 +167,7 @@ TEST_F(ThreeNodesCluster, elect_with_learner) {
   /* Now, all nodes are normal */
 
   /* node1 change node4 to follower, but node4 do not receive this log */
-  node1->set_flow_control(100, -2);
+  node1->set_flow_control(101, -2);
   node1->changeMember(Paxos::CCAddNode, t.getNodeIpAddrRef(4));
 
   EXPECT_EQ_EVENTUALLY(node1->getLastLogIndex(), node2->getCommitIndex(),

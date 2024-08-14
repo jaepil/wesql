@@ -98,7 +98,7 @@ TEST(configuration, MemberString) {
 
   // a learner's address string
   std::shared_ptr<RemoteServer> rptr3;
-  config->learners.push_back(rptr3 = std::make_shared<RemoteServer>(100));
+  config->learners.push_back(rptr3 = std::make_shared<RemoteServer>(101));
   rptr3->strAddr = std::string("127.0.0.1:10004");
   EXPECT_EQ(StableConfiguration::learnerToString(rptr3),
             std::string("127.0.0.1:10004$0"));
@@ -237,10 +237,10 @@ TEST(configuration, GetServers) {
   config->servers.push_back(rptr2 = std::make_shared<RemoteServer>(3));
   rptr2->strAddr = std::string("127.0.0.1:10003");
 
-  config->learners.push_back(rptr3 = std::make_shared<RemoteServer>(100));
+  config->learners.push_back(rptr3 = std::make_shared<RemoteServer>(101));
   rptr3->strAddr = std::string("127.0.0.1:10004");
 
-  config->learners.push_back(rptr4 = std::make_shared<RemoteServer>(101));
+  config->learners.push_back(rptr4 = std::make_shared<RemoteServer>(102));
   rptr4->strAddr = std::string("127.0.0.1:10005");
 
   // Get server and learner number
@@ -258,26 +258,26 @@ TEST(configuration, GetServers) {
 
   std::vector<Configuration::ServerRef> learners = config->getLearners();
   EXPECT_EQ(learners.size(), 2);
-  EXPECT_EQ(learners[0]->serverId, 100);
-  EXPECT_EQ(learners[1]->serverId, 101);
+  EXPECT_EQ(learners[0]->serverId, 101);
+  EXPECT_EQ(learners[1]->serverId, 102);
 
   // Get server and learner by id
   EXPECT_EQ(config->getServer(1)->serverId, 1);
   EXPECT_EQ(config->getServer(2)->serverId, 2);
   EXPECT_EQ(config->getServer(3)->serverId, 3);
-  EXPECT_EQ(config->getServer(100)->serverId, 100);
   EXPECT_EQ(config->getServer(101)->serverId, 101);
+  EXPECT_EQ(config->getServer(102)->serverId, 102);
   EXPECT_EQ(config->getServer(4), nullptr);
-  EXPECT_EQ(config->getServer(102), nullptr);
+  EXPECT_EQ(config->getServer(103), nullptr);
 
   // Get server and learner by address
   EXPECT_EQ(config->getServerIdFromAddr(std::string("127.0.0.1:10001")), 1);
   EXPECT_EQ(config->getServerIdFromAddr(std::string("127.0.0.1:10002")), 2);
   EXPECT_EQ(config->getServerIdFromAddr(std::string("127.0.0.1:10003")), 3);
   EXPECT_EQ(config->getLearnerByAddr(std::string("127.0.0.1:10004"))->serverId,
-            100);
-  EXPECT_EQ(config->getLearnerByAddr(std::string("127.0.0.1:10005"))->serverId,
             101);
+  EXPECT_EQ(config->getLearnerByAddr(std::string("127.0.0.1:10005"))->serverId,
+            102);
 }
 
 TEST(configuration, AddAndDeleteMember) {

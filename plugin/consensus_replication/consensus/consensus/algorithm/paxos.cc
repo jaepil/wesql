@@ -1855,7 +1855,7 @@ int Paxos::appendLog(const bool needLock) {
   }
   if (state_ != LEADER) {
     if (needLock) lock_.unlock();
-    return -1;
+    return PaxosErrorCode::PE_NOTLEADR;
   }
 
   LogEntry entry;
@@ -1936,7 +1936,7 @@ int Paxos::appendLogToServerByPtr(std::shared_ptr<RemoteServer> server,
       return -1;
     }
   } else {
-    if (state_ != LEADER) return -1;
+    if (state_ != LEADER) return PaxosErrorCode::PE_NOTLEADR;
     assert(needLock);
     if (!lock_.try_lock()) {
       // if lockless4force is true, the append message won't carry any log entry
@@ -2933,7 +2933,7 @@ int Paxos::leaderCommand(LcTypeT type, std::shared_ptr<RemoteServer> server) {
 
   /* just ensure only leader do leaderCommand */
   if (state_ != LEADER) {
-    return -1;
+    return PaxosErrorCode::PE_NOTLEADR;
   }
 
   PaxosMsg msg;
@@ -3321,7 +3321,7 @@ int Paxos::tryUpdateCommitIndex() {
 }
 
 int Paxos::tryUpdateCommitIndex_() {
-  if (state_ != LEADER) return -1;
+  if (state_ != LEADER) return PaxosErrorCode::PE_NOTLEADR;
   if (shutdown_.load()) return PaxosErrorCode::PE_SHUTDOWN;
 
 #ifdef FAIL_POINT
@@ -3613,7 +3613,7 @@ int Paxos::initAsLearner(std::string& strConfig, ClientService* cs,
   tmpConfig.push_back(strMember);
   std::dynamic_pointer_cast<StableConfiguration>(config_)->installConfig(
       tmpConfig, 1, this, localServer);
-  localServer_->serverId += 100;
+  localServer_->serverId += 99;
 
   // set new seed from server id
   srand(time(0) + localServer_->serverId * 100);
@@ -3898,7 +3898,7 @@ uint64_t Paxos::collectMinMatchIndex(std::vector<ClusterInfoType>& cis,
 
 int Paxos::forcePurgeLog(bool local, uint64_t forceIndex) {
   if (local == false && state_ != LEADER) {
-    return -1;
+    return PaxosErrorCode::PE_NOTLEADR;
   }
   /* update minMatchIndex_ */
   /* appendlog should take purge log information if minMatchIndex_ is not 0 */
@@ -4009,7 +4009,7 @@ int Paxos::getClusterInfo(std::vector<ClusterInfoType>& cis) {
 int Paxos::getClusterHealthInfo(std::vector<HealthInfoType>& healthInfo) {
   std::lock_guard<std::mutex> lg(lock_);
   if (shutdown_.load()) return PaxosErrorCode::PE_SHUTDOWN;
-  if (state_ != LEADER) return 1;
+  if (state_ != LEADER) return PaxosErrorCode::PE_NOTLEADR;;
 
   uint64_t lastLogIndex = getLastLogIndex();
   uint64_t appliedIndex = appliedIndex_;

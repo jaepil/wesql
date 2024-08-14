@@ -533,7 +533,7 @@ void StableConfiguration::addLearners(const std::vector<std::string>& strConfig,
     // learners.push_back(ptrR= std::make_shared<RemoteServer>(i++));
     ptrR = std::make_shared<RemoteServer>(0);
     addServer(learners, ptrR, replaceAll);
-    ptrR->serverId += 99;
+    ptrR->serverId += 100;
     ptrR->srv = paxos->getService();
     ptrR->paxos = paxos;
     ptrR->isLearner = true;
