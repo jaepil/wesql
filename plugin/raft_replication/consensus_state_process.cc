@@ -343,6 +343,7 @@ void *run_consensus_stage_change(void *arg) {
 
   thd->thread_stack = (char *)&thd;
   thd->store_globals();
+  thd->set_skip_readonly_check();
 
   int error = 0;
   std::atomic<bool> *is_running = reinterpret_cast<std::atomic<bool> *>(arg);

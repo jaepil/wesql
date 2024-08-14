@@ -117,12 +117,7 @@ int Consensus_info::flush_info(bool force, bool need_commit) {
   DBUG_TRACE;
 
   if (!inited) return 0;
-  /*
-  We update the sync_period at this point because only here we
-  now that we are handling a master info. This needs to be
-  update every time we call flush because the option maybe
-  dinamically set.
-  */
+
   mysql_mutex_lock(&LOCK_consensus_info);
 
   if (write_info(handler))
