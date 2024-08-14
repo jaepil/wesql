@@ -2116,6 +2116,14 @@ int purge_consensus_logs_on_conditions(ulong purge_time, ulong purge_size,
 
   if (target_index > 0) {
     res = rpl_consensus_force_purge_log(auto_purge /* local */, target_index);
+    if (res) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_PURGE_LOG_ERROR, target_index,
+                   rpl_consensus_paxos_error(res));
+      if (!auto_purge) {
+        my_error(ER_CONSENSUS_COMMAND_ERROR, MYF(0), res,
+                 rpl_consensus_paxos_error(res));
+      }
+    }
   }
 
   return res;
