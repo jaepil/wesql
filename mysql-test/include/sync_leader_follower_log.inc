@@ -51,7 +51,7 @@ while ($wait_counter)
 
 if (!$success)
 {
-  --die Timeout in sync_master_follower_log.inc;
+  --die Timeout in sync_leader_follower_log.inc;
 }
 
 --connection default

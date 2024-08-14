@@ -225,7 +225,7 @@ COMMIT;
 # Make sure the workload is already on the relay log before starting the
 # applier to avoid issues with slow systems.
 --let $follower_connection_name= conn2
---source include/sync_master_follower_log.inc
+--source include/sync_leader_follower_log.inc
 
 # This should prevent trx2 to trx5 from committing and will make all
 # four MTS workers to be busy regardless of server speed.
