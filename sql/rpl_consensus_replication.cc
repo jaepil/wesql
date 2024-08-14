@@ -151,6 +151,22 @@ bool is_consensus_replication_log_mode() {
   return result;
 }
 
+bool is_consensus_replication_state_leader() {
+  bool result = false;
+
+  plugin_ref plugin =
+      my_plugin_lock_by_name(nullptr, consensus_replication_plugin_name_str,
+                             MYSQL_REPLICATION_PLUGIN);
+  if (plugin != nullptr) {
+    st_mysql_consensus_replication *plugin_handle =
+        (st_mysql_consensus_replication *)plugin_decl(plugin)->info;
+    result = plugin_handle->is_state_leader();
+    plugin_unlock(nullptr, plugin);
+  }
+
+  return result;
+}
+
 bool consensus_replication_show_log_events(THD *thd) {
   bool result = false;
   plugin_ref plugin = nullptr;

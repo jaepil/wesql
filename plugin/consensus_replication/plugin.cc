@@ -76,12 +76,18 @@ bool plugin_is_consensus_replication_running() {
   return lv.consensus_replication_running;
 }
 
-bool plugin_is_consensus_replication_applier_running() {
+static bool plugin_is_consensus_replication_applier_running() {
   return is_consensus_applier_running();
 }
 
-bool plugin_is_consensus_replication_log_mode() {
+static bool plugin_is_consensus_replication_log_mode() {
   return opt_cluster_log_type_instance;
+}
+
+static bool plugin_is_consensus_replication_state_leader() {
+  return lv.consensus_replication_running &&
+         consensus_state_process.get_status(true) ==
+             Consensus_Log_System_Status::BINLOG_WORKING;
 }
 
 static bool plugin_show_consensus_logs(void *thd) {
@@ -100,6 +106,7 @@ struct st_mysql_consensus_replication consensus_replication_descriptor = {
     plugin_is_consensus_replication_running,
     plugin_is_consensus_replication_applier_running,
     plugin_is_consensus_replication_log_mode,
+    plugin_is_consensus_replication_state_leader,
     plugin_show_consensus_logs,
     plugin_show_consensus_log_events};
 

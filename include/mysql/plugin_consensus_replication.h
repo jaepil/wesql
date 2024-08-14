@@ -28,6 +28,11 @@ struct st_mysql_consensus_replication {
   bool (*is_log_mode)();
 
   /*
+    This function is used to check leader state.
+  */
+  bool (*is_state_leader)();
+
+  /*
     This function is used to show consensus logs.
   */
   bool (*show_logs)(void *thd);
