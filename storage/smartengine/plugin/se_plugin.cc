@@ -92,6 +92,7 @@ static int se_init_func(void *const p)
   se_hton->commit_by_xid = se_commit_by_xid;
   se_hton->rollback_by_xid = se_rollback_by_xid;
   se_hton->recover = se_recover;
+  se_hton->recover_prepared_in_tc = se_recover_tc;
   se_hton->commit = se_commit;
   se_hton->rollback = se_rollback;
   se_hton->db_type = DB_TYPE_SMARTENGINE;

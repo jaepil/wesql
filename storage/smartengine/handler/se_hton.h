@@ -155,6 +155,8 @@ xa_status_code se_commit_by_xid(handlerton *const hton, XID *const xid);
 
 xa_status_code se_rollback_by_xid(handlerton *const hton, XID *const xid);
 
+int se_recover_tc(handlerton *hton, Xa_state_list &xa_list);
+
 /**Reading last committed binary log info from SE system row. The info is needed for crash safe
 slave/master to work.*/
 int se_recover(handlerton *hton,

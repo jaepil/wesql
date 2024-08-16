@@ -32,6 +32,7 @@ static int consensus_ha_recover(ConsensusRecoveryManager *recovery_manager,
   xarecover_st info;
   Xa_state_list *se_xa_list;
   Xa_state_list xa_list{*binlog_xid_map};
+  info.found_foreign_xids = info.found_my_xids = 0;
   info.commit_list = commit_list;
   info.dry_run = false;
   info.list = nullptr;

@@ -353,6 +353,25 @@ xa_status_code se_rollback_by_xid(handlerton *const hton, XID *const xid)
   DBUG_RETURN(XA_OK);
 }
 
+int se_recover_tc(handlerton *hton, Xa_state_list &xa_list)
+{
+  DBUG_ENTER_FUNC();
+
+  assert(hton != nullptr);
+
+  std::vector<util::Transaction *> trans_list;
+  se_db->GetAllPreparedTransactions(&trans_list);
+
+  XID id;
+  for (auto &trans : trans_list) {
+    auto name = trans->GetName();
+    se_xid_from_string(name, &id);
+    xa_list.add(id, enum_ha_recover_xa_state::PREPARED_IN_SE);
+  }
+
+  DBUG_RETURN(XA_OK);
+}
+
 /**
   Reading last committed binary log info from SE system row.
   The info is needed for crash safe slave/master to work.
