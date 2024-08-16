@@ -111,11 +111,18 @@ void FormatFileNumber(uint64_t number, uint32_t path_id, char* out_buf,
   }
 }
 
-std::string DescriptorFileName(const std::string& dbname, uint64_t number) {
+std::string ManifestFileName(const std::string& dbname, uint64_t number) {
   assert(number > 0);
   char buf[100];
   snprintf(buf, sizeof(buf), "/MANIFEST-%06llu",
            static_cast<unsigned long long>(number));
+  return dbname + buf;
+}
+
+std::string CheckpointFileName(const std::string &dbname, int64_t file_number)
+{
+  char buf[100];
+  snprintf(buf, sizeof(buf), "/CHECKPOINT-%ld", file_number);
   return dbname + buf;
 }
 
@@ -182,9 +189,6 @@ bool ParseFileName(const std::string& fname,
   } else if (rest == "CURRENT") {
     *number = 0;
     *type = kCurrentFile;
-  } else if (rest == "CURRENT_CHECKPOINT") {
-    *number = 0;
-    *type = kCurrentCheckpointFile;
   } else if (rest == "LOCK") {
     *number = 0;
     *type = kDBLockFile;
@@ -197,7 +201,7 @@ bool ParseFileName(const std::string& fname,
     if (!rest.empty()) {
       return false;
     }
-    *type = kDescriptorFile;
+    *type = kManifestFile;
     *number = num;
   } else if (rest.starts_with("METADB-")) {
     rest.remove_prefix(strlen("METADB-"));

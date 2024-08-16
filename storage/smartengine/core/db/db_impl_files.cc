@@ -368,7 +368,7 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
       case kLogFile:
         keep = ((number >= state.log_number) || (number == state.prev_log_number));
         break;
-      case kDescriptorFile:
+      case kManifestFile:
         // Keep my manifest file, and any newer incarnations'
         // (can happen during manifest roll)
         //keep = (number >= state.manifest_file_number);
@@ -394,8 +394,7 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
       case kMetaDatabase:
       case kOptionsFile:
       case kBlobFile:
-      case kTableFile:  // extent space file don't purge
-      case kCurrentCheckpointFile:
+      case kTableFile: // extent space file don't purge
         keep = true;
         break;
       default:

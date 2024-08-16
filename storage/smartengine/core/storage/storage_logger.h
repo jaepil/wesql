@@ -151,10 +151,12 @@ public:
   // for hotbackup
   int manifest_file_in_current(std::string &manifest_file);
   int manifest_file_range(int32_t &begin, int32_t &end, int64_t &end_pos);
-  int32_t current_manifest_file_number() const { return current_manifest_file_number_; }
+  int64_t current_manifest_file_number() const { return current_manifest_file_number_; }
   uint64_t current_manifest_file_size() const { return log_writer_->file()->get_file_size(); }
-  int record_incremental_extent_ids(const std::string &backup_tmp_dir_path, const int32_t first_manifest_file_num,
-                                    const int32_t last_manifest_file_num, const uint64_t last_manifest_file_size);
+  int record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
+                                    const int64_t first_manifest_file_num,
+                                    const int64_t last_manifest_file_num,
+                                    const uint64_t last_manifest_file_size);
 #ifndef NDEBUG
   void TEST_reset();
 #endif
@@ -173,12 +175,8 @@ private:
   int internal_write_checkpoint();
   //not thread safe, should protected by log_sync_mutex_
   int update_log_writer(int64_t manifest_file_number);
-  std::string checkpoint_name(const std::string &dbname, int64_t file_number);
-  std::string manifest_log_name(int64_t file_number);
-  int write_current_checkpoint_file(int64_t checkpoint_file_number);
-  int write_current_file(int64_t manifest_file_number);
-  int parse_current_checkpoint_file(std::string &checkpoint_name, uint64_t &log_number);
-  int parse_current_file(std::string &manifest_name);
+  int write_current_file(int64_t checkpoint_file_number, int64_t manifest_file_number);
+  int parse_current_file(std::string &checkpoint_name, std::string &manifest_name, uint64_t &log_number);
   //not thread safe, should protected by log_sync_mutex_
   int create_log_writer(int64_t manifest_file_number, db::log::Writer *&writer);
   int create_log_reader(const std::string &manifest_name,
@@ -194,15 +192,15 @@ private:
                                    std::unordered_set<int64_t> &commited_trans_ids);
   // for hotbackup
   int check_manifest_for_backup(const std::string &backup_tmp_dir_path,
-                                const int32_t first_manifest_file_num,
-                                const int32_t last_manifest_file_num,
-                                std::vector<int32_t> &manifest_file_nums);
+                                const int64_t first_manifest_file_num,
+                                const int64_t last_manifest_file_num,
+                                std::vector<int64_t> &manifest_file_nums);
   int get_commited_trans_for_backup(const std::string &backup_tmp_dir_path,
-                                    const std::vector<int32_t> &manifest_file_nums,
+                                    const std::vector<int64_t> &manifest_file_nums,
                                     std::unordered_set<int64_t> &commited_trans_ids);
   int read_manifest_for_backup(const std::string &backup_tmp_dir_path,
                                const std::string &extent_ids_path,
-                               const std::vector<int32_t> &manifest_file_nums,
+                               const std::vector<int64_t> &manifest_file_nums,
                                const std::unordered_set<int64_t> &commited_trans_ids,
                                const uint64_t last_manifest_file_size);
   int process_change_info_for_backup(ChangeInfo &change_info,

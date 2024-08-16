@@ -56,7 +56,7 @@ void DumpDBFileSummary(const ImmutableDBOptions& options,
       case kIdentityFile:
         __SE_LOG(INFO, "IDENTITY file:  %s", file.c_str());
         break;
-      case kDescriptorFile:
+      case kManifestFile:
         env->GetFileSize(dbname + "/" + file, &file_size);
         __SE_LOG(INFO, "MANIFEST file:  %s size: %" PRIu64 " Bytes",
                       file.c_str(), file_size);

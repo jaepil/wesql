@@ -259,7 +259,7 @@ class CompactionTest : public testing::Test {
 
     uint64_t file_number = 1;
     std::string manifest_filename =
-        util::DescriptorFileName(dbname_, file_number);
+        util::ManifestFileName(dbname_, file_number);
     WritableFile *descriptor_file = nullptr;
     EnvOptions opt_env_opts =
         env_->OptimizeForManifestWrite(context_->env_options_);

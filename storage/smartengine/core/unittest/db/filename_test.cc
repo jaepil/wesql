@@ -50,8 +50,8 @@ TEST_F(FileNameTest, Parse) {
       {"0.sst", 0, kTableFile, kAllMode},
       {"CURRENT", 0, kCurrentFile, kAllMode},
       {"LOCK", 0, kDBLockFile, kAllMode},
-      {"MANIFEST-2", 2, kDescriptorFile, kAllMode},
-      {"MANIFEST-7", 7, kDescriptorFile, kAllMode},
+      {"MANIFEST-2", 2, kManifestFile, kAllMode},
+      {"MANIFEST-7", 7, kManifestFile, kAllMode},
       {"METADB-2", 2, kMetaDatabase, kAllMode},
       {"METADB-7", 7, kMetaDatabase, kAllMode},
       {"18446744073709551615.wal", 18446744073709551615ull, kLogFile, kAllMode},
@@ -138,11 +138,11 @@ TEST_F(FileNameTest, Construction) {
   ASSERT_EQ(200U, number);
   ASSERT_EQ(kTableFile, type);
 
-  fname = DescriptorFileName("bar", 100);
+  fname = ManifestFileName("bar", 100);
   ASSERT_EQ("bar/", std::string(fname.data(), 4));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
   ASSERT_EQ(100U, number);
-  ASSERT_EQ(kDescriptorFile, type);
+  ASSERT_EQ(kManifestFile, type);
 
   fname = TempFileName("tmp", 999);
   ASSERT_EQ("tmp/", std::string(fname.data(), 4));

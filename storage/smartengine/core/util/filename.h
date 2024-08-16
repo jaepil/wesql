@@ -26,20 +26,20 @@ class Directory;
 class Env;
 class WritableFileWriter;
 
-enum FileType {
+enum FileType
+{
   kLogFile,
   kDBLockFile,
   kTableFile,
-  kDescriptorFile,
+  kManifestFile,
   kCurrentFile,
   kTempFile,
-  kInfoLogFile,  // Either the current one, or an old one
+  kInfoLogFile, // Either the current one, or an old one
   kMetaDatabase,
   kIdentityFile,
   kOptionsFile,
   kBlobFile,
-  kCheckpointFile,
-  kCurrentCheckpointFile
+  kCheckpointFile
 };
 
 // Return the name of the log file with the specified number
@@ -84,8 +84,13 @@ extern void FormatFileNumber(uint64_t number, uint32_t path_id, char* out_buf,
 // Return the name of the descriptor file for the db named by
 // "dbname" and the specified incarnation number.  The result will be
 // prefixed with "dbname".
-extern std::string DescriptorFileName(const std::string& dbname,
+extern std::string ManifestFileName(const std::string& dbname,
                                       uint64_t number);
+
+// Return the name of the checkpoint file for the db named by
+// "dbname" and the specified file number.  The result will be
+// prefixed with "dbname".
+extern std::string CheckpointFileName(const std::string &dbname, int64_t file_number);
 
 // Return the name of the current file.  This file contains the name
 // of the current manifest file.  The result will be prefixed with

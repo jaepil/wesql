@@ -483,7 +483,7 @@ Status DBTestBase::CompactRange(int cf, uint32_t compact_type) {
 
 int DBTestBase::write_checkpoint()
 {
-  int32_t dummy_manifest_file_number = 0;
+  int64_t dummy_manifest_file_number = 0;
   return db_->do_manual_checkpoint(dummy_manifest_file_number);
 }
 

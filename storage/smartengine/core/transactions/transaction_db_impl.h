@@ -102,18 +102,18 @@ class TransactionDBImpl : public util::TransactionDB {
     return db_impl_;
   }
 
-  virtual int do_manual_checkpoint(int32_t &manifest_file_num) override;
+  virtual int do_manual_checkpoint(int64_t &manifest_file_num) override;
 
   virtual int create_backup_snapshot(BackupSnapshotId backup_id,
                                      db::MetaSnapshotSet &meta_snapshots,
-                                     int32_t &last_manifest_file_num,
+                                     int64_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
                                      uint64_t &last_wal_file_num,
                                      db::BinlogPosition &last_binlog_pos) override;
 
   virtual int record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
-                                            const int32_t first_manifest_file_num,
-                                            const int32_t last_manifest_file_num,
+                                            const int64_t first_manifest_file_num,
+                                            const int64_t last_manifest_file_num,
                                             const uint64_t last_manifest_file_size) override;
 
 private:

@@ -379,13 +379,13 @@ void TransactionDBImpl::GetAllPreparedTransactions(
 }
 
 // for hotbackup
-int TransactionDBImpl::do_manual_checkpoint(int32_t &manifest_file_num) {
+int TransactionDBImpl::do_manual_checkpoint(int64_t &manifest_file_num) {
   return db_impl_->do_manual_checkpoint(manifest_file_num);
 }
 
 int TransactionDBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
                                               MetaSnapshotSet &meta_snapshots,
-                                              int32_t &last_manifest_file_num,
+                                              int64_t &last_manifest_file_num,
                                               uint64_t &last_manifest_file_size,
                                               uint64_t &last_wal_file_num,
                                               BinlogPosition &last_binlog_pos)
@@ -399,8 +399,8 @@ int TransactionDBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
 }
 
 int TransactionDBImpl::record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
-                                                     const int32_t first_manifest_file_num,
-                                                     const int32_t last_manifest_file_num,
+                                                     const int64_t first_manifest_file_num,
+                                                     const int64_t last_manifest_file_num,
                                                      const uint64_t last_manifest_file_size)
 {
   return db_impl_->record_incremental_extent_ids(backup_tmp_dir_path,

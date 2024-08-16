@@ -16,6 +16,7 @@
 
 #include "backup/hotbackup_impl.h"
 #include "memory/thread_local_store.h"
+#include "storage/storage_logger.h"
 #include "storage/storage_manager.h"
 #include "util/file_util.h"
 #include "util/sync_point.h"
@@ -225,7 +226,7 @@ BackupSnapshotId BackupSnapshotImpl::generate_backup_id()
 int BackupSnapshotImpl::do_checkpoint(DB *db, const char *backup_tmp_dir_path) {
   int ret = Status::kOk;
   SSTFileChecker sst_file_checker;
-  WalDirFileChecker *wal_file_checker = nullptr;
+
   if (IS_NULL(db)) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "db is nullptr", K(ret));
@@ -241,7 +242,7 @@ int BackupSnapshotImpl::do_checkpoint(DB *db, const char *backup_tmp_dir_path) {
     SE_LOG(WARN, "Failed to do manual checkpoint", K(ret));
   } else if (FAILED(create_tmp_dir(db))) {
     SE_LOG(WARN, "Failed to create tmp dir", K(ret));
-  } else if (FAILED(link_files(db, &sst_file_checker, wal_file_checker))) {
+  } else if (FAILED(link_files(db, (CurrentFileChecker *)nullptr, &sst_file_checker, (WalDirFileChecker *)nullptr))) {
     SE_LOG(WARN, "Failed to link sst files", K(ret));
   } else {
     SE_LOG(INFO, "Success to do checkpoint", K(ret), K(first_manifest_file_num_));
@@ -279,29 +280,34 @@ int BackupSnapshotImpl::accquire_backup_snapshot(DB *db, BackupSnapshotId *backu
     cur_backup_id_ = *backup_id;
 
     db->DisableFileDeletions();
-    if (FAILED(db->create_backup_snapshot(cur_backup_id_,
-                                          cur_meta_snapshots_,
-                                          last_manifest_file_num_,
-                                          last_manifest_file_size_,
-                                          last_wal_file_num_,
-                                          last_binlog_pos_))) {
+
+    CurrentFileChecker current_file_checker;
+    if (FAILED(link_files(db, &current_file_checker, (DataDirFileChecker *)nullptr, (WalDirFileChecker *)nullptr))) {
+      SE_LOG(WARN, "Failed to link current file", K(ret));
+    } else if (FAILED(db->create_backup_snapshot(cur_backup_id_,
+                                                 cur_meta_snapshots_,
+                                                 last_manifest_file_num_,
+                                                 last_manifest_file_size_,
+                                                 last_wal_file_num_,
+                                                 last_binlog_pos_))) {
       SE_LOG(WARN, "Failed to acquire backup snapshot", K(ret));
     } else {
 #ifndef NDEBUG
       TEST_SYNC_POINT_CALLBACK("BackupSnapshotImpl::acquire_snapshot::after_create_backup_snapshot", db);
 #endif
       binlog_pos = last_binlog_pos_;
-      std::string last_manifest_file_dest = DescriptorFileName(backup_tmp_dir_path_, last_manifest_file_num_);
-      std::string last_manifest_file_src = DescriptorFileName(db->GetName(), last_manifest_file_num_);
+      std::string last_manifest_file_dest = ManifestFileName(backup_tmp_dir_path_, last_manifest_file_num_);
+      std::string last_manifest_file_src = ManifestFileName(db->GetName(), last_manifest_file_num_);
       DataDirFileChecker data_file_checker(first_manifest_file_num_, last_manifest_file_num_);
       WalDirFileChecker wal_file_checker(last_wal_file_num_);
-      if (FAILED(link_files(db, &data_file_checker, &wal_file_checker))) {
+      if (FAILED(link_files(db, (CurrentFileChecker *)nullptr, &data_file_checker, &wal_file_checker))) {
         SE_LOG(WARN, "Failed to link backup files", K(ret));
       } else if (FAILED(CopyFile(db->GetEnv(),
                                  last_manifest_file_src,
                                  last_manifest_file_dest,
-                                 last_manifest_file_size_,
-                                 false /**use_fsync*/).code())) { // copy last MANIFEST file
+                                 last_manifest_file_size_, // clang-format off
+                                 false).code())) { // clang-format on
+        // copy last MANIFEST file
         SE_LOG(WARN, "Failed to copy last manifest file", K(ret));
       } else {
         SE_LOG(INFO,

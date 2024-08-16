@@ -83,10 +83,17 @@ private:
 
 private:
   int link_sst_files(db::DB *db);
-  template<typename DataFileChecker, typename WalFileChecker>
-  int link_files(db::DB *db, DataFileChecker *data_file_checker, WalFileChecker *wal_file_checker);
+
+  template <typename CurrentFileChecker, typename DataFileChecker, typename WalFileChecker>
+  int link_files(db::DB *db,
+                 CurrentFileChecker *current_file_checker,
+                 DataFileChecker *data_file_checker,
+                 WalFileChecker *wal_file_checker);
+
   template <typename FileChecker>
-  int link_dir_files(db::DB *db, const std::string &dir_path, const std::vector<std::string> &files,
+  int link_dir_files(db::DB *db,
+                     const std::string &dir_path,
+                     const std::vector<std::string> &files,
                      FileChecker *file_checker);
   BackupSnapshotId generate_backup_id();
   // Cleanup the tmp dir
@@ -102,9 +109,9 @@ private:
   const char *backup_status_;
 
   // The written MANIFEST file after do checkpoint
-  int32_t first_manifest_file_num_;
+  int64_t first_manifest_file_num_;
   // The written MANIFEST file used when acquiring snapshots
-  int32_t last_manifest_file_num_;
+  int64_t last_manifest_file_num_;
   // The size of last_manifest_file
   uint64_t last_manifest_file_size_;
   // The written WAL log file after switch memtable in acquiring_snapshots
@@ -130,6 +137,11 @@ struct SSTFileChecker
   }
 };
 
+struct CurrentFileChecker
+{
+  inline bool operator()(const util::FileType type, const uint64_t file_num) { return type == util::kCurrentFile; }
+};
+
 struct DataDirFileChecker
 {
   DataDirFileChecker(const uint64_t first_manifest_file_num,
@@ -139,14 +151,13 @@ struct DataDirFileChecker
   {}
   inline bool operator()(const util::FileType &type, const uint64_t &file_num)
   {
-    // TODO(ljc): now we just copy all checkpoint files, and may need to read current checkpoint file to get
-    // checkpoint file number in the future.
     // clang-format off
-    return (type == util::kTableFile) 
-        || (type == util::kDescriptorFile && file_num < last_manifest_file_num_ && file_num >= first_manifest_file_num_) 
-        || (type == util::kCheckpointFile && file_num <= last_manifest_file_num_) 
-        || (type == kCurrentFile) 
-        || (type == kCurrentCheckpointFile);
+    return (type == util::kTableFile)
+        // for the last manifest file, can't copy all contents here, but only copy specified size of the last manifest
+        // file, which is matched with the size of the last manifest file when backup snapshot created, will process the
+        // last manifest file later.
+        || (type == util::kManifestFile && file_num < last_manifest_file_num_ && file_num >= first_manifest_file_num_) 
+        || (type == util::kCheckpointFile && file_num <= last_manifest_file_num_);
     // clang-format on
   }
   uint64_t first_manifest_file_num_;
@@ -164,8 +175,11 @@ struct WalDirFileChecker
   uint64_t last_wal_file_num_;
 };
 
-template<typename DataFileChecker, typename WalFileChecker>
-int BackupSnapshotImpl::link_files(db::DB *db, DataFileChecker *data_file_checker, WalFileChecker *wal_file_checker)
+template <typename CurrentFileChecker, typename DataFileChecker, typename WalFileChecker>
+int BackupSnapshotImpl::link_files(db::DB *db,
+                                   CurrentFileChecker *current_file_checker,
+                                   DataFileChecker *data_file_checker,
+                                   WalFileChecker *wal_file_checker)
 {
   int ret = common::Status::kOk;
   if (IS_NULL(db)) {
@@ -177,14 +191,18 @@ int BackupSnapshotImpl::link_files(db::DB *db, DataFileChecker *data_file_checke
     std::vector<std::string> wal_files;
     if (FAILED(db->GetEnv()->GetChildren(db->GetName(), &data_files).code())) {
       SE_LOG(WARN, "Failed to get all files in data dir", K(ret));
-    } else if (FAILED(link_dir_files(db, db->GetName(), data_files, data_file_checker))) {
-      SE_LOG(WARN, "Failed to link files in data dir", K(ret), "Dir", db->GetName());
-    } else if (nullptr == wal_file_checker) {
-      // skip link wal files
-    } else if (FAILED(db->GetEnv()->GetChildren(db->GetDBOptions().wal_dir, &wal_files).code())) {
-      SE_LOG(WARN, "Failed to get all files in wal dir", K(ret));
-    } else if (FAILED(link_dir_files(db, db->GetDBOptions().wal_dir, wal_files, wal_file_checker))) {
-      SE_LOG(WARN, "Failed to link files in wal dir", K(ret), "Dir", db->GetDBOptions().wal_dir);
+    } else {
+      if (current_file_checker && FAILED(link_dir_files(db, db->GetName(), data_files, current_file_checker))) {
+        SE_LOG(WARN, "Failed to link current file", K(ret), "Dir", db->GetName());
+      } else if (data_file_checker && FAILED(link_dir_files(db, db->GetName(), data_files, data_file_checker))) {
+        SE_LOG(WARN, "Failed to link files in data dir", K(ret), "Dir", db->GetName());
+      } else if (nullptr == wal_file_checker) {
+        // skip link wal files
+      } else if (FAILED(db->GetEnv()->GetChildren(db->GetDBOptions().wal_dir, &wal_files).code())) {
+        SE_LOG(WARN, "Failed to get all files in wal dir", K(ret));
+      } else if (FAILED(link_dir_files(db, db->GetDBOptions().wal_dir, wal_files, wal_file_checker))) {
+        SE_LOG(WARN, "Failed to link files in wal dir", K(ret), "Dir", db->GetDBOptions().wal_dir);
+      }
     }
     db->EnableFileDeletions(false);
   }

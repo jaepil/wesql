@@ -765,7 +765,7 @@ class DB {
   // for hotbackup
   virtual int create_backup_snapshot(BackupSnapshotId backup_id,
                                      MetaSnapshotSet &meta_snapshots,
-                                     int32_t &last_manifest_file_num,
+                                     int64_t &last_manifest_file_num,
                                      uint64_t &last_manifest_file_size,
                                      uint64_t &last_wal_file_num,
                                      BinlogPosition &last_binlog_pos)
@@ -774,8 +774,8 @@ class DB {
   }
 
   virtual int record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
-                                            const int32_t first_manifest_file_num,
-                                            const int32_t last_manifest_file_num,
+                                            const int64_t first_manifest_file_num,
+                                            const int64_t last_manifest_file_num,
                                             const uint64_t last_manifest_file_size)
   {
     return common::Status::kNotSupported;
@@ -842,7 +842,7 @@ class DB {
   }
 
   // hot backup
-  virtual int do_manual_checkpoint(int32_t &manifest_file_num)
+  virtual int do_manual_checkpoint(int64_t &manifest_file_num)
   {
     return common::Status::kNotSupported;
   }

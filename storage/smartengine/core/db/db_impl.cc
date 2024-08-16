@@ -2363,7 +2363,8 @@ bool DBImpl::snapshot_empty() {
   return is_empty;
 }
 
-int DBImpl::do_manual_checkpoint(int32_t &start_manifest_file_num) {
+int DBImpl::do_manual_checkpoint(int64_t &start_manifest_file_num)
+{
   int ret = Status::kOk;
   if (FAILED(StorageLogger::get_instance().external_write_checkpoint())) {
     SE_LOG(ERROR, "Do a manual checkpoint failed", K(ret));
@@ -2376,10 +2377,11 @@ int DBImpl::do_manual_checkpoint(int32_t &start_manifest_file_num) {
 
 int DBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
                                    MetaSnapshotSet &meta_snapshots,
-                                   int32_t &last_manifest_file_num,
+                                   int64_t &last_manifest_file_num,
                                    uint64_t &last_manifest_file_size,
                                    uint64_t &last_wal_file_num,
-                                   BinlogPosition &last_binlog_pos) {
+                                   BinlogPosition &last_binlog_pos)
+{
   int ret = Status::kOk;
   // keep create snapshot and do checkpoint atomic,
   // exclusive from apply_change_info in flush/compaction
@@ -2452,9 +2454,10 @@ int DBImpl::create_backup_snapshot(BackupSnapshotId backup_id,
 }
 
 int DBImpl::record_incremental_extent_ids(const std::string &backup_tmp_dir_path,
-                                          const int32_t first_manifest_file_num,
-                                          const int32_t last_manifest_file_num,
-                                          const uint64_t last_manifest_file_size) {
+                                          const int64_t first_manifest_file_num,
+                                          const int64_t last_manifest_file_num,
+                                          const uint64_t last_manifest_file_size)
+{
   int ret = Status::kOk;
   if (FAILED(StorageLogger::get_instance().record_incremental_extent_ids(backup_tmp_dir_path,
                                                                          first_manifest_file_num,

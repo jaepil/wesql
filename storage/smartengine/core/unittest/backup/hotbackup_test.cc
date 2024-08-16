@@ -49,9 +49,11 @@ public:
                         const std::string &extent_ids_file, 
                         const std::string &extent_file);
   void copy_sst_files(std::string backup_path);
+  void save_old_current_file();
+  void copy_old_current_file(std::string backup_path);
   void copy_rest_files(const std::string &backup_tmp_dir_path, std::string backup_path);
   void copy_extents(const std::string &backup_tmp_dir_path,
-                    const std::string &extent_ids_file, 
+                    const std::string &extent_ids_file,
                     const std::string &extent_file);
   uint64_t last_sst_file_num_ = 0;
   std::string backup_tmp_dir_path_;
@@ -65,8 +67,8 @@ struct RestFileChecker
   inline bool operator()(const util::FileType &type, const uint64_t &file_num)
   {
     return (type == util::kTableFile && (file_num > last_sst_file_num_ || last_sst_file_num_ == 0)) ||
-           (type == util::kLogFile) || (type == util::kDescriptorFile) || (type == util::kCheckpointFile) ||
-           (type == kCurrentFile) || (type == kCurrentCheckpointFile);
+           (type == util::kLogFile) || (type == util::kManifestFile) || (type == util::kCheckpointFile) ||
+           (type == kCurrentFile);
   }
   uint64_t last_sst_file_num_;
 };
@@ -168,7 +170,48 @@ void HotbackupTest::copy_extents(const std::string &backup_tmp_dir_path,
   }
 }
 
-void HotbackupTest::copy_sst_files(std::string backup_path) {
+void HotbackupTest::save_old_current_file()
+{
+  std::vector<std::string> all_files;
+  CurrentFileChecker file_checker;
+  ASSERT_OK(db_->GetEnv()->GetChildren(dbname_, &all_files));
+  uint64_t file_num = 0;
+  util::FileType type;
+  char cmd[1024];
+  for (auto &file : all_files) {
+    if (ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) {
+      std::string file_path = dbname_ + "/" + file;
+      snprintf(cmd, 1024, "cp %s %s", file_path.c_str(), (file_path + ".old").c_str());
+      SE_LOG(INFO, "save current file to CURRENT.old", K(cmd));
+      ASSERT_EQ(0, system(cmd));
+    }
+  }
+}
+
+void HotbackupTest::copy_old_current_file(std::string backup_path)
+{
+  std::vector<std::string> all_files;
+  CurrentFileChecker file_checker;
+  ASSERT_OK(db_->GetEnv()->GetChildren(dbname_, &all_files));
+  uint64_t file_num = 0;
+  util::FileType type;
+  char cmd[1024];
+  ASSERT_OK(db_->GetEnv()->CreateDirIfMissing(backup_path));
+  for (auto &file : all_files) {
+    if (ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) {
+      std::string file_path = dbname_ + "/" + file;
+      snprintf(cmd, 1024, "cp %s %s", (file_path + ".old").c_str(), backup_path.c_str());
+      SE_LOG(INFO, "copy old current file to backup dir", K(cmd));
+      ASSERT_EQ(0, system(cmd));
+      snprintf(cmd, 1024, "mv %s %s", (backup_path + "/CURRENT.old").c_str(), (backup_path + "/CURRENT").c_str());
+      SE_LOG(INFO, "rename old current file", K(cmd));
+      ASSERT_EQ(0, system(cmd));
+    }
+  }
+}
+
+void HotbackupTest::copy_sst_files(std::string backup_path)
+{
   std::vector<std::string> all_files;
   SSTFileChecker file_checker;
   ASSERT_OK(db_->GetEnv()->GetChildren(dbname_, &all_files));
@@ -698,13 +741,77 @@ TEST_F(HotbackupTest, large_object)
   delete[] lob_value;
 }
 
+TEST_F(HotbackupTest, recover_from_old_current_file)
+{
+  CreateColumnFamilies({"hotbackup"}, CurrentOptions());
+  BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
+  BackupSnapshotId backup_id = 0;
+  BinlogPosition binlog_pos;
+  int64_t dummy_file_num = 0;
+  std::string backup_path = dbname_ + backup_dir_;
+
+  ASSERT_OK(Put(1, "1", "11"));
+  ASSERT_OK(Put(1, "2", "22"));
+  ASSERT_OK(Flush(1));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->lock_instance());
+  ASSERT_EQ(Status::kOk, backup_snapshot->do_checkpoint(db_));
+  copy_sst_files(backup_path);
+  save_old_current_file();
+
+  ASSERT_OK(Put(1, "a", "aa"));
+  ASSERT_OK(Put(1, "b", "bb"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "c", "cc"));
+  ASSERT_OK(Put(1, "d", "dd"));
+  ASSERT_OK(Flush(1));
+  db_->do_manual_checkpoint(dummy_file_num);
+  ASSERT_OK(Put(1, "e", "ee"));
+  ASSERT_OK(Put(1, "f", "ff"));
+  ASSERT_OK(Flush(1));
+  ASSERT_OK(Put(1, "g", "gg"));
+  ASSERT_OK(Put(1, "h", "hh"));
+  ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
+
+  ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
+  copy_extents(backup_tmp_dir_path_,
+               backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
+               backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);
+
+  copy_rest_files(backup_tmp_dir_path_, backup_path);
+  ASSERT_EQ(Status::kOk, backup_snapshot->release_current_backup_snapshot(db_));
+  //
+  replay_sst_files(backup_path, backup_path + BACKUP_EXTENT_IDS_FILE, backup_path + BACKUP_EXTENTS_FILE);
+
+  // use old current file to recover
+  copy_old_current_file(backup_path);
+
+  backup_snapshot->unlock_instance();
+
+  Reopen(CurrentOptions(), &backup_path);
+  ASSERT_EQ("11", Get(1, "1"));
+  ASSERT_EQ("22", Get(1, "2"));
+  ASSERT_EQ("aa", Get(1, "a"));
+  ASSERT_EQ("bb", Get(1, "b"));
+  ASSERT_EQ("cc", Get(1, "c"));
+  ASSERT_EQ("dd", Get(1, "d"));
+  ASSERT_EQ("ee", Get(1, "e"));
+  ASSERT_EQ("ff", Get(1, "f"));
+  ASSERT_EQ("gg", Get(1, "g"));
+  ASSERT_EQ("hh", Get(1, "h"));
+  //
+  Close();
+  DestroyDB(backup_path, last_options_);
+}
+
 TEST_F(HotbackupTest, multi_checkpoint)
 {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
   BackupSnapshotId backup_id = 0;
   BinlogPosition binlog_pos;
-  int32_t dummy_file_num = 0;
+  int64_t dummy_file_num = 0;
   std::string backup_path = dbname_ + backup_dir_;
 
   ASSERT_OK(Put(1, "1", "11"));
@@ -761,7 +868,7 @@ TEST_F(HotbackupTest, delete_manifest_before_acquire)
 {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
-  int32_t dummy_file_num = 0;
+  int64_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
   BinlogPosition binlog_pos;
 
@@ -871,7 +978,7 @@ TEST_F(HotbackupTest, checkpoint_contain_dropped_cf) {
 TEST_F(HotbackupTest, delete_manifest_after_accquire) {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
-  int32_t dummy_file_num = 0;
+  int64_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
   BinlogPosition binlog_pos;
   std::string backup_path = dbname_ + backup_dir_;
@@ -924,7 +1031,7 @@ TEST_F(HotbackupTest, delete_manifest_after_accquire) {
 TEST_F(HotbackupTest, create_multiple_backup_snapshots) {
   CreateColumnFamilies({"hotbackup"}, CurrentOptions());
   BackupSnapshotImpl *backup_snapshot = BackupSnapshotImpl::get_instance();
-  int32_t dummy_file_num = 0;
+  int64_t dummy_file_num = 0;
   BackupSnapshotId backup_id = 0;
   BinlogPosition binlog_pos;
   std::string backup_path = dbname_ + backup_dir_;
