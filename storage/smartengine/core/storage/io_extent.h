@@ -15,11 +15,17 @@
  */
 #pragma once
 
+#include <queue>
 #include "storage/storage_common.h"
 #include "util/aio_wrapper.h"
 
 namespace smartengine
 {
+namespace table
+{
+class ExtentWriter;
+} // namespace table
+
 namespace storage
 {
 class IOExtent
@@ -98,6 +104,54 @@ private:
 protected:
   ::objstore::ObjectStore *object_store_;
   std::string bucket_;
+};
+
+class WriteExtentJob
+{
+public:
+  WriteExtentJob();
+  ~WriteExtentJob();
+
+  int init(table::ExtentWriter *writer, IOExtent *extent, const common::Slice &data);
+  void destroy();
+  int execute();
+
+private:
+  bool is_inited_;
+  table::ExtentWriter *writer_;
+  IOExtent *extent_;
+  char *data_;
+  int64_t data_size_;
+};
+
+class WriteExtentJobScheduler
+{
+public:
+  static WriteExtentJobScheduler &get_instance();
+
+  int start(util::Env *env, int64_t write_io_thread_count);
+  int stop();
+  int submit(WriteExtentJob *job);
+  int adjust_write_thread_count(int64_t thread_count);
+
+private:
+  static void consume_wrapper(void *scheduler);
+  int consume();
+  void push_to_job_queue(WriteExtentJob *job);
+  WriteExtentJob *pop_from_job_queue();
+
+private:
+  WriteExtentJobScheduler();
+  ~WriteExtentJobScheduler();
+  
+  static const int64_t MAX_JOB_QUEUE_SIZE_FACTOR = 10;
+
+private:
+  bool is_inited_;
+  util::Env *env_;
+  std::atomic<int64_t> write_io_thread_count_;
+  std::mutex job_queue_mutex_;
+  std::queue<WriteExtentJob *> job_queue_;
 };
 
 }  // namespace storage

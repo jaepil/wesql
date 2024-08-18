@@ -281,7 +281,7 @@ class Env {
   virtual common::Status UnlockFile(FileLock* lock) = 0;
 
   // Priority for scheduling job in thread pool
-  enum Priority {STATS, LOW, HIGH, SHRINK_EXTENT_SPACE, RECYCLE_EXTENT, FILTER, MASTER, TOTAL };
+  enum Priority {STATS, LOW, HIGH, SHRINK_EXTENT_SPACE, RECYCLE_EXTENT, FILTER, MASTER, WRITE_IO_THREAD, TOTAL };
 
   // Priority for requesting bytes in rate limiter scheduler
   enum IOPriority { IO_LOW = 0, IO_HIGH = 1, IO_TOTAL = 2 };

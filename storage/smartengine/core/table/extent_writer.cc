@@ -121,7 +121,10 @@ ExtentWriter::ExtentWriter()
       bloom_filter_writer_(nullptr),
       data_block_writer_(nullptr),
       change_info_(nullptr),
-      migrate_flag_(false)
+      migrate_flag_(false),
+      pending_extent_mutex_(),
+      pending_extents_(),
+      write_extent_ret_(Status::kOk)
 {}
 
 ExtentWriter::~ExtentWriter()
@@ -258,6 +261,10 @@ int ExtentWriter::finish(std::vector<ExtentInfo> *extent_infos)
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
   } else if (FAILED(write_extent())) {
     SE_LOG(WARN, "fail to write extent", K(ret));
+  } else if (FAILED(wait_pending_extents_finish())) {
+    SE_LOG(WARN, "fail to wait write extent jobs finish", K(ret));
+  } else if (FAILED(write_extent_ret_)) {
+    SE_LOG(WARN, "fail to execute write extent job", K(ret));
   } else {
     if (IS_NOTNULL(extent_infos)) {
       *extent_infos = writed_extent_infos_;
@@ -275,18 +282,49 @@ int ExtentWriter::rollback()
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
-  } else {
-    for (uint32_t i = 0; SUCCED(ret) && i < writed_extent_infos_.size(); ++i) {
+  } else { 
+    if (FAILED(wait_pending_extents_finish())) {
+      SE_LOG(WARN, "fail to wait write extent jobs finish", K(ret));
+    } else if (FAILED(write_extent_ret_)) {
+      SE_LOG(ERROR, "fail to execute write extent job", K(ret));
+    }
+
+    // During the rollback process in 'ExtentWriter', none of the previously written extent will
+    // be used. Therefore, we will attempt to reclaim all the extents that have already been written. 
+    int recycle_ret = Status::kOk;
+    for (uint32_t i = 0; i < writed_extent_infos_.size(); ++i) {
       const ExtentInfo &extent_info = writed_extent_infos_.at(i);
-      if (FAILED(ExtentSpaceManager::get_instance().recycle(table_space_id_,
-                                                            extent_space_type_,
-                                                            extent_info.extent_id_))) {
-        SE_LOG(WARN, "fail to recycle extent meta", K(ret), K(extent_info));
+      if (Status::kOk != (recycle_ret = ExtentSpaceManager::get_instance().recycle(table_space_id_,
+                                                                                   extent_space_type_,
+                                                                                   extent_info.extent_id_))) {
+        SE_LOG(WARN, "fail to recycle extent meta", K(recycle_ret), K(extent_info));
       }
     }
   }
 
   return ret;
+}
+
+int ExtentWriter::mark_write_extent_finish(const ExtentId &extent_id)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kOk;
+    SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
+  } else if (FAILED(erase_pending_extent(extent_id))) {
+    SE_LOG(WARN, "fail to erase pending io extent job", K(ret), K(extent_id));
+  } else {
+    SE_LOG(INFO, "success to mark io extent job finish", K(extent_id));
+  }
+
+  return ret;
+}
+
+void ExtentWriter::report_write_extent_error(int ret)
+{
+  std::lock_guard<std::mutex> lock_guard(pending_extent_mutex_);
+  write_extent_ret_ = ret;
 }
 
 bool ExtentWriter::is_empty() const
@@ -821,8 +859,6 @@ int ExtentWriter::flush_extent()
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
   } else if (FAILED(ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, extent))) {
     SE_LOG(WARN, "fail to allocate extent", K(ret));
-  } else if (FAILED(extent->write(Slice(buf_.data(), MAX_EXTENT_SIZE)))) {
-    SE_LOG(WARN, "fail to append extent data", K(ret));
   } else {
     extent_info_.table_space_id_ = table_space_id_;
     extent_info_.extent_space_type_ = extent_space_type_;
@@ -835,10 +871,11 @@ int ExtentWriter::flush_extent()
       // normal data persistence process.
       migrate_block_cache(extent);
       writed_extent_infos_.push_back(extent_info_);
+      if (FAILED(submit_write_extent_request(extent, Slice(buf_.data(), MAX_EXTENT_SIZE)))) {
+        SE_LOG(WARN, "fail to submit write extent request", K(ret));
+      }
     }
   }
-
-  DELETE_OBJECT(ModId::kIOExtent, extent);
 
   return ret;
 }
@@ -922,11 +959,6 @@ int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject 
 
       if (FAILED(storage::ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, extent))) {
         SE_LOG(WARN, "fail to allocate writable extent", K(ret));
-      // The last large object extent contains valid data of size.Since all extents are
-      // currently 2MB, we will directly write padding the data to 2MB size here.
-      // the valid size is recorded in ExtentMeta.
-      } else if (FAILED(extent->write(Slice(value_buf, storage::MAX_EXTENT_SIZE)))) {
-        SE_LOG(WARN, "fail to append part of large object", K(ret));
       } else if (FAILED(build_large_object_extent_meta(Slice(large_object.key_), extent->get_extent_id(), size, extent_meta))) {
         SE_LOG(WARN, "fail to build large object extent meta", K(ret));
       } else if (FAILED(write_extent_meta(extent_meta, true /*is_large_object_extent*/))) {
@@ -935,8 +967,13 @@ int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject 
         large_object.value_.extents_.push_back(extent->get_extent_id());
         offset += size;
         extent_meta.reset();
+        // The last large object extent contains valid data of size.Since all extents are
+        // currently 2MB, we will directly write padding the data to 2MB size here.
+        // the valid size is recorded in ExtentMeta.
+        if (FAILED(submit_write_extent_request(extent, Slice(value_buf, storage::MAX_EXTENT_SIZE)))) {
+          SE_LOG(WARN, "fail to submit write extent request", K(ret));
+        }
       }
-      DELETE_OBJECT(ModId::kIOExtent, extent);
     }
   }
 
@@ -1064,8 +1101,8 @@ int ExtentWriter::collect_migrating_block(const Slice &block,
   if (UNLIKELY(block.empty()) || UNLIKELY(!block_handle.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(block), K(block_handle));
-  } else if (IS_NULL(migrating_block_buf = reinterpret_cast<char *>(base_malloc(
-      block.size(), ModId::kExtentWriter)))) {
+  } else if (IS_NULL(migrating_block_buf = reinterpret_cast<char *>(base_memalign(
+      DIOHelper::DIO_ALIGN_SIZE, block.size(), ModId::kExtentWriter)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for block", K(ret), "size", block.size());
   } else {
@@ -1149,6 +1186,97 @@ void ExtentWriter::calculate_block_checksum(const Slice &block, uint32_t &checks
 {
   checksum = crc32c::Value(block.data(), block.size());
   checksum = crc32c::Mask(checksum);
+}
+
+int ExtentWriter::submit_write_extent_request(IOExtent *extent, const Slice &data)
+{
+  int ret = Status::kOk;
+  ExtentId extent_id;
+  WriteExtentJob *job = nullptr;
+
+  if (FAILED(write_extent_ret_)) {
+    SE_LOG(ERROR, "previous write extent job has failed, stop to submit new job", K(ret));
+  } else if (IS_NULL(extent) || UNLIKELY(data.empty())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(extent), K(data));
+  } else {
+    extent_id = extent->get_extent_id();
+    if (FAILED(add_pending_extent(extent_id))) {
+      SE_LOG(WARN, "fail to add pending io extent job", K(ret));
+    } else if (IS_NULL(job = MOD_NEW_OBJECT(ModId::kIOExtent, WriteExtentJob))) {
+      ret = Status::kMemoryLimit;
+      SE_LOG(WARN, "fail to allocate memory for IOExtentJob", K(ret));
+    } else if (FAILED(job->init(this, extent, data))) {
+      SE_LOG(WARN, "fail to init io extent job", K(ret));
+    } else if (FAILED(WriteExtentJobScheduler::get_instance().submit(job))) {
+      SE_LOG(WARN, "fail to submit io extent job", K(ret));
+    } else {
+      SE_LOG(INFO, "success to submit io extent job", K(extent_id));
+    }
+  }
+
+  // Resource clean.
+  if (FAILED(ret)) {
+    if (IS_NOTNULL(job)) {
+      MOD_DELETE_OBJECT(WriteExtentJob, job);
+    }
+  }
+
+  return ret;
+}
+
+int ExtentWriter::add_pending_extent(const ExtentId &extent_id)
+{
+  int ret = Status::kOk;
+
+  std::lock_guard<std::mutex> lock_guard(pending_extent_mutex_);
+  if (!(pending_extents_.emplace(extent_id.id()).second)) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "fail to emplace pending io extent job", K(ret), K(extent_id));
+  }
+
+  return ret;
+}
+
+int ExtentWriter::erase_pending_extent(const ExtentId &extent_id)
+{
+  int ret = Status::kOk;
+  int64_t erase_count = 0;
+
+  std::lock_guard<std::mutex> lock_guard(pending_extent_mutex_);
+  if (1 != (erase_count = pending_extents_.erase(extent_id.id()))) {
+    ret = Status::kErrorUnexpected;
+    SE_LOG(WARN, "fail to erase pending io extent job", K(ret), K(extent_id), K(erase_count));
+  }
+
+  return ret;
+}
+
+int ExtentWriter::wait_pending_extents_finish()
+{
+  int ret = Status::kOk;
+  // Here, we set an extreme waiting time of 30 minutes (180000 * 10ms).Since the
+  // "WriteExtentJobScheduler" ensures that the number of tasks in the queue is
+  // less than ten times the number of write threads (the current default value),
+  // the tasks in the queue will normally be executed quickly. This high time
+  // limit is set as a fallback measure th prevent the system from waiting indefinitely.
+  int64_t wait_count = 180000;
+  int64_t wait_time_interval = 10; // 10 ms
+
+  std::unique_lock<std::mutex> lock_guard(pending_extent_mutex_);
+  while (wait_count > 0 && !pending_extents_.empty()) {
+    pending_extent_mutex_.unlock();
+    --wait_count;
+    std::this_thread::sleep_for(std::chrono::milliseconds(wait_time_interval));
+    pending_extent_mutex_.lock();
+  }
+
+  if (!pending_extents_.empty()) {
+    ret = Status::kTimedOut;
+    SE_LOG(ERROR, "wait write extent jobs finish timeout", "pending_job_count", pending_extents_.size());
+  }
+
+  return ret;
 }
 
 } //namespace table

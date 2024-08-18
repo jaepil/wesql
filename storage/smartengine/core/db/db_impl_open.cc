@@ -1331,6 +1331,8 @@ Status DB::Open(const Options &options,
   int64_t ret = Status::kOk;
   char *tmp_buf = nullptr;
   GlobalContext *gctx = nullptr;
+  int64_t total_flush_compaction_thread_count = impl->initial_db_options_.max_background_flushes +
+      impl->initial_db_options_.max_background_compactions;
   if (nullptr != cf_options.table_factory) {
     cache::Cache *block_cache =
         static_cast<ExtentBasedTableFactory *>(cf_options.table_factory.get())->table_options().block_cache.get();
@@ -1342,6 +1344,8 @@ Status DB::Open(const Options &options,
   if (IS_NULL(impl->table_cache_.get())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, table cache must not nullptr", K(ret));
+  } else if (FAILED(WriteExtentJobScheduler::get_instance().start(impl->env_, total_flush_compaction_thread_count))) {
+    SE_LOG(WARN, "fail to start write extent job scheduler", K(ret), K(total_flush_compaction_thread_count));
   } else if (FAILED(cache::PersistentCache::get_instance().init(impl->env_, dbname, impl->immutable_db_options_.persistent_cache_size))) {
     SE_LOG(WARN, "fail to init PersistentCache", K(ret), K(dbname), "persistent_cache_size", impl->immutable_db_options_.persistent_cache_size);
   } else if (FAILED(StorageLogger::get_instance().init(impl->env_,

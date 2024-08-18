@@ -35,6 +35,7 @@ namespace storage
 struct ChangeInfo;
 struct ExtentMeta;
 class IOExtent;
+class WriteExtentJob;
 } // namespace storage
 
 namespace table
@@ -87,6 +88,8 @@ public:
   int append_block(const common::Slice &block, const common::Slice &block_index, const common::Slice &last_key);
   int finish(std::vector<ExtentInfo> *extent_infos);
   int rollback();
+  int mark_write_extent_finish(const storage::ExtentId &extent_id);
+  void report_write_extent_error(int ret);
   void set_migrate_flag() { migrate_flag_ = true; }
   bool is_empty() const;
 
@@ -137,6 +140,10 @@ private:
                               const common::CompressionType &compress_type);
   int migrate_block_cache(const storage::IOExtent *extent);
   void calculate_block_checksum(const common::Slice &block, uint32_t &checksum);
+  int submit_write_extent_request(storage::IOExtent *extent, const common::Slice &data);
+  int add_pending_extent(const storage::ExtentId &extent_id);
+  int erase_pending_extent(const storage::ExtentId &extent_id);
+  int wait_pending_extents_finish();
 
 private:
   static const int64_t SAFE_SPACE_SIZE = 1024; // size of safe space between last valid block and footer
@@ -166,6 +173,9 @@ private:
   bool migrate_flag_;
   std::unordered_map<uint32_t, RowBlock *> migrating_blocks_;
   std::vector<BlockHandle> migrate_block_handles_;
+  std::mutex pending_extent_mutex_;
+  std::unordered_set<int64_t> pending_extents_;
+  int write_extent_ret_;
 };
 
 } //namespace table

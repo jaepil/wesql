@@ -635,6 +635,7 @@ DBImpl::~DBImpl() {
   ExtentMetaManager::get_instance().destroy();
   ExtentSpaceManager::get_instance().destroy();
   BackupSnapshotImpl::get_instance()->destroy();
+  WriteExtentJobScheduler::get_instance().stop();
   if (nullptr != global_ctx) {
     MOD_DELETE_OBJECT(GlobalContext, global_ctx);
   }
@@ -935,6 +936,8 @@ Status DBImpl::SetDBOptions(
         env_->IncBackgroundThreadsIfNeeded(
             new_options.max_background_compactions, Env::Priority::LOW);
         MaybeScheduleFlushOrCompaction();
+        s = WriteExtentJobScheduler::get_instance().adjust_write_thread_count(
+          initial_db_options_.max_background_flushes + new_options.max_background_compactions);
       }
 
       mutable_db_options_ = new_options;

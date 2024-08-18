@@ -17,6 +17,8 @@
 #include "storage/io_extent.h"
 #include <unistd.h>
 #include "cache/persistent_cache.h"
+#include "table/extent_writer.h"
+#include "util/common.h"
 #include "util/misc_utility.h"
 
 namespace smartengine
@@ -623,6 +625,227 @@ int ObjectIOExtent::load_extent(cache::Cache::Handle **handle)
   }
 
   return ret;
+}
+
+WriteExtentJob::WriteExtentJob()
+    : is_inited_(false),
+      writer_(nullptr),
+      extent_(nullptr),
+      data_(nullptr),
+      data_size_(0)
+{}
+
+WriteExtentJob::~WriteExtentJob()
+{
+  destroy();
+}
+
+int WriteExtentJob::init(table::ExtentWriter *writer, IOExtent *extent, const common::Slice &data)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(is_inited_)) {
+    ret = Status::kInitTwice;
+    SE_LOG(WARN, "IOExtentJob has been inited", K(ret));
+  } else if (IS_NULL(writer) || IS_NULL(extent) || UNLIKELY(data.empty())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(writer), KP(extent), K(data));
+  } else if (IS_NULL(data_ = reinterpret_cast<char *>(base_memalign(DIOHelper::DIO_ALIGN_SIZE, data.size(), ModId::kIOExtent)))) {
+    ret = Status::kMemoryLimit;
+    SE_LOG(WARN, "fail to allocate memory for data", K(ret), "size", data.size());
+  } else {
+    // TODO (Zhao Dongsheng): resue data_ memory if neccessary.
+    memcpy(data_, data.data(), data.size());
+    data_size_ = data.size();
+    writer_ = writer;
+    extent_ = extent;
+    is_inited_ = true;
+  }
+
+  return ret;
+}
+
+void WriteExtentJob::destroy()
+{
+  if (IS_NOTNULL(extent_)) {
+    DELETE_OBJECT(ModId::kIOExtent, extent_);
+    extent_ = nullptr;
+  }
+
+  if (IS_NOTNULL(data_)) {
+    base_memalign_free(data_);
+    data_ = nullptr;
+  }
+}
+
+int WriteExtentJob::execute()
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "IOExtentJob should be inited", K(ret));
+  } else if (FAILED(extent_->write(Slice(data_, data_size_)))) {
+    SE_LOG(WARN, "fail to write extent data", K(ret), "extent_id", extent_->get_extent_id());
+  } else if (FAILED(writer_->mark_write_extent_finish(extent_->get_extent_id()))) {
+    SE_LOG(WARN, "fail to mark io complete", K(ret), "extent_id", extent_->get_extent_id());
+  } else {
+    SE_LOG(INFO, "success to do io extent job", "extent_id", extent_->get_extent_id());
+  }
+
+  if (FAILED(ret)) {
+    writer_->report_write_extent_error(ret);
+  }
+
+  return ret;
+}
+
+WriteExtentJobScheduler::WriteExtentJobScheduler()
+    : is_inited_(false),
+      env_(nullptr),
+      write_io_thread_count_(0),
+      job_queue_mutex_(),
+      job_queue_()
+{}
+
+WriteExtentJobScheduler::~WriteExtentJobScheduler() {}
+
+WriteExtentJobScheduler &WriteExtentJobScheduler::get_instance()
+{
+  static WriteExtentJobScheduler scheduler;
+  return scheduler;
+}
+
+int WriteExtentJobScheduler::start(util::Env *env, int64_t write_io_thread_count)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(is_inited_)) {
+    ret = Status::kInitTwice;
+    SE_LOG(WARN, "WriteExtentJobScheduler has been inited", K(ret));
+  } else if (IS_NULL(env) || UNLIKELY(write_io_thread_count <= 0)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(env), K(write_io_thread_count));
+  } else {
+    env_ = env;
+    write_io_thread_count_ = write_io_thread_count;
+    env_->SetBackgroundThreads(write_io_thread_count_, Env::WRITE_IO_THREAD);
+    is_inited_ = true;
+    SE_LOG(INFO, "success to start WriteExtentJobScheduler", K(write_io_thread_count));
+  }
+
+  return ret;
+}
+
+int WriteExtentJobScheduler::stop()
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "WriteExtentJobScheduler has not been inited", K(ret));
+  } else {
+    env_->UnSchedule(this, Env::Priority::WRITE_IO_THREAD);
+    // Before WriteExtentJobScheduler exits, all flush and compaction tasks must be
+    // completed or canceled.There tasks depend on completion of their submitted write
+    // extent tasks.Therefore, when 'WriteExtentJobScheduler' exits, there should be no
+    // unfinished write extent tasks.
+    std::lock_guard<std::mutex> lock_guard(job_queue_mutex_);
+    assert(job_queue_.empty());
+    if (!job_queue_.empty()) {
+      ret = Status::kErrorUnexpected;
+      SE_LOG(WARN, "There should be no unfinished tasks in the queue", K(ret), "job_count", job_queue_.size());
+    } else {
+      SE_LOG(INFO, "success to stop WriteExtentJobScheduler");
+    }
+  }
+
+  return ret;
+}
+
+int WriteExtentJobScheduler::submit(WriteExtentJob *job)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "WriteExtentJobScheduler should be inited", K(ret));
+  } else if (IS_NULL(job)) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(job));
+  } else {
+    push_to_job_queue(job);
+    env_->Schedule(&WriteExtentJobScheduler::consume_wrapper, this, Env::Priority::WRITE_IO_THREAD, this);
+  }
+
+  return ret;
+}
+
+int WriteExtentJobScheduler::adjust_write_thread_count(int64_t thread_count)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "WriteExtentJobScheduler should be inited", K(ret));
+  } else if (thread_count <= write_io_thread_count_.load()) {
+    SE_LOG(INFO, "Only dynamic addition of write threads is supported",
+      K(thread_count), K(write_io_thread_count_.load()));
+  } else {
+    env_->IncBackgroundThreadsIfNeeded(thread_count, Env::Priority::WRITE_IO_THREAD);
+  }
+
+  return ret;
+}
+
+void WriteExtentJobScheduler::consume_wrapper(void *scheduler)
+{
+  reinterpret_cast<WriteExtentJobScheduler *>(scheduler)->consume();
+}
+
+int WriteExtentJobScheduler::consume()
+{
+  int ret = Status::kOk;
+  WriteExtentJob *job = nullptr;
+
+  while (SUCCED(ret) && IS_NOTNULL(job = pop_from_job_queue())) {
+    QUERY_COUNT(monitor::CountPoint::WRITE_EXTENT_COUNT);
+    QUERY_TRACE_RESET();
+    QUERY_TRACE_SCOPE(monitor::TracePoint::WRITE_EXTENT_TIME);
+    if (FAILED(job->execute())) {
+      SE_LOG(WARN, "fail o execute io extent job", K(ret));
+    }
+
+    MOD_DELETE_OBJECT(WriteExtentJob, job);
+  }
+
+  return ret;
+}
+
+void WriteExtentJobScheduler::push_to_job_queue(WriteExtentJob *job)
+{
+  se_assert(IS_NOTNULL(job));
+  std::unique_lock<std::mutex> lock_guard(job_queue_mutex_);
+  // Limit the overall memory usage by restricting the number of write extent jobs in the queue.
+  while (static_cast<int64_t>(job_queue_.size()) > MAX_JOB_QUEUE_SIZE_FACTOR * write_io_thread_count_) {
+    lock_guard.unlock();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    lock_guard.lock();
+  }
+  job_queue_.push(job);
+}
+
+WriteExtentJob *WriteExtentJobScheduler::pop_from_job_queue()
+{
+  WriteExtentJob *job = nullptr;
+  std::lock_guard<std::mutex> lock_guard(job_queue_mutex_);
+  if (!job_queue_.empty()) {
+    job = job_queue_.front();
+    job_queue_.pop();
+    se_assert(IS_NOTNULL(job));
+  }
+
+  return job;
 }
 
 }  // namespace storage
