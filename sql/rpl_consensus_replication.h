@@ -33,7 +33,7 @@ bool is_consensus_replication_plugin_loaded();
 bool is_consensus_replication_enabled();
 bool is_consensus_replication_applier_running();
 bool is_consensus_replication_log_mode();
-bool is_consensus_replication_state_leader();
+bool is_consensus_replication_state_leader(uint64 &term);
 
 bool consensus_replication_show_logs(THD *thd);
 bool consensus_replication_show_log_events(THD *thd);

@@ -30,7 +30,7 @@ struct st_mysql_consensus_replication {
   /*
     This function is used to check leader state.
   */
-  bool (*is_state_leader)();
+  bool (*is_state_leader)(uint64 &term);
 
   /*
     This function is used to show consensus logs.

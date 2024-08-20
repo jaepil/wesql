@@ -84,10 +84,14 @@ static bool plugin_is_consensus_replication_log_mode() {
   return opt_cluster_log_type_instance;
 }
 
-static bool plugin_is_consensus_replication_state_leader() {
-  return lv.consensus_replication_running &&
-         consensus_state_process.get_status(true) ==
-             Consensus_Log_System_Status::BINLOG_WORKING;
+static bool plugin_is_consensus_replication_state_leader(uint64 &term) {
+  Consensus_Log_System_Status status =
+      Consensus_Log_System_Status::RELAY_LOG_WORKING;
+
+  if (lv.consensus_replication_running)
+    consensus_state_process.get_term_and_status(term, status);
+
+  return status == Consensus_Log_System_Status::BINLOG_WORKING;
 }
 
 static bool plugin_show_consensus_logs(void *thd) {

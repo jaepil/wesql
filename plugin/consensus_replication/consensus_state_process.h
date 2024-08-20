@@ -46,12 +46,15 @@ class ConsensusStateProcess {
   }
 
   // consensus status
-  Consensus_Log_System_Status get_status(bool need_lock = false) {
-    Consensus_Log_System_Status ret;
-    if (need_lock) mysql_rwlock_rdlock(&LOCK_consensuslog_status);
-    ret = status;
-    if (need_lock) mysql_rwlock_unlock(&LOCK_consensuslog_status);
-    return ret;
+  Consensus_Log_System_Status get_status() { return status; }
+
+  // consensus term and status
+  void get_term_and_status(uint64 &ret_term,
+                           Consensus_Log_System_Status &ret_status) {
+    mysql_rwlock_rdlock(&LOCK_consensuslog_status);
+    ret_status = status;
+    ret_term = current_term;
+    mysql_rwlock_unlock(&LOCK_consensuslog_status);
   }
 
   void set_status(Consensus_Log_System_Status status_arg) {

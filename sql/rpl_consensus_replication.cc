@@ -151,7 +151,7 @@ bool is_consensus_replication_log_mode() {
   return result;
 }
 
-bool is_consensus_replication_state_leader() {
+bool is_consensus_replication_state_leader(uint64 &term) {
   bool result = false;
 
   plugin_ref plugin =
@@ -160,7 +160,7 @@ bool is_consensus_replication_state_leader() {
   if (plugin != nullptr) {
     st_mysql_consensus_replication *plugin_handle =
         (st_mysql_consensus_replication *)plugin_decl(plugin)->info;
-    result = plugin_handle->is_state_leader();
+    result = plugin_handle->is_state_leader(term);
     plugin_unlock(nullptr, plugin);
   }
 
