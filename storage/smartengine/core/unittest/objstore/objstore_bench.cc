@@ -37,7 +37,7 @@ public:
 
     objstore::ObjectStore *obs = nullptr;
 
-    auto s = env_->InitObjectStore(provider_, region_, nullptr, false, bucket_, "");
+    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "");
     if (!s.ok()) {
       std::cout << "init object store failed:" << s.ToString() << std::endl;
       std::abort();
@@ -64,8 +64,9 @@ public:
 
   objstore::ObjectStore *create_objstore_client()
   {
+    std::string obj_err_msg;
     objstore::init_objstore_provider(provider_);
-    return objstore::create_object_store(provider_, region_, nullptr, false);
+    return objstore::create_object_store(provider_, region_, nullptr, false, obj_err_msg);
   }
 
   void release_objstore_client(objstore::ObjectStore *client)
@@ -173,9 +174,18 @@ protected:
   EnvOptions env_options_;
   objstore::ObjectStore *obj_store_;
 
-  std::string provider_ = "aws";
-  std::string bucket_ = "ljc";
-  std::string region_ = "cn-northwest-1";
+// for aws
+  // std::string provider_ = "aws";
+  // std::string bucket_ = "ljc";
+  // std::string region_ = "cn-northwest-1";
+  // std::string_view* endpoint_ = nullptr;
+
+// for aliyun
+  std::string provider_ = "aliyun";
+  std::string bucket_ = "wesql-mtr-tests";
+  std::string region_ = "cn-hangzhou";
+  std::string_view aliyun_endpoint_ = "oss-cn-hangzhou-internal.aliyuncs.com";
+  std::string_view* endpoint_ = &aliyun_endpoint_;
 };
 
 } // namespace obj
@@ -249,7 +259,7 @@ void test_put(char* data, int sample_count, smartengine::obj::ObjstoreBench &obj
   for (auto d: durations) {
     id++;
     total_duaration += d;
-    std::cout << "thread "<< id << ", speed: " << each_sample_count*obj_size*1000/d  << " duration: " << d << "ms" << std::endl;
+    std::cout << "thread "<< id << ", avg latency: " << d/each_sample_count << "ms" << ", speed: " << each_sample_count*obj_size*1000/d  << ", duration: " << d << "ms" << std::endl;
   }
 
   long avg_speed = total_size*1000/total_duaration;
@@ -303,7 +313,7 @@ void test_get(char* data, int sample_count, smartengine::obj::ObjstoreBench &obj
   for (auto d: durations) {
     id++;
     total_duaration += d;
-    std::cout << "thread "<< id << ", speed: " << each_sample_count*obj_size*1000/d  << " duration: " << d << "ms" << std::endl;
+    std::cout << "thread "<< id << ", avg latency: " << d/each_sample_count << "ms" << ", speed: " << each_sample_count*obj_size*1000/d  << ", duration: " << d << "ms" << std::endl;
   }
 
   long avg_speed = total_size*1000/total_duaration;

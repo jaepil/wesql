@@ -15,10 +15,10 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "mysys/objstore/aliyun_oss.h"
-#include <fstream>
-#include <iostream>
 #include <ctime>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
 
 namespace objstore {
 
@@ -307,9 +307,9 @@ char *get_oss_access_secret_key() {
   return nullptr;
 }
 
-AliyunOssObjectStore* create_aliyun_oss_objstore_helper(const std::string_view region,
-                                                        const std::string_view *endpoint,
-                                                        const std::string_view bucket_dir) {
+AliyunOssObjectStore *create_aliyun_oss_objstore_helper(
+    const std::string_view region, const std::string_view *endpoint,
+    const std::string_view bucket_dir, std::string &err_msg) {
   if (endpoint == nullptr) {
     return nullptr;
   }
@@ -322,19 +322,25 @@ AliyunOssObjectStore* create_aliyun_oss_objstore_helper(const std::string_view r
     std::string access_secret_key_str(access_secret_key);
     AlibabaCloud::OSS::OssClient client(std::string(*endpoint), access_key_id_str, access_secret_key_str, conf);
     return new AliyunOssObjectStore(region, std::move(client), bucket_dir);
+  } else {
+    err_msg =
+        "Failed to get access key id or access secret key, you should set "
+        "(OSS_)ACCESS_KEY_ID and (OSS_)ACCESS_KEY_SECRET environment "
+        "variables first.";
   }
   return nullptr;
 }
 
 AliyunOssObjectStore *create_aliyun_oss_objstore(
-    const std::string_view region, const std::string_view *endpoint) {
-  return create_aliyun_oss_objstore_helper(region, endpoint, "");
+    const std::string_view region, const std::string_view *endpoint,
+    std::string &err_msg) {
+  return create_aliyun_oss_objstore_helper(region, endpoint, "", err_msg);
 }
 
 AliyunOssObjectStore *create_aliyun_oss_objstore_for_test(
     const std::string_view region, const std::string_view *endpoint,
-    const std::string_view bucket_dir) {
-  return create_aliyun_oss_objstore_helper(region, endpoint, bucket_dir);
+    const std::string_view bucket_dir, std::string &err_msg) {
+  return create_aliyun_oss_objstore_helper(region, endpoint, bucket_dir, err_msg);
 }
 
 void destroy_aliyun_oss_objstore(AliyunOssObjectStore *oss_obj_store) {

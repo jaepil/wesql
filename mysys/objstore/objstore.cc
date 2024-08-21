@@ -186,11 +186,11 @@ Status ObjectStore::get_objects_to_dir(const std::string_view &src_objstore_buck
 ObjectStore *create_object_store(const std::string_view &provider,
                                  const std::string_view region,
                                  const std::string_view *endpoint,
-                                 bool use_https) {
+                                 bool use_https, std::string &err_msg) {
   if (provider == "aws") {
-    return create_s3_objstore(region, endpoint, use_https);
+    return create_s3_objstore(region, endpoint, use_https, err_msg);
   } else if (provider == "aliyun") {
-    return create_aliyun_oss_objstore(region, endpoint);
+    return create_aliyun_oss_objstore(region, endpoint, err_msg);
   } else if (provider == "local") {
     return create_local_objstore(region, endpoint, use_https);
   } else {
@@ -202,13 +202,16 @@ ObjectStore *create_object_store_for_test(const std::string_view &provider,
                                           const std::string_view region,
                                           const std::string_view *endpoint,
                                           bool use_https,
-                                          const std::string_view bucket_dir) {
+                                          const std::string_view bucket_dir,
+                                          std::string &err_msg) {
   if (provider == "aws") {
-    return create_s3_objstore_for_test(region, endpoint, use_https, bucket_dir);
+    return create_s3_objstore_for_test(region, endpoint, use_https, bucket_dir,
+                                       err_msg);
   } else if (provider == "local") {
     return create_local_objstore(region, endpoint, use_https);
   } else if (provider == "aliyun") {
-    return create_aliyun_oss_objstore_for_test(region, endpoint, bucket_dir);
+    return create_aliyun_oss_objstore_for_test(region, endpoint, bucket_dir,
+                                               err_msg);
   } else {
     return nullptr;
   }

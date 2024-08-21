@@ -98,10 +98,12 @@ void init_aliyun_api();
 void shutdown_aliyun_api();
 
 AliyunOssObjectStore *create_aliyun_oss_objstore(
-    const std::string_view region, const std::string_view *endpoint);
+    const std::string_view region, const std::string_view *endpoint,
+    std::string &err_msg);
 
 AliyunOssObjectStore *create_aliyun_oss_objstore_for_test(
-    const std::string_view region, const std::string_view *endpoint, const std::string_view bucket_dir);
+    const std::string_view region, const std::string_view *endpoint,
+    const std::string_view bucket_dir, std::string &err_msg);
 
 void destroy_aliyun_oss_objstore(AliyunOssObjectStore *oss_obj_store);
 

@@ -579,7 +579,8 @@ char *get_s3_access_secret_key() {
 S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
                                          const std::string_view *endpoint,
                                          bool use_https,
-                                         const std::string_view bucket_dir) {
+                                         const std::string_view bucket_dir,
+                                         std::string &err_msg) {
   Aws::Client::ClientConfiguration clientConfig;
   clientConfig.region = region;
   if (endpoint != nullptr) {
@@ -603,6 +604,9 @@ S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
   } else if (access_key_id || access_secret_key) {
     // if one of the access_key_id and access_secret_key is empty, we treat it
     // as an invalid input.
+    err_msg =
+        "access_key_id and access_secret_key environment variables should be "
+        "both set or both empty for s3";
     return nullptr;
   } else {
     // if both access_key_id and access_secret_key are empty, will find the
@@ -616,15 +620,17 @@ S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
 
 S3ObjectStore *create_s3_objstore(const std::string_view region,
                                   const std::string_view *endpoint,
-                                  bool use_https) {
-  return create_s3_objstore_helper(region, endpoint, use_https, "");
+                                  bool use_https, std::string &err_msg) {
+  return create_s3_objstore_helper(region, endpoint, use_https, "", err_msg);
 }
 
 S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
                                            const std::string_view *endpoint,
                                            bool use_https,
-                                           const std::string_view bucket_dir) {
-  return create_s3_objstore_helper(region, endpoint, use_https, bucket_dir);
+                                           const std::string_view bucket_dir,
+                                           std::string &err_msg) {
+  return create_s3_objstore_helper(region, endpoint, use_https, bucket_dir,
+                                   err_msg);
 }
 
 void destroy_s3_objstore(S3ObjectStore *s3_objstore) {

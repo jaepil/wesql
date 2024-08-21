@@ -100,12 +100,13 @@ void shutdown_aws_api();
 
 S3ObjectStore *create_s3_objstore(const std::string_view region,
                                   const std::string_view *endpoint,
-                                  bool useHttps);
+                                  bool useHttps, std::string &err_msg);
 
 S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
                                            const std::string_view *endpoint,
                                            bool use_https,
-                                           const std::string_view bucket_dir);
+                                           const std::string_view bucket_dir,
+                                           std::string &err_msg);
 
 void destroy_s3_objstore(S3ObjectStore *s3_obj_store);
 

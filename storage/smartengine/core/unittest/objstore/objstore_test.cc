@@ -86,8 +86,9 @@ public:
 
   objstore::ObjectStore *create_objstore_client()
   {
+    std::string obj_err_msg;
     objstore::init_objstore_provider(provider_);
-    return objstore::create_object_store(provider_, region_, endpoint_, false);
+    return objstore::create_object_store(provider_, region_, endpoint_, false, obj_err_msg);
   }
 
   void release_objstore_client(objstore::ObjectStore *client)

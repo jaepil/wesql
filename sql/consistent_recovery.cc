@@ -99,14 +99,19 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
         opt_recovery_objstore_endpoint
             ? std::string_view(opt_recovery_objstore_endpoint)
             : "");
+    std::string obj_error_msg;
     recovery_objstore = objstore::create_object_store(
         std::string_view(opt_recovery_objstore_provider),
         std::string_view(opt_recovery_objstore_region),
         opt_recovery_objstore_endpoint ? &endpoint : nullptr,
-        opt_recovery_objstore_use_https);
+        opt_recovery_objstore_use_https, obj_error_msg);
     if (recovery_objstore == nullptr) {
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-             "Failed to objstore::create_object_store");
+      err_msg.assign("Failed to create object store instance");
+      if (!obj_error_msg.empty()) {
+        err_msg.append(": ");
+        err_msg.append(obj_error_msg);
+      }
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return 1;
     }
     if (opt_recovery_objstore_bucket) {
@@ -134,13 +139,19 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
 
     std::string_view endpoint(
         opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
+    std::string obj_error_msg;
     recovery_objstore = objstore::create_object_store(
         std::string_view(opt_objstore_provider),
         std::string_view(opt_objstore_region),
-        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https);
+        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https,
+        obj_error_msg);
     if (recovery_objstore == nullptr) {
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-             "Failed to objstore::create_object_store");
+      std::string err_msg = "Failed to create object store instance";
+      if (!obj_error_msg.empty()) {
+        err_msg.append(": ");
+        err_msg.append(obj_error_msg);
+      }
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return 1;
     }
     if (opt_objstore_bucket) {

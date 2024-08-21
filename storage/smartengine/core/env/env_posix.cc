@@ -578,17 +578,19 @@ class PosixEnv : public Env
 
     objstore::init_objstore_provider(provider);
 
+    std::string obj_err_msg;
     if (bucket_subdir_for_test == "") {
-      obj_store_ = objstore::create_object_store(provider, region, endpoint, use_https);
+      obj_store_ = objstore::create_object_store(provider, region, endpoint, use_https, obj_err_msg);
     } else {
       obj_store_ = objstore::create_object_store_for_test(provider,
                                                           region,
                                                           endpoint,
                                                           use_https,
-                                                          bucket_subdir_for_test);
+                                                          bucket_subdir_for_test,
+                                                          obj_err_msg);
     }
     if (obj_store_ == nullptr) {
-      result = common::Status::InvalidArgument();
+      result = common::Status::InvalidArgument(obj_err_msg);
     } else {
       obj_store_bucket_ = bucket;
     }
