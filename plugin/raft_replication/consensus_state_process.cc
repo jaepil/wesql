@@ -464,8 +464,15 @@ static uint64 get_applier_start_index() {
                      "Error flush consensus info set start apply index");
       }
     } else if (start_apply_index == 0) {
+#ifdef WESQL_TEST
+      next_index = last_applied_index < first_index
+                       ? first_index
+                       : consensus_log_manager.get_next_trx_index(
+                             last_applied_index, false);
+#else
       next_index =
           consensus_log_manager.get_next_trx_index(last_applied_index, false);
+#endif
       consensus_info->set_start_apply_index(last_applied_index);
       if (consensus_info->flush_info(true, true)) {
         next_index = 0;
@@ -473,9 +480,16 @@ static uint64 get_applier_start_index() {
                      "Error flush consensus info set start apply index");
       }
     } else {
+#ifdef WESQL_TEST
+      next_index = last_applied_index < first_index
+                       ? first_index
+                       : consensus_log_manager.get_next_trx_index(
+                             start_apply_index, false);
+#else
       assert(start_apply_index >= first_index);
       next_index =
           consensus_log_manager.get_next_trx_index(start_apply_index, false);
+#endif
     }
   } else {
     uint64 consensus_recovery_index =

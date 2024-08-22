@@ -56,9 +56,13 @@ mysql.component
 ERROR
 Storage engine 'MyISAM' does not support system tables. [mysql.component]
 @table_name
-mysql.concurrency_control
+mysql.consensus_applier_info
 ERROR
-Storage engine 'MyISAM' does not support system tables. [mysql.concurrency_control]
+Storage engine 'MyISAM' does not support system tables. [mysql.consensus_applier_info]
+@table_name
+mysql.consensus_applier_worker
+ERROR
+Storage engine 'MyISAM' does not support system tables. [mysql.consensus_applier_worker]
 @table_name
 mysql.consensus_info
 ERROR
@@ -252,7 +256,9 @@ Warning	1726	Storage engine 'MyISAM' does not support system tables. [mysql.colu
 SEVERITY	ERRNO	MESSAGE
 Warning	1726	Storage engine 'MyISAM' does not support system tables. [mysql.component]
 SEVERITY	ERRNO	MESSAGE
-Warning	1726	Storage engine 'MyISAM' does not support system tables. [mysql.concurrency_control]
+Warning	1726	Storage engine 'MyISAM' does not support system tables. [mysql.consensus_applier_info]
+SEVERITY	ERRNO	MESSAGE
+Warning	1726	Storage engine 'MyISAM' does not support system tables. [mysql.consensus_applier_worker]
 SEVERITY	ERRNO	MESSAGE
 Warning	1726	Storage engine 'MyISAM' does not support system tables. [mysql.consensus_info]
 SEVERITY	ERRNO	MESSAGE
@@ -585,24 +591,3 @@ DROP USER 'user1'@'%';
 #-----------------------------------------------------------------------
 # Test case to verify logical upgrade from 5.7 dump file.
 #-----------------------------------------------------------------------
-SELECT table_schema, table_name, engine FROM information_schema.tables
-WHERE table_schema='mysql'
-                                              AND engine='MyISAM';
-TABLE_SCHEMA	TABLE_NAME	ENGINE
-mysql	columns_priv	MyISAM
-mysql	db	MyISAM
-mysql	event	MyISAM
-mysql	func	MyISAM
-mysql	ndb_binlog_index	MyISAM
-mysql	proc	MyISAM
-mysql	procs_priv	MyISAM
-mysql	proxies_priv	MyISAM
-mysql	tables_priv	MyISAM
-mysql	user	MyISAM
-# restart:--upgrade=FORCE
-SELECT table_schema, table_name, engine FROM information_schema.tables
-WHERE table_schema='mysql'
-                                              AND engine='MyISAM';
-TABLE_SCHEMA	TABLE_NAME	ENGINE
-mysql	event	MyISAM
-mysql	proc	MyISAM

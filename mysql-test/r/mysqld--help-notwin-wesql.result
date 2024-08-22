@@ -209,12 +209,6 @@ The following options may be given as the first argument:
  transactions are written to the binary log. Default is to
  order commits.
  (Defaults to on; use --skip-binlog-order-commits to disable.)
- --binlog-purge-size=# 
- If non-zero, binary logs will be purged after total
- binlogs' size is larger than binlog_purge_size. Purges
- happen at startup and atbinary log rotation. If
- expire_logs_days or binlog_expire_logs_seconds is set,
- this option takes priority.
  --binlog-rotate-encryption-master-key-at-startup 
  Force binlog encryption master key rotation at startup
  --binlog-row-event-max-size=# 
@@ -431,12 +425,17 @@ The following options may be given as the first argument:
  (milliseconds)
  --raft-replication-prefetch-cache-size=# 
  Max cached logs size
+<<<<<<< HEAD
  --raft-replication-prefetch-wakeup-ratio=# 
+=======
+ --consensus-replication-prefetch-wakeup-ratio=# 
+>>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
  prefetch wakeup ratio 
  --raft-replication-prefetch-window-size=# 
  prefetch window size
  --raft-replication-purged-gtid=name 
  Consensus cluster set the purged gtid
+<<<<<<< HEAD
  --raft-replication-recover-backup 
  recover from the backup created with xtrabackup or
  snapshot
@@ -444,6 +443,15 @@ The following options may be given as the first argument:
  recover new cluster from the snapshot of cloud storage or
  the backup created with xtrabackup
  --raft-replication-reset-prefetch-cache 
+=======
+ --consensus-replication-recover-backup 
+ recover from the backup created with xtrabackup or
+ snapshot
+ --consensus-replication-recover-new-cluster 
+ recover new cluster from the snapshot of cloud storage or
+ the backup created with xtrabackup
+ --consensus-replication-reset-prefetch-cache 
+>>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
  reset consensus prefetch_cache
  --raft-replication-send-timeout=# 
  Consensus send packet timeout
@@ -452,7 +460,11 @@ The following options may be given as the first argument:
  --raft-replication-sync-follower-meta-interva=# 
  Interval of leader sync follower's meta for learner
  source
+<<<<<<< HEAD
  --raft-replication-with-cache-log 
+=======
+ --consensus-replication-with-cache-log 
+>>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
  set server to replicate with cache log
  --raft-replication-worker-thread-cnt=# 
  Number of consensus worker thread
@@ -2244,7 +2256,6 @@ binlog-group-commit-sync-no-delay-count 0
 binlog-gtid-simple-recovery TRUE
 binlog-max-flush-queue-time 0
 binlog-order-commits TRUE
-binlog-purge-size 0
 binlog-rotate-encryption-master-key-at-startup FALSE
 binlog-row-event-max-size 8192
 binlog-row-image FULL
@@ -2274,6 +2285,7 @@ concurrent-insert AUTO
 connect-timeout 10
 connection-memory-chunk-size 8192
 connection-memory-limit 18446744073709551615
+<<<<<<< HEAD
 raft-replication ON
 raft-replication-allow-no-valid-entry FALSE
 raft-replication-appliedindex-force-delay 0
@@ -2340,6 +2352,64 @@ consistent-snapshot-innodb-tar-mode TAR
 consistent-snapshot-persistent-on-objectstore TRUE
 consistent-snapshot-smartengine-backup-checkpoint FALSE
 consistent-snapshot-smartengine-tar-mode TAR
+=======
+consensus-replication ON
+consensus-replication-allow-no-valid-entry FALSE
+consensus-replication-appliedindex-force-delay 0
+consensus-replication-archive-log-bin-index 
+consensus-replication-archive-recovery FALSE
+consensus-replication-archive-recovery-stop-datetime 
+consensus-replication-auto-leader-transfer TRUE
+consensus-replication-auto-leader-transfer-check-seconds 60
+consensus-replication-auto-reset-match-index TRUE
+consensus-replication-check-commit-index-interval 1000
+consensus-replication-checksum FALSE
+consensus-replication-cluster-id 0
+consensus-replication-cluster-info 
+consensus-replication-configure-change-timeout 60000
+consensus-replication-current-term 0
+consensus-replication-disable-election FALSE
+consensus-replication-disable-fifo-cache FALSE
+consensus-replication-dynamic-easyindex TRUE
+consensus-replication-election-timeout 5000
+consensus-replication-flow-control 
+consensus-replication-force-change-meta FALSE
+consensus-replication-force-recover-index 0
+consensus-replication-force-reset-meta FALSE
+consensus-replication-force-single-mode FALSE
+consensus-replication-force-sync-epoch-diff 0
+consensus-replication-heartbeat-thread-cnt 0
+consensus-replication-io-thread-cnt 4
+consensus-replication-large-batch-ratio 50
+consensus-replication-large-event-split-size 2097152
+consensus-replication-large-trx TRUE
+consensus-replication-learner-heartbeat TRUE
+consensus-replication-learner-node FALSE
+consensus-replication-learner-pipelining FALSE
+consensus-replication-learner-timeout 0
+consensus-replication-log-cache-size 67108864
+consensus-replication-log-level LOG_ERROR
+consensus-replication-log-type-node FALSE
+consensus-replication-max-delay-index 50000
+consensus-replication-max-log-size 20971520
+consensus-replication-max-packet-size 131072
+consensus-replication-min-delay-index 5000
+consensus-replication-new-follower-threshold 10000
+consensus-replication-optimistic-heartbeat FALSE
+consensus-replication-pipelining-timeout 1
+consensus-replication-prefetch-cache-size 67108864
+consensus-replication-prefetch-wakeup-ratio 2
+consensus-replication-prefetch-window-size 10
+consensus-replication-purged-gtid 
+consensus-replication-recover-backup FALSE
+consensus-replication-recover-new-cluster FALSE
+consensus-replication-reset-prefetch-cache FALSE
+consensus-replication-send-timeout 0
+consensus-replication-start-index 1
+consensus-replication-sync-follower-meta-interva 1
+consensus-replication-with-cache-log FALSE
+consensus-replication-worker-thread-cnt 4
+>>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
 console FALSE
 create-admin-listener-thread FALSE
 cte-max-recursion-depth 1000

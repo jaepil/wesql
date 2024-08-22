@@ -208,6 +208,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t1` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
@@ -224,6 +225,7 @@ BEGIN
 ###   @2='varchar-3' /* VARSTRING(20) meta=20 nullable=1 is_null=0 */
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t1` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
@@ -249,6 +251,7 @@ BEGIN
 ###   @2='varchar-3' /* VARSTRING(20) meta=20 nullable=1 is_null=0 */
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t1` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
@@ -309,6 +312,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t2` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t2`
@@ -347,6 +351,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t2` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t2`
@@ -394,6 +399,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t2` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t2`
@@ -424,6 +430,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t1` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
@@ -440,6 +447,7 @@ BEGIN
 ###   @2='varchar-3' /* VARSTRING(20) meta=20 nullable=1 is_null=0 */
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t1` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
@@ -465,6 +473,7 @@ BEGIN
 ###   @2='varchar-3' /* VARSTRING(20) meta=20 nullable=1 is_null=0 */
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t1` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
@@ -525,6 +534,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t2` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t2`
@@ -563,6 +573,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t2` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t2`
@@ -610,6 +621,7 @@ BEGIN
 /*!*/;
 # at #
 # # server id #  end_log_pos # CRC32 # 	Table_map: `test`.`t2` mapped to number #
+# has_generated_invisible_primary_key=0
 # at #
 # # server id #  end_log_pos # CRC32 # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t2`

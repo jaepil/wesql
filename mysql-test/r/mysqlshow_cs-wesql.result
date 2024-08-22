@@ -89,7 +89,6 @@ Database: information_schema
 | COLUMNS_EXTENSIONS                        |
 | COLUMN_PRIVILEGES                         |
 | COLUMN_STATISTICS                         |
-| CONSENSUS_COMMIT_POSITION                 |
 | ENABLED_ROLES                             |
 | ENGINES                                   |
 | EVENTS                                    |
@@ -181,7 +180,6 @@ Database: INFORMATION_SCHEMA
 | COLUMNS_EXTENSIONS                        |
 | COLUMN_PRIVILEGES                         |
 | COLUMN_STATISTICS                         |
-| CONSENSUS_COMMIT_POSITION                 |
 | ENABLED_ROLES                             |
 | ENGINES                                   |
 | EVENTS                                    |

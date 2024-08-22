@@ -89,7 +89,7 @@ count(*)
 2
 select count(*) from information_schema.USER_PRIVILEGES;
 count(*)
-84
+86
 End of 5.0 tests
 SET PERSIST max_connections = 18;
 SET PERSIST_ONLY max_connections = 18;

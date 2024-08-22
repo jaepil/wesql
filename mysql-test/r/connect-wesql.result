@@ -3,7 +3,8 @@ show tables where Tables_in_mysql != 'ndb_binlog_index';
 Tables_in_mysql
 columns_priv
 component
-concurrency_control
+consensus_applier_info
+consensus_applier_worker
 consensus_info
 db
 default_roles
@@ -54,7 +55,8 @@ show tables where Tables_in_mysql != 'ndb_binlog_index';
 Tables_in_mysql
 columns_priv
 component
-concurrency_control
+consensus_applier_info
+consensus_applier_worker
 consensus_info
 db
 default_roles
@@ -126,6 +128,8 @@ SELECT COUNT(*) = 1 FROM information_schema.processlist
 WHERE user = 'event_scheduler' AND command = 'Daemon';
 COUNT(*) = 1
 1
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 
 # -- Disconnecting default connection...
 
@@ -167,6 +171,8 @@ mysqltest_u1
 mysqltest_u1
 mysqltest_u1
 root
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 
 # -- Resetting variables...
 SET GLOBAL max_connections = 151;
@@ -200,6 +206,8 @@ SELECT COUNT(*) = 1 FROM information_schema.processlist
 WHERE user = 'event_scheduler' AND command = 'Daemon';
 COUNT(*) = 1
 1
+Warnings:
+Warning	1287	'INFORMATION_SCHEMA.PROCESSLIST' is deprecated and will be removed in a future release. Please use performance_schema.processlist instead
 
 # -- Closing new connection...
 

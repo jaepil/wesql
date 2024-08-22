@@ -70,6 +70,7 @@ void cr_get_server_startup_prerequirements(Trans_context_info &requirements, Bin
 
 void init_consensus_context(THD *thd) {
   thd->consensus_context.consensus_index = 0;
+  thd->consensus_context.consensus_term = 0;
   thd->consensus_context.consensus_error =
       Consensus_binlog_context_info::CSS_NONE;
   thd->consensus_context.consensus_replication_applier = false;
@@ -81,6 +82,7 @@ void reset_consensus_context(THD *thd) {
   assert(!thd->consensus_context.status_locked);
   assert(!thd->consensus_context.commit_locked);
   thd->consensus_context.consensus_index = 0;
+  thd->consensus_context.consensus_term = 0;
   thd->consensus_context.consensus_error =
       Consensus_binlog_context_info::CSS_NONE;
 }

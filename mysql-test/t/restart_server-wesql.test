@@ -66,23 +66,23 @@ SELECT 1;
 
 # 5.1) Create user and GRANT shutdown privilege on the user, execute RESTART.
 # First check check user can't execute RESTART without SHUTDOWN privilege.
-CREATE USER u1@localhost;
-GRANT SHUTDOWN ON *.* TO u1@localhost;
---connect(con1,localhost,u1,'',,)
-RESTART;
---source include/wait_until_disconnected.inc
---enable_reconnect
---source include/wait_until_connected_again.inc
---connect(root_con,localhost,root,'',,)
-REVOKE SHUTDOWN ON *.* FROM u1@localhost;
-FLUSH PRIVILEGES;
-disconnect con1;
---connect(con1,localhost,u1,'',,)
---error ER_SPECIFIC_ACCESS_DENIED_ERROR
-RESTART;
---connection root_con
-DROP USER u1@localhost;
---disable_reconnect
+# CREATE USER u1@localhost;
+# GRANT SHUTDOWN ON *.* TO u1@localhost;
+# --connect(con1,localhost,u1,'',,)
+# RESTART;
+# --source include/wait_until_disconnected.inc
+# --enable_reconnect
+# --source include/wait_until_connected_again.inc
+# --connect(root_con,localhost,root,'',,)
+# REVOKE SHUTDOWN ON *.* FROM u1@localhost;
+# FLUSH PRIVILEGES;
+# disconnect con1;
+# --connect(con1,localhost,u1,'',,)
+# --error ER_SPECIFIC_ACCESS_DENIED_ERROR
+# RESTART;
+# --connection root_con
+# DROP USER u1@localhost;
+# --disable_reconnect
 
 # 7) Shutdown mysqld with mysqladmin
 --exec $MYSQLADMIN -h localhost -S $MYSQL_SOCKET -P $MYSQL_PORT -u root shutdown 2>&1

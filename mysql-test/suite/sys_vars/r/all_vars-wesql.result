@@ -28,8 +28,6 @@ binlog_encryption
 binlog_encryption
 binlog_expire_logs_auto_purge
 binlog_expire_logs_auto_purge
-binlog_purge_size
-binlog_purge_size
 binlog_rotate_encryption_master_key_at_startup
 binlog_rotate_encryption_master_key_at_startup
 cte_max_recursion_depth

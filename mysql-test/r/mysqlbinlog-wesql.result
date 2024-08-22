@@ -847,10 +847,9 @@ flush logs;
 call p1();
 1
 1
-call p1();
-1
-1
 drop procedure p1;
+call p1();
+ERROR 42000: PROCEDURE test.p1 does not exist
 include/mysqlbinlog.inc
 # The proper term is pseudo_replica_mode, but we use this compatibility alias
 # to make the statement usable on server versions 8.0.24 and older.
@@ -1086,6 +1085,8 @@ set timestamp= default;
 FLUSH LOGS;
 Bug#31611 Security risk with BINLOG statement
 SET BINLOG_FORMAT='ROW';
+Warnings:
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 CREATE DATABASE mysqltest1;
 CREATE USER untrusted@localhost;
 GRANT SELECT ON mysqltest1.* TO untrusted@localhost;
@@ -1110,6 +1111,8 @@ DROP USER untrusted@localhost;
 Bug#32580 mysqlbinlog cannot read binlog event with user variables
 USE test;
 SET BINLOG_FORMAT = STATEMENT;
+Warnings:
+Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 FLUSH LOGS;
 CREATE TABLE t1 (a_real FLOAT, an_int INT, a_decimal DECIMAL(5,2), a_string CHAR(32));
 SET @a_real = rand(20) * 1000;

@@ -4031,8 +4031,8 @@ DROP DATABASE IF EXISTS mysqldump_test_db;
 # Create objects.
 CREATE DATABASE mysqldump_test_db;
 set names koi8r;
-CREATE VIEW mysqldump_test_db.v2 AS SELECT 1 AS О©╫О©╫О©╫О©╫О©╫О©╫О©╫1;
-CREATE VIEW mysqldump_test_db.v1 AS SELECT О©╫О©╫О©╫О©╫О©╫О©╫О©╫1 FROM mysqldump_test_db.v2;
+CREATE VIEW mysqldump_test_db.v2 AS SELECT 1 AS колонка1;
+CREATE VIEW mysqldump_test_db.v1 AS SELECT колонка1 FROM mysqldump_test_db.v2;
 set names latin1;
 
 # Dump mysqldump_test_db to bug30027.sql.
@@ -4211,7 +4211,7 @@ INSERT INTO t1 VALUES (1, 'ABC-п░п▒п▓', 'DEF-ц┌ц┐ц└'), (2, NULL, NULL);
 # error on multi-character ENCLOSED/ESCAPED BY
 # default '--default-charset' (binary):
 ##################################################
-1	ABC-О©╫О©╫О©╫	DEF-О©╫О©╫О©╫
+1	ABC-АБВ	DEF-бцд
 2	\N	\N
 ##################################################
 TRUNCATE t2;
@@ -4235,7 +4235,7 @@ a	b	c
 2	NULL	NULL
 # latin1 (data corruption is expected):
 ##################################################
-1	ABC-???	DEF-О©╫О©╫О©╫
+1	ABC-???	DEF-бцд
 2	\N	\N
 ##################################################
 TRUNCATE t2;
@@ -4247,7 +4247,7 @@ a	b	c
 2	NULL	NULL
 # koi8r (data corruption is expected):
 ##################################################
-1	ABC-О©╫О©╫О©╫	DEF-???
+1	ABC-АБВ	DEF-???
 2	\N	\N
 ##################################################
 TRUNCATE t2;
@@ -5271,14 +5271,12 @@ SHOW VARIABLES LIKE "relay_log_info_repository";
 Variable_name	Value
 relay_log_info_repository	TABLE
 SET GLOBAL master_info_repository= 'FILE';
-Warnings:
-Warning	1287	'@@master_info_repository' is deprecated and will be removed in a future release.
+ERROR HY000: Failure while changing the type of replication repository: Repository conversion is possible when only default channel exists.
 SET GLOBAL relay_log_info_repository= 'FILE';
-Warnings:
-Warning	1287	'@@relay_log_info_repository' is deprecated and will be removed in a future release.
+ERROR HY000: Failure while changing the type of replication repository: Repository conversion is possible when only default channel exists.
 SHOW VARIABLES LIKE "master_info_repository";
 Variable_name	Value
-master_info_repository	FILE
+master_info_repository	TABLE
 SHOW VARIABLES LIKE "relay_log_info_repository";
 Variable_name	Value
 relay_log_info_repository	TABLE
@@ -5347,10 +5345,9 @@ CREATE TABLE IF NOT EXISTS `slave_relay_log_info` (
   `Privilege_checks_username` varchar(32) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin DEFAULT NULL COMMENT 'Username part of PRIVILEGE_CHECKS_USER.',
   `Privilege_checks_hostname` varchar(255) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL COMMENT 'Hostname part of PRIVILEGE_CHECKS_USER.',
   `Require_row_format` tinyint(1) NOT NULL COMMENT 'Indicates whether the channel shall only accept row based events.',
-  `Require_table_primary_key_check` enum('STREAM','ON','OFF') NOT NULL DEFAULT 'STREAM' COMMENT 'Indicates what is the channel policy regarding tables having primary keys on create and alter table queries',
+  `Require_table_primary_key_check` enum('STREAM','ON','OFF','GENERATE') NOT NULL DEFAULT 'STREAM' COMMENT 'Indicates what is the channel policy regarding tables without primary keys on create and alter table queries',
   `Assign_gtids_to_anonymous_transactions_type` enum('OFF','LOCAL','UUID') NOT NULL DEFAULT 'OFF' COMMENT 'Indicates whether the channel will generate a new GTID for anonymous transactions. OFF means that anonymous transactions will remain anonymous. LOCAL means that anonymous transactions will be assigned a newly generated GTID based on server_uuid. UUID indicates that anonymous transactions will be assigned a newly generated GTID based on Assign_gtids_to_anonymous_transactions_value',
   `Assign_gtids_to_anonymous_transactions_value` text CHARACTER SET utf8mb3 COLLATE utf8mb3_bin COMMENT 'Indicates the UUID used while generating GTIDs for anonymous transactions',
-  Consensus_apply_index bigint(20) unsigned NOT NULL COMMENT 'The consensus log applyed index in the consensus log',
   PRIMARY KEY (`Channel_name`)
 ) /*!50100 TABLESPACE `mysql` */ ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 STATS_PERSISTENT=0 ROW_FORMAT=DYNAMIC COMMENT='Relay Log Information';
 /*!40101 SET character_set_client = @saved_cs_client */;

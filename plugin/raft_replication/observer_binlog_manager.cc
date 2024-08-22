@@ -171,6 +171,10 @@ static int consensus_binlog_manager_before_flush(Binlog_manager_param *param) {
   THD *thd = param->thd;
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
+  if (thd->consensus_context.consensus_term == 0)
+    thd->consensus_context.consensus_term =
+        consensus_state_process.get_current_term();
+
   /* Check server status */
   mysql_mutex_lock(consensus_state_process.get_log_term_lock());
   if (consensus_state_process.get_status() !=
