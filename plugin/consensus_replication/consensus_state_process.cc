@@ -238,12 +238,12 @@ int ConsensusStateProcess::wait_follower_upgraded(uint64 term, uint64 index) {
   binlog->close(LOG_CLOSE_INDEX | LOG_CLOSE_TO_BE_OPENED, false, false);
 
   // open binlog index
-  if (binlog->open_index_file(opt_binlog_index_name, opt_bin_logname, false)) {
+  if (binlog->open_index_file(log_bin_index, opt_bin_logname, false)) {
     binlog->unlock_index();
     mysql_mutex_unlock(log_lock);
     mysql_rwlock_unlock(&LOCK_consensuslog_status);
     LogPluginErr(ERROR_LEVEL, ER_BINLOG_CANT_OPEN_FOR_LOGGING,
-                 opt_binlog_index_name, errno);
+                 log_bin_index, errno);
     error = 1;
     goto end;
   }
