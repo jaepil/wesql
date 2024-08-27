@@ -1,4 +1,4 @@
-create table t1(id int);
+create table t1(id int) engine=innodb;
 xa begin 'xa1';
 insert into t1 values (1000);
 xa end 'xa1';

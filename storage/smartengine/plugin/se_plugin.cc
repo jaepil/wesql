@@ -505,7 +505,7 @@ mysql_declare_plugin(smartengine){
     smartengine::se_show_vars_export,  /**status variables*/
     smartengine::se_system_vars_export,  /**system variables*/
     nullptr,  /**config options*/
-    PLUGIN_OPT_DEFAULT_OFF | PLUGIN_OPT_DEPENDENT_EXTRA_PLUGINS,  /**flags*/
+    0,  /**flags*/
 },
     smartengine::se_i_s_cfstats, smartengine::se_i_s_dbstats,
     smartengine::se_i_s_perf_context, smartengine::se_i_s_perf_context_global,

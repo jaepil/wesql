@@ -1,5 +1,5 @@
 use test;
-create table t1 (data longblob);
+create table t1 (data longblob) engine=innodb;
 insert into t1 values (repeat('a', 100));
 set global consensus_replication_checksum=ON;
 insert into t1 values (repeat('a', 10*1024*1024));
@@ -18,7 +18,7 @@ insert into t1 values (repeat('a', 40*1024*1024));
 drop table t1;
 
 set global consensus_replication_log_cache_size=1;
-create table t1 (data longblob);
+create table t1 (data longblob) engine=innodb;
 insert into t1 values (repeat('a', 100));
 set global consensus_replication_checksum=ON;
 insert into t1 values (repeat('a', 10*1024*1024));

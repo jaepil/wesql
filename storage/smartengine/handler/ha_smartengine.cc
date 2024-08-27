@@ -3844,7 +3844,8 @@ int ha_smartengine::pushdown_table_schema(const TABLE *table,
         if (FAILED(se_db->modify_table_schema(subtable_handle, table_schema))) {
           SE_LOG(WARN, "fail to modify table schema", K(ret), K(i), K(table_schema));
         } else {
-          SE_LOG(INFO, "success to push down table schema", "index_id", subtable_handle->GetID());
+          SE_LOG(INFO, "success to push down table schema", "index_id", subtable_handle->GetID(),
+              "table_name", table->s->table_name.str);
         }
       }
     }

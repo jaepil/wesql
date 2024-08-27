@@ -3,7 +3,7 @@ flush logs;
 SET @@GLOBAL.DEBUG= '+d, dont_compress_gtid_table';
 flush logs;
 SET @@GLOBAL.DEBUG= '+d, dont_compress_gtid_table';
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 show master status;
 File	Position	Binlog_Do_DB	Binlog_Ignore_DB	Executed_Gtid_Set
@@ -31,7 +31,7 @@ source_uuid	interval_start	interval_end
 #	4	4
 SET @@GLOBAL.DEBUG= '-d, dont_compress_gtid_table';
 drop table t;
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_3");
 insert into t values(1);
@@ -43,7 +43,7 @@ show master status;
 File	Position	Binlog_Do_DB	Binlog_Ignore_DB	Executed_Gtid_Set
 master-bin.000003	#			#
 drop table t;
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 set debug='+d,crash_commit_before';
 insert into t values(1);
@@ -52,7 +52,7 @@ show master status;
 File	Position	Binlog_Do_DB	Binlog_Ignore_DB	Executed_Gtid_Set
 master-bin.000003	#			#
 drop table t;
-create table t(c text);
+create table t(c text) engine=innodb;
 insert into t values('kongzhi');
 set global max_binlog_size=4096;
 set global debug="+d,simulate_leader_degrade_slow";
@@ -73,7 +73,7 @@ master-bin.000003	#			#
 set global max_binlog_size=(1024 * 1024 * 1024);
 drop table t;
 call dbms_consensus.change_leader("127.0.0.1:PAXOS_PORT_1");
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 show master status;
 File	Position	Binlog_Do_DB	Binlog_Ignore_DB	Executed_Gtid_Set

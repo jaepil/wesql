@@ -1,4 +1,4 @@
-create table test.t1(a int primary key);
+create table test.t1(a int primary key) engine=innodb;
 create table test.t2(a int primary key)engine=myisam;
 
 flush binary logs;

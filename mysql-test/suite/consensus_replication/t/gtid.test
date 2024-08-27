@@ -21,7 +21,7 @@ SET @@GLOBAL.DEBUG= '+d, dont_compress_gtid_table';
 
 #leader
 --connection conn1
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 --replace_column 2 # 5 #
 show master status;
@@ -45,7 +45,7 @@ drop table t;
 
 #2. switch role
 --connection conn1
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 #change consensus_leader to 3;
 --replace_result $PAXOS_PORT_3 PAXOS_PORT_3 
@@ -69,7 +69,7 @@ drop table t;
 
 #3 crash recovery
 --connection conn4
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 --source include/wait_follower_catchup.inc
 
@@ -91,7 +91,7 @@ drop table t;
 
 #4. leader degrade slow
 connection default;
-create table t(c text);
+create table t(c text) engine=innodb;
 insert into t values('kongzhi');
 --source include/wait_follower_catchup.inc
 
@@ -147,7 +147,7 @@ connection conn2;
 --eval call dbms_consensus.change_leader("127.0.0.1:$PAXOS_PORT_1")
 connection default;
 --source include/wait_until_connected_again.inc
-create table t(id int);
+create table t(id int) engine=innodb;
 insert into t values(0);
 --replace_column 2 # 5 #
 show master status;

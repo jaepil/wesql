@@ -3,45 +3,10 @@
 #
 --echo # Change leader role to logger, The Logger node continues to persist the binlog .
 
---echo # Create object store
---let $objstore_dir=$MYSQL_TMP_DIR/objstore
---mkdir $objstore_dir
-
 --source include/have_wesql_test.inc
 --connect (conn1,127.0.0.1,root,,test,$MYPORT_1)
 --connect (conn2,127.0.0.1,root,,test,$MYPORT_2)
 --connect (conn3,127.0.0.1,root,,test,$MYPORT_3)
-
-# Restart mysqld.1 with binlog_archive
---connection conn1
---enable_reconnect
---echo # Restart msyqld.1
---replace_result $objstore_dir objstore_dir
---let $restart_parameters=restart: --binlog-archive=true --objstore-region=$objstore_dir
---source include/restart_mysqld.inc
---source include/wait_until_connected_again.inc
-
-# Restart mysqld.2 with binlog_archive
---connection conn2
---enable_reconnect
---let $wait_follower= 1;
---echo # Restart msyqld.2
---replace_result $objstore_dir objstore_dir
---let $restart_parameters=restart: --binlog-archive=true --objstore-region=$objstore_dir
---source include/restart_mysqld.inc
---source include/wait_until_connected_again.inc
---let $wait_follower= 0;
-
-# Restart mysqld.3 with binlog_archive
---connection conn3
---enable_reconnect
---let $wait_follower= 1;
---echo # Restart msyqld.3
---replace_result $objstore_dir objstore_dir
---let $restart_parameters=restart: --binlog-archive=true --objstore-region=$objstore_dir
---source include/restart_mysqld.inc
---source include/wait_until_connected_again.inc
---let $wait_follower= 0;
 
 --echo # Connection mysqld.1
 --connection conn1
@@ -149,8 +114,6 @@ SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 --connection conn1
 --enable_reconnect
 --echo # Restart mysqld.1
---replace_result $objstore_dir objstore_dir
---let $restart_parameters=restart: --binlog-archive=true --objstore-region=$objstore_dir
 --source include/start_mysqld.inc
 
 --echo # Connection mysqld.1 as new leader.

@@ -1,6 +1,6 @@
 --source include/paxos.inc
 
-create table t1(id int);
+create table t1(id int) engine=innodb;
 
 --connect (con1,127.0.0.1,root,,test,$MYPORT_1)
 --connect (con2,127.0.0.1,root,,test,$MYPORT_2)

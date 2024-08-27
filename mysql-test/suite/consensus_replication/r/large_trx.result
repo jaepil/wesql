@@ -6,7 +6,7 @@ flush local logs;
 set global debug="+d,force_large_trx,force_large_trx_single_ev";
 # --------- normal case ---------
 use test;
-create table t1 (id int);
+create table t1 (id int) engine=innodb;
 insert into t1 values (1), (2), (3);
 begin;
 insert into t1 values (4);

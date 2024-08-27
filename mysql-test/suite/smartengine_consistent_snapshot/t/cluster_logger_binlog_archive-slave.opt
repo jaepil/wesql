@@ -1,0 +1,2 @@
+--initialize=--table-on-objstore=false
+--initialize=--objstore-region=$MYSQL_TMP_DIR

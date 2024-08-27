@@ -119,7 +119,7 @@ SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 
 set debug='';
 DROP TABLES t1,t2,t3,t4;
-create table t(id int);
+create table t(id int) engine=innodb;
 --source include/wait_follower_catchup.inc
 
 #---------------------------------------------------
@@ -235,7 +235,7 @@ disconnect con2;
 connection con101;
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
 let $master_uuid= `SELECT @@GLOBAL.SERVER_UUID`;
-create table t1(id int);
+create table t1(id int) engine=innodb;
 --source include/wait_follower_catchup.inc
 
 connection con2;

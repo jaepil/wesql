@@ -2,12 +2,12 @@
 # DDL crash and recovery
 #
 set debug = 'd, crash_commit_before_log';
-create table t(id int);
+create table t(id int) engine=innodb;
 ERROR HY000: Lost connection to MySQL server during query
 show tables;
 Tables_in_test
 set debug = 'd, consensus_replication_crash_after_commit';
-create table t(id int);
+create table t(id int) engine = innodb;
 ERROR HY000: Lost connection to MySQL server during query
 show tables;
 Tables_in_test
@@ -146,9 +146,9 @@ id
 #
 # Xa with binlog And DDL Crash (6000)
 #
-create table t1(id int);
-create table t2(id int);
-create table t3(id int);
+create table t1(id int) engine=innodb;
+create table t2(id int) engine=innodb;
+create table t3(id int) engine=innodb;
 flush logs;
 set global binlog_order_commits=OFF;
 xa begin '6001';
@@ -168,7 +168,7 @@ drop table t3;
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
 ERROR HY000: Lost connection to MySQL server during query
-create table t3(id int);
+create table t3(id int) engine=innodb;
 set global binlog_order_commits=OFF;
 xa recover;
 formatID	gtrid_length	bqual_length	data

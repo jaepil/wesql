@@ -68,7 +68,7 @@ SELECT @@GLOBAL.GTID_EXECUTED, @@GLOBAL.GTID_OWNED;
 MASTER_UUID:1-10	
 set debug='';
 DROP TABLES t1,t2,t3,t4;
-create table t(id int);
+create table t(id int) engine=innodb;
 SET @@GLOBAL.DEBUG= 'd,crash_after_commit_before_update_pos';
 insert into t values(1001);
 SET @@GLOBAL.DEBUG= 'd, disable_se_persists_gtid';
@@ -113,7 +113,7 @@ id
 1002
 1016
 SET @@GLOBAL.DEBUG= 'd, disable_gtid_background_persister';
-create table t1(id int);
+create table t1(id int) engine=innodb;
 SET @@GLOBAL.DEBUG= 'd, disable_se_persists_gtid';
 SET @@GLOBAL.DEBUG= '+d, crash_after_update_pos_before_apply';
 stop consensus_replication;

@@ -5,9 +5,7 @@ smartengine=                            1
 default-storage-engine=                 smartengine
 default-tmp-storage_engine=             innodb
 serverless=                             true
-binlog_archive=                         false
 consistent_snapshot_archive=            false
-table-on-objstore=                      false
 log-bin=                                master-bin
 log-bin=                                master-bin.index
 binlog_archive_slice_max_size=          4096
@@ -16,6 +14,7 @@ binlog_archive_expire_auto_purge=       false
 log-error-verbosity=                    3
 
 [mysqld.2]
+#!use-slave-opt
 consensus-replication-log-type-node=ON
 consensus_replication_auto_leader_transfer=ON
 smartengine=                        1
@@ -24,13 +23,13 @@ default-tmp-storage_engine=         innodb
 log-bin=                            logger1-bin
 log-bin=                            logger1-bin.index
 serverless=                         true
-binlog_archive=                     false
 table_on_objstore =                 false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false
 log-error-verbosity=                3
 
 [mysqld.3]
+#!use-slave-opt
 consensus-replication-log-type-node=ON
 consensus_replication_auto_leader_transfer=ON
 smartengine=                        1
@@ -39,7 +38,6 @@ default-tmp-storage_engine=         innodb
 log-bin=                            logger2-bin
 log-bin=                            logger2-bin.index
 serverless=                         true
-binlog_archive=                     false
 table_on_objstore =                 false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false

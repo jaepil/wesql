@@ -1,11 +1,4 @@
 # Change leader role to logger, The Logger node continues to persist the binlog .
-# Create object store
-# Restart msyqld.1
-# restart: --binlog-archive=true --objstore-region=objstore_dir
-# Restart msyqld.2
-# restart: --binlog-archive=true --objstore-region=objstore_dir
-# Restart msyqld.3
-# restart: --binlog-archive=true --objstore-region=objstore_dir
 # Connection mysqld.1
 FLUSH logs;
 FLUSH logs;
@@ -121,7 +114,7 @@ binlog.000010
 # Connection mysqld.3 as follower.
 include/assert.inc [consensus role of mysqld.3 is Follower.]
 # Restart mysqld.1
-# restart: --binlog-archive=true --objstore-region=objstore_dir
+# restart
 # Connection mysqld.1 as new leader.
 include/assert.inc [consensus role of mysqld.1 is Leader.]
 show binary logs;

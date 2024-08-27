@@ -194,12 +194,12 @@ tt	CREATE TABLE `tt` (
 create database db_test;
 show create database db_test;
 Database	Create Database
-db_test	CREATE DATABASE `db_test` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */
+db_test	CREATE DATABASE `db_test` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */ /*!80016 DEFAULT ENCRYPTION='N' */
 drop database db_test;
 create database db_test charset utf8mb4;
 show create database db_test;
 Database	Create Database
-db_test	CREATE DATABASE `db_test` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */
+db_test	CREATE DATABASE `db_test` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */ /*!80016 DEFAULT ENCRYPTION='N' */
 drop database db_test;
 create database db_test charset utf8;
 show create database db_test;

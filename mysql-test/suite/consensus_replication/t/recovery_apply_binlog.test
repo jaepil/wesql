@@ -23,7 +23,7 @@ set debug = 'd, crash_commit_before_log';
 # Write file to make mysql-test-run.pl restart the server
 --exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --error 2013
-create table t(id int);
+create table t(id int) engine=innodb;
 
 connection default;
 --enable_reconnect
@@ -38,7 +38,7 @@ set debug = 'd, consensus_replication_crash_after_commit';
 # Write file to make mysql-test-run.pl restart the server
 --exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --error 2013
-create table t(id int);
+create table t(id int) engine = innodb;
 
 connection default;
 --enable_reconnect
@@ -295,9 +295,9 @@ select * from t;
 --echo #
 
 connection default;
-create table t1(id int);
-create table t2(id int);
-create table t3(id int);
+create table t1(id int) engine=innodb;
+create table t2(id int) engine=innodb;
+create table t3(id int) engine=innodb;
 flush logs;
 
 set global binlog_order_commits=OFF;
@@ -342,7 +342,7 @@ reap;
 connection default;
 --enable_reconnect
 --source include/wait_until_connected_again.inc
-create table t3(id int);
+create table t3(id int) engine=innodb;
 --disable_reconnect
 
 set global binlog_order_commits=OFF;

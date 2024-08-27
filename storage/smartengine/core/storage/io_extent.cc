@@ -553,7 +553,7 @@ int ObjectIOExtent::read_object(int64_t offset, int64_t size, char *buf, common:
     if (UNLIKELY(!object_status.is_succ())) {
       ret = Status::kObjStoreError;
       SE_LOG(WARN, "io error, failed to get obj", K(ret), KE(object_status.error_code()),
-            K(std::string(object_status.error_message())), K_(extent_id), K(object_id));
+            K(std::string(object_status.error_message())), K_(bucket), K_(extent_id), K(object_id));
     } else if (UNLIKELY(size != static_cast<int64_t>(body.size()))) {
       ret = Status::kCorruption;
       SE_LOG(WARN, "the data is corrupted", K(ret), "expected_size", size, "actual_size", body.size());

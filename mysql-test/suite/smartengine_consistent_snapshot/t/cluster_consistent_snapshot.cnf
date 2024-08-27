@@ -15,6 +15,7 @@ binlog_archive_expire_auto_purge=       false
 recovery_from_objstore=                 true
 
 [mysqld.2]
+#!use-slave-opt
 smartengine=                                1
 default-storage-engine=                     smartengine
 default-tmp-storage_engine=                 innodb
@@ -28,6 +29,7 @@ consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false
 
 [mysqld.3]
+#!use-slave-opt
 smartengine=                                1
 default-storage-engine=                     smartengine
 default-tmp-storage_engine=                 innodb
