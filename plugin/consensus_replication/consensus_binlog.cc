@@ -1247,6 +1247,94 @@ int consensus_get_log_position(ConsensusLogIndex *log_file_index,
   return ret;
 }
 
+static int consensus_find_end_pos_by_index(ConsensusLogIndex *log_file_index,
+                                           const char *file_name,
+                                           const uint64 start_index,
+                                           const uint64 consensus_index,
+                                           my_off_t *pos) {
+  my_off_t lower_start_pos;
+  bool matched;
+  DBUG_TRACE;
+
+  get_lower_bound_pos_of_index(log_file_index, start_index, consensus_index + 1,
+                               lower_start_pos, matched);
+  if (matched) {
+    *pos = lower_start_pos;
+    return 0;
+  }
+  if (lower_start_pos == 0) lower_start_pos = BIN_LOG_HEADER_SIZE;
+
+  Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
+  if (binlog_file_reader.open(file_name, lower_start_pos)) {
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
+    return 1;
+  }
+
+  Log_event *ev = nullptr;
+  Consensus_log_event *consensus_log_ev = nullptr;
+  bool found = false;
+  bool next_set;
+  bool stop_scan = false;
+
+  while (!stop_scan &&
+         (ev = binlog_file_reader.read_event_object()) != nullptr) {
+    switch (ev->get_type_code()) {
+      case binary_log::CONSENSUS_LOG_EVENT:
+        consensus_log_ev = (Consensus_log_event *)ev;
+        update_pos_map_by_start_index(
+            log_file_index, start_index, consensus_log_ev,
+            binlog_file_reader.event_start_pos(),
+            binlog_file_reader.position() + consensus_log_ev->get_length(),
+            next_set);
+        if (consensus_log_ev->get_index() == consensus_index) {
+          found = true;
+          *pos = binlog_file_reader.position() + consensus_log_ev->get_length();
+          stop_scan = true;
+        } else if (consensus_log_ev->get_index() > consensus_index) {
+          stop_scan = true;
+        }
+        break;
+      default:
+        break;
+    }
+    delete ev;
+  }
+
+  if (binlog_file_reader.has_fatal_error()) {
+    LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                 binlog_file_reader.get_error_str());
+  }
+
+  return (int)!found;
+}
+
+int consensus_get_log_end_position(ConsensusLogIndex *log_file_index,
+                                   uint64 consensus_index, char *log_name,
+                                   my_off_t *pos) {
+  std::string file_name;
+  uint64 start_index;
+  int ret = 0;
+  DBUG_TRACE;
+
+  // use another io_cache , so do not need lock LOCK_log
+  if (consensus_find_log_by_index(log_file_index, consensus_index, file_name,
+                                  start_index)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
+                 "getting log end position");
+    ret = 1;
+  } else if (consensus_find_end_pos_by_index(log_file_index, file_name.c_str(),
+                                             start_index, consensus_index,
+                                             pos)) {
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_INDEX_IN_FILE_ERROR,
+                 consensus_index, file_name.c_str());
+    ret = 1;
+  } else {
+    strncpy(log_name, file_name.c_str(), FN_REFLEN);
+  }
+  return ret;
+}
+
 #if 0
 /**
   @brief Checks if automatic purge size conditions are met and therefore the

@@ -1,6 +1,3 @@
-INSTALL PLUGIN clone SONAME 'CLONE_PLUGIN';
-# Server restart with --consistent-snapshot-archive=true --consistent_snapshot_archive_period=1 --binlog_archive_expire_auto_purge=false --consistent_snapshot_expire_auto_purge=false
-# restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 --binlog_archive_expire_auto_purge=false --consistent_snapshot_expire_auto_purge=false
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1);
@@ -18,6 +15,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `c1` int DEFAULT NULL
 ) ENGINE=SMARTENGINE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+# Wait for at least 1 snapshots to be generated 
 #
 # Check for contain innodb_archive consistent_snapshot.index
 Pattern found.
@@ -29,14 +27,18 @@ include/assert.inc [mysql pesistent innodb archive file exist.]
 # Select smartengine persistent views
 include/assert.inc [1st smartengine archive file should be se_archive_000001.]
 include/assert.inc [smartengine pesistent archive file exist.]
-# Select binlog persistent views
-include/assert.inc [1st binlog archive file should be binlog.000001.]
-# Purge persistent snapshot by timestamp
-SELECT * FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+include/assert.inc [smartengine backup exist.]
+INSERT INTO t1 SELECT * FROM t1;
+INSERT INTO t1 SELECT * FROM t1;
+INSERT INTO t1 SELECT * FROM t1;
+INSERT INTO t1 SELECT * FROM t1;
+# Wait for at least 4 snapshots to be generated 
+# Purge persistent snapshot to timestamp
 include/assert.inc [Purge consistent snapshot.]
 include/assert.inc [Check results after purge.]
-# Purge persistent snapshot
+# Purge all persistent snapshot
 include/assert.inc [Purge consistent snapshot.]
-SELECT * FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+include/assert.inc [Keep the last consistent snapshot.]
 # Cleanup
+DROP TABLE t1;
 DROP DATABASE db1;

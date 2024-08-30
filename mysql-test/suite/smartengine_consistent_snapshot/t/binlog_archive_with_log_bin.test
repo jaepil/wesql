@@ -46,7 +46,6 @@ SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX or
 --disable_warnings
 SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
 --enable_warnings
-
 --source include/show_binary_logs.inc
 
 DROP TABLE t1;

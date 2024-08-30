@@ -38,6 +38,7 @@
 typedef struct Consistent_snapshot_recovery_status {
   int m_recovery_status;
   uint64_t m_start_binlog_pos;
+  uint64_t m_start_consensus_index;
   char m_start_binlog_file[FN_REFLEN + 1];
   char m_stop_timestamp[MAX_DATETIME_FULL_WIDTH + 4];
   char m_binlog_index_file[FN_REFLEN + 1];
@@ -67,16 +68,18 @@ class Consistent_recovery {
   int write_consistent_snapshot_recovery_status(
       Consistent_snapshot_recovery_status &recovery_status);
   int consistent_snapshot_consensus_recovery_finish();
+
  private:
   int open_binlog_index_file(IO_CACHE *index_file, const char *index_file_name,
                              enum cache_type type);
   int add_line_to_index_file(IO_CACHE *index_file, const char *log_name);
   int close_binlog_index_file(IO_CACHE *index_file);
   int truncate_binlogs_from_objstore(const char *log_file_name_arg,
-                                             my_off_t log_pos);
-  int merge_slice_to_binlog_file(const char *to_binlog_file);
+                                     my_off_t log_pos);
+  int merge_slice_to_binlog_file(const char *to_binlog_file,
+                                 const char *to_mysql_binlog_basename);
   int truncate_binlog_slice_from_objstore(const char *log_file_name_arg,
-                                             my_off_t log_pos);
+                                          my_off_t log_pos, bool &has_truncated);
 
   enum Consistent_recovery_state {
     CONSISTENT_RECOVERY_STATE_NONE = 0,
@@ -95,11 +98,17 @@ class Consistent_recovery {
   Consistent_recovery_type m_recovery_type;
   Consistent_recovery_state m_state;
   objstore::ObjectStore *recovery_objstore;
-  uint64_t m_binlog_pos;
+  uint64_t m_mysql_binlog_pos;
+  uint64_t m_consensus_index;
   uint64_t m_se_snapshot_id;
   char m_objstore_bucket[FN_REFLEN + 1];
-  char m_binlog_file[FN_REFLEN + 1];
+  char m_binlog_start_file[FN_REFLEN + 1];
+  char m_mysql_binlog_start_file[FN_REFLEN + 1];
+  char m_mysql_binlog_end_file[FN_REFLEN + 1];
   char m_snapshot_end_binlog_file[FN_REFLEN + 1];
+  char m_binlog_index_keyid[FN_REFLEN + 1];
+  IO_CACHE m_binlog_index_file;
+  char m_binlog_index_file_name[FN_REFLEN + 1];;
 
   char m_mysql_archive_recovery_dir[FN_REFLEN + 1];
   char m_mysql_archive_recovery_data_dir[FN_REFLEN + 1];
@@ -113,7 +122,7 @@ class Consistent_recovery {
   char m_se_backup_index_file_name[FN_REFLEN + 1];
   IO_CACHE m_se_backup_index_file;
   uint m_se_backup_index;
-  char m_se_backup_dir[FN_REFLEN + 1];
+  char m_se_snapshot_dir[FN_REFLEN + 1];
   char m_se_backup_name[FN_REFLEN + 1];
   char m_mysql_binlog_index_file_name[FN_REFLEN + 1];
   char m_consistent_snapshot_local_time

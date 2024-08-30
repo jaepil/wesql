@@ -60,7 +60,7 @@ char *Binlog_archive_command::binlog_purge(UDF_INIT *, UDF_ARGS *args,
   }
 
   std::tie(err_val, err_msg) =
-      binlog_archive->purge_logs(log_file.c_str(), nullptr);
+      binlog_archive->purge_logs(log_file.c_str());
   if (err_val) {
     *error = err_val;
     my_error(ER_UDF_ERROR, MYF(0), m_udf_name, err_msg.c_str());

@@ -44,6 +44,7 @@
 #include "sql/mysqld.h"
 #include "sql/mysqld_thd_manager.h"
 #include "sql/protocol_classic.h"
+#include "sql/rpl_handler.h"
 #include "sql/rpl_io_monitor.h"
 #include "sql/rpl_source.h"
 #include "sql/sql_parse.h"
@@ -53,7 +54,7 @@ const float Binlog_archive::PACKET_GROW_FACTOR = 2.0;
 const float Binlog_archive::PACKET_SHRINK_FACTOR = 0.5;
 
 // Global binlog archive thread object
-static Binlog_archive *mysql_binlog_archive = nullptr;
+static Binlog_archive mysql_binlog_archive;
 static my_thread_handle mysql_binlog_archive_pthd;
 static bool abort_binlog_archive = false;
 
@@ -120,15 +121,25 @@ int start_binlog_archive() {
 
   // Check if the binlog is enabled.
   if (!opt_bin_log) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "The binlog archive start need binlog mode.");
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+           "need enable binlog mode");
     return 0;
   }
   // Check if the binlog archive is enabled.
   if (!opt_binlog_archive || !opt_serverless) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "The binlog persistent not enabled.");
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+           "the binlog persistent not enabled");
     return 0;
+  }
+  if (opt_binlog_archive_using_consensus_index) {
+#ifdef WESQL_CLUSTER
+    if (NO_HOOK(binlog_manager))
+#endif
+    {
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+             "must enable consensus plugin");
+      return 1;
+    }
   }
 
   if (!opt_consistent_snapshot_archive_dir) {
@@ -137,9 +148,13 @@ int start_binlog_archive() {
 
   // Check if the mysql archive path is set.
   if (opt_consistent_snapshot_archive_dir == nullptr) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "Mysql archive path no set, please set "
-           "--consistent_snapshot_archive_dir.");
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+           "must set consistent_snapshot_archive_dir");
+    return 1;
+  }
+
+  if (!opt_persistent_on_objstore) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, "must set objectstore");
     return 1;
   }
 
@@ -148,17 +163,19 @@ int start_binlog_archive() {
   if (!my_stat(opt_consistent_snapshot_archive_dir, &d_stat, MYF(0)) ||
       !MY_S_ISDIR(d_stat.st_mode) ||
       my_access(opt_consistent_snapshot_archive_dir, (F_OK | W_OK))) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "Mysql archive path not exists.");
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+           "consistent_snapshot_archive_dir path not exists");
     return 1;
   }
 
   // data home can not include archive directory.
   if (test_if_data_home_dir(opt_consistent_snapshot_archive_dir)) {
     std::string err_msg;
-    err_msg.assign("mysql archive path is within the current data directory: ");
+    err_msg.assign(
+        "consistent_snapshot_archive_dir is within the current data "
+        "directory: ");
     err_msg.append(opt_consistent_snapshot_archive_dir);
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, err_msg.c_str());
     return 1;
   }
 
@@ -171,69 +188,57 @@ int start_binlog_archive() {
       STRING_WITH_LEN(BINLOG_ARCHIVE_SUBDIR));
   convert_dirname(tmp_archive_binlog_dir, tmp_archive_binlog_dir, NullS);
 
-  // If binlog persist to object store,
-  // when startup, remove local binlog archive dir and recreate it.
-  if (opt_persistent_on_objstore) {
-    remove_file(tmp_archive_binlog_dir);
+  // remove local binlog archive dir and recreate it.
+  remove_file(tmp_archive_binlog_dir);
+  if (my_mkdir(tmp_archive_binlog_dir, 0777, MYF(0))) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+           "Failed to create binlog archive dir");
+    return 1;
   }
 
-  // Check if the binlog archive dir exists. If not exists, create it.
-  if (!my_stat(tmp_archive_binlog_dir, &d_stat, MYF(0))) {
-    if (my_mkdir(tmp_archive_binlog_dir, 0777, MYF(0))) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-             "Failed to create binlog archive dir.");
-      return 1;
-    }
-  } else {
-    if (!MY_S_ISDIR(d_stat.st_mode) ||
-        my_access(tmp_archive_binlog_dir, (F_OK | W_OK))) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-             "Mysql binlog archive path not access.");
-      return 1;
-    }
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, "start binlog archive");
+
+  // persist the binlog to the object store.
+  std::string obj_error_msg;
+  std::string err_msg;
+  std::string_view endpoint(
+      opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
+  objstore::ObjectStore *objstore =
+      objstore::create_object_store(std::string_view(opt_objstore_provider),
+                                    std::string_view(opt_objstore_region),
+                                    opt_objstore_endpoint ? &endpoint : nullptr,
+                                    opt_objstore_use_https, obj_error_msg);
+  if (!objstore) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_CREATE_OBJECT_STORE,
+           opt_objstore_provider, opt_objstore_region,
+           std::string(endpoint).c_str(), opt_objstore_bucket,
+           opt_objstore_use_https ? "true" : "false",
+           !obj_error_msg.empty() ? obj_error_msg.c_str() : "");
+    return 1;
   }
-
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "start binlog archive");
-
-#ifdef HAVE_PSI_INTERFACE
-  const char *category = "archive";
-  int count_thread =
-      static_cast<int>(array_elements(all_binlog_archive_threads));
-  mysql_thread_register(category, all_binlog_archive_threads, count_thread);
-
-  int count_mutex =
-      static_cast<int>(array_elements(all_binlog_archive_mutex_info));
-  mysql_mutex_register(category, all_binlog_archive_mutex_info, count_mutex);
-
-  int count_cond =
-      static_cast<int>(array_elements(all_binlog_archive_cond_info));
-  mysql_cond_register(category, all_binlog_archive_cond_info, count_cond);
-
-  int count_file = static_cast<int>(array_elements(all_binlog_archive_files));
-  mysql_file_register(category, all_binlog_archive_files, count_file);
-
-#endif
-
-  mysql_mutex_init(PSI_binlog_archive_lock_key, &m_run_lock,
-                   MY_MUTEX_INIT_FAST);
-  mysql_cond_init(PSI_binlog_archive_cond_key, &m_run_cond);
-
-  mysql_binlog_archive = new Binlog_archive();
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_CREATE_OBJECT_STORE,
+         opt_objstore_provider, opt_objstore_region,
+         std::string(endpoint).c_str(), opt_objstore_bucket,
+         opt_objstore_use_https ? "true" : "false", "");
+  if (strcmp(opt_objstore_provider, "local") == 0) {
+    objstore->create_bucket(std::string_view(opt_objstore_bucket));
+  }
+  mysql_binlog_archive.set_objstore(objstore);
 
   mysql_mutex_lock(&m_run_lock);
   abort_binlog_archive = false;
   if (mysql_thread_create(THR_KEY_binlog_archive, &mysql_binlog_archive_pthd,
                           &connection_attrib, mysql_binlog_archive_action,
-                          (void *)mysql_binlog_archive)) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+                          (void *)&mysql_binlog_archive)) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
            "Failed to create binlog archive thread");
     mysql_mutex_unlock(&m_run_lock);
     return 1;
   }
 
-  mysql_binlog_archive->thread_set_created();
+  mysql_binlog_archive.thread_set_created();
 
-  while (mysql_binlog_archive->is_thread_alive_not_running()) {
+  while (mysql_binlog_archive.is_thread_alive_not_running()) {
     DBUG_PRINT("sleep", ("Waiting for binlog archive thread to start"));
     struct timespec abstime;
     set_timespec(&abstime, 1);
@@ -251,27 +256,25 @@ int start_binlog_archive() {
 void stop_binlog_archive() {
   DBUG_TRACE;
 
-  if (!mysql_binlog_archive) return;
-
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stop binlog archive");
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+         "stop binlog archive begin.");
 
   mysql_mutex_lock(&m_run_lock);
-  if (mysql_binlog_archive->is_thread_dead()) {
+  if (mysql_binlog_archive.is_thread_dead()) {
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+           "binlog archive stopped already.");
     mysql_mutex_unlock(&m_run_lock);
-    goto end;
+    return;
   }
   mysql_mutex_unlock(&m_run_lock);
-  mysql_binlog_archive->terminate_binlog_archive_thread();
+  mysql_binlog_archive.terminate_binlog_archive_thread();
   /* Wait until the thread is terminated. */
   my_thread_join(&mysql_binlog_archive_pthd, nullptr);
-end:
-  mysql_mutex_lock(&m_run_lock);
-  delete mysql_binlog_archive;
-  mysql_binlog_archive = nullptr;
-  mysql_mutex_unlock(&m_run_lock);
-
-  mysql_mutex_destroy(&m_run_lock);
-  mysql_cond_destroy(&m_run_cond);
+  if (mysql_binlog_archive.get_objstore()) {
+    objstore::destroy_object_store(mysql_binlog_archive.get_objstore());
+    mysql_binlog_archive.set_objstore(nullptr);
+  }
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stop binlog archive end.");
 }
 
 /**
@@ -318,37 +321,65 @@ Binlog_archive::Binlog_archive()
       m_index_file(),
       m_crash_safe_index_file(),
       m_purge_index_file() {
-  m_binlog_archive_first_slice = false;
+  m_consensus_is_leader = false;
+  m_consensus_term = 0;
+  m_mysql_binlog_first_file = true;
+  m_binlog_archive_last_index_number = 0;
+  m_event_checksum_alg = binary_log::BINLOG_CHECKSUM_ALG_OFF;
+  m_mysql_binlog_previouse_consensus_index = 0;
+  m_binlog_previouse_consensus_index = 0;
   m_binlog_archive_last_event_end_pos = 0;
   m_binlog_in_transaction = false;
   m_slice_bytes_written = 0;
   m_binlog_write_last_event_end_pos = 0;
+  m_mysql_binlog_last_event_end_pos = 0;
+  m_mysql_binlog_write_last_event_end_pos = 0;
   m_mysql_binlog_start_pos = 0;
   m_slice_pipeline_head = nullptr;
-  m_next_binlog_archive_file_name[0] = '\0';
   m_mysql_archive_dir[0] = '\0';
   m_binlog_archive_dir[0] = '\0';
+  m_mysql_binlog_start_file[0] = '\0';
   m_binlog_archive_file_name[0] = '\0';
-  m_binlog_archive_relative_file_name[0] = '\0';
+  m_binlog_slice_local_name[0] = '\0';
+  m_mysql_binlog_file_name[0] = '\0';
+  m_index_local_file_name[0] = '\0';
   m_index_file_name[0] = '\0';
-  m_crash_safe_index_file_name[0] = '\0';
+  m_crash_safe_index_local_file_name[0] = '\0';
   m_purge_index_file_name[0] = '\0';
-  init();
 }
 
 /**
  * @brief Destructs the Binlog_archive object.
  */
-Binlog_archive::~Binlog_archive() {
-  DBUG_TRACE;
-  cleanup();
-}
+Binlog_archive::~Binlog_archive() {}
 
 /**
  * @brief Initializes the binlog archive object.
  */
-void Binlog_archive::init() {
-  DBUG_TRACE;
+void Binlog_archive::init_pthread_object() {
+#ifdef HAVE_PSI_INTERFACE
+  const char *category = "archive";
+  int count_thread =
+      static_cast<int>(array_elements(all_binlog_archive_threads));
+  mysql_thread_register(category, all_binlog_archive_threads, count_thread);
+
+  int count_mutex =
+      static_cast<int>(array_elements(all_binlog_archive_mutex_info));
+  mysql_mutex_register(category, all_binlog_archive_mutex_info, count_mutex);
+
+  int count_cond =
+      static_cast<int>(array_elements(all_binlog_archive_cond_info));
+  mysql_cond_register(category, all_binlog_archive_cond_info, count_cond);
+
+  int count_file = static_cast<int>(array_elements(all_binlog_archive_files));
+  mysql_file_register(category, all_binlog_archive_files, count_file);
+
+#endif
+
+  mysql_mutex_init(PSI_binlog_archive_lock_key, &m_run_lock,
+                   MY_MUTEX_INIT_FAST);
+  mysql_cond_init(PSI_binlog_archive_cond_key, &m_run_cond);
+
   mysql_mutex_init(PSI_binlog_index_lock_key, &m_index_lock,
                    MY_MUTEX_INIT_FAST);
   mysql_mutex_init(PSI_binlog_rotate_lock_key, &m_rotate_lock,
@@ -358,17 +389,20 @@ void Binlog_archive::init() {
 /**
  * @brief Cleans up any resources used by the binlog archive.
  */
-void Binlog_archive::cleanup() {
-  DBUG_TRACE;
+void Binlog_archive::deinit_pthread_object() {
   mysql_mutex_destroy(&m_index_lock);
   mysql_mutex_destroy(&m_rotate_lock);
+  mysql_mutex_destroy(&m_run_lock);
+  mysql_cond_destroy(&m_run_cond);
 }
 
 /**
  * @brief Returns the binlog archive instance.
  * @return Binlog_archive*
  */
-Binlog_archive *Binlog_archive::get_instance() { return mysql_binlog_archive; }
+Binlog_archive *Binlog_archive::get_instance() { return &mysql_binlog_archive; }
+
+mysql_mutex_t *Binlog_archive::get_binlog_archive_lock() { return &m_run_lock; }
 
 /**
  * @brief Terminate the binlog archive thread.
@@ -446,7 +480,7 @@ static bool is_number(const char *str, ulonglong *res, bool allow_wildcards) {
 void Binlog_archive::run() {
   DBUG_TRACE;
   std::string err_msg;
-  LOG_INFO log_info;
+  LOG_ARCHIVED_INFO log_info;
   int error = 1;
   set_thread_context();
 
@@ -454,37 +488,6 @@ void Binlog_archive::run() {
   m_thd_state.set_initialized();
   mysql_cond_broadcast(&m_run_cond);
   mysql_mutex_unlock(&m_run_lock);
-
-  // Set @source_binlog_checksum = 'NONE';
-  LEX_CSTRING var_name = {STRING_WITH_LEN("source_binlog_checksum")};
-  Item *item_str = new Item_string(STRING_WITH_LEN("NONE"), &my_charset_latin1);
-  Item_func_set_user_var *suv = new Item_func_set_user_var(var_name, item_str);
-  if (suv->fix_fields(m_thd, nullptr) || suv->check(false) || suv->update()) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "Failed to set source_binlog_checksum to NONE");
-    goto end;
-  }
-
-  // persist the binlog to the object store.
-  if (opt_persistent_on_objstore) {
-    std::string obj_error_msg;
-    std::string_view endpoint(
-        opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
-    binlog_objstore = objstore::create_object_store(
-        std::string_view(opt_objstore_provider),
-        std::string_view(opt_objstore_region),
-        opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https,
-        obj_error_msg);
-    if (!binlog_objstore) {
-      err_msg.assign("Failed to create object store instance");
-      if (!obj_error_msg.empty()) {
-        err_msg.append(": ");
-        err_msg.append(obj_error_msg);
-      }
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-      goto end;
-    }
-  }
 
   strmake(m_mysql_archive_dir, opt_consistent_snapshot_archive_dir,
           sizeof(m_mysql_archive_dir) - 1);
@@ -496,53 +499,6 @@ void Binlog_archive::run() {
   // it.
   convert_dirname(m_binlog_archive_dir, m_binlog_archive_dir, NullS);
 
-  // create archive binlog sub dir, if not exists.
-  {
-    // Read the first binlog file from mysql binlog.index file.
-    error = mysql_bin_log.find_log_pos(&log_info, NullS, true);
-    if (error != 0) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-             "Failed to find binlog from mysql binlog");
-      goto end;
-    }
-    // log_info.log_file_name could be a absolute path.
-    // get relative path. Check if the binlog file name's first char
-    // is "/"
-    char temp_binlog_dir[FN_REFLEN + 1] = {0};
-    char temp_binlog_file[FN_REFLEN + 1] = {0};
-    size_t temp_binlog_dir_len = 0;
-    if (log_info.log_file_name[0] == FN_LIBCHAR) {
-      strmake(temp_binlog_file, log_info.log_file_name + 1,
-              sizeof(temp_binlog_file) - 1);
-    } else if (log_info.log_file_name[0] == FN_CURLIB &&
-               log_info.log_file_name[1] == FN_LIBCHAR) {
-      strmake(temp_binlog_file, log_info.log_file_name + 2,
-              sizeof(temp_binlog_file) - 1);
-    } else {
-      strmake(temp_binlog_file, log_info.log_file_name,
-              sizeof(temp_binlog_file) - 1);
-    }
-
-    dirname_part(temp_binlog_dir, temp_binlog_file, &temp_binlog_dir_len);
-    if (temp_binlog_dir_len > 0) {
-      MY_STAT d_stat;
-      char temp_archive_binlog_dir[FN_REFLEN + 1] = {0};
-      strmake(
-          strmake(temp_archive_binlog_dir, m_binlog_archive_dir,
-                  sizeof(temp_archive_binlog_dir) - temp_binlog_dir_len - 1),
-          temp_binlog_dir, temp_binlog_dir_len);
-      if (!my_stat(temp_archive_binlog_dir, &d_stat, MYF(0))) {
-        // recursive create subdir.
-        if (recursive_create_dir(temp_binlog_dir, m_binlog_archive_dir)) {
-          error = 1;
-          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-                 "Failed to create binlog archive sub dir.");
-          goto end;
-        }
-      }
-    }
-  }
-
   mysql_mutex_lock(&m_run_lock);
   m_thd_state.set_running();
   mysql_cond_broadcast(&m_run_cond);
@@ -551,7 +507,14 @@ void Binlog_archive::run() {
   LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "Binlog archive thread running");
 
   for (;;) {
-    char binlog_file_name[FN_REFLEN + 1] = {0};
+    my_off_t last_binlog_slice_max_num = 0;
+    uint64_t last_binlog_consensus_index = 0;
+    uint64_t last_binlog_index_num = 0;
+    uint64_t previous_consensus_index;
+    my_off_t mysql_start_pos = 0;
+    uint64_t consensus_term = 0;
+    char mysql_start_binlog[FN_REFLEN + 1] = {0};
+    char last_binlog_file_name[FN_REFLEN + 1] = {0};
     mysql_mutex_lock(&m_run_lock);
     if (abort_binlog_archive) {
       mysql_mutex_unlock(&m_run_lock);
@@ -561,32 +524,60 @@ void Binlog_archive::run() {
     if (m_thd == nullptr || m_thd->killed) break;
     m_thd->clear_error();
 
+#ifdef WESQL_CLUSTER
+    // Check whether consensus role is leader and fetch leader term
+    if (!is_consensus_replication_state_leader(consensus_term)) {
+      struct timespec abstime;
+      set_timespec(&abstime, 1);
+      mysql_mutex_lock(&m_run_lock);
+      m_consensus_is_leader = false;
+      // When demoted to a non-Leader role, the previous Leader role's consensus
+      // term remains unchanged, making it easier to query the binlog persistent
+      // view. m_consensus_term = 0;
+      error = mysql_cond_timedwait(&m_run_cond, &m_run_lock, &abstime);
+      mysql_mutex_unlock(&m_run_lock);
+      continue;
+    }
+    m_consensus_is_leader = true;
+    m_consensus_term = consensus_term;
+#endif
+    sprintf(m_index_file_name, "%s" BINLOG_ARCHIVE_CONSENSUS_TERM_EXT "%s",
+            BINLOG_ARCHIVE_INDEX_FILE_BASENAME,
+            static_cast<my_off_t>(m_consensus_term),
+            BINLOG_ARCHIVE_INDEX_FILE_SUFFIX);
+
     mysql_mutex_lock(&m_index_lock);
     // open persistent binlog.index
     if (open_index_file()) {
-      err_msg.assign("Failed to open archive binlog index file: ");
-      err_msg.append(BINLOG_ARCHIVE_INDEX_FILE);
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
       mysql_mutex_unlock(&m_index_lock);
       break;
     }
-    // Find the last persistent binlog from persistent binlog.index.
-    error = find_log_pos(&log_info, NullS);
+    // Find the last slice of the last binlog from persistent binlog.index.
+    error = find_log_pos_by_name(&log_info, NullS);
     if (error == 0) {
       do {
-        strmake(binlog_file_name, log_info.log_file_name,
-                sizeof(binlog_file_name) - 1);
+        strmake(last_binlog_file_name, log_info.log_file_name,
+                sizeof(last_binlog_file_name) - 1);
       } while (!(error = find_next_log(&log_info)));
       if (error != LOG_INFO_EOF) {
         close_index_file();
         mysql_mutex_unlock(&m_index_lock);
         LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-               "Failed to find binlog from archive binlog index file.");
+               "Find binlog from persistent binlog index failed.");
         break;
       }
+      my_off_t number = 0;
+      is_number(last_binlog_file_name + strlen(BINLOG_ARCHIVE_BASENAME),
+                &number, false);
+      last_binlog_index_num = number;
+      last_binlog_slice_max_num = log_info.slice_end_pos;
+      previous_consensus_index = log_info.previous_consensus_index;
     } else if (error == LOG_INFO_EOF) {
       // log index file is empty.
-      binlog_file_name[0] = '\0';
+      last_binlog_index_num = 0;
+      last_binlog_file_name[0] = '\0';
+      last_binlog_slice_max_num = BIN_LOG_HEADER_SIZE;
+      previous_consensus_index = 0;
     } else {
       close_index_file();
       mysql_mutex_unlock(&m_index_lock);
@@ -595,117 +586,136 @@ void Binlog_archive::run() {
       break;
     }
     mysql_mutex_unlock(&m_index_lock);
-    // Verify if the binlog_file_name is valid. Find the position
-    // from mysql binlog.index file.
-    if (binlog_file_name[0] != '\0') {
-      error = mysql_bin_log.find_log_pos(&log_info, binlog_file_name, true);
-      // Find the next binlog file, start archive from the next binlog file.
-      if (error == LOG_INFO_EOF) {
-        // If not found, identify binlog path change. Start archive from the
-        // first binlog file.
-        binlog_file_name[0] = '\0';
-      } else if (error != 0) {
-        err_msg.assign("Failed to find binlog from mysql binlog: ");
-        err_msg.append(binlog_file_name);
-        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-        close_index_file();
-        break;
-      }
-    }
-    m_binlog_write_last_event_end_pos = BIN_LOG_HEADER_SIZE;
-    m_binlog_archive_last_event_end_pos = BIN_LOG_HEADER_SIZE;
-    // Generate archive start binlog name.
-    strmake(m_binlog_archive_file_name, binlog_file_name,
-            sizeof(m_binlog_archive_file_name) - 1);
+    mysql_start_binlog[0] = '\0';
+    mysql_start_pos = BIN_LOG_HEADER_SIZE;
 
-    // Generate archive start position by last persistent binlog slice.
-    if (binlog_file_name[0] != '\0' && binlog_objstore) {
-      char binlog_relative_file[FN_REFLEN + 1] = {0};
-      // Generate binlog keyid.
-      // If binlog file is absolute path, change absolute path to relative path,
-      // remove the root path.
-      // If binlog file is relative path like ./binlog.000001, change it to
-      // binlog.000001.
-      if (binlog_file_name[0] == FN_LIBCHAR) {
-        strmake(binlog_relative_file, binlog_file_name + 1,
-                sizeof(binlog_relative_file) - 1);
-      } else if (binlog_file_name[0] == FN_CURLIB &&
-                 binlog_file_name[1] == FN_LIBCHAR) {
-        strmake(binlog_relative_file, binlog_file_name + 2,
-                sizeof(binlog_relative_file) - 1);
-      } else {
-        strmake(binlog_relative_file, binlog_file_name,
-                sizeof(binlog_relative_file) - 1);
-      }
-      std::string binlog_keyid{};
-      binlog_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
-      binlog_keyid.append(FN_DIRSEP);
-      binlog_keyid.append(binlog_relative_file);
-      binlog_keyid.append(".");
+    // Generate mysql start binlog name and position.
+    if (opt_binlog_archive_using_consensus_index) {
+#ifdef WESQL_CLUSTER
+      // get last consensus index from last persistent binlog
+      if (last_binlog_file_name[0] != '\0' && !NO_HOOK(binlog_manager)) {
+        std::string binlog_name;
+        binlog_name.assign(m_binlog_archive_dir);
+        binlog_name.append(last_binlog_file_name);
 
-      bool finished = false;
-      std::string start_after;
-      std::vector<objstore::ObjectMeta> objects;
-
-      // list last binlog slices.
-      do {
-        std::vector<objstore::ObjectMeta> tmp_objects;
-        objstore::Status ss = binlog_objstore->list_object(
-            std::string_view(opt_objstore_bucket), binlog_keyid, start_after,
-            finished, tmp_objects);
-        // The binlog present in persistent binlog.index should also exist in
-        // object store.
-        if (!ss.is_succ()) {
+        merge_slice_to_binlog_file(last_binlog_file_name);
+        if (RUN_HOOK(binlog_manager, get_unique_index_from_pos,
+                     (binlog_name.c_str(), 0, last_binlog_consensus_index))) {
           err_msg.assign(
-              "download persistent binlog from object store failed: ");
-          err_msg.append(binlog_keyid);
-          err_msg.append(" error=");
-          err_msg.append(ss.error_message());
+              "get consensus index using persistent binlog failed: ");
+          err_msg.append(last_binlog_file_name);
           LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
           break;
         }
-        // Append object.
-        objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
-      } while (finished == false);
-      if (finished == false) break;
-
-      my_off_t max_found = 0, number = 0;
-      for (const auto &object : objects) {
-        if (is_number(object.key.c_str() + binlog_keyid.length(), &number,
-                      false)) {
-          max_found = std::max(max_found, number);
+        assert(last_binlog_consensus_index > 0);
+        // get mysql binlog and end positiion using consensus index.
+        // generate mysql start binlog name and position.
+        char start_file[FN_REFLEN + 1];
+        my_off_t start_pos = 0;
+        if (RUN_HOOK(binlog_manager, get_pos_from_unique_index,
+                     (last_binlog_consensus_index, start_file, start_pos))) {
+          err_msg.assign(
+              "get mysql binlog and position using consensus index failed: ");
+          err_msg.append(std::to_string(last_binlog_consensus_index));
+          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+          break;
         }
+        // Only file name.
+        strmake(mysql_start_binlog, start_file + dirname_length(start_file),
+                sizeof(mysql_start_binlog) - 1);
+        mysql_start_pos = start_pos;
       }
-      m_binlog_write_last_event_end_pos = max_found;
-      m_binlog_archive_last_event_end_pos = max_found;
+#endif
+    } else {
+      // Generate mysql start binlog name and position.
+      strmake(mysql_start_binlog, last_binlog_file_name,
+              sizeof(mysql_start_binlog) - 1);
     }
+    err_msg.assign("persistent start ");
+    err_msg.append("term=");
+    err_msg.append(std::to_string(m_consensus_term));
+    err_msg.append(" persistent_start_binlog=");
+    err_msg.append(last_binlog_file_name);
+    err_msg.append(":");
+    err_msg.append(std::to_string(last_binlog_slice_max_num));
+    err_msg.append(" consensus_start_index=");
+    err_msg.append(std::to_string(last_binlog_consensus_index));
+    err_msg.append(" mysql_start_binlog=");
+    err_msg.append(mysql_start_binlog);
+    err_msg.append(":");
+    err_msg.append(std::to_string(mysql_start_pos));
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
-    m_mysql_binlog_start_pos = m_binlog_archive_last_event_end_pos;
+    mysql_mutex_lock(&m_rotate_lock);
+    m_mysql_binlog_start_pos = mysql_start_pos;
+    strmake(m_mysql_binlog_start_file, mysql_start_binlog,
+            sizeof(m_mysql_binlog_start_file) - 1);
+    m_mysql_binlog_last_event_end_pos = m_mysql_binlog_start_pos;
+    m_mysql_binlog_write_last_event_end_pos = m_mysql_binlog_start_pos;
+    m_slice_bytes_written = 0;
+    m_binlog_write_last_event_end_pos = last_binlog_slice_max_num;
+    m_binlog_archive_last_event_end_pos = last_binlog_slice_max_num;
+    m_binlog_archive_start_consensus_index = last_binlog_consensus_index;
+    m_binlog_previouse_consensus_index = previous_consensus_index;
+    m_binlog_archive_last_index_number = last_binlog_index_num;
+    m_binlog_in_transaction = false;
+    m_mysql_binlog_first_file = true;
+    // init in archive_init()
+    m_mysql_binlog_file_name[0] = '\0';
+    m_binlog_archive_file_name[0] = '\0';
+    m_binlog_slice_local_name[0] = '\0';
 
+    mysql_mutex_unlock(&m_rotate_lock);
+
+    // The binlog archive only stops in the event of an error, such
+    // as when the thread is killed, aborted, consensus role or term changed, or
+    // if an API execution fails. In cases where the thread is killed or
+    // aborted, the binlog archive thread must exit. For other errors, will
+    // retry binlog archiving after waiting for a period of time.
     archive_binlogs();
-    // If previous archive binlog slice is not closed, close it.
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+           "persistent binlog had abort");
+
+    // persist last binlog slice to object store.
+    // No matter what causes the binlog persistence to terminate, locally
+    // cached binlog slices should be persisted to prevent data loss. If binlog
+    // persistence terminates and exits while some MySQL binlogs have not been
+    // persisted (for example, if MySQL generates a large amount of binlog data,
+    // and binlog persistence is too slow to keep up), this could result in
+    // incomplete binlog persistence. Therefore, to ensure complete binlog
+    // persistence, it is essential to ensure that the local mysql binlogs are
+    // still present after the cluster recovers.
+    // Users can determine whether all binlogs have been fully persisted by
+    // comparing the `consensus_index` from
+    // `information_schema.binlog_persistent_info` with the `match_index`
+    // obtained from `information_schema.wesql_cluster_global`.
+    rotate_binlog_slice(0, true);
+
+    mysql_mutex_lock(&m_rotate_lock);
+    // If previous archived binlog slice is not closed, close it.
     if (m_slice_pipeline_head) {
       m_slice_pipeline_head->close();
       m_slice_pipeline_head = nullptr;
     }
+    mysql_mutex_unlock(&m_rotate_lock);
 
+    mysql_mutex_lock(&m_index_lock);
+    close_index_file();
+    mysql_mutex_unlock(&m_index_lock);
+
+    // If the thread is killed, exit.
+    if (m_thd == nullptr || m_thd->killed) break;
+
+    // Will retry binlog archiving
+    // after waiting for a period of time
     struct timespec abstime;
     set_timespec(&abstime, 3);
     mysql_mutex_lock(&m_run_lock);
     error = mysql_cond_timedwait(&m_run_cond, &m_run_lock, &abstime);
     mysql_mutex_unlock(&m_run_lock);
-
-    mysql_mutex_lock(&m_index_lock);
-    close_index_file();
-    mysql_mutex_unlock(&m_index_lock);
   }
 
-end:
   LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "Binlog archive thread end");
-  if (binlog_objstore) {
-    objstore::destroy_object_store(binlog_objstore);
-    binlog_objstore = nullptr;
-  }
   // Free new Item_***.
   m_thd->free_items();
   m_thd->release_resources();
@@ -743,20 +753,20 @@ int Binlog_archive::archive_init() {
   }
 
   // check start file
-  if (m_binlog_archive_file_name[0] != '\0') {
-    mysql_bin_log.make_log_name(index_entry_name, m_binlog_archive_file_name);
+  if (m_mysql_binlog_start_file[0] != '\0') {
+    mysql_bin_log.make_log_name(index_entry_name, m_mysql_binlog_start_file);
     name_ptr = index_entry_name;
   }
+
   if (mysql_bin_log.find_log_pos(&m_mysql_linfo, name_ptr, true)) {
     err_msg.assign("Could not find first log file name in mysql binary log: ");
     err_msg.append(name_ptr);
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     return 1;
   }
-
   if (m_mysql_binlog_start_pos < BIN_LOG_HEADER_SIZE) {
     err_msg.assign(
-        "Client requested source to start replication "
+        "requested source to start archive "
         "from position < 4: ");
     err_msg.append(std::to_string(m_mysql_binlog_start_pos));
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
@@ -775,7 +785,7 @@ int Binlog_archive::archive_init() {
   // there are incomplete transaction log in the binlog persisted to S3.
   // Therefore, we also need to truncate the binlog on S3.
   if (m_mysql_binlog_start_pos > binlog_ifile.length()) {
-    err_msg.assign("Client requested source to start replication from ");
+    err_msg.assign("requested source to start archive from ");
     err_msg.append("position ");
     err_msg.append(std::to_string(m_mysql_binlog_start_pos));
     err_msg.append("> file size ");
@@ -783,9 +793,46 @@ int Binlog_archive::archive_init() {
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     return 1;
   }
+  mysql_mutex_lock(&m_rotate_lock);
+  // init the first mysql binlog.
+  strmake(m_mysql_binlog_file_name, m_mysql_linfo.log_file_name,
+          sizeof(m_mysql_binlog_file_name) - 1);
+  // init the last persistent binlog
+  sprintf(m_binlog_archive_file_name, "%s" BINLOG_ARCHIVE_NUMBER_EXT,
+          BINLOG_ARCHIVE_BASENAME,
+          (ulonglong)m_binlog_archive_last_index_number);
+  // init the local binlog slice.
+  std::string binlog_slice;
+  binlog_slice.assign(m_binlog_archive_dir);
+  binlog_slice.append(m_binlog_archive_file_name);
+  binlog_slice.append(BINLOG_ARCHIVE_SLICE_LOCAL_SUFFIX);
+  strmake(m_binlog_slice_local_name, binlog_slice.c_str(),
+          sizeof(m_binlog_slice_local_name) - 1);
+  mysql_mutex_unlock(&m_rotate_lock);
   return 0;
 }
 
+bool Binlog_archive::consensus_leader_is_changed() {
+#ifdef WESQL_CLUSTER
+  // Check whether consensus role is leader
+  uint64_t consensus_term = 0;
+  if (!is_consensus_replication_state_leader(consensus_term)) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+           "consensus role had changed to non-leader");
+    return true;
+  }
+  if (m_consensus_term != consensus_term) {
+    std::string err_msg;
+    err_msg.assign("consensus leader term had changed ");
+    err_msg.append(std::to_string(m_consensus_term));
+    err_msg.append(" to ");
+    err_msg.append(std::to_string(consensus_term));
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    return true;
+  }
+#endif
+  return false;
+}
 int Binlog_archive::archive_binlogs() {
   DBUG_TRACE;
   std::string err_msg;
@@ -869,6 +916,8 @@ int Binlog_archive::archive_binlog(File_reader &reader, my_off_t start_pos) {
   if (reader.position() != start_pos && reader.seek(start_pos)) return 1;
 
   while (!m_thd->killed) {
+    // Each time a larger end_pos is obtained, the consensus role is checked for
+    // changes.
     auto [end_pos, code] = get_binlog_end_pos(reader);
 
     if (code) return 1;
@@ -886,6 +935,7 @@ int Binlog_archive::archive_binlog(File_reader &reader, my_off_t start_pos) {
 int Binlog_archive::read_format_description_event(File_reader &reader) {
   uchar *event_ptr = nullptr;
   uint32 event_len = 0;
+  std::string err_msg;
 
   if (reader.read_event_data(&event_ptr, &event_len)) {
     if (reader.get_error_type() == Binlog_read_error::READ_EOF) {
@@ -900,21 +950,52 @@ int Binlog_archive::read_format_description_event(File_reader &reader) {
 
   if (event_ptr == nullptr ||
       event_ptr[EVENT_TYPE_OFFSET] != binary_log::FORMAT_DESCRIPTION_EVENT) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "Could not find format_description_event in binlog file");
+    err_msg.assign("Could not find format_description_event in binlog ");
+    err_msg.append(m_mysql_linfo.log_file_name);
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     return 1;
   }
+
+  m_event_checksum_alg =
+      Log_event_footer::get_checksum_alg((const char *)event_ptr, event_len);
+  assert(m_event_checksum_alg < binary_log::BINLOG_CHECKSUM_ALG_ENUM_END ||
+         m_event_checksum_alg == binary_log::BINLOG_CHECKSUM_ALG_UNDEF);
 
   Log_event *ev = nullptr;
   Binlog_read_error binlog_read_error = binlog_event_deserialize(
       event_ptr, event_len, &reader.format_description_event(), false, &ev);
   if (binlog_read_error.has_error()) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, binlog_read_error.get_str());
+    err_msg.assign(binlog_read_error.get_str());
+    err_msg.append(" ");
+    err_msg.append(m_mysql_linfo.log_file_name);
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     return 1;
   }
   reader.set_format_description_event(
       dynamic_cast<Format_description_log_event &>(*ev));
   delete ev;
+
+#ifdef WESQL_CLUSTER
+  // Get mysql binlog previous consensus index
+  uint64 previous_consensus_index = 0;
+  if (!NO_HOOK(binlog_manager)) {
+    if (RUN_HOOK(binlog_manager, get_unique_index_from_pos,
+                 (m_mysql_linfo.log_file_name, BIN_LOG_HEADER_SIZE,
+                  previous_consensus_index))) {
+      err_msg.assign(
+          "Could not find previouse consensus index in mysql binlog ");
+      err_msg.append(m_mysql_linfo.log_file_name);
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      return 1;
+    }
+    err_msg.assign("Found previouse consensus index in mysql binlog ");
+    err_msg.append(m_mysql_linfo.log_file_name);
+    err_msg.append(" previous_consensus_index=");
+    err_msg.append(std::to_string(previous_consensus_index));
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+  }
+  m_mysql_binlog_previouse_consensus_index = previous_consensus_index;
+#endif
   return 0;
 }
 
@@ -953,9 +1034,9 @@ int Binlog_archive::archive_events(File_reader &reader, my_off_t end_pos) {
 
       /*
         It is reading events before end_pos of active binlog file. In theory,
-        it should never return nullptr. But RESET MASTER doesn't check if there
-        is any dump thread working. So it is possible that the active binlog
-        file is reopened and truncated to 0 after RESET MASTER.
+        it should never return nullptr. But RESET MASTER doesn't check if
+        there is any dump thread working. So it is possible that the active
+        binlog file is reopened and truncated to 0 after RESET MASTER.
       */
       LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, "SYSTEM IO error");
       return 1;
@@ -978,17 +1059,23 @@ int Binlog_archive::archive_events(File_reader &reader, my_off_t end_pos) {
 }
 
 /**
- * @brief Write an binlog event from log_file with log_pos to the archive binlog
- * cache.
+ * @brief Write an binlog event from log_file with log_pos to the archive
+ * binlog cache.
  *
- * @param thd
- * @param flags
- * @param packet
- * @param log_file
- * @param log_pos
+ * @param log_file mysql binlog of the read
+ * @param log_pos mysql binlog end position of the read
  * @return int
  * @note The first event in the archive is not necessarily the first event in
  * the binlog; it could also be an event from the middle of the binlog.
+ * If archiving starts from the middle of the mysql binlog, the persistence
+ * position of the event may differ from its position in the local binlog, so
+ * the end_log_pos of the event might need to be updated; this is limited to
+ * events read from the first local binlog; subsequent binlog will maintain
+ * the same persistence structure as the local binlog. This is because the
+ * last persisted binlog may have come from the old leader, while the event
+ * currently being prepared for persistence is from the new leader. The new
+ * leader needs to continue persisting subsequent events from the located file
+ * into the same persistent binlog.
  */
 int Binlog_archive::archive_event(File_reader &reader, uchar *event_ptr,
                                   uint32 event_len, const char *log_file,
@@ -1008,93 +1095,100 @@ int Binlog_archive::archive_event(File_reader &reader, uchar *event_ptr,
 
   DBUG_PRINT("info",
              ("Archiving event of type %s", Log_event::get_type_str(type)));
-
+  // An event of type `FORMAT_DESCRIPTION_EVENT` signifies the start of a new
+  // binlog.
   if (type == binary_log::FORMAT_DESCRIPTION_EVENT) {
     mysql_mutex_lock(&m_rotate_lock);
     assert(m_binlog_in_transaction == false);
 
-    // Persist no archived binlog slice.
+    // When MySQL switches to a new binlog, the persistent binlog should also
+    // follow suit. Before switching to a new persistent binlog, the remaining
+    // events of the previous binlog need to be persisted.
     if (m_slice_pipeline_head && m_binlog_write_last_event_end_pos >
                                      m_binlog_archive_last_event_end_pos) {
+      m_slice_pipeline_head->flush();
+      m_slice_pipeline_head->sync();
       m_slice_pipeline_head->close();
       m_slice_pipeline_head = nullptr;
-      // Upload the local archived binlog last slice to the object store.
-      if (binlog_objstore) {
-        std::string archived_binlog_keyid{};
-        char binlog_slice_ext[11] = {0};
-        archived_binlog_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
-        archived_binlog_keyid.append(FN_DIRSEP);
-        archived_binlog_keyid.append(m_binlog_archive_relative_file_name);
-        archived_binlog_keyid.append(".");
-        sprintf(binlog_slice_ext, "%010llu", m_binlog_write_last_event_end_pos);
-        // Binlog max size is 1G (1,073,741,824), so the binlog slice file name
-        // extension is 10 bytes.
-        archived_binlog_keyid.append(binlog_slice_ext);
-        objstore::Status ss = binlog_objstore->put_object_from_file(
-            std::string_view(opt_objstore_bucket), archived_binlog_keyid,
-            m_binlog_archive_slice_name);
-        std::string err_msg;
-        err_msg.assign("upload binlog last slice to object store: ");
-        err_msg.append(archived_binlog_keyid);
-        err_msg.append(" size=");
-        err_msg.append(std::to_string(m_slice_bytes_written));
-        if (!ss.is_succ()) {
-          err_msg.append(" error=");
-          err_msg.append(ss.error_message());
-          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-          error = 1;
-          mysql_mutex_unlock(&m_rotate_lock);
-          goto end;
-        }
-        LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-        // remove the local archived binlog slice, after upload to the object
-        // store.
-        remove_file(m_binlog_archive_slice_name);
+      // Check whether consensus role is leader
+      if (consensus_leader_is_changed()) {
+        error = 1;
+        mysql_mutex_unlock(&m_rotate_lock);
+        goto end;
       }
+      // Upload the binlog last slice to the object store.
+      std::string archived_binlog_keyid{};
+      std::string binlog_slice_name{};
+      archived_binlog_keyid.append(BINLOG_ARCHIVE_SUBDIR);
+      archived_binlog_keyid.append(FN_DIRSEP);
+      new_persistent_binlog_slice_key(
+          m_binlog_archive_file_name, binlog_slice_name,
+          m_binlog_write_last_event_end_pos, m_consensus_term);
+      archived_binlog_keyid.append(binlog_slice_name);
+      objstore::Status ss = binlog_objstore->put_object_from_file(
+          std::string_view(opt_objstore_bucket), archived_binlog_keyid,
+          std::string_view(m_binlog_slice_local_name));
+      if (!ss.is_succ()) {
+        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_SLICE_FILE,
+               archived_binlog_keyid.c_str(), m_binlog_slice_local_name,
+               m_slice_bytes_written, std::string(ss.error_message()).c_str());
+        error = 1;
+        goto end_rotate;
+      }
+      LogErr(INFORMATION_LEVEL,
+             ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_SLICE_FILE,
+             archived_binlog_keyid.c_str(), m_binlog_slice_local_name,
+             m_slice_bytes_written, "");
+      // Remove the local binlog slice, after upload to the object
+      // store.
+      remove_file(std::string(m_binlog_slice_local_name));
+
+      // Append last binlog slice name to persistent binlog-index.index.
+      mysql_mutex_lock(&m_index_lock);
+      std::string binlog_meta;
+      binlog_meta.assign(binlog_slice_name);
+      binlog_meta.append("|");
+      binlog_meta.append(std::to_string(m_binlog_previouse_consensus_index));
+      if (add_log_to_index(reinterpret_cast<const uchar *>(binlog_meta.c_str()),
+                           binlog_meta.length())) {
+        error = 1;
+        mysql_mutex_unlock(&m_index_lock);
+        goto end_rotate;
+      }
+      mysql_mutex_unlock(&m_index_lock);
+
       m_slice_bytes_written = 0;
       m_binlog_archive_last_event_end_pos = m_binlog_write_last_event_end_pos;
-
-      if (m_binlog_archive_first_slice) {
-        // When we are done with the file, we need to record it in the index.
-        // record binlog real file name to the index file.
-        mysql_mutex_lock(&m_index_lock);
-        if (add_log_to_index((uchar *)m_binlog_archive_file_name,
-                             strlen(m_binlog_archive_file_name))) {
-          error = 1;
-          mysql_mutex_unlock(&m_index_lock);
-          mysql_mutex_unlock(&m_rotate_lock);
-          goto end;
-        }
-        mysql_mutex_unlock(&m_index_lock);
-        m_binlog_archive_first_slice = false;
-      }
+      m_mysql_binlog_last_event_end_pos =
+          m_mysql_binlog_write_last_event_end_pos;
     }
 
-    // create archive binlog first slice.
-    if (new_binlog_slice(log_file, log_pos)) {
+    // switch next mysql binlog and generate first slice.
+    if (new_binlog_slice(true, log_file, log_pos,
+                         m_mysql_binlog_previouse_consensus_index)) {
       error = 1;
-      mysql_mutex_unlock(&m_rotate_lock);
-      goto end;
+      goto end_rotate;
     }
-    m_binlog_archive_first_slice = true;
     // Write BINLOG_MAGIC to the binlog first slice.
     if (m_slice_pipeline_head->write((const uchar *)BINLOG_MAGIC,
                                      BIN_LOG_HEADER_SIZE)) {
       error = 1;
-      goto end;
+      goto end_rotate;
     }
     m_slice_bytes_written = BIN_LOG_HEADER_SIZE;
     m_binlog_write_last_event_end_pos = BIN_LOG_HEADER_SIZE;
     m_binlog_archive_last_event_end_pos = BIN_LOG_HEADER_SIZE;
+    m_mysql_binlog_write_last_event_end_pos = BIN_LOG_HEADER_SIZE;
+    m_mysql_binlog_last_event_end_pos = BIN_LOG_HEADER_SIZE;
     // Write Format_description_event to the binlog first slice.
     if (m_slice_pipeline_head->write(event_ptr, event_len)) {
       error = 1;
-      mysql_mutex_unlock(&m_rotate_lock);
-      goto end;
+      goto end_rotate;
     }
     m_slice_bytes_written += event_len;
     // Update the last archived event end of position.
     m_binlog_write_last_event_end_pos = event_end_pos;
+    m_mysql_binlog_write_last_event_end_pos = event_end_pos;
     m_slice_pipeline_head->flush();
     mysql_mutex_unlock(&m_rotate_lock);
     goto suc;
@@ -1137,43 +1231,71 @@ int Binlog_archive::archive_event(File_reader &reader, uchar *event_ptr,
 
   mysql_mutex_lock(&m_rotate_lock);
 
-  // If slice not exists, create a new slice.
+  // If the local slice has not been created, it indicates that the archiving
+  // started from the middle of the binlog. The first half of the
+  // current binlog has already been persisted, and now is on
+  // persisting the second half of the binlog.
+  // It's to note that the subsequent events might be generated by the new
+  // leader.
   if (!m_slice_pipeline_head) {
-    assert(log_pos != BIN_LOG_HEADER_SIZE);
-    // create archive binlog first slice.
-    if (new_binlog_slice(log_file, log_pos)) {
+    assert(log_pos > BIN_LOG_HEADER_SIZE);
+    if (new_binlog_slice(false, log_file, log_pos, 0)) {
       error = 1;
-      mysql_mutex_unlock(&m_rotate_lock);
-      goto end;
+      goto end_rotate;
     }
   }
+
+  m_slice_bytes_written += event_len;
+  // Record the last archived event end of position.
+  m_binlog_write_last_event_end_pos += event_len;
+  m_mysql_binlog_write_last_event_end_pos = event_end_pos;
+
+  // Here, the primary consideration is that the new Leader's current
+  // `binlog.000004` event needs to be persisted into the `binlog.000001` file
+  // generated by the old Leader. However, the structures of these two binlogs
+  // might differ, so it may be necessary to adjust the `event_end_pos` of each
+  // event.
+  if (m_mysql_binlog_first_file) {
+    if (event_end_pos != m_binlog_write_last_event_end_pos) {
+      int4store(event_ptr + LOG_POS_OFFSET,
+                static_cast<uint32>(m_binlog_write_last_event_end_pos));
+      if (event_checksum_on()) {
+        calc_event_checksum(event_ptr, event_len);
+      }
+      event_end_pos = uint4korr(event_ptr + LOG_POS_OFFSET);
+    }
+  } else {
+    assert(m_binlog_write_last_event_end_pos ==
+           m_mysql_binlog_write_last_event_end_pos);
+  }
+  assert(m_binlog_write_last_event_end_pos == event_end_pos);
 
   assert(m_slice_pipeline_head != nullptr);
   if (m_slice_pipeline_head->write(event_ptr, event_len)) {
     error = 1;
-    mysql_mutex_unlock(&m_rotate_lock);
-    goto end;
+    goto end_rotate;
   }
-  m_slice_bytes_written += event_len;
-  // Record the last archived event end of position.
-  m_binlog_write_last_event_end_pos = event_end_pos;
 
   // rotate binlog slice, if the binlog slice size is too large.
   // Whenever the current position is at a transaction boundary, rotate binlog
   // slice.
   if (m_binlog_in_transaction == false &&
       !(type == binary_log::GTID_LOG_EVENT ||
+#ifdef WESQL_CLUSTER
+        type == binary_log::CONSENSUS_LOG_EVENT ||
+#endif
         type == binary_log::ANONYMOUS_GTID_LOG_EVENT) &&
       !(type == binary_log::USER_VAR_EVENT ||
         type == binary_log::INTVAR_EVENT || type == binary_log::RAND_EVENT) &&
       m_slice_bytes_written >= opt_binlog_archive_slice_max_size) {
-    if (rotate_binlog_slice(m_binlog_write_last_event_end_pos, false)) {
+    if (rotate_binlog_slice(m_mysql_binlog_write_last_event_end_pos, false)) {
       error = 1;
-      mysql_mutex_unlock(&m_rotate_lock);
-      goto end;
+      goto end_rotate;
     }
   }
-  m_slice_pipeline_head->flush();
+  if (m_slice_pipeline_head) {
+    m_slice_pipeline_head->flush();
+  }
   mysql_mutex_unlock(&m_rotate_lock);
 
 suc:
@@ -1181,18 +1303,163 @@ suc:
   // Actually, it's enough to send a signal only when rotating the binlog
   // file.
   signal_update();
+  return 0;
 
+end_rotate:
+  if (m_slice_pipeline_head) {
+    m_slice_pipeline_head->close();
+    m_slice_pipeline_head = nullptr;
+  }
+  mysql_mutex_unlock(&m_rotate_lock);
 end:
   return error;
 }
 
-bool Binlog_archive::stop_waiting_for_mysql_binlog_update(
-    my_off_t log_pos) const {
+inline void Binlog_archive::calc_event_checksum(uchar *event_ptr,
+                                                size_t event_len) {
+  ha_checksum crc = checksum_crc32(0L, nullptr, 0);
+  crc = checksum_crc32(crc, event_ptr, event_len - BINLOG_CHECKSUM_LEN);
+  int4store(event_ptr + event_len - BINLOG_CHECKSUM_LEN, crc);
+}
+
+int Binlog_archive::merge_slice_to_binlog_file(const char *to_binlog_file) {
+  // List the binlog file all slice.
+  std::streamsize binlog_size = 0;
+  my_off_t slice_number = 0;
+  std::string err_msg;
+
+  std::string binlog_name;
+  binlog_name.assign(m_binlog_archive_dir);
+  binlog_name.append(to_binlog_file);
+  remove_file(binlog_name);
+
+  // Find the first slice of the last binlog from persistent binlog.index.
+  LOG_ARCHIVED_INFO log_info;
+  int error = 1;
+  error = find_log_pos_by_name(&log_info, to_binlog_file);
+  if (error != 0) {
+    return 1;
+  }
+  do {
+    std::string binlog_slice_name;
+    std::string binlog_slice_keyid;
+    binlog_slice_name.assign(m_binlog_archive_dir);
+    binlog_slice_name.append(to_binlog_file);
+    binlog_slice_name.append(BINLOG_ARCHIVE_SLICE_LOCAL_SUFFIX);
+    binlog_slice_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
+    binlog_slice_keyid.append(FN_DIRSEP);
+    binlog_slice_keyid.append(log_info.log_slice_name);
+    // Delete the local binlog slice file if it exists.
+    remove_file(binlog_slice_name);
+    // download slice from object store
+    objstore::Status ss = binlog_objstore->get_object_to_file(
+        std::string_view(opt_objstore_bucket), binlog_slice_keyid,
+        binlog_slice_name);
+    if (!ss.is_succ()) {
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_GET_OBJECT_TO_FILE,
+             "get binlog slice failed", binlog_slice_keyid.c_str(),
+             binlog_slice_name.c_str(),
+             std::string(ss.error_message()).c_str());
+      return 1;
+    }
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_GET_OBJECT_TO_FILE,
+           "get binlog slice", binlog_slice_keyid.c_str(),
+           binlog_slice_name.c_str(), "");
+    // append binlog slice file to binlog file.
+    std::ofstream binlog_file;
+    binlog_file.open(binlog_name, std::ofstream::app);
+    if (!binlog_file.is_open()) {
+      err_msg.assign("Failed to open binlog file: ");
+      err_msg.append(binlog_name);
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      return 1;
+    }
+    std::ifstream binlog_slice;
+    binlog_slice.open(binlog_slice_name, std::ifstream::in);
+    if (!binlog_slice.is_open()) {
+      err_msg.assign("Failed to open binlog slice file: ");
+      err_msg.append(binlog_slice_name);
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      return 1;
+    }
+    binlog_file << binlog_slice.rdbuf();
+    binlog_slice.close();
+    // seek file end and get file size.
+    binlog_file.seekp(0, std::ios::end);
+    binlog_size = binlog_file.tellp();
+    binlog_file.close();
+    slice_number = log_info.slice_end_pos;
+    if (static_cast<my_off_t>(binlog_size) != slice_number) {
+      err_msg.assign("merge binlog slice to binlog failed: ");
+      err_msg.append(log_info.log_slice_name);
+      err_msg.append(" slice_end_pos=");
+      err_msg.append(std::to_string(slice_number));
+      err_msg.append(" binlog_total_size=");
+      err_msg.append(std::to_string(binlog_size));
+      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      return 1;
+    }
+    // remove binlog slice file
+    remove_file(binlog_slice_name);
+  } while (!(error = find_next_log_slice(&log_info)) &&
+           compare_log_name(log_info.log_file_name, to_binlog_file) == 0);
+
+  err_msg.assign("merge slice to binlog ");
+  err_msg.append(binlog_name);
+  err_msg.append(" size=");
+  err_msg.append(std::to_string(binlog_size));
+  err_msg.append(" last slice number=");
+  err_msg.append(std::to_string(slice_number));
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+
+  if (my_chmod(binlog_name.c_str(),
+               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
+                   OTHERS_WRITE | OTHERS_READ,
+               MYF(MY_WME))) {
+    err_msg.assign("Failed to chmod: ");
+    err_msg.append(binlog_name);
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    // remove_file(mysql_clone_file_name);
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * @brief new binlog slice name.
+ *
+ * @param binlog persistent binlog file name.
+ * @return int
+ */
+int Binlog_archive::new_persistent_binlog_slice_key(const char *binlog,
+                                                    std::string &slice_name,
+                                                    const my_off_t pos,
+                                                    const uint64_t term) {
+  char binlog_slice_ext[12] = {0};
+  char binlog_slice_term_ext[22] = {0};
+  slice_name.assign(binlog);
+
+  snprintf(binlog_slice_term_ext, sizeof(binlog_slice_term_ext),
+           "." BINLOG_ARCHIVE_CONSENSUS_TERM_EXT, static_cast<my_off_t>(term));
+  slice_name.append(binlog_slice_term_ext);
+  // Binlog max size is 1G (1,073,741,824), so the binlog slice file
+  // name extension is 10 bytes.
+  snprintf(binlog_slice_ext, sizeof(binlog_slice_ext),
+           "." BINLOG_ARCHIVE_SLICE_POSITION_EXT, pos);
+  slice_name.append(binlog_slice_ext);
+  return 0;
+}
+
+int Binlog_archive::stop_waiting_for_mysql_binlog_update(my_off_t log_pos) {
+  // Check whether consensus role is leader
+  if (consensus_leader_is_changed()) {
+    return -1;
+  }
   if (mysql_bin_log.get_binlog_end_pos() > log_pos ||
       !mysql_bin_log.is_active(m_mysql_linfo.log_file_name) || m_thd->killed) {
-    return true;
+    return 0;
   }
-  return false;
+  return 1;
 }
 
 int Binlog_archive::wait_new_mysql_binlog_events(my_off_t log_pos) {
@@ -1203,20 +1470,17 @@ int Binlog_archive::wait_new_mysql_binlog_events(my_off_t log_pos) {
     LOCK_binlog_end_pos if we reached the end of the hot log and are going
     to wait for updates on the binary log (Binlog_sender::wait_new_event()).
   */
-  if (stop_waiting_for_mysql_binlog_update(log_pos)) {
-    return 0;
+  if ((ret = stop_waiting_for_mysql_binlog_update(log_pos)) != 1) {
+    // return 0 or -1
+    return ret;
   }
 
   mysql_bin_log.lock_binlog_end_pos();
   m_thd->ENTER_COND(mysql_bin_log.get_log_cond(),
                     mysql_bin_log.get_binlog_end_pos_lock(), nullptr, nullptr);
-  while (!stop_waiting_for_mysql_binlog_update(log_pos)) {
-    // TODO: "Add a function to periodically update the lock file in object
-    // storage. This lock file indicates a write lock to prevent write
-    // conflicts. The lock file records the instance ID and lease time. Each
-    // time, the binlog persistence thread updates the lease here. Other write
-    // operations on the persistent object only need to check this lock."
-    ret = mysql_bin_log.wait_for_update();
+  while ((ret = stop_waiting_for_mysql_binlog_update(log_pos)) == 1) {
+    std::chrono::nanoseconds timeout = std::chrono::nanoseconds{1000000ULL};
+    mysql_bin_log.wait_for_update(timeout);
   }
   mysql_bin_log.unlock_binlog_end_pos();
   m_thd->EXIT_COND(nullptr);
@@ -1231,7 +1495,7 @@ std::pair<my_off_t, int> Binlog_archive::get_binlog_end_pos(
 
   std::pair<my_off_t, int> result = std::make_pair(read_pos, 1);
 
-  if (unlikely(wait_new_mysql_binlog_events(read_pos))) return result;
+  if (unlikely(wait_new_mysql_binlog_events(read_pos)) != 0) return result;
 
   result.first = mysql_bin_log.get_binlog_end_pos();
 
@@ -1253,54 +1517,65 @@ std::pair<my_off_t, int> Binlog_archive::get_binlog_end_pos(
 /**
  * @brief Create a new binlog slice local file.
  *
- * @param log_file
- * @param log_pos
+ * @param new_binlog switch next binlog
+ * @param log_file mysql binlog
+ * @param log_pos mysql binlog position
  * @return int
  * @note Must be called with m_rotate_lock held.
  */
-int Binlog_archive::new_binlog_slice(const char *log_file,
-                                     my_off_t log_pos [[maybe_unused]]) {
+int Binlog_archive::new_binlog_slice(bool new_binlog, const char *log_file,
+                                     my_off_t log_pos [[maybe_unused]],
+                                     uint64_t previous_consensus_index) {
   int error = 0;
-  // rotate new archive binlog first slice.
-  assert(log_file != nullptr);
-  // Get the next archive binlog file name.
-  strmake(m_binlog_archive_file_name, log_file,
-          sizeof(m_binlog_archive_file_name) - 1);
-
-  // m_binlog_archive_file_name could be a absolute path.
-  // get relative path. Check if the binlog file name's first char
-  // is "/"
-  if (m_binlog_archive_file_name[0] == FN_LIBCHAR) {
-    strmake(m_binlog_archive_relative_file_name, m_binlog_archive_file_name + 1,
-            sizeof(m_binlog_archive_relative_file_name) - 1);
-  } else if (m_binlog_archive_file_name[0] == FN_CURLIB &&
-             m_binlog_archive_file_name[1] == FN_LIBCHAR) {
-    strmake(m_binlog_archive_relative_file_name, m_binlog_archive_file_name + 2,
-            sizeof(m_binlog_archive_relative_file_name) - 1);
-  } else {
-    strmake(m_binlog_archive_relative_file_name, m_binlog_archive_file_name,
-            sizeof(m_binlog_archive_relative_file_name) - 1);
+  std::string err_msg = {};
+  err_msg.assign("generate new local binlog slice:");
+  // Generate the next archive binlog file name.
+  // Generate the first binlog slice.
+  if (new_binlog) {
+    m_binlog_archive_last_index_number++;
+    m_mysql_binlog_first_file = false;
+    m_binlog_previouse_consensus_index = previous_consensus_index;
+    strmake(m_mysql_binlog_file_name, log_file,
+            sizeof(m_mysql_binlog_file_name) - 1);
+    sprintf(m_binlog_archive_file_name, "%s" BINLOG_ARCHIVE_NUMBER_EXT,
+            BINLOG_ARCHIVE_BASENAME,
+            (ulonglong)m_binlog_archive_last_index_number);
+    std::string binlog_slice;
+    binlog_slice.assign(m_binlog_archive_dir);
+    binlog_slice.append(m_binlog_archive_file_name);
+    binlog_slice.append(BINLOG_ARCHIVE_SLICE_LOCAL_SUFFIX);
+    strmake(m_binlog_slice_local_name, binlog_slice.c_str(),
+            sizeof(m_binlog_slice_local_name) - 1);
+    err_msg.append("swtich new mysql binlog ");
+    err_msg.append(log_file);
+    err_msg.append(" previous_consensus_index=");
+    err_msg.append(std::to_string(m_binlog_previouse_consensus_index));
+    err_msg.append(" persistent binlog index_number=");
+    err_msg.append(std::to_string(m_binlog_archive_last_index_number));
   }
-
-  assert(m_binlog_archive_dir[0] != '\0');
-  m_binlog_archive_slice_name.assign(m_binlog_archive_dir);
-  m_binlog_archive_slice_name.append(m_binlog_archive_relative_file_name);
-  // split binlog to slices, if the binlog file size is too large.
-  // create IO_CACHE for binlog slice.
-  // Open the first binlog slice file.
-  m_binlog_archive_slice_name.append(".slice");
-  remove_file(m_binlog_archive_slice_name);
+  err_msg.append(" ");
+  // rotate new archive binlog slice.
+  err_msg.append(m_binlog_slice_local_name);
+  remove_file(std::string(m_binlog_slice_local_name));
   std::unique_ptr<IO_CACHE_ostream> file_ostream(new IO_CACHE_ostream);
   if (file_ostream->open(PSI_binlog_archive_log_file_slice_key,
-                         m_binlog_archive_slice_name.c_str(), MYF(0))) {
+                         m_binlog_slice_local_name, MYF(0))) {
     error = 1;
+    err_msg.append(" file open failed.");
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     goto end;
   }
+  assert(m_slice_pipeline_head == nullptr);
   m_slice_pipeline_head = std::move(file_ostream);
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
 end:
   return error;
 }
+
+/*
+ @param log_pos mysql binlog position of the rotate.
+*/
 int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
   int error = 0;
   std::string err_msg;
@@ -1308,83 +1583,104 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
     mysql_mutex_lock(&m_rotate_lock);
   }
   err_msg.assign("request rotate binlog slice: ");
-  err_msg.append(m_binlog_archive_relative_file_name);
-  err_msg.append("/");
+  err_msg.append("expected mysql position=");
   err_msg.append(std::to_string(log_pos));
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-  // log_pos already archived.
-  if (m_binlog_archive_last_event_end_pos >= log_pos) {
+  err_msg.append(" persistent mysql binlog ");
+  err_msg.append(m_mysql_binlog_file_name);
+  err_msg.append(":");
+  err_msg.append(std::to_string(m_mysql_binlog_write_last_event_end_pos));
+  err_msg.append(" to ");
+  err_msg.append(m_binlog_archive_file_name);
+  err_msg.append(":");
+  err_msg.append(std::to_string(m_binlog_write_last_event_end_pos));
+
+  // msyql binlog log_pos already archived.
+  if (log_pos > 0 && m_mysql_binlog_last_event_end_pos >= log_pos) {
+    err_msg.append(", had persisted.");
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     goto end;
   }
 
-  if (m_binlog_write_last_event_end_pos < log_pos) {
+  if (log_pos > 0 && m_mysql_binlog_write_last_event_end_pos < log_pos) {
+    err_msg.append("failed");
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     error = 1;
     goto end;
   }
 
+  if (m_mysql_binlog_last_event_end_pos ==
+      m_mysql_binlog_write_last_event_end_pos) {
+    err_msg.append(", had persisted.");
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    goto end;
+  }
+  err_msg.append(" begin");
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+
   if (m_slice_pipeline_head) {
+    m_slice_pipeline_head->flush();
+    m_slice_pipeline_head->sync();
     m_slice_pipeline_head->close();
     m_slice_pipeline_head = nullptr;
-    // Upload the local archived binlog slice to the object store.
-    if (binlog_objstore) {
-      size_t len;
-      std::string archived_binlog_keyid{};
-      char binlog_slice_ext[11] = {0};
-      archived_binlog_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
-      archived_binlog_keyid.append(FN_DIRSEP);
-      archived_binlog_keyid.append(m_binlog_archive_relative_file_name);
-      archived_binlog_keyid.append(".");
-      len = snprintf(binlog_slice_ext, sizeof(binlog_slice_ext), "%010llu",
-                     m_binlog_write_last_event_end_pos);
-      assert(len > 0);
-      archived_binlog_keyid.append(binlog_slice_ext);
-      objstore::Status ss = binlog_objstore->put_object_from_file(
-          std::string_view(opt_objstore_bucket), archived_binlog_keyid,
-          m_binlog_archive_slice_name);
-      err_msg.assign("upload binlog slice to object store: ");
-      err_msg.append(archived_binlog_keyid);
-      err_msg.append(" size=");
-      err_msg.append(std::to_string(m_slice_bytes_written));
-      if (!ss.is_succ()) {
-        err_msg.append(" error=");
-        err_msg.append(ss.error_message());
-        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-        error = 1;
-        goto end;
-      }
-      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-      // remove the local archived binlog slice, after upload to the object
-      // store.
-      remove_file(m_binlog_archive_slice_name);
-    }
-    // When we are uploaded the binlog first slice to object store,
-    // we need to refresh the binlog.index.
-    if (m_binlog_archive_first_slice) {
-      // When we are done with the file, we need to record it in the index.
-      // record binlog real file name to the index file.
-      mysql_mutex_lock(&m_index_lock);
-      if (add_log_to_index((uchar *)m_binlog_archive_file_name,
-                           strlen(m_binlog_archive_file_name))) {
-        error = 1;
-        mysql_mutex_unlock(&m_index_lock);
-        goto end;
-      }
-      mysql_mutex_unlock(&m_index_lock);
-    }
-    m_binlog_archive_first_slice = false;
-    m_binlog_archive_last_event_end_pos = m_binlog_write_last_event_end_pos;
 
-    std::unique_ptr<IO_CACHE_ostream> file_ostream(new IO_CACHE_ostream);
-    if (file_ostream->open(PSI_binlog_archive_log_file_slice_key,
-                           m_binlog_archive_slice_name.c_str(), MYF(0))) {
+    // No longer check whether the current node's role has changed; even if a
+    // change occurs, the slice will still be persisted to S3. Since the current
+    // version of the binlog is being used, it won't affect other term versions.
+    // However, this might result in some unnecessary data. 
+    /* 
+    // Check whether consensus role is leader 
+    if (consensus_leader_is_changed()) {
+      error = 1;
+      goto end;
+     }
+    */
+    // Upload the local archived binlog slice to the object store.
+    std::string archived_binlog_keyid{};
+    std::string binlog_slice_name{};
+    archived_binlog_keyid.append(BINLOG_ARCHIVE_SUBDIR);
+    archived_binlog_keyid.append(FN_DIRSEP);
+    new_persistent_binlog_slice_key(
+        m_binlog_archive_file_name, binlog_slice_name,
+        m_binlog_write_last_event_end_pos, m_consensus_term);
+    archived_binlog_keyid.append(binlog_slice_name);
+    objstore::Status ss = binlog_objstore->put_object_from_file(
+        std::string_view(opt_objstore_bucket), archived_binlog_keyid,
+        std::string_view(m_binlog_slice_local_name));
+    if (!ss.is_succ()) {
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_SLICE_FILE,
+             archived_binlog_keyid.c_str(), m_binlog_slice_local_name,
+             m_slice_bytes_written, std::string(ss.error_message()).c_str());
       error = 1;
       goto end;
     }
-    m_slice_pipeline_head = std::move(file_ostream);
+    LogErr(INFORMATION_LEVEL,
+           ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_SLICE_FILE,
+           archived_binlog_keyid.c_str(), m_binlog_slice_local_name,
+           m_slice_bytes_written, "");
+    remove_file(std::string(m_binlog_slice_local_name));
+
+    // Append slice to the persistent binlog.index.
+    // When we are done with the file, we need to record it in the index.
+    // record binlog real file name to the index file.
+    mysql_mutex_lock(&m_index_lock);
+    std::string binlog_entry;
+    binlog_entry.assign(binlog_slice_name);
+    binlog_entry.append("|");
+    binlog_entry.append(std::to_string(m_binlog_previouse_consensus_index));
+    if (add_log_to_index(reinterpret_cast<const uchar *>(binlog_entry.c_str()),
+                         binlog_entry.length())) {
+      error = 1;
+      mysql_mutex_unlock(&m_index_lock);
+      goto end;
+    }
+    mysql_mutex_unlock(&m_index_lock);
+
+    m_binlog_archive_last_event_end_pos = m_binlog_write_last_event_end_pos;
+    m_mysql_binlog_last_event_end_pos = m_mysql_binlog_write_last_event_end_pos;
     m_slice_bytes_written = 0;
-    m_slice_pipeline_head->flush();
   }
-  assert(m_binlog_archive_last_event_end_pos >= log_pos);
+  assert(log_pos == 0 || m_mysql_binlog_last_event_end_pos >= log_pos);
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "rotate binlog slice end.");
 
 end:
   if (need_lock) {
@@ -1466,7 +1762,7 @@ int Binlog_archive::open_crash_safe_index_file() {
   if (!my_b_inited(&m_crash_safe_index_file)) {
     myf flags = MY_WME | MY_NABP | MY_WAIT_IF_FULL;
 
-    if ((file = my_open(m_crash_safe_index_file_name, O_RDWR | O_CREAT,
+    if ((file = my_open(m_crash_safe_index_local_file_name, O_RDWR | O_CREAT,
                         MYF(MY_WME))) < 0 ||
         init_io_cache(&m_crash_safe_index_file, file, IO_SIZE, WRITE_CACHE, 0,
                       false, flags)) {
@@ -1487,8 +1783,9 @@ int Binlog_archive::open_crash_safe_index_file() {
 int Binlog_archive::set_crash_safe_index_file_name() {
   int error = 0;
   DBUG_TRACE;
-  if (fn_format(m_crash_safe_index_file_name, BINLOG_ARCHIVE_INDEX_FILE,
-                m_binlog_archive_dir, ".index_crash_safe",
+  if (fn_format(m_crash_safe_index_local_file_name,
+                BINLOG_ARCHIVE_INDEX_LOCAL_FILE, m_binlog_archive_dir,
+                ".index_crash_safe",
                 MYF(MY_UNPACK_FILENAME | MY_SAFE_PATH | MY_REPLACE_EXT |
                     MY_REPLACE_DIR)) == nullptr) {
     error = 1;
@@ -1545,15 +1842,15 @@ int Binlog_archive::move_crash_safe_index_file_to_index_file() {
         Delete Crash safe index file here and recover the binlog.index
         state(m_index_file io_cache) from old binlog.index content.
        */
-      mysql_file_delete(key_file_binlog_index, m_crash_safe_index_file_name,
-                        MYF(0));
+      mysql_file_delete(key_file_binlog_index,
+                        m_crash_safe_index_local_file_name, MYF(0));
 
       goto recoverable_err;
     }
 
     while ((file_delete_status == false) && (failure_trials > 0)) {
-      file_delete_status = !(mysql_file_delete(key_file_binlog_index,
-                                               m_index_file_name, MYF(MY_WME)));
+      file_delete_status = !(mysql_file_delete(
+          key_file_binlog_index, m_index_local_file_name, MYF(MY_WME)));
       --failure_trials;
       if (!file_delete_status) {
         my_sleep(1000);
@@ -1568,8 +1865,8 @@ int Binlog_archive::move_crash_safe_index_file_to_index_file() {
         Delete Crash safe file index file here and recover the binlog.index
         state(m_index_file io_cache) from old binlog.index content.
        */
-      mysql_file_delete(key_file_binlog_index, m_crash_safe_index_file_name,
-                        MYF(0));
+      mysql_file_delete(key_file_binlog_index,
+                        m_crash_safe_index_local_file_name, MYF(0));
 
       goto recoverable_err;
     }
@@ -1577,8 +1874,8 @@ int Binlog_archive::move_crash_safe_index_file_to_index_file() {
 
   failure_trials = MYSQL_BIN_LOG::MAX_RETRIES_FOR_DELETE_RENAME_FAILURE;
   while ((file_rename_status == false) && (failure_trials > 0)) {
-    file_rename_status = !(my_rename(m_crash_safe_index_file_name,
-                                     m_index_file_name, MYF(MY_WME)));
+    file_rename_status = !(my_rename(m_crash_safe_index_local_file_name,
+                                     m_index_local_file_name, MYF(MY_WME)));
     --failure_trials;
     if (!file_rename_status) {
       my_sleep(1000);
@@ -1592,7 +1889,7 @@ int Binlog_archive::move_crash_safe_index_file_to_index_file() {
   }
 
 recoverable_err:
-  if ((fd = mysql_file_open(key_file_binlog_index, m_index_file_name,
+  if ((fd = mysql_file_open(key_file_binlog_index, m_index_local_file_name,
                             O_RDWR | O_CREAT, MYF(MY_WME))) < 0 ||
       mysql_file_sync(fd, MYF(MY_WME)) ||
       init_io_cache_ext(&m_index_file, fd, IO_SIZE, READ_CACHE,
@@ -1642,8 +1939,12 @@ fatal_err:
   @retval
     -1   error
 */
-int Binlog_archive::add_log_to_index(uchar *log_name, size_t log_name_len) {
+int Binlog_archive::add_log_to_index(const uchar *log_name,
+                                     size_t log_name_len) {
   DBUG_TRACE;
+
+  DBUG_EXECUTE_IF("fail_to_write_binlog_slice_to_persistent_binlog_index",
+                  { return LOG_INFO_IO; });
 
   if (!my_b_inited(&m_index_file)) {
     return LOG_INFO_IO;
@@ -1669,27 +1970,28 @@ int Binlog_archive::add_log_to_index(uchar *log_name, size_t log_name_len) {
     goto err;
   }
 
-  if (binlog_objstore != nullptr) {
-    // refresh 'mysql-bin.index' to object store
+  // Check whether consensus role is leader
+  if (consensus_leader_is_changed()) {
+    goto err;
+  }
+  // refresh 'mysql-bin.index' to object store
+  {
     std::string index_keyid{};
     index_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
     index_keyid.append(FN_DIRSEP);
-    index_keyid.append(BINLOG_ARCHIVE_INDEX_FILE);
+    index_keyid.append(m_index_file_name);
     objstore::Status ss = binlog_objstore->put_object_from_file(
         std::string_view(opt_objstore_bucket), index_keyid,
-        m_crash_safe_index_file_name);
-    std::string err_msg;
-    err_msg.assign("update ");
-    err_msg.append(reinterpret_cast<char *>(log_name));
-    err_msg.append(" to object store: ");
-    err_msg.append(index_keyid);
+        m_crash_safe_index_local_file_name);
     if (!ss.is_succ()) {
-      err_msg.append(" error =");
-      err_msg.append(ss.error_message());
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_INDEX_FILE,
+             index_keyid.c_str(), log_name,
+             std::string(ss.error_message()).c_str());
       goto err;
     }
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    LogErr(INFORMATION_LEVEL,
+           ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_INDEX_FILE,
+           index_keyid.c_str(), log_name, "");
   }
 
   // If failed, restart the binlog archiving from run()->while{}.
@@ -1724,8 +2026,8 @@ bool Binlog_archive::open_index_file() {
 
   if (my_b_inited(&m_index_file)) goto end;
 
-  fn_format(m_index_file_name, BINLOG_ARCHIVE_INDEX_FILE, m_binlog_archive_dir,
-            ".index", opt);
+  fn_format(m_index_local_file_name, BINLOG_ARCHIVE_INDEX_LOCAL_FILE,
+            m_binlog_archive_dir, ".index", opt);
 
   if (set_crash_safe_index_file_name()) {
     error = true;
@@ -1737,51 +2039,82 @@ bool Binlog_archive::open_index_file() {
     does not exist and m_crash_safe_index_file exists when mysqld server
     restarts.
   */
-  if (my_access(m_index_file_name, F_OK) &&
-      !my_access(m_crash_safe_index_file_name, F_OK) &&
-      my_rename(m_crash_safe_index_file_name, m_index_file_name, MYF(MY_WME))) {
+  if (my_access(m_index_local_file_name, F_OK) &&
+      !my_access(m_crash_safe_index_local_file_name, F_OK) &&
+      my_rename(m_crash_safe_index_local_file_name, m_index_local_file_name,
+                MYF(MY_WME))) {
     error = true;
     goto end;
   }
 
   // Check if the index file exists in s3, if so, download it to local.
-  // And rename it to m_index_file_name.
-  if (binlog_objstore != nullptr) {
-    std::string index_file_name_str{};
-    index_file_name_str.assign(m_crash_safe_index_file_name);
-    std::string index_keyid{};
-    index_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
-    index_keyid.append(FN_DIRSEP);
-    index_keyid.append(BINLOG_ARCHIVE_INDEX_FILE);
-    auto status = binlog_objstore->get_object_to_file(
-        std::string_view(opt_objstore_bucket), index_keyid,
-        index_file_name_str);
-    if (status.is_succ()) {
-      if (my_rename(m_crash_safe_index_file_name, m_index_file_name,
-                    MYF(MY_WME))) {
-        error = true;
-        goto end;
+  // The persisted `binlog-index.index` is based on multiple versions of
+  // the consensus term, so the `binlog-index.index` with the highest consensus
+  // term should be obtained as the initial one.
+  // {$BINLOG_ARCHIVE_INDEX_FILE_BASENAME}{$m_consensus_term}{$BINLOG_ARCHIVE_INDEX_FILE_SUFFIX}
+  // binlog-index.00000000000000001234.index
+  {
+    std::vector<objstore::ObjectMeta> objects;
+    bool finished = false;
+    std::string start_after;
+    do {
+      std::vector<objstore::ObjectMeta> tmp_objects;
+      objstore::Status ss = binlog_objstore->list_object(
+          std::string_view(opt_objstore_bucket),
+          BINLOG_ARCHIVE_SUBDIR FN_DIRSEP BINLOG_ARCHIVE_INDEX_FILE_BASENAME,
+          start_after, finished, tmp_objects);
+      if (!ss.is_succ()) {
+        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LIST_OBJECT,
+               "list persistent binlog-index.index failed",
+               BINLOG_ARCHIVE_INDEX_FILE_BASENAME,
+               std::string(ss.error_message()).c_str());
+        return true;
       }
-      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-             "download persistent binlog/binlog.index from object store.");
-    } else if (strcmp(opt_objstore_provider, "local") != 0 &&
-               status.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
-      std::string err_msg;
-      err_msg.assign("download persistent binlog.index failed: ");
-      err_msg.append(index_keyid);
-      err_msg.append(" to ");
-      err_msg.append(index_file_name_str);
-      err_msg.append(" error=");
-      err_msg.append(status.error_message());
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-      error = true;
-      goto end;
+      objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
+    } while (finished == false);
+
+    if (!objects.empty()) {
+      // download the last binlog-index.****.index
+      std::string last_binlog_index_keyid{};
+      last_binlog_index_keyid.assign((objects.back()).key);
+      size_t first_dot = last_binlog_index_keyid.find('.');
+      size_t second_dot = last_binlog_index_keyid.find('.', first_dot + 1);
+      std::string consensus_term_str =
+          last_binlog_index_keyid.substr(first_dot + 1, second_dot);
+      uint64_t consensus_term = std::stoull(consensus_term_str);
+      if (m_consensus_term != consensus_term) {
+        LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_OPEN_INDEX_TERM_CHANGED,
+               consensus_term, m_consensus_term);
+      }
+      {
+        auto status = binlog_objstore->get_object_to_file(
+            std::string_view(opt_objstore_bucket), last_binlog_index_keyid,
+            std::string_view(m_crash_safe_index_local_file_name));
+        if (!status.is_succ()) {
+          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_GET_OBJECT_TO_FILE,
+                 "get last persistent binlog-index.index failed",
+                 last_binlog_index_keyid.c_str(), m_index_local_file_name,
+                 std::string(status.error_message()).c_str());
+          error = true;
+          goto end;
+        }
+        if (my_rename(m_crash_safe_index_local_file_name,
+                      m_index_local_file_name, MYF(MY_WME))) {
+          error = true;
+          goto end;
+        }
+        LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_GET_OBJECT_TO_FILE,
+               "get last persistent binlog-index.index",
+               last_binlog_index_keyid.c_str(), m_index_local_file_name, "");
+      }
     }
   }
 
-  if ((index_file_nr =
-           mysql_file_open(PSI_binlog_archive_log_index_key, m_index_file_name,
-                           O_RDWR | O_CREAT, MYF(MY_WME))) < 0 ||
+  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_OPEN_INDEX,
+         "open local binlog-index.index", m_index_local_file_name);
+  if ((index_file_nr = mysql_file_open(PSI_binlog_archive_log_index_key,
+                                       m_index_local_file_name,
+                                       O_RDWR | O_CREAT, MYF(MY_WME))) < 0 ||
       mysql_file_sync(index_file_nr, MYF(MY_WME)) ||
       init_io_cache_ext(&m_index_file, index_file_nr, IO_SIZE, READ_CACHE,
                         mysql_file_seek(index_file_nr, 0L, MY_SEEK_END, MYF(0)),
@@ -1808,9 +2141,10 @@ bool Binlog_archive::open_index_file() {
     due to a crash.
   */
   if (set_purge_index_file_name() || open_purge_index_file(false) ||
-      purge_index_entry(nullptr) || close_purge_index_file()) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "Failed to set purge index file.");
+      purge_index_entry() || close_purge_index_file()) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_OPEN_INDEX,
+           "Failed to set local binlog purge index file",
+           m_index_local_file_name);
     error = true;
     goto end;
   }
@@ -1819,6 +2153,13 @@ bool Binlog_archive::open_index_file() {
 end:
   // if (need_lock_index) mysql_mutex_unlock(&m_index_lock);
   return error;
+}
+
+IO_CACHE *Binlog_archive::get_index_file() {
+  // Check whether consensus role is leader
+  if (consensus_leader_is_changed()) return nullptr;
+  if (open_index_file()) return nullptr;
+  return &m_index_file;
 }
 
 /**
@@ -1868,23 +2209,13 @@ static int compare_log_name(const char *log_1, const char *log_2) {
   @retval
     LOG_INFO_IO		Got IO error while reading file
 */
-int Binlog_archive::find_log_pos_common(IO_CACHE *index_file, LOG_INFO *linfo,
-                                        const char *log_name) {
+int Binlog_archive::find_log_pos_common(IO_CACHE *index_file,
+                                        LOG_ARCHIVED_INFO *linfo,
+                                        const char *log_name,
+                                        uint64_t consensus_index,
+                                        bool last_slice [[maybe_unused]]) {
   DBUG_TRACE;
   int error = 0;
-  char *full_fname = linfo->log_file_name;
-  char full_log_name[FN_REFLEN] = {0}, fname[FN_REFLEN] = {0};
-
-  // extend relative paths for log_name to be searched
-  if (log_name) {
-    if (normalize_binlog_name(full_log_name, log_name, false)) {
-      error = LOG_INFO_EOF;
-      goto end;
-    }
-  }
-
-  DBUG_PRINT("enter", ("log_name: %s, full_log_name: %s",
-                       log_name ? log_name : "NULL", full_log_name));
 
   /* As the file is flushed, we can't get an error here */
   my_b_seek(index_file, (my_off_t)0);
@@ -1894,37 +2225,74 @@ int Binlog_archive::find_log_pos_common(IO_CACHE *index_file, LOG_INFO *linfo,
     my_off_t offset = my_b_tell(index_file);
 
     /* If we get 0 or 1 characters, this is the end of the file */
-    if ((length = my_b_gets(index_file, fname, FN_REFLEN)) <= 1) {
+    if ((length = my_b_gets(index_file, linfo->log_line, FN_REFLEN)) <= 1) {
       /* Did not find the given entry; Return not found or error */
       error = !index_file->error ? LOG_INFO_EOF : LOG_INFO_IO;
       break;
     }
+    /* Get rid of the trailing '\n' */
+    linfo->log_line[length - 1] = 0;
 
-    // extend relative paths and match against full path
-    if (normalize_binlog_name(full_fname, fname, false)) {
-      error = LOG_INFO_EOF;
-      break;
-    }
+    /*
+      {$binlog_file_name}.{$consensus_term}.{$slice_end_pos}|{$previouse_index}
+
+      binlog.000001.00000000000000000000.0000000377|0
+      binlog.000002.00000000000000000000.0000000295|1
+      binlog.000003.00000000000000000000.0000000295|1
+      binlog.000004.00000000000000000000.0000001924|1
+      binlog.000004.00000000000000000000.0000014524|1
+      binlog.000004.00000000000000000000.0000025541|1
+      binlog.000005.00000000000000000000.0000000291|11
+      binlog.000005.00000000000000000000.0000000429|11
+    */
+    std::string in_str;
+    in_str.assign(linfo->log_line);
+    size_t idx = in_str.find("|");
+    std::string found_log_slice_name = in_str.substr(0, idx);
+    std::string found_consensus_index = in_str.substr(idx + 1);
+    linfo->previous_consensus_index = std::stoull(found_consensus_index);
+    strmake(linfo->log_slice_name, found_log_slice_name.c_str(),
+            sizeof(linfo->log_slice_name) - 1);
+
+    size_t first_dot = found_log_slice_name.find('.');
+    size_t second_dot = found_log_slice_name.find('.', first_dot + 1);
+    std::string file_name = found_log_slice_name.substr(0, second_dot);
+
+    strmake(linfo->log_file_name, file_name.c_str(),
+            sizeof(linfo->log_file_name) - 1);
+
+    std::string left_string = found_log_slice_name.substr(second_dot + 1);
+    size_t third_dot = left_string.find('.');
+    std::string term = left_string.substr(0, third_dot);
+    linfo->slice_consensus_term = std::stoull(term);
+    std::string end_pos = left_string.substr(third_dot + 1);
+    linfo->slice_end_pos = std::stoull(end_pos);
+
     // if the log entry matches, null string matching anything
-    if (!log_name || !compare_log_name(full_fname, full_log_name)) {
-      DBUG_PRINT("info", ("Found log file entry"));
-      linfo->index_file_start_offset = offset;
-      linfo->index_file_offset = my_b_tell(index_file);
-      break;
+    if (!log_name || log_name[0] == '\0' ||
+        !compare_log_name(file_name.c_str(), log_name)) {
+      if (consensus_index == 0 ||
+          consensus_index == linfo->previous_consensus_index) {
+        DBUG_PRINT("info", ("Found log file entry"));
+        linfo->index_file_start_offset = offset;
+        linfo->index_file_offset = my_b_tell(index_file);
+        break;
+      }
     }
     linfo->entry_index++;
   }
 
-end:
   return error;
 }
-int Binlog_archive::find_log_pos(LOG_INFO *linfo, const char *log_name) {
+
+int Binlog_archive::find_log_pos_by_name(LOG_ARCHIVED_INFO *linfo,
+                                         const char *log_name) {
   DBUG_TRACE;
 
   if (!my_b_inited(&m_index_file)) {
     return LOG_INFO_IO;
   }
-  return find_log_pos_common(&m_index_file, linfo, log_name);
+  return find_log_pos_common(&m_index_file, linfo, log_name, 0);
 }
 
 /**
@@ -1946,81 +2314,194 @@ int Binlog_archive::find_log_pos(LOG_INFO *linfo, const char *log_name) {
   @retval LOG_INFO_EOF End of log-index-file found
   @retval LOG_INFO_IO Got IO error while reading file
 */
-int Binlog_archive::find_next_log(LOG_INFO *linfo) {
+int Binlog_archive::find_next_log(LOG_ARCHIVED_INFO *linfo) {
   DBUG_TRACE;
 
   if (!my_b_inited(&m_index_file)) {
     return LOG_INFO_IO;
   }
-  return find_next_log_common(&m_index_file, linfo);
+  return find_next_log_common(&m_index_file, linfo, false);
 }
 
+/**
+ * @brief
+ *
+ * @param index_file
+ * @param linfo
+ * @param found_slice
+ * @return int
+ */
 int Binlog_archive::find_next_log_common(IO_CACHE *index_file,
-                                         LOG_INFO *linfo) {
+                                         LOG_ARCHIVED_INFO *linfo,
+                                         bool found_slice) {
   DBUG_TRACE;
-
   int error = 0;
   size_t length = 0;
-  char fname[FN_REFLEN] = {0};
-  char *full_fname = linfo->log_file_name;
+  std::string previous_log_name;
+  previous_log_name.assign(linfo->log_file_name);
 
   if (!my_b_inited(index_file)) {
     error = LOG_INFO_IO;
-    goto err;
+    return error;
   }
   /* As the file is flushed, we can't get an error here */
   my_b_seek(index_file, linfo->index_file_offset);
 
-  linfo->index_file_start_offset = linfo->index_file_offset;
-  if ((length = my_b_gets(index_file, fname, FN_REFLEN)) <= 1) {
-    error = !index_file->error ? LOG_INFO_EOF : LOG_INFO_IO;
-    goto err;
-  }
-
-  if (fname[0] != 0) {
-    if (normalize_binlog_name(full_fname, fname, false)) {
-      error = LOG_INFO_EOF;
-      goto err;
+  for (;;) {
+    linfo->index_file_start_offset = linfo->index_file_offset;
+    if ((length = my_b_gets(index_file, linfo->log_line, FN_REFLEN)) <= 1) {
+      error = !index_file->error ? LOG_INFO_EOF : LOG_INFO_IO;
+      break;
     }
-    length = strlen(full_fname);
+
+    /* Get rid of the trailing '\n' */
+    linfo->log_line[length - 1] = 0;
+
+    // {$binlog_file_name}.{$consensus_term}.{$slice_end_pos}|{$previouse_index}
+    // binlog.000010.00000000000000001120.0000000512|454
+    std::string in_str;
+    in_str.assign(linfo->log_line);
+    size_t idx = in_str.find("|");
+    std::string found_log_slice_name = in_str.substr(0, idx);
+    std::string found_consensus_index = in_str.substr(idx + 1);
+    linfo->previous_consensus_index = std::stoull(found_consensus_index);
+    strmake(linfo->log_slice_name, found_log_slice_name.c_str(),
+            sizeof(linfo->log_slice_name) - 1);
+
+    size_t first_dot = found_log_slice_name.find('.');
+    size_t second_dot = found_log_slice_name.find('.', first_dot + 1);
+    std::string log_name = found_log_slice_name.substr(0, second_dot);
+    strmake(linfo->log_file_name, log_name.c_str(),
+            sizeof(linfo->log_file_name) - 1);
+    std::string left_string = found_log_slice_name.substr(second_dot + 1);
+    size_t third_dot = left_string.find('.');
+    std::string term = left_string.substr(0, third_dot);
+    std::string end_pos = left_string.substr(third_dot + 1);
+    linfo->slice_consensus_term = std::stoull(term);
+    linfo->slice_end_pos = std::stoull(end_pos);
+
+    linfo->entry_index++;
+    linfo->index_file_offset = my_b_tell(index_file);
+    // Find next binlog or next slice
+    if (found_slice ||
+        compare_log_name(log_name.c_str(), previous_log_name.c_str()) != 0) {
+      break;
+    }
   }
 
-  linfo->index_file_offset = my_b_tell(index_file);
-
-err:
   return error;
 }
 
+int Binlog_archive::find_next_log_slice(LOG_ARCHIVED_INFO *linfo) {
+  DBUG_TRACE;
+  return find_next_log_common(&m_index_file, linfo, true);
+}
+
+int Binlog_archive::get_binlog_last_consensus_index(uint64_t &consensus_index,
+                                                    uint64_t &consensus_term,
+                                                    std::string &mysql_binlog,
+                                                    my_off_t &mysql_binlog_pos,
+                                                    std ::string &binlog,
+                                                    my_off_t &binlog_pos) {
+  mysql_mutex_lock(&m_rotate_lock);
+  mysql_binlog_pos = m_mysql_binlog_last_event_end_pos;
+  mysql_binlog.assign(m_mysql_binlog_file_name);
+  binlog.assign(m_binlog_archive_file_name);
+  binlog_pos = m_binlog_archive_last_event_end_pos;
+  mysql_mutex_unlock(&m_rotate_lock);
+
+  consensus_term = m_consensus_term;
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager) && !mysql_binlog.empty()) {
+    if (RUN_HOOK(binlog_manager, get_unique_index_from_pos,
+                 (mysql_binlog.c_str(), mysql_binlog_pos, consensus_index))) {
+      std::string err_msg;
+      err_msg.assign(" get consensus index using position failed: ");
+      err_msg.append(mysql_binlog);
+      err_msg.append(std::to_string(mysql_binlog_pos));
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      consensus_index = 0;
+    }
+  }
+#endif
+  return 0;
+}
+
 /**
- * @brief Check if the given log file is archived.
+ * @brief Check if the given mysql log file is archived.
+ * @param log_file_name_arg mysql binlog file
+ * @param persistent_log_file_name return persistent binlog name
+ * @param log_pos mysql binlog position
+ * @return true, archive success.
+ * @return false, archive failed.
  * @note Must be called with m_index_lock held.
  */
 bool Binlog_archive::binlog_is_archived(const char *log_file_name_arg,
-                                        my_off_t log_pos) {
+                                        char *persistent_log_file_name,
+                                        my_off_t log_pos,
+                                        uint64_t consensus_index) {
   DBUG_TRACE;
   bool ret = true;
-  LOG_INFO log_info;
-  // If the binlog file is the current binlog file.
-  // rotate binlog slice by log_pos.
+  LOG_ARCHIVED_INFO log_info;
+
+  // If the binlog file is the current mysql binlog file.
+  // rotate binlog slice by mysql log_pos.
   mysql_mutex_lock(&m_rotate_lock);
-  if (m_binlog_archive_file_name[0] != '\0' &&
-      0 == compare_log_name(m_binlog_archive_file_name, log_file_name_arg)) {
+  if (m_mysql_binlog_file_name[0] != '\0' &&
+      0 == compare_log_name(m_mysql_binlog_file_name, log_file_name_arg)) {
     if (rotate_binlog_slice(log_pos, false)) {
       ret = false;
+    } else {
+      // Update mysql binlog filename to the archived binlog filename
+      strmake(persistent_log_file_name, m_binlog_archive_file_name, FN_REFLEN);
+      ret = true;
     }
     mysql_mutex_unlock(&m_rotate_lock);
     return ret;
   }
+  mysql_mutex_unlock(&m_rotate_lock);
+
+  // Check whether consensus role is leader
+  if (consensus_leader_is_changed()) return false;
+
   mysql_mutex_lock(&m_index_lock);
   // If the log index file is not opened, return true.
   // Wait binlog archive thread to open the index file.
-  if ((atomic_log_index_state != LOG_INDEX_OPENED) ||
-      (!open_index_file() && find_log_pos(&log_info, log_file_name_arg))) {
-    ret = false;
+  if ((atomic_log_index_state != LOG_INDEX_OPENED) || (!open_index_file())) {
+    if (consensus_index > 0) {  // consensus mode.
+      int error = 0;
+      if ((error = find_log_pos_by_name(&log_info, NullS))) {
+        ret = false;
+      } else {
+        char pre_log[FN_REFLEN + 1] = {0};
+        strmake(pre_log, log_info.log_file_name, FN_REFLEN);
+        ret = false;
+        do {
+          // diff persistent binlog previous consensus index.
+          if (log_info.previous_consensus_index >= consensus_index) {
+            strmake(persistent_log_file_name, pre_log, FN_REFLEN);
+            ret = true;
+            break;
+          }
+          strmake(pre_log, log_info.log_file_name, FN_REFLEN);
+        } while (!(error = find_next_log(&log_info)));
+      }
+    } else {  // non consensus mode.
+      if (find_log_pos_by_name(&log_info, log_file_name_arg)) {
+        ret = false;
+      } else {
+        strmake(persistent_log_file_name, log_info.log_file_name, FN_REFLEN);
+        ret = true;
+      }
+    }
   }
-
   mysql_mutex_unlock(&m_index_lock);
-  mysql_mutex_unlock(&m_rotate_lock);
+
+  if (!ret) {
+    // Attempt to persist the first slice of the binlog and generate a binlog
+    // index entry.
+    rotate_binlog_slice(0, true);
+  }
   return ret;
 }
 
@@ -2035,16 +2516,25 @@ void Binlog_archive::signal_update() { mysql_cond_broadcast(&m_run_cond); }
  * @param log_file_name
  * @param log_pos
  * @note Must be called with m_run_lock held.
- * @return true
- * @return false
+ * @return 0, archive success, stop wait.
+ * @return 1, archive fail, continue wait.
+ * @return 2, archive fail, stop wait.
  */
-bool Binlog_archive::stop_waiting_for_update(char *log_file_name,
-                                             my_off_t log_pos
+int Binlog_archive::stop_waiting_for_archive(const char *log_file_name,
+                                             char *persistent_log_file_name,
+                                             my_off_t log_pos [[maybe_unused]],
+                                             uint64_t consensus_index
                                              [[maybe_unused]]) {
   DBUG_TRACE;
 
-  bool error = false;
-  error = binlog_is_archived(log_file_name, log_pos);
+  int error = 0;
+
+  if (consensus_leader_is_changed()) return 2;
+
+  if (!binlog_is_archived(log_file_name, persistent_log_file_name, log_pos,
+                          consensus_index)) {
+    error = 1;
+  }
   return error;
 }
 
@@ -2065,21 +2555,17 @@ int Binlog_archive::wait_for_update() {
  * @brief For consistent snapshot arhcive,
  *        consistent snapshot thread wait for the binlog archive to finish.
  * */
-int binlog_archive_wait_for_update(THD *thd, char *log_file_name,
-                                   my_off_t log_pos) {
+int binlog_archive_wait_for_update(THD *thd, const char *log_file_name,
+                                   char *persistent_log_file_name,
+                                   my_off_t log_pos, uint64_t consensus_index) {
   DBUG_TRACE;
   int ret = 0;
   if (!opt_binlog_archive) {
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, "Binlog archive is not enabled");
     return 0;
   }
-  if (!mysql_binlog_archive) {
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "Binlog archive object is not initialized");
-    return 1;
-  }
   mysql_mutex_lock(&m_run_lock);
-  if (!mysql_binlog_archive->is_thread_running()) {
+  if (!mysql_binlog_archive.is_thread_running()) {
     mysql_mutex_unlock(&m_run_lock);
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
            "Binlog archive thread is not running");
@@ -2087,12 +2573,17 @@ int binlog_archive_wait_for_update(THD *thd, char *log_file_name,
   }
   thd->ENTER_COND(&m_run_cond, &m_run_lock, nullptr, nullptr);
   // Check if waited binlog file is archived.
-  while (
-      !mysql_binlog_archive->stop_waiting_for_update(log_file_name, log_pos)) {
-    mysql_binlog_archive->wait_for_update();
+  while ((ret = mysql_binlog_archive.stop_waiting_for_archive(
+              log_file_name, persistent_log_file_name, log_pos,
+              consensus_index)) != 0) {
+    // error
+    if (ret == 2) break;
+
+    mysql_binlog_archive.wait_for_update();
     // binlog archive thread maybe terminated.
-    if (!mysql_binlog_archive->is_thread_running()) {
-      ret = 1;
+    if (!mysql_binlog_archive.is_thread_running()) {
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+             "Binlog archive thread is not running");
       break;
     }
   }
@@ -2211,26 +2702,25 @@ int Binlog_archive::auto_purge_logs() {
   if (!opt_binlog_archive_expire_auto_purge) return 0;
 
   auto purge_time = calculate_auto_purge_lower_time_bound();
-  char purge_to_log[FN_REFLEN + 1] = {0};
+  std::string purge_to_log;
   bool found = false;
   std::vector<objstore::ObjectMeta> binlog_objects;
   show_binlog_persistent_files(binlog_objects);
+  // purge binlog before purge_time.
   for (const auto &object : binlog_objects) {
     if (purge_time < (object.last_modified / 1000)) {
       break;
     }
-    strmake(purge_to_log, object.key.c_str(), sizeof(purge_to_log) - 1);
+    purge_to_log.assign(object.key);
     found = true;
   }
   if (found) {
-    std::string tmp_str;
-    char dev[FN_REFLEN + 1];
-    size_t dev_length;
-    size_t length = dirname_part(dev, purge_to_log, &dev_length);
-    tmp_str.assign(purge_to_log + length);
-    tmp_str = tmp_str.substr(0, tmp_str.length() - strlen(".") - 10);
-    strmake(purge_to_log, tmp_str.c_str(), sizeof(purge_to_log) - 1);
-    purge_logs(purge_to_log, nullptr);
+    // binlog.000001.00000000000000001234.0000000345
+    size_t first_dot = purge_to_log.find('.');
+    size_t second_dot = purge_to_log.find('.', first_dot + 1);
+
+    purge_to_log = purge_to_log.substr(0, second_dot);
+    purge_logs(purge_to_log.c_str());
   }
   return 0;
 }
@@ -2241,19 +2731,20 @@ int Binlog_archive::auto_purge_logs() {
  * @param decrease_log_space
  * @return std::tuple<bool, std::string>
  */
-std::tuple<int, std::string> Binlog_archive::purge_logs(
-    const char *to_log, ulonglong *decrease_log_space) {
+std::tuple<int, std::string> Binlog_archive::purge_logs(const char *to_log) {
   DBUG_TRACE;
   int error = 0;
   std::string err_msg{};
-  LOG_INFO log_info;
+  LOG_ARCHIVED_INFO log_info;
   char purge_log_name[FN_REFLEN + 1] = {0};
+  std::string dirty_end_binlog{};
+  uint64_t dirty_end_binlog_consensus_term = 0;
 
   err_msg.assign("purge binlog to: ");
   err_msg.append(to_log);
   LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
-  mysql_bin_log.make_log_name(purge_log_name, to_log);
+  strmake(purge_log_name, to_log, sizeof(purge_log_name) - 1);
 
   // Check consistent snapshot, only when start consistent snapshot.
   if (opt_consistent_snapshot_archive && opt_serverless) {
@@ -2301,20 +2792,31 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(
       std::string binlog_name = left_string.substr(0, idx);
       left_string = left_string.substr(idx + 1);
 
-      char binlog_name_tmp[FN_REFLEN + 1] = {0};
-      mysql_bin_log.make_log_name(binlog_name_tmp, binlog_name.c_str());
-      // Only purge binlog smaller than the oldest snapshot's binlog.
-      if (compare_log_name(purge_log_name, binlog_name_tmp)) {
-        strmake(purge_log_name, binlog_name_tmp, sizeof(purge_log_name) - 1);
-        err_msg.assign(
-            "purge binlog smaller than the oldest snapshot's binlog: ");
-        err_msg.append(binlog_name_tmp);
-        LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-      }
-
       idx = left_string.find("|");
       std::string binlog_pos = left_string.substr(0, idx);
+      left_string = left_string.substr(idx + 1);
+
+      idx = left_string.find("|");
+      std::string previous_consensus_index = left_string.substr(0, idx);
       std::string se_snapshot = left_string.substr(idx + 1);
+      if (binlog_name.length() == 0) {
+        consistent_snapshot_archive->unlock_consistent_snapshot_index();
+        error = 0;
+        err_msg.assign(
+            "binlog is empty in the first consistent snapshot, so purge "
+            "nothing.");
+        LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+        return std::make_tuple(error, err_msg);
+      }
+      // Only purge binlog smaller than the oldest snapshot's binlog.
+      if (compare_log_name(purge_log_name, binlog_name.c_str())) {
+        strmake(purge_log_name, binlog_name.c_str(),
+                sizeof(purge_log_name) - 1);
+        err_msg.assign(
+            "purge binlog smaller than the oldest snapshot's binlog: ");
+        err_msg.append(binlog_name);
+        LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      }
     }
     consistent_snapshot_archive->unlock_consistent_snapshot_index();
     if (index_file->error == -1) {
@@ -2332,7 +2834,7 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(
     goto err;
   }
 
-  if ((error = find_log_pos(&log_info, purge_log_name))) {
+  if ((error = find_log_pos_by_name(&log_info, purge_log_name))) {
     err_msg.assign("Failed to find log pos: ");
     err_msg.append(purge_log_name);
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
@@ -2349,20 +2851,25 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(
     File name exists in index file; delete until we find this file
     or a file that is used.
   */
-  if ((error = find_log_pos(&log_info, NullS))) {
+  if ((error = find_log_pos_by_name(&log_info, NullS))) {
     err_msg.assign("Failed to find log pos");
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     goto err;
   }
 
   while (compare_log_name(purge_log_name, log_info.log_file_name)) {
-    if ((error = register_purge_index_entry(log_info.log_file_name))) {
+    if ((error = register_purge_index_entry(log_info.log_line))) {
       err_msg.assign("Failed to register purge");
       LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
       goto err;
     }
 
-    if (find_next_log(&log_info)) break;
+    // Find the first purgable binlog slice from the index and clean it up as
+    // garbage since these garbage archive files do not exist in the index.
+    dirty_end_binlog.assign(log_info.log_file_name);
+    dirty_end_binlog_consensus_term = log_info.slice_consensus_term;
+
+    if (find_next_log_slice(&log_info)) break;
   }
 
   if ((error = sync_purge_index_file())) {
@@ -2378,15 +2885,144 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(
     goto err;
   }
 
-  // TODO: Remove data that is smaller than match_name and does not exist
-  // in the index file.
 err:
   int error_index = 0, close_error_index = 0;
+  int error_purge = 0;
   /* Read each entry from m_purge_index_file and delete the file. */
   if (!error && is_inited_purge_index_file() &&
-      (error_index = purge_index_entry(decrease_log_space))) {
+      (error_index = purge_index_entry())) {
+    error_purge = 1;
     err_msg.assign("Failed to purge index entry");
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+  }
+
+  // Directly clean up those garbage binlog that is is smaller than
+  // match_name or do not exist in the binlog-index.index.
+  // Purge old consensus term binlog-index.index
+  if (!error && !error_index && !error_purge) {
+    // clean up those garbage binlog
+    if (!dirty_end_binlog.empty()) {
+      err_msg.assign(
+          "clean up those garbage binlog that do not exist in the index: "
+          "before ");
+      err_msg.append(dirty_end_binlog);
+      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+
+      // binlog/binlog.*, fetch all persistent binlog.
+      std::string binlog_prefix;
+      binlog_prefix.assign(BINLOG_ARCHIVE_SUBDIR);
+      binlog_prefix.append(FN_DIRSEP);
+      binlog_prefix.append(BINLOG_ARCHIVE_BASENAME);
+
+      std::vector<objstore::ObjectMeta> objects;
+      bool finished = false;
+      std::string start_after;
+      do {
+        std::vector<objstore::ObjectMeta> tmp_objects;
+        objstore::Status ss = binlog_objstore->list_object(
+            std::string_view(opt_objstore_bucket), binlog_prefix, start_after,
+            finished, tmp_objects);
+        if (!ss.is_succ()) {
+          error = 1;
+          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LIST_OBJECT,
+                 "list binlog failed", binlog_prefix.c_str(),
+                 std::string(ss.error_message()).c_str());
+          break;
+        }
+        objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
+      } while (finished == false);
+
+      // Starting from the smallest persistent binlog until the
+      // `dirty_end_binlog`.
+      if (!error) {
+        for (const auto &object : objects) {
+          size_t first_dot = object.key.find('.');
+          size_t second_dot = object.key.find('.', first_dot + 1);
+          std::string log_name = object.key.substr(0, second_dot);
+          if (compare_log_name(dirty_end_binlog.c_str(), log_name.c_str()) >
+              0) {
+            objstore::Status ss = binlog_objstore->delete_object(
+                std::string_view(opt_objstore_bucket), object.key);
+            if (!ss.is_succ()) {
+              err_msg.assign(
+                  "Delete garbage binlog from object store failed: ");
+              err_msg.append(object.key);
+              err_msg.append(" error=");
+              err_msg.append(ss.error_message());
+              LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+              // Continue cleaning up other binlog even if an error occurs.
+            }
+          }
+        }
+      }
+    }
+    // Purge old consensus term binlog-index.index
+    /*
+      binlog-index.00000000000000000011.index
+      binlog-index.00000000000000000012.index
+      binlog-index.00000000000000000013.index
+      binlog-index.00000000000000000014.index
+      binlog-index.00000000000000000015.index
+    */
+    if (!error && dirty_end_binlog_consensus_term > 0) {
+      char index_name[FN_REFLEN] = {0};
+      sprintf(index_name, "%s" BINLOG_ARCHIVE_CONSENSUS_TERM_EXT "%s",
+              BINLOG_ARCHIVE_INDEX_FILE_BASENAME,
+              static_cast<my_off_t>(dirty_end_binlog_consensus_term),
+              BINLOG_ARCHIVE_INDEX_FILE_SUFFIX);
+      err_msg.assign(
+          "clean up those garbage binlog-index.index: "
+          "consensus term before ");
+      err_msg.append(index_name);
+      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+
+      // Fetch all binlog-index.index.
+      std::vector<objstore::ObjectMeta> objects;
+      bool finished = false;
+      std::string start_after;
+      do {
+        std::vector<objstore::ObjectMeta> tmp_objects;
+        objstore::Status ss = binlog_objstore->list_object(
+            std::string_view(opt_objstore_bucket),
+            BINLOG_ARCHIVE_SUBDIR FN_DIRSEP BINLOG_ARCHIVE_INDEX_FILE_BASENAME,
+            start_after, finished, tmp_objects);
+        if (!ss.is_succ()) {
+          error = 1;
+          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LIST_OBJECT,
+                 "list binlog-index.index failed",
+                 BINLOG_ARCHIVE_INDEX_FILE_BASENAME,
+                 std::string(ss.error_message()).c_str());
+          break;
+        }
+        objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
+      } while (finished == false);
+      // Starting from the smallest persistent binlog-index.idex until the
+      // `dirty_end_binlog_term`.
+      if (!error) {
+        for (const auto &object : objects) {
+          size_t first_dot = object.key.find('.');
+          size_t second_dot = object.key.find('.', first_dot + 1);
+          std::string consensus_term_str =
+              object.key.substr(first_dot + 1, second_dot);
+          uint64_t consensus_term = std::stoull(consensus_term_str);
+          if (dirty_end_binlog_consensus_term > consensus_term) {
+            objstore::Status ss = binlog_objstore->delete_object(
+                std::string_view(opt_objstore_bucket), object.key);
+            if (!ss.is_succ()) {
+              err_msg.assign(
+                  "Delete garbage binlog-index.index from object store "
+                  "failed: ");
+              err_msg.append(object.key);
+              err_msg.append(" error=");
+              err_msg.append(ss.error_message());
+              LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+              // Continue cleaning up other binlog.index even if an error
+              // occurs.
+            }
+          }
+        }
+      }
+    }
   }
 
   close_error_index = close_purge_index_file();
@@ -2403,7 +3039,7 @@ err:
 int Binlog_archive::set_purge_index_file_name() {
   int error = 0;
   DBUG_TRACE;
-  if (fn_format(m_purge_index_file_name, BINLOG_ARCHIVE_INDEX_FILE,
+  if (fn_format(m_purge_index_file_name, BINLOG_ARCHIVE_INDEX_LOCAL_FILE,
                 m_binlog_archive_dir, ".~rec~",
                 MYF(MY_UNPACK_FILENAME | MY_SAFE_PATH | MY_REPLACE_EXT)) ==
       nullptr) {
@@ -2488,12 +3124,10 @@ int Binlog_archive::register_purge_index_entry(const char *entry) {
  * @param decrease_log_space
  * @return int
  */
-int Binlog_archive::purge_index_entry(ulonglong *decrease_log_space) {
+int Binlog_archive::purge_index_entry() {
   DBUG_TRACE;
-  MY_STAT s;
   int error = 0;
-  LOG_INFO log_info;
-  LOG_INFO check_log_info;
+  LOG_ARCHIVED_INFO log_info;
 
   assert(my_b_inited(&m_purge_index_file));
 
@@ -2505,9 +3139,9 @@ int Binlog_archive::purge_index_entry(ulonglong *decrease_log_space) {
 
   for (;;) {
     size_t length = 0;
+    char log_line[FN_REFLEN + 1] = {0};
 
-    if ((length = my_b_gets(&m_purge_index_file, log_info.log_file_name,
-                            FN_REFLEN)) <= 1) {
+    if ((length = my_b_gets(&m_purge_index_file, log_line, FN_REFLEN)) <= 1) {
       if (m_purge_index_file.error) {
         error = m_purge_index_file.error;
         LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, error);
@@ -2519,120 +3153,40 @@ int Binlog_archive::purge_index_entry(ulonglong *decrease_log_space) {
     }
 
     /* Get rid of the trailing '\n' */
-    log_info.log_file_name[length - 1] = 0;
+    log_line[length - 1] = 0;
+
+    std::string in_str;
+    in_str.assign(log_line);
+    size_t idx = in_str.find("|");
+    std::string found_slice_name = in_str.substr(0, idx);
+    std::string found_consensus_index = in_str.substr(idx + 1);
+    strmake(log_info.log_slice_name, found_slice_name.c_str(),
+            sizeof(log_info.log_slice_name) - 1);
+    log_info.previous_consensus_index = std::stoull(found_consensus_index);
 
     // delete the archived binlog file from the object store.
     if (binlog_objstore) {
-      char temp_binlog_relative_file_name[FN_REFLEN + 1] = {0};
-      if (log_info.log_file_name[0] == FN_LIBCHAR) {
-        strmake(temp_binlog_relative_file_name, log_info.log_file_name + 1,
-                sizeof(temp_binlog_relative_file_name) - 1);
-      } else if (log_info.log_file_name[0] == FN_CURLIB &&
-                 log_info.log_file_name[1] == FN_LIBCHAR) {
-        strmake(temp_binlog_relative_file_name, log_info.log_file_name + 2,
-                sizeof(temp_binlog_relative_file_name) - 1);
-      } else {
-        strmake(temp_binlog_relative_file_name, log_info.log_file_name,
-                sizeof(temp_binlog_relative_file_name) - 1);
-      }
-
       // List all binlog slice.
       std::string binlog_keyid{};
       std::vector<objstore::ObjectMeta> objects;
       binlog_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
       binlog_keyid.append(FN_DIRSEP);
-      binlog_keyid.append(temp_binlog_relative_file_name);
-      binlog_keyid.append(".");
+      binlog_keyid.append(log_info.log_slice_name);
 
-      bool finished = false;
-      std::string start_after;
-      do {
-        std::vector<objstore::ObjectMeta> tmp_objects;
-        objstore::Status ss = binlog_objstore->list_object(
-            std::string_view(opt_objstore_bucket), binlog_keyid, start_after,
-            finished, tmp_objects);
-        if (!ss.is_succ()) {
-          std::string err_msg;
-          // If not exists, ignore it.
-          if (ss.error_code() == objstore::Errors::SE_NO_SUCH_KEY) {
-            error = 0;
-            break;
-          }
-          err_msg.assign("Failed to list binlog files: ");
-          err_msg.append(binlog_keyid);
-          err_msg.append(" error=");
-          err_msg.append(ss.error_message());
-          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-          error = 1;
-          break;
-        }
-        objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
-      } while (finished == false);
-      if (error == 1) goto err;
-
-      // Delete all binlog slice.
-      for (const auto &object : objects) {
-        objstore::Status ss = binlog_objstore->delete_object(
-            std::string_view(opt_objstore_bucket), object.key);
-        if (!ss.is_succ()) {
-          std::string err_msg;
-          err_msg.assign("Failed to delete binlog slice from object store: ");
-          err_msg.append(object.key);
-          err_msg.append(" error=");
-          err_msg.append(ss.error_message());
-          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-          error = 1;
-          goto err;
-        }
+      objstore::Status ss = binlog_objstore->delete_object(
+          std::string_view(opt_objstore_bucket), binlog_keyid);
+      if (!ss.is_succ()) {
+        std::string err_msg;
+        err_msg.assign("Failed to delete binlog slice from object store: ");
+        err_msg.append(binlog_keyid);
+        err_msg.append(" error=");
+        err_msg.append(ss.error_message());
+        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+        error = 1;
+        goto err;
       }
       LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_PURGE_LOG,
              binlog_keyid.c_str());
-    } else {
-      // delete the archived binlog file from the local archive directory.
-      if (!mysql_file_stat(PSI_binlog_purge_archive_log_file_key,
-                           log_info.log_file_name, &s, MYF(0))) {
-        if (my_errno() == ENOENT) {
-          /*
-            It's not fatal if we can't stat a log file that does not exist;
-            If we could not stat, we won't delete.
-          */
-          LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-                 log_info.log_file_name);
-          set_my_errno(0);
-        } else {
-          /*
-            Other than ENOENT are fatal
-          */
-          LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-                 log_info.log_file_name);
-          error = LOG_INFO_FATAL;
-          goto err;
-        }
-      } else {
-        DBUG_PRINT("info", ("purging %s", log_info.log_file_name));
-        if (!mysql_file_delete(PSI_binlog_purge_archive_log_file_key,
-                               log_info.log_file_name, MYF(0))) {
-          if (decrease_log_space) *decrease_log_space -= s.st_size;
-        } else {
-          if (my_errno() == ENOENT) {
-            LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-                   log_info.log_file_name);
-            set_my_errno(0);
-          } else {
-            LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-                   log_info.log_file_name);
-
-            if (my_errno() == EMFILE) {
-              DBUG_PRINT("info", ("my_errno: %d, set ret = LOG_INFO_EMFILE",
-                                  my_errno()));
-              error = LOG_INFO_EMFILE;
-              goto err;
-            }
-            error = LOG_INFO_FATAL;
-            goto err;
-          }
-        }
-      }
     }
   }
 
@@ -2646,7 +3200,7 @@ err:
  * @param log_info
  * @return int
  */
-int Binlog_archive::remove_logs_from_index(LOG_INFO *log_info) {
+int Binlog_archive::remove_logs_from_index(LOG_ARCHIVED_INFO *log_info) {
   DBUG_TRACE;
 
   if (!my_b_inited(&m_index_file)) {
@@ -2686,24 +3240,25 @@ int Binlog_archive::remove_logs_from_index(LOG_INFO *log_info) {
     goto err;
   }
 
-  if (binlog_objstore != nullptr) {
+  {
     // refresh 'mysql-bin.index' to object store
     std::string index_keyid{};
     index_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
     index_keyid.append(FN_DIRSEP);
-    index_keyid.append(BINLOG_ARCHIVE_INDEX_FILE);
+    index_keyid.append(m_index_file_name);
     objstore::Status ss = binlog_objstore->put_object_from_file(
-        std::string_view(opt_objstore_bucket), index_keyid, m_index_file_name);
+        std::string_view(opt_objstore_bucket), index_keyid,
+        m_index_local_file_name);
     if (!ss.is_succ()) {
-      std::string err_msg;
-      err_msg.assign("Failed to upload clone index file to object store: ");
-      err_msg.append(index_keyid);
-      err_msg.append(" error=");
-      err_msg.append(ss.error_message());
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_INDEX_FILE,
+             index_keyid.c_str(), m_index_local_file_name,
+             std::string(ss.error_message()).c_str());
       close_index_file();
       goto err;
     }
+    LogErr(INFORMATION_LEVEL,
+           ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_INDEX_FILE,
+           index_keyid.c_str(), m_index_local_file_name, "");
   }
 
   return 0;
@@ -2719,13 +3274,16 @@ int Binlog_archive::show_binlog_persistent_files(
   if (binlog_objstore != nullptr) {
     bool finished = false;
     std::string start_after;
+    std::string binlog_prefix;
+    binlog_prefix.assign(BINLOG_ARCHIVE_SUBDIR);
+    binlog_prefix.append(FN_DIRSEP);
+    binlog_prefix.append(BINLOG_ARCHIVE_BASENAME);
 
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
-      objstore::Status ss =
-          binlog_objstore->list_object(std::string_view(opt_objstore_bucket),
-                                       std::string_view(BINLOG_ARCHIVE_SUBDIR),
-                                       start_after, finished, tmp_objects);
+      objstore::Status ss = binlog_objstore->list_object(
+          std::string_view(opt_objstore_bucket), binlog_prefix, start_after,
+          finished, tmp_objects);
       if (!ss.is_succ()) {
         std::string err_msg;
         if (ss.error_code() == objstore::Errors::SE_NO_SUCH_KEY) {
@@ -2733,32 +3291,12 @@ int Binlog_archive::show_binlog_persistent_files(
           return error;
         }
         error = 1;
-        err_msg.assign("Failed to binlog files: ");
-        err_msg.append(BINLOG_ARCHIVE_SUBDIR);
-        err_msg.append(" error=");
-        err_msg.append(ss.error_message());
-        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LIST_OBJECT, "list binlog failed",
+               binlog_prefix.c_str(), std::string(ss.error_message()).c_str());
         return error;
       }
       objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
     } while (finished == false);
-
-    // ignore binlog.index file.
-    objects.erase(
-        std::remove_if(objects.begin(), objects.end(),
-                       [](const objstore::ObjectMeta &obj) {
-                         std::string index_keyid;
-                         index_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
-                         index_keyid.append(FN_DIRSEP);
-                         index_keyid.append(BINLOG_ARCHIVE_INDEX_FILE);
-                         return obj.key.compare(index_keyid) == 0;
-                       }),
-        objects.end());
-    // sort the binlog slice files by key.
-    std::sort(objects.begin(), objects.end(),
-              [](const objstore::ObjectMeta &a, const objstore::ObjectMeta &b) {
-                return a.key < b.key;
-              });
   }
   return error;
 }
@@ -2912,7 +3450,9 @@ void Binlog_archive::calc_shrink_buffer_size(size_t current_size) {
 }
 
 static time_t calculate_auto_purge_lower_time_bound() {
-  if (DBUG_EVALUATE_IF("expire_logs_always", true, false)) return time(nullptr);
+  if (DBUG_EVALUATE_IF("expire_persistent_logs_always", true, false)) {
+    return time(nullptr);
+  }
 
   int64 expiration_time = 0;
   int64 current_time = time(nullptr);

@@ -9,6 +9,7 @@
 #include "plugin.h"
 #include "system_variables.h"
 
+#include "my_inttypes.h"
 #include "my_loglevel.h"
 #include "mysql/components/services/log_builtins.h"
 #include "sql/debug_sync.h"  // DEBUG_SYNC
@@ -34,11 +35,11 @@ static int consensus_binlog_manager_binlog_recovery(
              ? 0
              : (consistent_snapshot_recovery
                     ? consensus_binlog_recovery(
-                          param->binlog, consistent_recovery_start_binlog,
-                          consistent_recovery_start_position,
+                          param->binlog, true,
+                          (uint64)consistent_recovery_start_consensus_index,
                           consistent_recovery_end_binlog,
                           &consistent_recovery_end_position)
-                    : consensus_binlog_recovery(param->binlog, nullptr, 0,
+                    : consensus_binlog_recovery(param->binlog, false, 0,
                                                 nullptr, nullptr));
 }
 
@@ -467,6 +468,44 @@ static int consensus_binlog_manager_purge_logs(Binlog_manager_param *,
                                             auto_purge);
 }
 
+/* If log_pos is zero, scan to the end. */
+static int consensus_binlog_manager_get_unique_index_from_pos(
+    Binlog_manager_param *, const char *log_file_name, my_off_t log_pos,
+    uint64 &unique_index) {
+  DBUG_TRACE;
+
+  if (opt_initialize) return 0;
+
+  // If the plugin is not running, return failed.
+  if (!plugin_is_consensus_replication_running()) return 1;
+
+  bool reached_stop_point;
+  uint64 current_term;
+  uint64 next_index;
+
+  next_index = consensus_get_next_index(log_file_name, false, 0, log_pos,
+                                        reached_stop_point, current_term);
+  unique_index = next_index > 0 ? next_index - 1 : 0;
+
+  return (next_index == 0);
+}
+
+static int consensus_binlog_manager_get_pos_from_unique_index(Binlog_manager_param *,
+                                                       uint64 unique_index,
+                                                       char *log_file_name,
+                                                       my_off_t &log_pos) {
+  DBUG_TRACE;
+
+  if (opt_initialize) return 0;
+
+  // If the plugin is not running, return failed.
+  if (!plugin_is_consensus_replication_running()) return 1;
+
+  return consensus_get_log_end_position(
+      consensus_log_manager.get_log_file_index(), unique_index, log_file_name,
+      &log_pos);
+}
+
 Binlog_manager_observer cr_binlog_mananger_observer = {
     sizeof(Binlog_manager_observer),
 
@@ -488,4 +527,6 @@ Binlog_manager_observer cr_binlog_mananger_observer = {
     consensus_binlog_manager_rotate_and_purge,
     consensus_binlog_manager_purge_logs,
     consensus_binlog_manager_reencrypt_logs,
+    consensus_binlog_manager_get_unique_index_from_pos,
+    consensus_binlog_manager_get_pos_from_unique_index,
 };

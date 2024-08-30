@@ -27,10 +27,41 @@
 
 #define BINLOG_ARCHIVE_SUBDIR "binlog"
 #define BINLOG_ARCHIVE_SUBDIR_LEN 6
-#define BINLOG_ARCHIVE_INDEX_FILE "binlog.index"
-#define BINLOG_ARCHIVE_INDEX_FILE_LEN 12
+#define BINLOG_ARCHIVE_INDEX_FILE_BASENAME "binlog-index."
+#define BINLOG_ARCHIVE_INDEX_FILE_SUFFIX ".index"
+#define BINLOG_ARCHIVE_INDEX_LOCAL_FILE "binlog-index.index"
+#define BINLOG_ARCHIVE_START_INDEX_FILE_LEN 18
+#define BINLOG_ARCHIVE_BASENAME "binlog."
+#define BINLOG_ARCHIVE_SLICE_LOCAL_SUFFIX ".slice"
+#define BINLOG_ARCHIVE_NUMBER_EXT "%06llu"
+#define BINLOG_ARCHIVE_SLICE_POSITION_EXT "%010llu"
+#define BINLOG_ARCHIVE_CONSENSUS_TERM_EXT "%020llu"
 
 class THD;
+
+struct LOG_ARCHIVED_INFO {
+  char log_line[FN_REFLEN] = {0};
+  char log_file_name[FN_REFLEN] = {0};
+  char log_slice_name[FN_REFLEN] = {0};
+  uint64_t previous_consensus_index;
+  uint64_t slice_consensus_term;
+  my_off_t slice_end_pos;
+  my_off_t index_file_offset, index_file_start_offset;
+  my_off_t pos;
+  int entry_index;  // used in purge_logs(), calculatd in find_log_pos().
+  LOG_ARCHIVED_INFO()
+      : previous_consensus_index(0),
+        slice_consensus_term(0),
+        slice_end_pos(0),
+        index_file_offset(0),
+        index_file_start_offset(0),
+        pos(0),
+        entry_index(0) {
+    memset(log_line, 0, FN_REFLEN);
+    memset(log_file_name, 0, FN_REFLEN);
+    memset(log_slice_name, 0, FN_REFLEN);
+  }
+};
 
 /**
  * @class Binlog_archive
@@ -56,6 +87,18 @@ class Binlog_archive {
   ~Binlog_archive();
 
   /**
+   * @brief Initializes.
+   */
+  void init_pthread_object();
+  /**
+   * @brief Cleans up any resources.
+   */
+  void deinit_pthread_object();
+
+  mysql_mutex_t *get_binlog_archive_lock();
+
+  static Binlog_archive *get_instance();
+  /**
    * @brief Runs the binlog archiving process.
    */
   void run();
@@ -66,24 +109,37 @@ class Binlog_archive {
   bool is_thread_dead() const { return m_thd_state.is_thread_dead(); }
   bool is_thread_alive() const { return m_thd_state.is_thread_alive(); }
   bool is_thread_running() const { return m_thd_state.is_running(); }
-  static Binlog_archive *get_instance();
-  int archive_event(File_reader &reader, uchar *event_ptr,
-                    uint32 event_len, const char *log_file, my_off_t log_pos);
+  int archive_event(File_reader &reader, uchar *event_ptr, uint32 event_len,
+                    const char *log_file, my_off_t log_pos);
   int flush_events();
-  bool stop_waiting_for_update(char *log_file_name, my_off_t log_pos);
+  int stop_waiting_for_archive(const char *log_file_name,
+                               char *persistent_log_file_name, my_off_t log_pos,
+                               uint64_t consensus_index);
   int wait_for_update();
   void signal_update();
   int terminate_binlog_archive_thread();
   void lock_binlog_index() { mysql_mutex_lock(&m_index_lock); }
   void unlock_binlog_index() { mysql_mutex_unlock(&m_index_lock); }
-  inline IO_CACHE *get_index_file() { return &m_index_file; }
-  std::tuple<int, std::string> purge_logs(const char *to_log,
-                                          ulonglong *decrease_log_space);
+  IO_CACHE *get_index_file();
+  std::tuple<int, std::string> purge_logs(const char *to_log);
   int show_binlog_persistent_files(std::vector<objstore::ObjectMeta> &objects);
-  static int find_next_log_common(IO_CACHE *index_file, LOG_INFO *linfo);
-  static int find_log_pos_common(IO_CACHE *index_file, LOG_INFO *linfo,
-                                 const char *log_name);
+  static int find_next_log_common(IO_CACHE *index_file,
+                                  LOG_ARCHIVED_INFO *linfo,
+                                  bool found_slice = false);
+  static int find_log_pos_common(IO_CACHE *index_file, LOG_ARCHIVED_INFO *linfo,
+                                 const char *log_name, uint64_t consensus_index,
+                                 bool last_slice = false);
   int rotate_binlog_slice(my_off_t log_pos, bool need_lock);
+  inline void set_objstore(objstore::ObjectStore *objstore) {
+    binlog_objstore = objstore;
+  }
+  inline objstore::ObjectStore *get_objstore() { return binlog_objstore; }
+  int get_binlog_last_consensus_index(uint64_t &consensus_index,
+                                      uint64_t &consensus_term,
+                                      std::string &mysql_binlog,
+                                      my_off_t &mysql_binlog_pos,
+                                      std ::string &binlog,
+                                      my_off_t &binlog_pos);
 
  private:
   // the binlog archive THD handle.
@@ -91,14 +147,6 @@ class Binlog_archive {
   /* thread state */
   thread_state m_thd_state;
 
-  /**
-   * @brief Initializes the binlog archive.
-   */
-  void init();
-  /**
-   * @brief Cleans up any resources used by the binlog archive.
-   */
-  void cleanup();
   void set_thread_context();
 
   /* current archive binlog file name, copy from mysql binlog file name
@@ -110,35 +158,68 @@ class Binlog_archive {
   */
   // current archive binlog file name, copy from mysql binlog file name
   char m_binlog_archive_file_name[FN_REFLEN + 1];
-  char m_binlog_archive_relative_file_name[FN_REFLEN + 1];
   char m_mysql_archive_dir[FN_REFLEN + 1];
   char m_binlog_archive_dir[FN_REFLEN + 1];
-  char m_next_binlog_archive_file_name[FN_REFLEN + 1];
   Format_description_event m_description_event;
   objstore::ObjectStore *binlog_objstore;
   mysql_mutex_t m_rotate_lock;
-  my_off_t m_binlog_archive_last_event_end_pos; //  The last binlog event position persisted to objstore.
+  bool m_consensus_is_leader;
+  uint64_t m_consensus_term;
   my_off_t m_slice_bytes_written;
-  my_off_t m_binlog_write_last_event_end_pos; // The last binlog event position writed to persistent cache.
-  my_off_t m_mysql_binlog_start_pos; // mysql binlog archive start position.
+  my_off_t
+      m_binlog_archive_last_event_end_pos;  //  The last binlog event position
+                                            //  persisted to objstore.
+  my_off_t m_binlog_write_last_event_end_pos;  // The last binlog event position
+                                               // writed to persistent cache.
+  char m_mysql_binlog_start_file[FN_REFLEN + 1];
+  my_off_t m_mysql_binlog_start_pos;  // mysql binlog archive start position.
   std::unique_ptr<IO_CACHE_ostream> m_slice_pipeline_head;
-  std::string m_binlog_archive_slice_name;
-  bool m_binlog_archive_first_slice;
+  char m_binlog_slice_local_name[FN_REFLEN + 1];
+  bool m_mysql_binlog_first_file;
+  char m_mysql_binlog_file_name[FN_REFLEN + 1];  // mysql binlog entry name
+  my_off_t
+      m_mysql_binlog_last_event_end_pos;  //  The last binlog event position
+                                          //  persisted to objstore.
+  my_off_t m_mysql_binlog_write_last_event_end_pos;  // The last binlog event
+                                                     // position writed to
+                                                     // persistent cache.
+  uint64_t m_binlog_archive_last_index_number;
+  binary_log::enum_binlog_checksum_alg m_event_checksum_alg;
+  uint64
+      m_mysql_binlog_previouse_consensus_index;  // the previous consensus index
+                                                 // of current mysql binlog
+  uint64 m_binlog_previouse_consensus_index;     // the previous
+                                                 // consensus index
+                                                 // of previous
+                                                 // mysql binlog
   Diagnostics_area m_diag_area;
   String m_packet;
   bool m_binlog_in_transaction;
-  int new_binlog_slice(const char *log_file, my_off_t log_pos);
+  uint64 m_binlog_archive_start_consensus_index;
+  int new_binlog_slice(bool new_binlog, const char *log_file, my_off_t log_pos,
+                       uint64_t previous_consensus_index);
   int archive_init();
   int archive_cleanup();
+  bool consensus_leader_is_changed();
   int archive_binlogs();
   int archive_binlog(File_reader &reader, my_off_t start_pos);
   std::pair<my_off_t, int> get_binlog_end_pos(File_reader &reader);
   int archive_events(File_reader &reader, my_off_t end_pos);
   int read_format_description_event(File_reader &reader);
   int wait_new_mysql_binlog_events(my_off_t log_pos);
-  bool stop_waiting_for_mysql_binlog_update(my_off_t log_pos) const;
-  bool binlog_is_archived(const char *log_file_name_arg, my_off_t log_pos);
-
+  int new_persistent_binlog_slice_key(const char *binlog,
+                                      std::string &slice_name,
+                                      const my_off_t pos, const uint64_t term);
+  int stop_waiting_for_mysql_binlog_update(my_off_t log_pos);
+  bool binlog_is_archived(const char *log_file_name_arg,
+                          char *persistent_log_file_name, my_off_t log_pos,
+                          uint64_t consensus_index);
+  int merge_slice_to_binlog_file(const char *to_binlog_file);
+  inline bool event_checksum_on() {
+    return m_event_checksum_alg > binary_log::BINLOG_CHECKSUM_ALG_OFF &&
+           m_event_checksum_alg < binary_log::BINLOG_CHECKSUM_ALG_ENUM_END;
+  }
+  void calc_event_checksum(uchar *event_ptr, size_t event_len);
   const static uint32 PACKET_MIN_SIZE = 4096;
   const static uint32 PACKET_MAX_SIZE = UINT_MAX32;
   const static ushort PACKET_SHRINK_COUNTER_THRESHOLD = 100;
@@ -164,19 +245,21 @@ class Binlog_archive {
 
   IO_CACHE m_index_file;
   mysql_mutex_t m_index_lock;
+  char m_index_local_file_name[FN_REFLEN];
   char m_index_file_name[FN_REFLEN];
   bool open_index_file();
   void close_index_file();
-  int add_log_to_index(uchar *log_name, size_t log_name_len);
-  int find_log_pos(LOG_INFO *linfo, const char *log_name);
-  int find_next_log(LOG_INFO *linfo);
-  int remove_logs_from_index(LOG_INFO *linfo);
+  int add_log_to_index(const uchar *log_name, size_t log_name_len);
+  int find_log_pos_by_name(LOG_ARCHIVED_INFO *linfo, const char *log_name);
+  int find_next_log(LOG_ARCHIVED_INFO *linfo);
+  int find_next_log_slice(LOG_ARCHIVED_INFO *linfo);
+  int remove_logs_from_index(LOG_ARCHIVED_INFO *linfo);
   /*
     m_crash_safe_index_file is temp file used for guaranteeing
     index file crash safe when master server restarts.
   */
   IO_CACHE m_crash_safe_index_file;
-  char m_crash_safe_index_file_name[FN_REFLEN];
+  char m_crash_safe_index_local_file_name[FN_REFLEN];
   enum enum_log_state { LOG_INDEX_OPENED, LOG_INDEX_CLOSED };
   std::atomic<enum_log_state> atomic_log_index_state{LOG_INDEX_CLOSED};
   int open_crash_safe_index_file();
@@ -198,12 +281,14 @@ class Binlog_archive {
   int sync_purge_index_file();
   int register_purge_index_entry(const char *entry);
   int register_create_index_entry(const char *entry);
-  int purge_index_entry(ulonglong *decrease_log_space);
+  int purge_index_entry();
   int auto_purge_logs();
 };
 
 extern int start_binlog_archive();
 extern void stop_binlog_archive();
-extern int binlog_archive_wait_for_update(THD *thd, char *log_file_name,
-                                          my_off_t log_pos);
+extern int binlog_archive_wait_for_update(THD *thd, const char *log_file_name,
+                                          char *persistent_log_file_name,
+                                          my_off_t log_pos,
+                                          uint64_t consensus_index);
 #endif

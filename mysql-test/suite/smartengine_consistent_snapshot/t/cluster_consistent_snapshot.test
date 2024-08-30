@@ -4,19 +4,16 @@
 --source include/have_consensus_replication.inc
 --source include/paxos.inc
 
+let $wait_condition= select role='Leader' from information_schema.wesql_cluster_local;
+let $wait_timeout= 600;
+--source include/wait_condition.inc
 
-# 1. install mysql_clone plugin
---replace_result $CLONE_PLUGIN CLONE_PLUGIN
---eval INSTALL PLUGIN clone SONAME '$CLONE_PLUGIN'
+--echo # Wait for first snapshots to be generated after startup 
+let $wait_condition= SELECT count(*) >= 1 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
 
-# 2. create run directory
-
-# 3. start with consistent-snapshot-archive
---echo # Server restart with --consistent-snapshot-archive=true
---let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 
---source include/restart_mysqld.inc
-
-CREATE DATABASE db1;
+use test;
 CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1);
 INSERT INTO t1 values(2);
@@ -24,11 +21,6 @@ INSERT INTO t1 values(3);
 INSERT INTO t1 values(4);
 SELECT * FROM t1;
 SHOW CREATE TABLE t1;
-
-# 4. start with consistent-snapshot-archive
---echo # Server restart with --consistent-snapshot-archive=true
---let $restart_parameters=restart: --smartengine=1 --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless=true --consistent_snapshot_archive_period=1 
---source include/restart_mysqld.inc
 
 INSERT INTO t1 values(5);
 INSERT INTO t1 values(6);
@@ -40,6 +32,7 @@ SELECT * FROM t1;
 --let $region = `select @@objstore_region`
 
 set debug = 'd, crash_commit_before_log';
+--let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --exec echo "wait" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --error 2013
 INSERT INTO t1 values(9);
@@ -53,11 +46,20 @@ INSERT INTO t1 values(9);
 --echo # Create an empty data directory...
 --mkdir $MYSQLD_DATADIR
 --force-cpdir $BACKUP_DATADIR $MYSQLD_DATADIR/$region
+--force-rmdir $BACKUP_DATADIR
 
-# 5. recovery
+sleep 5;
+
+# recovery from consensus index=0
 --echo # Recovery start from object store.
---let $restart_parameters=restart: --smartengine=1 --recovery_from_objstore=true --default-storage-engine=smartengine --default-tmp-storage_engine=innodb --serverless --consistent_snapshot_archive_period=1
 --source include/start_mysqld.inc
+--source include/wait_until_connected_again.inc
 
+let $wait_condition= select role='Leader' from information_schema.wesql_cluster_local;
+let $wait_timeout= 600;
+--source include/wait_condition.inc
+
+use test;
 SELECT * FROM t1;
-DROP DATABASE db1;
+--echo # Cleanup
+DROP TABLE t1;

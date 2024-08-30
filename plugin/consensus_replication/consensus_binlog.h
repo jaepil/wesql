@@ -30,6 +30,9 @@ int consensus_get_log_entry(ConsensusLogIndex *log_file_index,
 int consensus_get_log_position(ConsensusLogIndex *log_file_index,
                                uint64 consensus_index, char *log_name,
                                my_off_t *pos);
+int consensus_get_log_end_position(ConsensusLogIndex *log_file_index,
+                                   uint64 consensus_index, char *log_name,
+                                   my_off_t *pos);
 int consensus_find_log_by_index(ConsensusLogIndex *log_file_index,
                                 uint64 consensus_index, std::string &file_name,
                                 uint64 &start_index);

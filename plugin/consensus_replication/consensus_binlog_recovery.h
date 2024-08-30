@@ -25,8 +25,8 @@
 class MYSQL_BIN_LOG;
 
 extern int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog,
-                                     const char *ha_recover_end_file,
-                                     my_off_t ha_recover_end_pos,
+                                     bool has_ha_recover_end,
+                                     uint64 ha_recover_end_index,
                                      char *recover_end_file,
                                      my_off_t *recover_end_pos);
 #endif

@@ -52,6 +52,7 @@ typedef struct Consistent_snapshot {
   char se_backup_name[FN_REFLEN + 1];
   char binlog_name[FN_REFLEN + 1];
   uint64_t binlog_pos;
+  uint64_t consensus_index;
   uint64_t se_snapshot_id;
 } Consistent_snapshot;
 
@@ -78,15 +79,11 @@ class Consistent_archive {
   void unlock_mysql_clone_index() {
     mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
   }
-  inline IO_CACHE *get_mysql_clone_index_file() {
-    return &m_mysql_clone_index_file;
-  }
+  IO_CACHE *get_mysql_clone_index_file();
 
   void lock_se_backup_index() { mysql_mutex_lock(&m_se_backup_index_lock); }
   void unlock_se_backup_index() { mysql_mutex_unlock(&m_se_backup_index_lock); }
-  inline IO_CACHE *get_se_backup_index_file() {
-    return &m_se_backup_index_file;
-  }
+  IO_CACHE *get_se_backup_index_file();
 
   void lock_consistent_snapshot_index() {
     mysql_mutex_lock(&m_consistent_index_lock);
@@ -94,14 +91,18 @@ class Consistent_archive {
   void unlock_consistent_snapshot_index() {
     mysql_mutex_unlock(&m_consistent_index_lock);
   }
-  inline IO_CACHE *get_consistent_snapshot_index_file() {
-    return &m_consistent_snapshot_index_file;
-  }
+  IO_CACHE *get_consistent_snapshot_index_file();
   std::tuple<int, std::string> purge_consistent_snapshot(
       const char *to_created_ts, size_t len, bool auto_purge);
   int show_innodb_persistent_files(std::vector<objstore::ObjectMeta> &objects);
   int show_se_persistent_files(std::vector<objstore::ObjectMeta> &objects);
   int show_se_backup_snapshot(THD *thd, std::vector<uint64_t> &backup_ids);
+  inline void set_objstore(objstore::ObjectStore *objstore) {
+    snapshot_objstore = objstore;
+  }
+  inline objstore::ObjectStore *get_objstore() {
+    return snapshot_objstore;
+  }
 
  private:
   pthread_t m_thread;
@@ -123,12 +124,16 @@ class Consistent_archive {
   char m_mysql_archive_dir[FN_REFLEN + 1];
   char m_mysql_archive_data_dir[FN_REFLEN + 1];
   objstore::ObjectStore *snapshot_objstore;
+  uint64_t m_consensus_term;
   bool archive_consistent_snapshot();
-  int wait_for_consistent_archive(const std::chrono::seconds &timeout);
+  int archive_consistent_snapshot_data();
+  int archive_consistent_snapshot_binlog();
+  int archive_consistent_snapshot_cleanup(bool failed);
+  int wait_for_consistent_archive(const std::chrono::seconds &timeout, bool &abort);
   void signal_consistent_archive();
   // index file for every archive type.
   bool open_index_file(const char *index_file_name_arg, const char *log_name,
-                       Archive_type arch_type);
+                       Archive_type arch_type, bool need_lock=false);
   void close_index_file(Archive_type arch_type);
   int find_line_from_index(LOG_INFO *linfo, const char *match_name,
                            Archive_type arch_type);
@@ -159,19 +164,23 @@ class Consistent_archive {
   bool archive_smartengine();
   bool copy_smartengine_wals_and_metas();
   bool release_se_snapshot(uint64_t backup_snapshot_id);
-  uint64_t m_binlog_pos;
+  uint64_t m_mysql_binlog_pos_previous_snapshot;
+  uint64_t m_mysql_binlog_pos;
+  uint64_t m_consensus_index;
+  char m_mysql_binlog_file_previous_snapshot[FN_REFLEN + 1]; // mysql binlog index entry name.
+  char m_mysql_binlog_file[FN_REFLEN + 1]; // mysql binlog index entry name.
   char m_binlog_file[FN_REFLEN + 1];
   uint64_t m_se_snapshot_id;
   /**smartengine tmp backup directory, which stores hard link for smartengine
    files, protect them from be deleted before copy completely.*/
   mysql_mutex_t m_se_backup_index_lock;
-  char tmp_se_backup_dir_[FN_REFLEN + 1];
+  char m_se_temp_backup_dir[FN_REFLEN + 1];
   char m_se_backup_index_file_name[FN_REFLEN + 1];
   IO_CACHE m_se_backup_index_file;
   IO_CACHE m_crash_safe_se_backup_index_file;
   char m_crash_safe_se_backup_index_file_name[FN_REFLEN];
   uint64_t m_se_backup_next_index_number;
-  char m_se_backup_dir[FN_REFLEN + 1];
+  char m_se_snapshot_dir[FN_REFLEN + 1];
   char m_se_backup_name[FN_REFLEN + 1];
 
   // Archive consistent snapshot file
