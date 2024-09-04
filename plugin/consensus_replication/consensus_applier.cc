@@ -80,8 +80,11 @@ int mts_recovery_max_consensus_index() {
   int error = 0;
   uint64 max_consensus_apply_index = 0;
   Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
+  Consensus_info *consensus_info = consensus_meta.get_consensus_info();
 
-  if (applier_info->recovery_parallel_workers == 0) {
+  if (consensus_info->get_recover_status() ==
+          Consensus_Log_System_Status::BINLOG_WORKING ||
+      applier_info->recovery_parallel_workers == 0) {
     return error;
   }
 
