@@ -66,39 +66,32 @@ int consensus_replication_after_recovery(Server_state_param *) {
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  /* Init replica construct for consensus channel */
   if (!opt_initialize) {
+    /* Init replica construct for consensus channel */
     if (init_consensus_replica()) return -1;
+
+    if (consensus_state_process.start_consensus_state_change_thread())
+      return -1;
+
+    /* Start consensus service */
+    if (consensus_state_process.init_service()) return -1;
+
+    /* Start consensus apply threads */
+    if (!opt_cluster_log_type_instance && start_consensus_replica()) return -1;
+
+    // purge logs after start applier thread
+    MYSQL_BIN_LOG *log =
+        &consensus_state_process.get_relay_log_info()->relay_log;
+    if (DBUG_EVALUATE_IF("expire_logs_always_at_start", false, true))
+      log->auto_purge_at_server_startup();
+    else if (expire_logs_days > 0 || binlog_expire_logs_seconds > 0)
+      purge_consensus_logs_on_conditions(time(nullptr), 0, nullptr, true);
   }
 
   return 0;
 }
 
 int consensus_replication_before_handle_connection(Server_state_param *) {
-  DBUG_TRACE;
-
-  if (!opt_bin_log) return 0;
-
-  /* If the plugin is not running, return failed. */
-  if (!plugin_is_consensus_replication_running()) return 1;
-
-  assert(!opt_initialize);
-
-  if (consensus_state_process.start_consensus_state_change_thread()) return -1;
-
-  /* Start consensus service */
-  if (consensus_state_process.init_service()) return -1;
-
-  /* Start consensus apply threads */
-  if (!opt_cluster_log_type_instance && start_consensus_replica()) return -1;
-
-  // purge logs after start applier thread
-  MYSQL_BIN_LOG *log = &consensus_state_process.get_relay_log_info()->relay_log;
-  if (DBUG_EVALUATE_IF("expire_logs_always_at_start", false, true))
-    log->auto_purge_at_server_startup();
-  else if (expire_logs_days > 0 || binlog_expire_logs_seconds > 0)
-    purge_consensus_logs_on_conditions(time(nullptr), 0, nullptr, true);
-
   return 0;
 }
 
