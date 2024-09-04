@@ -278,17 +278,19 @@ static int consensus_applier_on_rollback_positions(
   return error;
 }
 
-static int consensus_applier_on_mts_recovery_groups(
-    Binlog_applier_param *param) {
+static int consensus_applier_on_mts_recovery_groups(Binlog_applier_param *param,
+                                                    bool &exit) {
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
   int error = 0;
 
+  exit = false;
   if (channel_map.is_consensus_replication_channel_name(
           param->rli->get_channel())) {
     error = applier_mts_recovery_groups(param->rli);
+    exit = true;
   }
 
   return error;
