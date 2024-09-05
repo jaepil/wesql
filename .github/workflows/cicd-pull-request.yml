@@ -60,9 +60,9 @@ jobs:
           cd mysql-test
           CUR_DIR=`pwd`
           ./mysql-test-run.pl --suite=smartengine_consistent_snapshot  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
-              --initialize="--serverless=true" --initialize="--objstore_provider=local"
+              --initialize="--serverless=true" --initialize="--objectstore_provider=local"
           ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
-              --initialize="--serverless=true" --initialize="--objstore_provider=local" --initialize="--plugin-load-add=mysql_clone.so" --skip-test-list=collections/disabled-smartengine-serverless.def
+              --initialize="--serverless=true" --initialize="--objectstore_provider=local" --initialize="--plugin-load-add=mysql_clone.so" --skip-test-list=collections/disabled-smartengine-serverless.def
 
       - name: view logs of mtr serverless
         if: ${{ failure() }}

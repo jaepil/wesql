@@ -12,7 +12,7 @@ plugin-load-add=                        mysql_clone.so
 consistent_snapshot_archive_period=     1000
 consistent_snapshot_expire_auto_purge=  false
 binlog_archive_expire_auto_purge=       false
-recovery_from_objstore=                 true
+recovery_from_objectstore=              true
 
 [mysqld.2]
 #!use-slave-opt
@@ -24,7 +24,7 @@ consensus_replication_auto_leader_transfer= ON
 log-bin=                            logger1-bin
 log-bin=                            logger1-bin.index
 serverless=                         true
-table_on_objstore =                 false
+table_on_objectstore =              false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false
 
@@ -38,6 +38,6 @@ consensus_replication_auto_leader_transfer= ON
 log-bin=                            logger2-bin
 log-bin=                            logger2-bin.index
 serverless=                         true
-table_on_objstore =                 false
+table_on_objectstore =              false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false

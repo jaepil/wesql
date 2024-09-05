@@ -163,7 +163,7 @@ int start_consistent_archive() {
   if (!opt_consistent_snapshot_persistent_on_objstore) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "consistent snapshot must set objectstore, "
-           " --consistent_snapshot_persistent_on_objstore");
+           " --consistent_snapshot_persistent_on_objectstore");
     return 1;
   }
 

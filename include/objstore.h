@@ -160,11 +160,11 @@ class ObjectStore {
 
   virtual Status delete_directory(const std::string_view &bucket,
                                   const std::string_view &prefix);
-  
+
   virtual Status put_objects_from_dir(const std::string_view &src_dir,
                                       const std::string_view &dst_objstore_bucket,
                                       const std::string_view &dst_objstore_dir);
-  
+
   virtual Status get_objects_to_dir(const std::string_view &src_objstore_bucket,
                                     const std::string_view &src_objstore_dir,
                                     const std::string_view &dst_dir);
@@ -189,6 +189,12 @@ ObjectStore *create_object_store_for_test(const std::string_view &provider,
                                           bool use_https,
                                           const std::string_view bucket_dir,
                                           std::string &err_msg);
+
+int ensure_object_store_lock(const std::string_view &provider,
+                             const std::string_view &region,
+                             const std::string_view &bucket_dir,
+                             const std::string_view &data_uuid,
+                             const bool should_exist, std::string &err_msg);
 
 void destroy_object_store(ObjectStore *obj_store);
 

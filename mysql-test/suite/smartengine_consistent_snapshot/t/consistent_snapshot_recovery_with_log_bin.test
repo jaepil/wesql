@@ -4,7 +4,7 @@
 --echo # Consistent snapshot, change log-bin and consistent snapshot recovey.
 
 --let $MYSQLD_DATADIR=`select @@datadir`
---let $region = `select @@objstore_region`
+--let $region = `select @@objectstore_region`
 
 --echo # Wait persistent binlog finish. 
 let $wait_condition= SELECT count(distinct Log_name) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;

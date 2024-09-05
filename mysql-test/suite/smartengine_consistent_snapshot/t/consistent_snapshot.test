@@ -17,8 +17,8 @@ let $wait_condition= SELECT count(*) >0 FROM INFORMATION_SCHEMA.CONSISTENT_PERSI
 --echo #
 --echo # Check for contain innodb_archive consistent_snapshot.index
 --let $datadir=`select @@datadir`
---let $region = `select @@objstore_region`
---let $bucket = `select @@objstore_bucket`
+--let $region = `select @@objectstore_region`
+--let $bucket = `select @@objectstore_bucket`
 --let $grep_file=$datadir/$region/$bucket/consistent_snapshot.index
 --let $grep_pattern=innodb_archive.*
 --let $grep_output= boolean

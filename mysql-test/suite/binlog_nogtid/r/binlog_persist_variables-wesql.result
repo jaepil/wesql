@@ -24,7 +24,7 @@ VARIABLE_NAME LIKE '%slave%' OR
 VARIABLE_NAME LIKE '%source%') AND
 VARIABLE_NAME NOT LIKE 'binlog_archive%' AND
 VARIABLE_NAME NOT LIKE 'consensus_replication%' AND
-VARIABLE_NAME NOT LIKE '%objstore%' AND
+VARIABLE_NAME NOT LIKE '%objectstore%' AND
 VARIABLE_NAME NOT LIKE 'consistent-snapshot%' AND
 (VARIABLE_NAME NOT IN ('innodb_api_enable_binlog',
 'innodb_master_thread_disabled_debug', 'innodb_replication_delay'))

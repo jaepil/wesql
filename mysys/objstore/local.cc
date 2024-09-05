@@ -168,8 +168,8 @@ Status LocalObjectStore::get_object(const std::string_view &bucket,
   }
 
   std::string key_path = generate_path(bucket, key);
-  std::ifstream input_file(key_path, std::ios::binary);
-  if (!input_file) {
+  std::ifstream input_file(key_path, std::ios::in | std::ios::binary);
+  if (!input_file.is_open()) {
     std::error_code errcode(errno, std::generic_category());
     Errors error_code = std_err_code_to_objstore_error(errcode);
     return Status(error_code, errcode.value(), "Couldn't open file");
@@ -195,8 +195,8 @@ Status LocalObjectStore::get_object(const std::string_view &bucket,
   }
 
   std::string key_path = generate_path(bucket, key);
-  std::ifstream input_file(key_path, std::ios::binary);
-  if (!input_file) {
+  std::ifstream input_file(key_path, std::ios::in | std::ios::binary);
+  if (!input_file.is_open()) {
     std::error_code errcode(errno, std::generic_category());
     Errors error_code = std_err_code_to_objstore_error(errcode);
     return Status(error_code, errcode.value(), "Couldn't open file"); 
