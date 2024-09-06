@@ -327,6 +327,7 @@ Binlog_archive::Binlog_archive()
   m_binlog_archive_last_index_number = 0;
   m_event_checksum_alg = binary_log::BINLOG_CHECKSUM_ALG_OFF;
   m_mysql_binlog_previouse_consensus_index = 0;
+  m_slice_create_ts = 0;
   m_binlog_previouse_consensus_index = 0;
   m_binlog_archive_last_event_end_pos = 0;
   m_binlog_in_transaction = false;
@@ -1286,11 +1287,14 @@ int Binlog_archive::archive_event(File_reader &reader, uchar *event_ptr,
 #endif
         type == binary_log::ANONYMOUS_GTID_LOG_EVENT) &&
       !(type == binary_log::USER_VAR_EVENT ||
-        type == binary_log::INTVAR_EVENT || type == binary_log::RAND_EVENT) &&
-      m_slice_bytes_written >= opt_binlog_archive_slice_max_size) {
-    if (rotate_binlog_slice(m_mysql_binlog_write_last_event_end_pos, false)) {
-      error = 1;
-      goto end_rotate;
+        type == binary_log::INTVAR_EVENT || type == binary_log::RAND_EVENT)) {
+    time_t now = time(nullptr);
+    if ((m_slice_bytes_written >= opt_binlog_archive_slice_max_size) ||
+        ((ulonglong)(now - m_slice_create_ts) >= opt_binlog_archive_interval)) {
+      if (rotate_binlog_slice(m_mysql_binlog_write_last_event_end_pos, false)) {
+        error = 1;
+        goto end_rotate;
+      }
     }
   }
   if (m_slice_pipeline_head) {
@@ -1455,6 +1459,11 @@ int Binlog_archive::stop_waiting_for_mysql_binlog_update(my_off_t log_pos) {
   if (consensus_leader_is_changed()) {
     return -1;
   }
+
+  if (DBUG_EVALUATE_IF("force_suspend_binlog_persist_while_wait_for_mysql_binlog", true, false)) {
+    return 1;
+  }
+
   if (mysql_bin_log.get_binlog_end_pos() > log_pos ||
       !mysql_bin_log.is_active(m_mysql_linfo.log_file_name) || m_thd->killed) {
     return 0;
@@ -1481,6 +1490,18 @@ int Binlog_archive::wait_new_mysql_binlog_events(my_off_t log_pos) {
   while ((ret = stop_waiting_for_mysql_binlog_update(log_pos)) == 1) {
     std::chrono::nanoseconds timeout = std::chrono::nanoseconds{1000000ULL};
     mysql_bin_log.wait_for_update(timeout);
+    time_t now = time(nullptr);
+    if ((ulonglong)(now - m_slice_create_ts) >= opt_binlog_archive_interval) {
+      mysql_bin_log.unlock_binlog_end_pos();
+      m_thd->EXIT_COND(nullptr);
+
+      rotate_binlog_slice(0, true);
+
+      mysql_bin_log.lock_binlog_end_pos();
+      m_thd->ENTER_COND(mysql_bin_log.get_log_cond(),
+                        mysql_bin_log.get_binlog_end_pos_lock(), nullptr,
+                        nullptr);
+    }
   }
   mysql_bin_log.unlock_binlog_end_pos();
   m_thd->EXIT_COND(nullptr);
@@ -1567,6 +1588,7 @@ int Binlog_archive::new_binlog_slice(bool new_binlog, const char *log_file,
   }
   assert(m_slice_pipeline_head == nullptr);
   m_slice_pipeline_head = std::move(file_ostream);
+  m_slice_create_ts = time(nullptr);
   LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
 end:
@@ -1596,8 +1618,11 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
 
   // msyql binlog log_pos already archived.
   if (log_pos > 0 && m_mysql_binlog_last_event_end_pos >= log_pos) {
-    err_msg.append(", had persisted.");
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    goto end;
+  }
+
+  if (m_mysql_binlog_last_event_end_pos ==
+      m_mysql_binlog_write_last_event_end_pos) {
     goto end;
   }
 
@@ -1608,12 +1633,6 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
     goto end;
   }
 
-  if (m_mysql_binlog_last_event_end_pos ==
-      m_mysql_binlog_write_last_event_end_pos) {
-    err_msg.append(", had persisted.");
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
-    goto end;
-  }
   err_msg.append(" begin");
   LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 

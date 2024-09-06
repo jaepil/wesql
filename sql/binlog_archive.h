@@ -196,6 +196,7 @@ class Binlog_archive {
   String m_packet;
   bool m_binlog_in_transaction;
   uint64 m_binlog_archive_start_consensus_index;
+  time_t m_slice_create_ts;
   int new_binlog_slice(bool new_binlog, const char *log_file, my_off_t log_pos,
                        uint64_t previous_consensus_index);
   int archive_init();

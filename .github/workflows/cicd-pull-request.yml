@@ -54,21 +54,6 @@ jobs:
           cd bu
           make -j$(echo "$(nproc)") && make install
 
-      - name: run mtr on normal file
-        run: |
-          cd bu
-          cd mysql-test
-          ./mysql-test-run.pl --suite=consensus_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
-          ./mysql-test-run.pl --suite=smartengine --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
-
-      - name: view logs of mtr on normal file
-        if: ${{ failure() }}
-        run: |
-          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
-              echo "logfile:"$logfile
-              cat $logfile
-          done
-
       - name: run mtr on serverless
         run: |
           cd bu
@@ -80,6 +65,21 @@ jobs:
               --initialize="--serverless=true" --initialize="--objstore_provider=local" --initialize="--plugin-load-add=mysql_clone.so" --skip-test-list=collections/disabled-smartengine-serverless.def
 
       - name: view logs of mtr serverless
+        if: ${{ failure() }}
+        run: |
+          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
+              echo "logfile:"$logfile
+              cat $logfile
+          done
+
+      - name: run mtr on normal file
+        run: |
+          cd bu
+          cd mysql-test
+          ./mysql-test-run.pl --suite=consensus_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
+          ./mysql-test-run.pl --suite=smartengine --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
+
+      - name: view logs of mtr on normal file
         if: ${{ failure() }}
         run: |
           for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do

@@ -6,7 +6,10 @@
 --let $MYSQLD_DATADIR=`select @@datadir`
 --let $region = `select @@objstore_region`
 
-# Recovery test using consistent snapshot with no binlog
+--echo # Wait persistent binlog finish. 
+let $wait_condition= SELECT count(distinct Log_name) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
 
 --echo # Wait for first snapshots to be generated after startup 
 let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
@@ -17,11 +20,11 @@ FLUSH logs;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 2 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT Log_slice_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 
 --echo # Crash
 set debug = 'd, crash_commit_before_log';
@@ -39,8 +42,8 @@ create table t1(id int);
 --force-cpdir $BACKUP_DATADIR $MYSQLD_DATADIR/$region
 --force-rmdir $BACKUP_DATADIR
 
-# Recovery start using consistent snapshot with no binlog
---echo # Recovery start using consistent snapshot with no binlog
+# Recovery start using consistent snapshot with consensus_index = 0
+--echo # Recovery start using consistent snapshot with consensus_index = 0
 --let $_expect_file_name = $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --let $restart_parameters = "restart: "
 --source include/start_mysqld.inc
@@ -54,17 +57,13 @@ let $wait_condition= SELECT count(*) = 2 FROM INFORMATION_SCHEMA.CONSISTENT_PERS
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
---let $assert_text= the first consistent snapshot binlog is empty.
---let $assert_cond= COUNT(*) = 1 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX WHERE consensus_index = 0
---source include/assert.inc
-
 --source include/show_binary_logs.inc
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(*) >= 2 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 3 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT Log_slice_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
@@ -94,15 +93,18 @@ SELECT count(*) FROM t1;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(*) >= 6 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 8 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT Log_slice_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 
-# shutdown server and rmdir datadir
---echo # Shutdown server
---source include/shutdown_mysqld.inc
+--echo # Crash
+set debug = 'd, crash_commit_before_log';
+--exec echo "wait" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--error 2013
+INSERT INTO t1 values(100,'abcd');
+--source include/wait_until_disconnected.inc
 
 --echo # Force rmdir datadir for recovery test
 --let $BACKUP_DATADIR = $MYSQL_TMP_DIR/$region
@@ -114,7 +116,8 @@ SELECT Log_slice_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 --force-rmdir $BACKUP_DATADIR
 
 # Recovery test using consistent snapshot, and change --log-bin
---echo # Recovery start using consistent snapshot, and change --log-bin
+--echo # Recovery start using consistent snapshot, and change --log-bin=custom-binlog
+--let $_expect_file_name = $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --let $restart_parameters=restart: --log-bin=$MYSQL_TMP_DIR/custom-binlog --log-bin-index=$MYSQL_TMP_DIR/custom-binlog-index.index
 --replace_result $restart_parameters restart
 --source include/start_mysqld.inc
@@ -124,7 +127,7 @@ let $wait_timeout= 600;
 --source include/wait_condition.inc
 
 --echo # Wait for snapshots to be generated after startup recovery
-let $wait_condition= SELECT count(*) = 4 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) = 3 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -133,15 +136,18 @@ SELECT count(*) FROM t1;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(*) >= 9 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 9 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT Log_slice_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 
-# shutdown server and rmdir datadir
---echo # Shutdown server
---source include/shutdown_mysqld.inc
+--echo # Crash
+set debug = 'd, crash_commit_before_log';
+--exec echo "wait" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--error 2013
+INSERT INTO t1 values(100,'abcd');
+--source include/wait_until_disconnected.inc
 
 --echo # Force rmdir datadir for recovery test
 --let $BACKUP_DATADIR = $MYSQL_TMP_DIR/$region
@@ -152,12 +158,19 @@ SELECT Log_slice_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 --force-cpdir $BACKUP_DATADIR $MYSQLD_DATADIR/$region
 --force-rmdir $BACKUP_DATADIR
 --remove_file $MYSQL_TMP_DIR/custom-binlog-index.index
+--remove_file $MYSQL_TMP_DIR/custom-binlog.000001
+--remove_file $MYSQL_TMP_DIR/custom-binlog.000002
+--remove_file $MYSQL_TMP_DIR/custom-binlog.000003
+--remove_file $MYSQL_TMP_DIR/custom-binlog.000004
+--remove_file $MYSQL_TMP_DIR/custom-binlog.000005
 --remove_file $MYSQL_TMP_DIR/custom-binlog.000006
 --remove_file $MYSQL_TMP_DIR/custom-binlog.000007
 --remove_file $MYSQL_TMP_DIR/custom-binlog.000008
+--remove_file $MYSQL_TMP_DIR/custom-binlog.000009
 
 # Recovery start using consistent snapshot, change back to log-bin=master-bin
 --echo # Recovery start using consistent snapshot
+--let $_expect_file_name = $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
 --let $restart_parameters=restart
 --source include/start_mysqld.inc
 
@@ -166,7 +179,7 @@ let $wait_timeout= 600;
 --source include/wait_condition.inc
 
 --echo # Wait for snapshots to be generated after startup recovery 
-let $wait_condition= SELECT count(*) = 5 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) = 4 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -175,11 +188,11 @@ SELECT count(*) FROM t1;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(*) >= 10 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 10 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT Log_slice_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 
 DROP TABLE t1;
 DROP DATABASE db1;

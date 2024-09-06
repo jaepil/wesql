@@ -3,6 +3,16 @@
 #
 --echo # Binlog persist to object store
 
+--echo # Wait for first binlog persistent after startup 
+let $wait_condition= SELECT count(distinct Log_name) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
+
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+--disable_warnings
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+--enable_warnings
+
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1,'abcd');

@@ -1,4 +1,11 @@
 # Binlog persist to object store
+# Wait for first binlog persistent after startup 
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+Log_name
+binlog.000001
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+Log_slice_key
+binlog/binlog.000001.00000000000000000002.0000000559
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1,'abcd');
@@ -47,7 +54,7 @@ binlog.000004
 binlog.000005
 SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
 Log_slice_key
-binlog/binlog.000001.00000000000000000002.0000004448
+binlog/binlog.000001.00000000000000000002.0000000559
 binlog/binlog.000001.00000000000000000002.0000004492
 binlog/binlog.000002.00000000000000000002.0000000639
 binlog/binlog.000003.00000000000000000002.0000000295

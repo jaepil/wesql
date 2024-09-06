@@ -17,7 +17,7 @@ FLUSH logs;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish on mysqld.1 as leader after flush 3 logs.
-let $wait_condition= SELECT count(distinct Log_name) >= 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) >= 4 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -45,6 +45,17 @@ INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;
 FLUSH logs;
+--source include/show_binary_logs.inc
+
+--echo # Wait persistent binlog finish on mysqld.1 as leader after flush 5 logs.
+let $wait_condition= SELECT count(distinct Log_name) >= 9 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
+
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+
+--echo # force suspend binlog persistent
+set global debug= '+d, force_suspend_binlog_persist_while_wait_for_mysql_binlog';
 
 INSERT INTO t1 values(1,'abcd');
 INSERT INTO t1 values(2,'abcd');
@@ -56,15 +67,6 @@ INSERT INTO t1 values(3,'abcd');
 INSERT INTO t1 values(4,'abcd');
 
 SELECT count(*) FROM t1;
-
---source include/show_binary_logs.inc
-
---echo # Wait persistent binlog finish on mysqld.1 as leader after multi insert.
-let $wait_condition= SELECT count(distinct Log_name) >= 8 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
-let $wait_timeout= 600;
---source include/wait_condition_or_abort.inc
-
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 
 --echo # Kill mysqld.1
 --source include/kill_mysqld.inc
@@ -85,7 +87,7 @@ let $wait_timeout= 600;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish on mysqld2 as new leader.
-let $wait_condition= SELECT count(distinct Log_name) >= 8 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) >= 9 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -97,7 +99,7 @@ FLUSH logs;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish on mysqld.2 as new leader after flush 3 logs.
-let $wait_condition= SELECT count(distinct Log_name) >= 10 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) >= 12 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -128,7 +130,7 @@ let $wait_timeout= 600;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish on mysqld.1 as new leader.
-let $wait_condition= SELECT count(distinct Log_name) >= 10 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) >= 12 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
@@ -141,8 +143,8 @@ FLUSH logs;
 
 --source include/show_binary_logs.inc
 
---echo # Wait persistent binlog finish on mysqld.1 as new after flush 1 logs.
-let $wait_condition= SELECT count(distinct Log_name) >= 10 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+--echo # Wait persistent binlog finish on mysqld.1 as new leader after flush 2 logs.
+let $wait_condition= SELECT count(distinct Log_name) >= 14 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
