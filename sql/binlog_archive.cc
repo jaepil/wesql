@@ -153,7 +153,7 @@ int start_binlog_archive() {
     return 1;
   }
 
-  if (!opt_persistent_on_objstore) {
+  if (!opt_consistent_snapshot_persistent_on_objstore) {
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, "must set objectstore");
     return 1;
   }
@@ -1626,9 +1626,9 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
     // No longer check whether the current node's role has changed; even if a
     // change occurs, the slice will still be persisted to S3. Since the current
     // version of the binlog is being used, it won't affect other term versions.
-    // However, this might result in some unnecessary data. 
-    /* 
-    // Check whether consensus role is leader 
+    // However, this might result in some unnecessary data.
+    /*
+    // Check whether consensus role is leader
     if (consensus_leader_is_changed()) {
       error = 1;
       goto end;
@@ -2941,12 +2941,12 @@ err:
           std::string log_name = object.key.substr(0, second_dot);
           if (compare_log_name(dirty_end_binlog.c_str(), log_name.c_str()) >
               0) {
+            err_msg.assign("delete garbage binlog from object store: ");
+            err_msg.append(object.key);
+            LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
             objstore::Status ss = binlog_objstore->delete_object(
                 std::string_view(opt_objstore_bucket), object.key);
             if (!ss.is_succ()) {
-              err_msg.assign(
-                  "Delete garbage binlog from object store failed: ");
-              err_msg.append(object.key);
               err_msg.append(" error=");
               err_msg.append(ss.error_message());
               LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
@@ -3006,13 +3006,13 @@ err:
               object.key.substr(first_dot + 1, second_dot);
           uint64_t consensus_term = std::stoull(consensus_term_str);
           if (dirty_end_binlog_consensus_term > consensus_term) {
+            err_msg.assign(
+                "delete garbage binlog-index.index from object store: ");
+            err_msg.append(object.key);
+            LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
             objstore::Status ss = binlog_objstore->delete_object(
                 std::string_view(opt_objstore_bucket), object.key);
             if (!ss.is_succ()) {
-              err_msg.assign(
-                  "Delete garbage binlog-index.index from object store "
-                  "failed: ");
-              err_msg.append(object.key);
               err_msg.append(" error=");
               err_msg.append(ss.error_message());
               LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
@@ -3177,7 +3177,7 @@ int Binlog_archive::purge_index_entry() {
           std::string_view(opt_objstore_bucket), binlog_keyid);
       if (!ss.is_succ()) {
         std::string err_msg;
-        err_msg.assign("Failed to delete binlog slice from object store: ");
+        err_msg.assign("delete binlog slice from object store: ");
         err_msg.append(binlog_keyid);
         err_msg.append(" error=");
         err_msg.append(ss.error_message());

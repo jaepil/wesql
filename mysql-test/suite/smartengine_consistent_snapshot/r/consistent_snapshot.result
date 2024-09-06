@@ -22,11 +22,11 @@ Pattern found.
 # Check for contain se_archive consistent_snapshot.index
 Pattern found.
 # Select mysql innodb persistent views
-include/assert.inc [1st mysql innodb archive file should be innodb_archive_000001.]
+include/assert.inc [1st mysql innodb archive file should be innodb_archive_000001]
 include/assert.inc [mysql pesistent innodb archive file exist.]
 # Select smartengine persistent views
-include/assert.inc [1st smartengine archive file should be se_archive_000001.]
-include/assert.inc [smartengine pesistent archive file exist.]
+include/assert.inc [1st smartengine archive file should be se_archive_000001]
+include/assert.inc [smartengine pesistent archive file exist]
 include/assert.inc [smartengine backup exist.]
 INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;

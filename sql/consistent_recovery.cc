@@ -71,11 +71,11 @@ Consistent_recovery::Consistent_recovery()
   m_mysql_archive_recovery_data_dir[0] = '\0';
   m_mysql_archive_recovery_binlog_dir[0] = '\0';
   m_mysql_innodb_clone_dir[0] = '\0';
-  m_mysql_clone_name[0] = '\0';
+  m_mysql_clone_keyid[0] = '\0';
   m_mysql_clone_index_file_name[0] = '\0';
   m_se_backup_index_file_name[0] = '\0';
   m_se_snapshot_dir[0] = '\0';
-  m_se_backup_name[0] = '\0';
+  m_se_backup_keyid[0] = '\0';
   m_mysql_binlog_index_file_name[0] = '\0';
   m_consistent_snapshot_local_time[0] = '\0';
 }
@@ -396,9 +396,9 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
 
     strncpy(m_consistent_snapshot_local_time, ts.c_str(),
             sizeof(m_consistent_snapshot_local_time) - 1);
-    strncpy(m_mysql_clone_name, innodb_name.c_str(),
-            sizeof(m_mysql_clone_name) - 1);
-    strncpy(m_se_backup_name, se_name.c_str(), sizeof(m_se_backup_name) - 1);
+    strncpy(m_mysql_clone_keyid, innodb_name.c_str(),
+            sizeof(m_mysql_clone_keyid) - 1);
+    strncpy(m_se_backup_keyid, se_name.c_str(), sizeof(m_se_backup_keyid) - 1);
     strncpy(m_binlog_start_file, binlog_name.c_str(),
             sizeof(m_binlog_start_file) - 1);
     m_mysql_binlog_pos = std::stoull(binlog_pos);
@@ -424,9 +424,9 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
   err_msg.assign("Recovery consistent snapshot: ");
   err_msg.append(m_consistent_snapshot_local_time);
   err_msg.append(" ");
-  err_msg.append(m_mysql_clone_name);
+  err_msg.append(m_mysql_clone_keyid);
   err_msg.append(" ");
-  err_msg.append(m_se_backup_name);
+  err_msg.append(m_se_backup_keyid);
   err_msg.append(" ");
   err_msg.append(m_binlog_start_file);
   err_msg.append(" ");
@@ -443,205 +443,159 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
 }
 
 /**
- * @brief Read m_mysql_clone_name to temp archive dir from object store.
+ * @brief Read m_mysql_clone_keyid to temp archive dir from object store.
  *        Then cp archived mysql innodb file to mysql data dir.
  *
  * @return true
  * @return false
  */
 bool Consistent_recovery::recovery_mysql_innodb() {
+  std::string err_msg;
   // no recovery
   if (m_state == CONSISTENT_RECOVERY_STATE_NONE ||
       m_state == CONSISTENT_RECOVERY_STATE_END)
     return false;
-  {
-    std::string err_msg;
-    err_msg.assign("Recovery mysql innodb ");
-    err_msg.append(m_mysql_clone_name);
-    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-  }
+
+  err_msg.assign("recover persistent innodb ");
+  err_msg.append(m_mysql_clone_keyid);
+  err_msg.append(" to mysql datadir ");
+  err_msg.append(mysql_real_data_home);
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+
   std::string mysql_clone_file_name;
-  std::string mysql_clone_keyid;
+  std::string mysql_clone_basename;
   mysql_clone_file_name.assign(m_mysql_archive_recovery_data_dir);
-  mysql_clone_file_name.append(m_mysql_clone_name);
-  mysql_clone_keyid.assign(m_mysql_clone_name);
-  if (opt_consistent_snapshot_compression) {
-    mysql_clone_file_name.append(CONSISTENT_TAR_GZ_SUFFIX);
-    mysql_clone_keyid.append(CONSISTENT_TAR_GZ_SUFFIX);
-  } else {
-    mysql_clone_file_name.append(CONSISTENT_TAR_SUFFIX);
-    mysql_clone_keyid.append(CONSISTENT_TAR_SUFFIX);
-  }
-  // delete the local expired data if it exists.
-  remove_file(mysql_clone_file_name);
-  // download m_mysql_clone_name from object store
-  objstore::Status ss = recovery_objstore->get_object_to_file(
-      std::string_view(m_objstore_bucket), mysql_clone_keyid,
-      mysql_clone_file_name);
-  if (!ss.is_succ()) {
-    std::string err_msg;
-    err_msg.assign("Failed to download mysql innodb clone file: ");
+  mysql_clone_file_name.append(m_mysql_clone_keyid);
+  mysql_clone_basename.assign(m_mysql_clone_keyid);
+  size_t idx = mysql_clone_basename.find(".");
+  // Check if with ".tar" or ".tar.gz" extension.
+  if (idx == std::string::npos) {
+    mysql_clone_basename.assign(m_mysql_clone_keyid);
+    // Directly recover to mysql data directory.
+    err_msg.assign("download mysql innodb clone dir: ");
     err_msg.append(" key=");
-    err_msg.append(mysql_clone_keyid);
+    err_msg.append(m_mysql_clone_keyid);
+    err_msg.append(" mysql datadir=");
+    err_msg.append(mysql_real_data_home);
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    objstore::Status ss = recovery_objstore->get_objects_to_dir(
+        std::string_view(m_objstore_bucket), m_mysql_clone_keyid,
+        mysql_real_data_home);
+    if (!ss.is_succ()) {
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+  } else {
+    std::string clone_name_ext = mysql_clone_basename.substr(idx);
+    mysql_clone_basename = mysql_clone_basename.substr(0, idx);
+    // delete the local clone data if it exists.
+    remove_file(mysql_clone_file_name);
+    // download m_mysql_clone_keyid from object store
+    err_msg.assign("download mysql innodb clone file: ");
+    err_msg.append(" key=");
+    err_msg.append(m_mysql_clone_keyid);
     err_msg.append(" file=");
     err_msg.append(mysql_clone_file_name);
-    err_msg.append(" error=");
-    err_msg.append(ss.error_message());
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    return true;
-  }
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    objstore::Status ss = recovery_objstore->get_object_to_file(
+        std::string_view(m_objstore_bucket), m_mysql_clone_keyid,
+        mysql_clone_file_name);
+    if (!ss.is_succ()) {
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
 
-  if (my_chmod(mysql_clone_file_name.c_str(),
-               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
-                   OTHERS_WRITE | OTHERS_READ,
-               MYF(MY_WME))) {
-    std::string err_msg;
-    err_msg.assign("Failed to chmod: ");
-    err_msg.append(mysql_clone_file_name);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    // remove_file(mysql_clone_file_name);
-    return true;
-  }
+    if (my_chmod(mysql_clone_file_name.c_str(),
+                 USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
+                     OTHERS_WRITE | OTHERS_READ,
+                 MYF(MY_WME))) {
+      err_msg.assign("chmod failed: ");
+      err_msg.append(mysql_clone_file_name);
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      // remove_file(mysql_clone_file_name);
+      return true;
+    }
 
-  // tar -xvzf /u01/mysql_archive/clone000034.tar
-  std::stringstream cmd;
-  std::string clone_untar_name;
-  clone_untar_name.assign(m_mysql_archive_recovery_data_dir);
-  clone_untar_name.append(m_mysql_clone_name);
-  // Delete local expired data if it exists.
-  remove_file(clone_untar_name);
-  if (opt_consistent_snapshot_compression) {
-    cmd << "tar -xzf " << mysql_clone_file_name.c_str() << " -C "
-        << m_mysql_archive_recovery_data_dir;
-  } else {
-    cmd << "tar -xf " << mysql_clone_file_name.c_str() << " -C "
-        << m_mysql_archive_recovery_data_dir;
-  }
-  if (system(cmd.str().c_str())) {
-    std::string err_msg;
-    err_msg.assign("Failed to untar mysql innodb clone file: ");
-    err_msg.append(mysql_clone_file_name);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    // mysql_archive/clone000034.tar
-    remove_file(mysql_clone_file_name);
-    return true;
-  }
+    // tar -xvzf /u01/mysql_archive/clone000034.tar
+    std::stringstream cmd;
+    std::string clone_untar_name;
+    int err = 0;
+    clone_untar_name.assign(m_mysql_archive_recovery_data_dir);
+    clone_untar_name.append(mysql_clone_basename);
+    // Delete local expired clone data dir if it exists.
+    remove_file(clone_untar_name);
+    if (strcmp(clone_name_ext.c_str(), CONSISTENT_TAR_GZ_SUFFIX) == 0) {
+      cmd << "tar -xzf " << mysql_clone_file_name.c_str() << " -C "
+          << m_mysql_archive_recovery_data_dir;
+    } else {
+      assert(strcmp(clone_name_ext.c_str(), CONSISTENT_TAR_SUFFIX) == 0);
+      cmd << "tar -xf " << mysql_clone_file_name.c_str() << " -C "
+          << m_mysql_archive_recovery_data_dir;
+    }
+    err_msg.assign("untar mysql innodb clone file: ");
+    err_msg.append(cmd.str());
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    if ((err = system(cmd.str().c_str())) != 0) {
+      err_msg.append(" error=");
+      err_msg.append(std::to_string(err));
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      // mysql_archive/clone000034.tar
+      remove_file(mysql_clone_file_name);
+      return true;
+    }
 
-  // cp -r /u01/mysql_archive/clone000034 mysql_real_data_home
-  // scan the clone dir and copy the files and sub dir to mysql data dir
-  if (copy_directory(clone_untar_name, mysql_real_data_home)) {
-    std::string err_msg;
-    err_msg.assign("Failed to copy mysql innodb file: ");
+    // cp -r /u01/mysql_archive/clone000034 mysql_real_data_home
+    // scan the clone dir and copy the files and sub dir to mysql data dir
+    err_msg.assign("copy mysql innodb clone file: ");
     err_msg.append(clone_untar_name);
-    err_msg.append(" to ");
+    err_msg.append(" to mysql datadir ");
     err_msg.append(mysql_real_data_home);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    if (copy_directory(clone_untar_name, mysql_real_data_home)) {
+      err_msg.append(" failed");
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      // remove mysql_archive/clone000034
+      remove_file(clone_untar_name);
+      // mysql_archive/clone000034.tar
+      remove_file(mysql_clone_file_name);
+      return true;
+    }
+
     // remove mysql_archive/clone000034
     remove_file(clone_untar_name);
     // mysql_archive/clone000034.tar
     remove_file(mysql_clone_file_name);
-    return true;
   }
-
-  // remove mysql_archive/clone000034
-  remove_file(clone_untar_name);
-  // mysql_archive/clone000034.tar
-  remove_file(mysql_clone_file_name);
   m_state = CONSISTENT_RECOVERY_STATE_MYSQL_INNODB;
 
   return false;
 }
 
-// read m_se_backup_name to temp archive dir from object store.
+// read m_se_backup_keyid to temp archive dir from object store.
 // smartengine plugin is loaded.
 bool Consistent_recovery::recovery_smartengine() {
+  DBUG_TRACE;
+  DBUG_PRINT("info", ("recovery_smartengine"));
+  std::string smartengine_real_data_home;
+  std::string err_msg;
   // no recovery process
   if (m_state == CONSISTENT_RECOVERY_STATE_NONE ||
       m_state == CONSISTENT_RECOVERY_STATE_END)
     return false;
 
   /* Check if the smartengine plugin is loaded. */
-  LEX_CSTRING engine_name = {STRING_WITH_LEN("smartengine")};
-  plugin_ref tmp_plugin = ha_resolve_by_name_raw(nullptr, engine_name);
+  plugin_ref tmp_plugin = ha_resolve_by_name_raw(
+      nullptr, LEX_CSTRING{STRING_WITH_LEN("smartengine")});
   if (tmp_plugin == nullptr) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
            "smartengine plugin is not loaded");
     return true;
   }
   plugin_unlock(nullptr, tmp_plugin);
-
-  {
-    std::string err_msg;
-    err_msg.assign("Recovery smartengine ");
-    err_msg.append(m_se_backup_name);
-    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-  }
-
-  std::string se_file_name;
-  std::string se_backup_keyid;
-  se_file_name.assign(m_mysql_archive_recovery_data_dir);
-  se_file_name.append(m_se_backup_name);
-  se_backup_keyid.assign(m_se_backup_name);
-  if (opt_consistent_snapshot_compression) {
-    se_file_name.append(CONSISTENT_TAR_GZ_SUFFIX);
-    se_backup_keyid.append(CONSISTENT_TAR_GZ_SUFFIX);
-  } else {
-    se_file_name.append(CONSISTENT_TAR_SUFFIX);
-    se_backup_keyid.append(CONSISTENT_TAR_SUFFIX);
-  }
-  // delete the local expired data if it exists.
-  remove_file(se_file_name);
-  // download m_se_backup_name from object store
-  objstore::Status ss = recovery_objstore->get_object_to_file(
-      std::string_view(m_objstore_bucket), se_backup_keyid, se_file_name);
-  if (!ss.is_succ()) {
-    std::string err_msg;
-    err_msg.assign("Failed to download smartengine backup file: ");
-    err_msg.append(" key=");
-    err_msg.append(se_backup_keyid);
-    err_msg.append(" file=");
-    err_msg.append(se_file_name);
-    err_msg.append(" error=");
-    err_msg.append(ss.error_message());
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    return true;
-  }
-
-  if (my_chmod(se_file_name.c_str(),
-               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
-                   OTHERS_WRITE | OTHERS_READ,
-               MYF(MY_WME))) {
-    std::string err_msg;
-    err_msg.assign("Failed to chmod: ");
-    err_msg.append(se_file_name);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    // remove_file(mysql_clone_file_name);
-    return true;
-  }
-
-  // tar -xvzf /u01/mysql_archive/se_backup000034.tar
-  std::stringstream cmd;
-  std::string se_backup_untar_name;
-  se_backup_untar_name.assign(m_mysql_archive_recovery_data_dir);
-  se_backup_untar_name.append(m_se_backup_name);
-  // Delete local expired data if it exists.
-  remove_file(se_backup_untar_name);
-  if (opt_consistent_snapshot_compression) {
-    cmd << "tar -xzf " << se_file_name << " -C "
-        << m_mysql_archive_recovery_data_dir;
-  } else {
-    cmd << "tar -xf " << se_file_name << " -C "
-        << m_mysql_archive_recovery_data_dir;
-  }
-  if (system(cmd.str().c_str())) {
-    std::string err_msg;
-    err_msg.assign("Failed to untar smartengine backup file: ");
-    err_msg.append(se_file_name);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    // mysql_archive/se_backup000034.tar
-    remove_file(se_file_name);
-    return true;
-  }
 
   // Retrive smartengine option --smartengine-datadir
   String se_data_dir{};
@@ -673,30 +627,120 @@ bool Consistent_recovery::recovery_smartengine() {
     return true;
   }
   mysql_mutex_unlock(&LOCK_plugin);
-
-  std::string smartengine_real_data_home;
   smartengine_real_data_home.assign(se_data_dir.c_ptr());
-  // cp -r /u01/mysql_archive/se_backup000034 SMARTENGINE_DATADIR
-  // scan the se backup dir and copy the files and sub dir to smartengine data
-  // dir
-  if (copy_directory(se_backup_untar_name, smartengine_real_data_home)) {
-    std::string err_msg;
-    err_msg.assign("Failed to copy smartengine file: ");
-    err_msg.append(se_backup_untar_name);
-    err_msg.append(" to ");
+
+  err_msg.assign("recover persistent smartengine wals and meta ");
+  err_msg.append(m_se_backup_keyid);
+  err_msg.append("to smartengine datadir ");
+  err_msg.append(smartengine_real_data_home);
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+
+  std::string se_file_name;
+  std::string se_backup_basename;
+  se_file_name.assign(m_mysql_archive_recovery_data_dir);
+  se_file_name.append(m_se_backup_keyid);
+  se_backup_basename.assign(m_se_backup_keyid);
+  size_t idx = se_backup_basename.find(".");
+  if (idx == std::string::npos) {
+    se_backup_basename.assign(m_se_backup_keyid);
+    // Directly recover to mysql data directory.
+    err_msg.assign("download persistent smartengine dir: ");
+    err_msg.append(" key=");
+    err_msg.append(m_se_backup_keyid);
+    err_msg.append(" smartengine datadir=");
     err_msg.append(smartengine_real_data_home);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    objstore::Status ss = recovery_objstore->get_objects_to_dir(
+        std::string_view(m_objstore_bucket), m_se_backup_keyid,
+        smartengine_real_data_home);
+    if (!ss.is_succ()) {
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+  } else {
+    std::string backup_name_ext = se_backup_basename.substr(idx);
+    se_backup_basename = se_backup_basename.substr(0, idx);
+    // delete the local expired data if it exists.
+    remove_file(se_file_name);
+    // download m_se_backup_keyid from object store
+    err_msg.assign("download smartengine backup file: ");
+    err_msg.append(" key=");
+    err_msg.append(m_se_backup_keyid);
+    err_msg.append(" file=");
+    err_msg.append(se_file_name);
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    objstore::Status ss = recovery_objstore->get_object_to_file(
+        std::string_view(m_objstore_bucket), m_se_backup_keyid, se_file_name);
+    if (!ss.is_succ()) {
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+
+    if (my_chmod(se_file_name.c_str(),
+                 USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
+                     OTHERS_WRITE | OTHERS_READ,
+                 MYF(MY_WME))) {
+      err_msg.assign("chmod failed: ");
+      err_msg.append(se_file_name);
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      // remove_file(mysql_clone_file_name);
+      return true;
+    }
+
+    // tar -xvzf /u01/mysql_archive/se_backup000034.tar
+    int err = 0;
+    std::stringstream cmd;
+    std::string se_backup_untar_name;
+    se_backup_untar_name.assign(m_mysql_archive_recovery_data_dir);
+    se_backup_untar_name.append(se_backup_basename);
+    // Delete local expired data if it exists.
+    remove_file(se_backup_untar_name);
+    if (strcmp(backup_name_ext.c_str(), CONSISTENT_TAR_GZ_SUFFIX) == 0) {
+      cmd << "tar -xzf " << se_file_name << " -C "
+          << m_mysql_archive_recovery_data_dir;
+    } else {
+      assert(strcmp(backup_name_ext.c_str(), CONSISTENT_TAR_SUFFIX) == 0);
+      cmd << "tar -xf " << se_file_name << " -C "
+          << m_mysql_archive_recovery_data_dir;
+    }
+    err_msg.assign("untar mysql innodb clone file: ");
+    err_msg.append(cmd.str());
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    if ((err = system(cmd.str().c_str())) != 0) {
+      err_msg.append(" error=");
+      err_msg.append(std::to_string(err));
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      // mysql_archive/se_backup000034.tar
+      remove_file(se_file_name);
+      return true;
+    }
+    // cp -r /u01/mysql_archive/se_backup000034 SMARTENGINE_DATADIR
+    // scan the se backup dir and copy the files and sub dir to smartengine data
+    // dir
+    err_msg.assign("copy smartengine file: ");
+    err_msg.append(se_backup_untar_name);
+    err_msg.append(" to smartengine datadir ");
+    err_msg.append(smartengine_real_data_home);
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    if (copy_directory(se_backup_untar_name, smartengine_real_data_home)) {
+      err_msg.append(" failed");
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      // remove mysql_archive/se_backup000034
+      remove_file(se_backup_untar_name);
+      // mysql_archive/se_backup000034.tar
+      remove_file(se_file_name);
+      return true;
+    }
+
     // remove mysql_archive/se_backup000034
     remove_file(se_backup_untar_name);
     // mysql_archive/se_backup000034.tar
     remove_file(se_file_name);
-    return true;
   }
-
-  // remove mysql_archive/se_backup000034
-  remove_file(se_backup_untar_name);
-  // mysql_archive/se_backup000034.tar
-  remove_file(se_file_name);
   m_state = CONSISTENT_RECOVERY_STATE_SE;
   return false;
 }
@@ -1069,6 +1113,7 @@ static bool is_number(const char *str, ulonglong *res, bool allow_wildcards) {
 int Consistent_recovery::truncate_binlog_slice_from_objstore(
     const char *log_file_name_arg, my_off_t log_pos, bool &has_truncated) {
   std::string err_msg;
+  objstore::Status ss;
   std::vector<objstore::ObjectMeta> objects;
   std::string binlog_keyid{};
   binlog_keyid.assign(BINLOG_ARCHIVE_SUBDIR);
@@ -1079,17 +1124,24 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(
   bool finished = false;
   std::string start_after;
   // Find last binlog.000000n.slice
-  objstore::Status ss = recovery_objstore->list_object(
-      std::string_view(m_objstore_bucket), binlog_keyid, start_after, finished,
-      objects);
-  if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
-    err_msg.assign("Failed to binlog files: ");
-    err_msg.append(BINLOG_ARCHIVE_SUBDIR);
-    err_msg.append(" error=");
-    err_msg.append(ss.error_message());
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    return 1;
-  }
+  do {
+    std::vector<objstore::ObjectMeta> tmp_objects;
+    ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
+                                        binlog_keyid, start_after, finished,
+                                        tmp_objects);
+    // The binlog present in persistent binlog-index.index should also exist in
+    // object store.
+    if (!ss.is_succ()) {
+      err_msg.assign("list binlog slice from object store failed: ");
+      err_msg.append(binlog_keyid);
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return 1;
+    }
+    objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
+  } while (finished == false);
+
   my_off_t number = 0;
   my_off_t pre_slice_number = 0;
   bool truncate_slice_end = false;
@@ -1452,6 +1504,7 @@ static int compare_log_name(const char *log_1, const char *log_2) {
 int Consistent_recovery::truncate_binlogs_from_objstore(
     const char *log_file_name_arg, my_off_t log_pos) {
   DBUG_TRACE;
+  std::string err_msg;
   LOG_ARCHIVED_INFO log_info;
   IO_CACHE new_index_io_cache;
   IO_CACHE index_io_cache;
@@ -1463,7 +1516,7 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
   if (log_file_name_arg[0] == '\0') return 0;
 
   if (m_binlog_index_keyid[0] == '\0') return 0;
-  
+
   // Convert mysql binlog name to persistent binlog name.
   to_truncate_persistent_log_name =
       log_file_name_arg + dirname_length(log_file_name_arg);
@@ -1478,7 +1531,6 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
       std::string_view(m_objstore_bucket),
       std::string_view(m_binlog_index_keyid), index_file);
   if (!ss.is_succ()) {
-    std::string err_msg;
     err_msg.assign("download persistent binlog.index failed.");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     return 1;
@@ -1531,7 +1583,6 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
   // Delete persistent binlog after to_truncate_persistent_log_name
   while ((error = Binlog_archive::find_next_log_common(&index_io_cache,
                                                        &log_info)) == 0) {
-    std::string err_msg;
     // List all binlog slice.
     std::string binlog_keyid;
     std::vector<objstore::ObjectMeta> objects;
@@ -1542,18 +1593,22 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
 
     bool finished = false;
     std::string start_after;
-    ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
-                                        binlog_keyid, start_after, finished,
-                                        objects);
-    if (!ss.is_succ() && ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
-      err_msg.assign("list persistent binlog slice failed: ");
-      err_msg.append(BINLOG_ARCHIVE_SUBDIR);
-      err_msg.append(" error=");
-      err_msg.append(ss.error_message());
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-      error = 1;
-      goto err;
-    }
+    do {
+      std::vector<objstore::ObjectMeta> tmp_objects;
+      ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
+                                          binlog_keyid, start_after, finished,
+                                          objects);
+      if (!ss.is_succ() &&
+          ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
+        err_msg.assign("list persistent binlog slice failed: ");
+        err_msg.append(binlog_keyid);
+        err_msg.append(" error=");
+        err_msg.append(ss.error_message());
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+        error = 1;
+        goto err;
+      }
+    } while (finished == false);
 
     // Delete all binlog slice.
     for (const auto &object : objects) {
@@ -1588,7 +1643,6 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
         std::string_view(m_objstore_bucket),
         std::string_view(m_binlog_index_keyid), new_index_file_name);
     if (!ss.is_succ()) {
-      std::string err_msg;
       err_msg.assign(
           "refresh persistent binlog.index to object store failed: ");
       err_msg.append(m_binlog_index_keyid);

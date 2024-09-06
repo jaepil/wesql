@@ -43,18 +43,17 @@
 #define MYSQL_SE_WAL_FILE_SUFFIX_LEN 4
 #define MYSQL_SE_TMP_BACKUP_DIR "hotbackup_tmp"
 #define MYSQL_SE_TMP_BACKUP_DIR_LEN 13
+#define CONSISTENT_NO_TAR           0
+#define CONSISTENT_TAR              1
+#define CONSISTENT_TAR_COMPRESSION  2
 
 class THD;
 
-typedef struct Consistent_snapshot {
-  char m_consistent_snapshot_local_time[iso8601_size];
-  char mysql_clone_name[FN_REFLEN + 1];
-  char se_backup_name[FN_REFLEN + 1];
-  char binlog_name[FN_REFLEN + 1];
-  uint64_t binlog_pos;
-  uint64_t consensus_index;
-  uint64_t se_snapshot_id;
-} Consistent_snapshot;
+typedef enum Consistent_snapshot_tar_mode {
+  CONSISTENT_SNAPSHOT_NO_TAR = 0,
+  CONSISTENT_SNAPSHOT_TAR = 1,
+  CONSISTENT_SNAPSHOT_TAR_COMMPRESSION = 2
+} Consistent_snapshot_tar_mode;
 
 class Consistent_archive {
  public:
@@ -125,6 +124,8 @@ class Consistent_archive {
   char m_mysql_archive_data_dir[FN_REFLEN + 1];
   objstore::ObjectStore *snapshot_objstore;
   uint64_t m_consensus_term;
+  ulong m_innodb_tar_compression_mode;
+  ulong m_se_tar_compression_mode;
   bool archive_consistent_snapshot();
   int archive_consistent_snapshot_data();
   int archive_consistent_snapshot_binlog();
@@ -149,10 +150,12 @@ class Consistent_archive {
   // Archive mysql innodb
   int generate_innodb_new_name();
   bool achive_mysql_innodb();
+  int archive_innodb_data();
   void read_mysql_innodb_clone_status();
   mysql_mutex_t m_mysql_innodb_clone_index_lock;
   char m_mysql_innodb_clone_dir[FN_REFLEN + 1];
   char m_mysql_clone_name[FN_REFLEN + 1];
+  char m_mysql_clone_keyid[FN_REFLEN + 1];
   char m_mysql_clone_index_file_name[FN_REFLEN + 1];
   IO_CACHE m_mysql_clone_index_file;
   IO_CACHE m_crash_safe_mysql_clone_index_file;
@@ -162,7 +165,7 @@ class Consistent_archive {
   // Archive smartengine.
   int generate_se_new_name();
   bool archive_smartengine();
-  bool copy_smartengine_wals_and_metas();
+  bool archive_smartengine_wals_and_metas();
   bool release_se_snapshot(uint64_t backup_snapshot_id);
   uint64_t m_mysql_binlog_pos_previous_snapshot;
   uint64_t m_mysql_binlog_pos;
@@ -182,6 +185,7 @@ class Consistent_archive {
   uint64_t m_se_backup_next_index_number;
   char m_se_snapshot_dir[FN_REFLEN + 1];
   char m_se_backup_name[FN_REFLEN + 1];
+  char m_se_backup_keyid[FN_REFLEN + 1];
 
   // Archive consistent snapshot file
   bool write_consistent_snapshot_file();

@@ -115,7 +115,7 @@ class Consistent_recovery {
   char m_mysql_archive_recovery_binlog_dir[FN_REFLEN + 1];
   char m_mysql_innodb_clone_dir[FN_REFLEN + 1];
 
-  char m_mysql_clone_name[FN_REFLEN + 1];
+  char m_mysql_clone_keyid[FN_REFLEN + 1];
   char m_mysql_clone_index_file_name[FN_REFLEN + 1];
   IO_CACHE m_mysql_clone_index_file;
 
@@ -123,7 +123,7 @@ class Consistent_recovery {
   IO_CACHE m_se_backup_index_file;
   uint m_se_backup_index;
   char m_se_snapshot_dir[FN_REFLEN + 1];
-  char m_se_backup_name[FN_REFLEN + 1];
+  char m_se_backup_keyid[FN_REFLEN + 1];
   char m_mysql_binlog_index_file_name[FN_REFLEN + 1];
   char m_consistent_snapshot_local_time
       [iso8601_size];  // MAX_DATETIME_FULL_WIDTH
