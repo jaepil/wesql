@@ -19,6 +19,7 @@
 #include <vector>
 #include "monitoring/query_perf_context.h"
 #include "util/string_util.h"
+#include "schema/table_schema.h"
 
 namespace smartengine {
 using namespace smartengine::common;
@@ -299,6 +300,25 @@ Status SetIdentityFile(Env* env, const std::string& dbname) {
     env->DeleteFile(tmp);
   }
   return s;
+}
+
+std::string make_index_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema)
+{
+  std::string prefix = "/" + cluster_id +
+                       "/" + "smartengine" +
+                       "/" + "v1"
+                       "/" + table_schema.get_database_name() +
+                       "/" + std::to_string(table_schema.get_index_id()) +
+                       "/";
+
+  return prefix;
+}
+
+std::string make_data_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema)
+{
+  std::string prefix = make_index_prefix(cluster_id, table_schema) + "data" + "/";
+  
+  return prefix;
 }
 
 }  // namespace util

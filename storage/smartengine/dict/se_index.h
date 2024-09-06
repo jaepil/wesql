@@ -23,6 +23,7 @@
 #include "se_index_stats.h"
 #include "dd/types/index.h"
 #include "util/se_buff.h"
+#include "util/se_constants.h"
 
 class Field;
 
@@ -233,6 +234,7 @@ public:
   GL_INDEX_ID get_gl_index_id() const
   {
     const GL_INDEX_ID gl_index_id = {m_cf_handle->GetID(), m_index_number};
+    se_assert(m_cf_handle->GetID() == m_index_number);
     return gl_index_id;
   }
 
@@ -285,8 +287,14 @@ public:
            bool is_reverse_cf_arg,
            bool is_auto_cf_arg,
            const std::string &name,
-           SeIndexStats stats = SeIndexStats());
-
+           const SeIndexStats &stats);
+  SeKeyDef(uint indexnr_arg,
+           uint keyno_arg,
+           uint16_t index_dict_version_arg,
+           uchar index_type_arg,
+           uint16_t kv_format_version_arg,
+           const std::string &name,
+           const SeIndexStats &stats);
   ~SeKeyDef();
 
   enum {

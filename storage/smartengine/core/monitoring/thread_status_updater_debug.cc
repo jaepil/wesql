@@ -30,7 +30,6 @@ void ThreadStatusUpdater::TEST_VerifyColumnFamilyInfoMap(
     if (check_exist) {
       assert(iter != cf_info_map_.end());
       assert(iter->second);
-      assert(iter->second->cf_name == cfd->GetName());
     } else {
       assert(iter == cf_info_map_.end());
     }

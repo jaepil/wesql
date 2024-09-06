@@ -1406,6 +1406,7 @@ int DBImpl::schedule_flush(WriteContext *write_context)
   return ret;
 }
 
+// TODO (Zhao Dongsheng): Empty memtable needn't switch.
 int DBImpl::switch_memtable(ColumnFamilyData *sub_table, WriteContext *write_context, bool force_create_new_log)
 {
   mutex_.AssertHeld();

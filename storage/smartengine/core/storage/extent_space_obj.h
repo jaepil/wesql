@@ -37,10 +37,13 @@ class ObjectExtentSpace : public ExtentSpace {
   int remove() override;
 
   // extent relative function
-  int allocate(ExtentIOInfo &io_info) override;
-  int recycle(const ExtentId extent_id) override;
+  int allocate(const std::string prefix, ExtentIOInfo &io_info) override;
+  int recycle(const std::string prefix, const ExtentId extent_id) override;
   // mark the extent used, only used during recovery
-  int reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool& existed) override;
+  int reference_if_need(const std::string prefix,
+                        const ExtentId extent_id,
+                        ExtentIOInfo &io_info,
+                        bool& existed) override;
 
   // shrink relative function
   int get_shrink_info_if_need(const ShrinkCondition &shrink_condition,

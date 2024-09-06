@@ -42,10 +42,15 @@ public:
   int unregister_subtable(const int64_t index_id);
 
   //extent relatice function
-  int allocate(const int32_t extent_space_type, ExtentIOInfo &io_info);
-  int recycle(const int32_t extent_space_type, const ExtentId extent_id);
+  int allocate(const int32_t extent_space_type,
+               const std::string prefix,
+               ExtentIOInfo &io_info);
+  int recycle(const int32_t extent_space_type,
+              const std::string prefix,
+              const ExtentId extent_id);
   // mark the extent used if need, only used during recovery
   int reference_if_need(const int32_t extent_space_type,
+                        const std::string prefix,
                         const ExtentId extent_id,
                         ExtentIOInfo &io_info,
                         bool &existed);

@@ -48,6 +48,16 @@ namespace smartengine
 extern const char *const DEFAULT_CF_NAME;
 
 /*
+  This is the databae_name of smartengine system table
+*/
+extern const char * DEFAULT_SYSTEM_DATABASE_NAME;
+
+/*
+  This is the table_name of smartengine system table
+*/
+extern const char * DEFAULT_SYSTEM_TABLE_NAME;
+
+/*
   This is the name of the Column Family used for storing the data dictionary.
 */
 extern const char *const DEFAULT_SYSTEM_SUBTABLE_NAME;
@@ -141,7 +151,7 @@ struct SeDdHelper {
       std::set<uint32_t>& subtable_ids);
 };
 
-bool se_parse_column_format_from_comment(const char *str);
+extern bool is_smartengine_system_database(const char *database_name);
 
 } // namespace smartengine
 

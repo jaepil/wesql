@@ -280,10 +280,15 @@ public:
   int finalize_bulk_load();
 
 private:
+  // TODO(Zhao Dongsheng) : The structure key_def_cf_info is useless.
   struct key_def_cf_info {
     smartengine::db::ColumnFamilyHandle *cf_handle;
     bool is_reverse_cf;
     bool is_auto_cf;
+
+    key_def_cf_info() : cf_handle(nullptr),
+                        is_reverse_cf(false),
+                        is_auto_cf(false) {}
   };
 
   // used for both update and delete operations
@@ -369,28 +374,18 @@ private:
   std::map<std::string, prepare_inplace_key_stat> new_key_stats;
 
 private:
-  int create_key_defs(
-      const TABLE *const table_arg,
-      SeTableDef *tbl_def_arg,
-      const char *old_table_name = nullptr,
-      const TABLE *const old_table_arg = nullptr,
-      const SeTableDef *const old_tbl_def_arg = nullptr,
-      const bool need_rebuild = false) const;
-
-  int  create_cfs(const TABLE *const table_arg,
-                  SeTableDef *tbl_def_arg,
-                  std::array<key_def_cf_info, MAX_INDEXES + 1> *const cfs,
-                  std::array<uint32_t, MAX_INDEXES + 1> *const index_ids,
-                  const char *old_table_name = nullptr,
-                  const TABLE *const old_table_arg = nullptr,
-                  const SeTableDef *const old_tbl_def_arg = nullptr,
-                  const bool need_rebuild = false) const;
+  int create_key_defs(const TABLE *new_table,
+                      const TABLE *old_table,
+                      const dd::Table *dd_table,
+                      SeTableDef *new_table_def,
+                      const SeTableDef *old_table_def,
+                      LEX_CSTRING engine_attribute,
+                      bool need_rebuild);
 
   int create_key_def(const TABLE *const table_arg,
                      const uint &i,
                      const SeTableDef *const tbl_def_arg,
                      std::shared_ptr<SeKeyDef> *const new_key_def,
-                     const key_def_cf_info &cf_info,
                      const uint32_t index_id) const;
 
   int update_write_row(const uchar *const old_data,
@@ -664,7 +659,6 @@ private:
       SeTableDef *const vtbl_def_arg,
       const TABLE *const old_table_arg,
       const SeTableDef *const old_tbl_def_arg,
-      const std::array<key_def_cf_info, MAX_INDEXES + 1> &cfs,
       const std::array<uint32_t, MAX_INDEXES + 1> &index_ids) const;
 
   std::unordered_map<std::string, uint> get_old_key_positions(
@@ -954,8 +948,8 @@ private:
                               const dd::Table *old_dd_table,
                               dd::Table *new_dd_table);
 
-  void dd_commit_inplace_no_change(const dd::Table *old_dd_tab,
-                                   dd::Table *new_dd_tab);
+  void dd_commit_inplace_no_change(const dd::Table *old_dd_table,
+                                   dd::Table *new_dd_table);
 
   int dd_commit_inplace_instant(Alter_inplace_info *ha_alter_info,
                                 const TABLE *old_table,
@@ -967,15 +961,15 @@ private:
       TABLE *const altered_table,
       my_core::Alter_inplace_info *const ha_alter_info,
       bool commit,
-      const dd::Table *old_dd_tab,
-      dd::Table *new_dd_tab);
+      const dd::Table *old_dd_table,
+      dd::Table *new_dd_table);
 
   bool commit_inplace_alter_table_rebuild(
       TABLE *const altered_table,
       my_core::Alter_inplace_info *const ha_alter_info,
       bool commit,
-      const dd::Table *old_dd_tab,
-      dd::Table *new_dd_tab);
+      const dd::Table *old_dd_table,
+      dd::Table *new_dd_table);
 
   int commit_inplace_alter_table_common(my_core::TABLE *const altered_table,
                                         my_core::Alter_inplace_info *const ha_alters_info,
@@ -1065,6 +1059,7 @@ private:
 
   const smartengine::db::Snapshot *m_scan_it_snapshot;
 
+  // TODO(Zhao Dongsheng): use name m_table_def.
   std::shared_ptr<SeTableDef> m_tbl_def;
 
   /* instant ddl information used for decoding */

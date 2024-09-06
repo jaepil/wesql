@@ -281,7 +281,7 @@ void DBTestBase::CreateColumnFamilies(const std::vector<std::string>& cfs,
   for (auto cf : cfs) {
     uint32_t cfi = get_next_column_family_id();
     ColumnFamilyHandle *handle = nullptr;
-    ColumnFamilyDescriptor cfd(cf, cf_opts);
+    ColumnFamilyDescriptor cfd(cf_opts);
     ASSERT_TRUE(0 == dbfull()->TEST_create_subtable(cfd, cfi, handle));
     ASSERT_TRUE(nullptr != handle);
     ASSERT_TRUE(cfi == handle->GetID());
@@ -430,7 +430,7 @@ common::Status DBTestBase::open_create_default_subtable(const common::Options& o
       ColumnFamilyHandle *handle = nullptr;
       int ret = 0;
       // table:0 for default column family, 1+ for user's column family
-      ColumnFamilyDescriptor cf(kDefaultColumnFamilyName, ColumnFamilyOptions(options));
+      ColumnFamilyDescriptor cf{ColumnFamilyOptions(options)};
       if (FAILED(dbfull()->TEST_create_subtable(cf, kDefaultColumnFamilyId, handle))) {
         SE_LOG(ERROR, "Failed to create sub table!", K(ret));
         MOD_DELETE_OBJECT(ColumnFamilyHandle, handle);

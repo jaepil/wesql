@@ -46,6 +46,8 @@ public:
 
   static const util::Comparator *get_cf_comparator(const std::string &cf_name);
 
+  void get_cf_options(common::ColumnFamilyOptions *const opts);
+  //TODO (Zhao Dongsheng) : deprecated
   void get_cf_options(const std::string &cf_name, common::ColumnFamilyOptions *const opts);
 
 private:

@@ -167,8 +167,9 @@ int LargeObjectExtentMananger::recover_extent_space()
         SE_LOG(WARN, "unexpected error, ExtentMeta must not nullptr", K(ret), K(extent_id));
       } else if (FAILED(ExtentSpaceManager::get_instance().reference(extent_meta->table_space_id_,
                                                                      extent_meta->extent_space_type_,
+                                                                     extent_meta->prefix_,
                                                                      extent_id))) {
-        SE_LOG(WARN, "fail to to reference lob extent", K(ret), K(extent_id));
+        SE_LOG(WARN, "fail to to reference lob extent", K(ret), "prefix", extent_meta->prefix_, K(extent_id));
       } else {
         SE_LOG(INFO, "success to refrence lob extent", K(*extent_meta));
       }
@@ -364,6 +365,7 @@ int LargeObjectExtentMananger::recycle_extent(ExtentMeta *extent_meta, bool for_
       if (!for_recovery) {
         if (FAILED(ExtentSpaceManager::get_instance().recycle(extent_meta->table_space_id_,
                                                               extent_meta->extent_space_type_,
+                                                              extent_meta->prefix_,
                                                               extent_id))) {
           SE_LOG(WARN, "fail to recycle extent", K(ret), K(extent_id));
         } else {

@@ -38,10 +38,12 @@ public:
   void unset_unpack() { attr_ &= (~FLAG_MASK_UNPACK); }
   bool has_unpack() const { return 0 != (attr_ & FLAG_MASK_UNPACK); }
   bool use_column_format() const { return (primary_index_id_ == index_id_) && engine_attribute_.use_column_format(); }
-  void set_index_id(int64_t index_id) { index_id_ = index_id; }
-  int64_t get_index_id() const { return index_id_; }
+  void set_database_name(const std::string &database_name) { databae_name_ = database_name; }
+  std::string get_database_name() const { return databae_name_; }
   void set_primary_index_id(int64_t primary_index_id) { primary_index_id_ = primary_index_id; }
   int64_t get_primary_index_id() const { return primary_index_id_; }
+  void set_index_id(int64_t index_id) { index_id_ = index_id; }
+  int64_t get_index_id() const { return index_id_; }
   void set_packed_column_count(uint32_t packed_column_count) { packed_column_count_ = packed_column_count; }
   uint32_t get_packed_column_count() const { return packed_column_count_; }
   EngineAttribute &get_engine_attribute() { return engine_attribute_; }
@@ -58,8 +60,9 @@ private:
   static const uint8_t FLAG_MASK_UNPACK = 0x01;
 
 private:
-  int64_t index_id_;
+  std::string databae_name_;
   int64_t primary_index_id_;
+  int64_t index_id_;
   /**table attributes flag:
   +-----------------+--------------------------+----------------+
   | has unpack info | has instant added column |  reserved bits |

@@ -185,6 +185,9 @@ struct BlockBasedTableOptions {
   // This option only affects newly written tables. When reading exising tables,
   // the information about version is read from the footer.
   uint32_t format_version = 3;
+
+  // TODO(Zhao Dongsheng) : Temporarily pass the cluster_id by BlockBasedTableOptions.
+  std::string cluster_id = "";
 };
 
 // A base class for table factories.

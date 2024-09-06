@@ -354,14 +354,15 @@ int FileIOExtent::direct_read(int fd, int64_t offset, int64_t size, char *buf)
   return ret;
 }
 
-ObjectIOExtent::ObjectIOExtent() : object_store_(nullptr), bucket_() {}
+ObjectIOExtent::ObjectIOExtent() : object_store_(nullptr), bucket_(), prefix_() {}
 
 ObjectIOExtent::~ObjectIOExtent() {}
 
 int ObjectIOExtent::init(const ExtentId &extent_id,
                          int64_t unique_id,
                          ::objstore::ObjectStore *object_store,
-                         const std::string &bucket)
+                         const std::string &bucket,
+                         const std::string &prefix)
 {
   int ret = Status::kOk;
 
@@ -372,12 +373,14 @@ int ObjectIOExtent::init(const ExtentId &extent_id,
              UNLIKELY(IS_NULL(object_store)) ||
              UNLIKELY(bucket.empty())) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), K(unique_id), KP(object_store), K(bucket));
+    SE_LOG(WARN, "invalid argument", K(ret), K(unique_id),
+        KP(object_store), K(bucket));
   } else {
     extent_id_ = extent_id;
     unique_id_ = unique_id;
     object_store_ = object_store;
     bucket_ = bucket;
+    prefix_ = prefix;
 
     is_inited_ = true;
   }
@@ -505,7 +508,7 @@ int ObjectIOExtent::write_object(const char *data, int64_t data_size)
 {
   int ret = Status::kOk;
   ::objstore::Status object_status;
-  std::string object_id = std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
+  std::string object_id = prefix_ + std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
 
   object_status = object_store_->put_object(bucket_, object_id, std::string_view(data, data_size));
   if (UNLIKELY(!object_status.is_succ())) {
@@ -523,7 +526,7 @@ int ObjectIOExtent::read_object(int64_t offset, int64_t size, char *buf, common:
 {
   int ret = Status::kOk;
   ::objstore::Status object_status;
-  std::string object_id = std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
+  std::string object_id = prefix_ + std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
   std::string body;
 
   if (PersistentCache::get_instance().is_enabled()) {
@@ -605,7 +608,7 @@ int ObjectIOExtent::load_extent(cache::Cache::Handle **handle)
     if (Status::kNotFound != ret) {
       SE_LOG(WARN, "fail to lookup from persistent cache", K(ret), K_(extent_id));
     } else {
-      std::string object_id = std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
+      std::string object_id = prefix_ + std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
       std::string body;
       ::objstore::Status object_status = object_store_->get_object(bucket_, object_id, 0, MAX_EXTENT_SIZE, body);
 
@@ -756,6 +759,7 @@ int WriteExtentJobScheduler::stop()
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "There should be no unfinished tasks in the queue", K(ret), "job_count", job_queue_.size());
     } else {
+      is_inited_ = false;
       SE_LOG(INFO, "success to stop WriteExtentJobScheduler");
     }
   }

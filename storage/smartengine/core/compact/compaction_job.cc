@@ -122,7 +122,6 @@ int CompactionJob::prepare_minor_task(const int64_t merge_limit) {
   } else {
     SE_LOG(INFO, "minor compaction builder info",
                 K(cf_desc_.column_family_id_),
-                K(cf_desc_.column_family_name_.c_str()),
                 K(meta_snapshot_->get_extent_layer_version(0)->get_extent_layer_size()),
                 K(context_.output_level_),
                 K(wide_range));

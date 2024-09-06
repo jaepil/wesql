@@ -94,26 +94,6 @@ uint64_t DBImpl::TEST_LogfileNumber() {
   return logfile_number_;
 }
 
-Status DBImpl::TEST_GetAllImmutableCFOptions(
-    std::unordered_map<std::string, const ImmutableCFOptions*>* iopts_map) {
-  std::vector<std::string> cf_names;
-  std::vector<const ImmutableCFOptions*> iopts;
-  {
-    InstrumentedMutexLock l(&mutex_);
-    /*
-    for (auto cfd : *versions_->GetColumnFamilySet()) {
-      cf_names.push_back(cfd->GetName());
-      iopts.push_back(cfd->ioptions());
-    }*/
-  }
-  iopts_map->clear();
-  for (size_t i = 0; i < cf_names.size(); ++i) {
-    iopts_map->insert({cf_names[i], iopts[i]});
-  }
-
-  return Status::OK();
-}
-
 uint64_t DBImpl::TEST_FindMinLogContainingOutstandingPrep() {
   return FindMinLogContainingOutstandingPrep();
 }
@@ -126,8 +106,10 @@ int DBImpl::TEST_create_subtable(const ColumnFamilyDescriptor &cf, int32_t tid, 
 {
   int ret = Status::kOk;
   const int64_t TEST_INDEX_ID_BASE = 100;
+  schema::TableSchema table_schema;
+  table_schema.set_index_id(tid);
   common::ColumnFamilyOptions cf_options;
-  CreateSubTableArgs args(tid, cf_options, true, tid);
+  CreateSubTableArgs args(table_schema, cf_options, true, tid);
 
   if (FAILED(CreateColumnFamily(args, &handle).code())) {
     SE_LOG(WARN, "fail to create subtable", K(ret));

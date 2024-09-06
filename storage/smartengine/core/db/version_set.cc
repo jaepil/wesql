@@ -336,7 +336,7 @@ int VersionSet::create_backup_snapshot(MetaSnapshotSet &meta_snapshots) {
 int VersionSet::add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_replay, ColumnFamilyData *&sub_table)
 {
   int ret = Status::kOk;
-  ChangeSubTableLogEntry log_entry(args.index_id_, args.table_space_id_);
+  ChangeSubTableLogEntry log_entry(args.table_schema_, args.table_space_id_);
 
   AllSubTable *new_all_sub_table = nullptr;
   if (UNLIKELY(!args.is_valid())) {
@@ -349,7 +349,7 @@ int VersionSet::add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_
   } else {
     if (is_replay) {
       //no need alloc new AllSubTable when recovery, optimize for many subtable
-      if (FAILED(global_ctx_->all_sub_table_->add_sub_table(args.index_id_, sub_table))) {
+      if (FAILED(global_ctx_->all_sub_table_->add_sub_table(args.table_schema_.get_index_id(), sub_table))) {
         SE_LOG(WARN, "fail to add subtable to all subtable", K(ret), K(args));
       }
     } else {
@@ -361,9 +361,8 @@ int VersionSet::add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for new all sub table",
                     K(ret));
-      } else if (FAILED(new_all_sub_table->add_sub_table(args.index_id_, sub_table))) {
-          SE_LOG(WARN, "fail to add sub table to new all sub table", K(ret),
-                      "index_id", args.index_id_);
+      } else if (FAILED(new_all_sub_table->add_sub_table(args.table_schema_.get_index_id(), sub_table))) {
+          SE_LOG(WARN, "fail to add sub table to new all sub table", K(ret), K(args));
       } else if (FAILED(global_ctx_->install_new_all_sub_table(new_all_sub_table))) {
         SE_LOG(WARN, "fail to install new all sub table", K(ret));
       }
@@ -377,7 +376,7 @@ int VersionSet::add_sub_table(CreateSubTableArgs &args, bool write_log, bool is_
 int VersionSet::remove_sub_table(ColumnFamilyData *sub_table, bool write_log, bool is_replay)
 {
   int ret = Status::kOk;
-  ChangeSubTableLogEntry log_entry(sub_table->GetID(), sub_table->get_table_space_id());
+  ChangeSubTableLogEntry log_entry(sub_table->get_table_schema(), sub_table->get_table_space_id());
 
   AllSubTable *new_all_sub_table = nullptr;
   if (IS_NULL(sub_table)) {
@@ -389,7 +388,7 @@ int VersionSet::remove_sub_table(ColumnFamilyData *sub_table, bool write_log, bo
     sub_table->SetDropped();
 //    TODO: yeti (#15350417)
     sub_table->set_bg_stopped(true);
-    SE_LOG(INFO, "success to remove subtable", K(sub_table->GetID()));
+    SE_LOG(INFO, "success to remove subtable", K(log_entry), K(sub_table->GetID()));
   }
 
   if (SUCCED(ret)) {
@@ -717,7 +716,7 @@ int VersionSet::load_all_sub_table(util::RandomAccessFile &checkpoint_reader,
   CheckpointBlockHeader *block_header = nullptr;
   ColumnFamilyData *sub_table = nullptr;
   common::ColumnFamilyOptions cf_options(global_ctx_->options_);
-  CreateSubTableArgs dummy_args(1, cf_options);
+  CreateSubTableArgs dummy_args(cf_options);
   Slice result;
 
   assert(buf);
@@ -736,8 +735,9 @@ int VersionSet::load_all_sub_table(util::RandomAccessFile &checkpoint_reader,
         }
       } else {
         for (int64_t i = 0; SUCCED(ret) && i < block_header->entry_count_; ++i) {
-          if (IS_NULL(sub_table =
-                          MOD_NEW_OBJECT(memory::ModId::kColumnFamilySet, ColumnFamilyData, global_ctx_->options_))) {
+          if (IS_NULL(sub_table =MOD_NEW_OBJECT(memory::ModId::kColumnFamilySet,
+                                                ColumnFamilyData,
+                                                global_ctx_->options_))) {
             ret = Status::kMemoryLimit;
             SE_LOG(WARN, "fail to allocate memory for sub table", K(ret));
           } else if (FAILED(sub_table->init(dummy_args, global_ctx_, column_family_set_.get()))) {
@@ -1077,7 +1077,7 @@ int VersionSet::read_big_subtable(util::RandomAccessFile *checkpoint_reader,
   Slice result;
   int64_t pos = 0;
   common::ColumnFamilyOptions cf_options(global_ctx_->options_);
-  CreateSubTableArgs dummy_args(1, cf_options);
+  CreateSubTableArgs dummy_args(cf_options);
 
   if (IS_NULL(checkpoint_reader) || block_size <=0 || file_offset <= 0) {
     ret = Status::kInvalidArgument;
@@ -1228,7 +1228,7 @@ int VersionSet::replay_add_subtable_log(const char *log_data, int64_t log_length
     SE_LOG(WARN, "fail to deserialize add subtable log entry", K(ret), K(log_length));
   } else {
     //TODO:yuanfeng, create extent space?
-    CreateSubTableArgs args(log_entry.index_id_, cf_options, true, log_entry.table_space_id_);
+    CreateSubTableArgs args(log_entry.table_schema_, cf_options, true, log_entry.table_space_id_);
     if (FAILED(add_sub_table(args, false /*write log*/, true /*is_replay*/, sub_table))) {
       SE_LOG(WARN, "fail to add subtable", K(ret), K(log_entry), K(args));
     } else if (FAILED(ExtentSpaceManager::get_instance().open_table_space(log_entry.table_space_id_))) {
@@ -1255,23 +1255,24 @@ int VersionSet::replay_remove_subtable_log(const char *log_data, int64_t log_len
     SE_LOG(WARN, "invalid argument", K(ret), KP(log_data), K(log_length));
   } else if (FAILED(log_entry.deserialize(log_data, log_length, pos))) {
     SE_LOG(WARN, "fail to deserialize remove subtable log entry", K(ret));
-  } else if (IS_NULL(sub_table = column_family_set_->GetColumnFamily(log_entry.index_id_))) {
+  } else if (IS_NULL(sub_table = column_family_set_->GetColumnFamily(log_entry.table_schema_.get_index_id()))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, subtable must not nullptr", K(ret), K(log_entry));
   } else if (FAILED(remove_sub_table(sub_table, false /*write log*/, true /*is_replay*/))) {
     SE_LOG(WARN, "fail to remove subtable", K(ret), K(log_entry));
   } else if (FAILED(ExtentSpaceManager::get_instance().unregister_subtable(sub_table->get_table_space_id(), sub_table->GetID()))) {
-    SE_LOG(WARN, "fail to unregister subtbale", K(ret), "table_space_id", sub_table->get_table_space_id(), "index_id", sub_table->GetID());
+    SE_LOG(WARN, "fail to unregister subtbale", K(ret), K(log_entry),
+        "table_space_id", sub_table->get_table_space_id());
   } else if (FAILED(sub_table->release_resource(true /*for_recovery*/))) {
     SE_LOG(WARN, "fail to release subtable", K(ret));
   } else {
     if (sub_table->Unref()) {
       //ugly, ColumnFamilySet will been replaced by AllSubtableMap
       MOD_DELETE_OBJECT(ColumnFamilyData, sub_table);
-      SE_LOG(INFO, "success to replay remove subtable", "index_id", log_entry.index_id_);
+      SE_LOG(INFO, "success to replay remove subtable", K(log_entry) );
     } else {
       ret = Status::kErrorUnexpected;
-      SE_LOG(WARN, "unexpected error, subtable should not ref by other", K(ret), "index_id", log_entry.index_id_);
+      SE_LOG(WARN, "unexpected error, subtable should not ref by other", K(ret), K(log_entry));
     }
   }
 

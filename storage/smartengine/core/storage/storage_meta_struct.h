@@ -42,14 +42,10 @@ class SubTableMeta
 {
 public:
   static const int32_t SSTABLE_META_VERSION = 1;
-  int64_t index_id_;//primary table: index_id_ == table_id_. index_table: index_id_ = index_number
-  int32_t index_no_;
-  int64_t index_type_;
-  int64_t row_count_;
-  int64_t data_size_;
-  db::RecoveryPoint recovery_point_;
-  int64_t table_space_id_;
+
   schema::TableSchema table_schema_;
+  int64_t table_space_id_;
+  db::RecoveryPoint recovery_point_;
 
   SubTableMeta();
   ~SubTableMeta();
@@ -62,6 +58,7 @@ public:
 
 //for compatibility, the variables in this struct must not been deleted or moved.
 //new variables should only been added at the end.
+// TODO(Zhao Dongsheng): reconstruct the member variables order.
 struct ExtentMeta
 {
 public:
@@ -86,9 +83,13 @@ public:
   int32_t extent_space_type_;
   table::BlockHandle index_block_handle_;
   schema::TableSchema table_schema_;
+  std::string prefix_;
 
   ExtentMeta();
-  ExtentMeta(uint8_t attr, const table::ExtentInfo &extent_info, const schema::TableSchema &table_schema);
+  ExtentMeta(uint8_t attr,
+             const table::ExtentInfo &extent_info,
+             const schema::TableSchema &table_schema,
+             const std::string &prefix);
   ExtentMeta(const ExtentMeta &extent_meta);
   ~ExtentMeta();
 

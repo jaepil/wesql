@@ -56,7 +56,6 @@ void SeSubtableManager::init(SeSubtableOptions *const cf_options,
 
   for (auto cfh : *handles) {
     assert(cfh != nullptr);
-    //m_cf_name_map[cfh->GetName()] = cfh;
     m_subtable_id_map[cfh->GetID()] = cfh;
   }
 }
@@ -86,6 +85,7 @@ void SeSubtableManager::get_per_index_cf_name(const std::string &db_table_name,
 }
 
 
+// TODO (Zhao Dongsheng) : Reconstruct this function.
 /**
   create subtable physically, for rollback, we need write ddl_log.
   @param[in] se_db, se DB object
@@ -97,46 +97,44 @@ void SeSubtableManager::get_per_index_cf_name(const std::string &db_table_name,
 bool SeSubtableManager::create_subtable(db::DB *const se_db,
                                         db::WriteBatch *const xa_batch,
                                         ulong thread_id,
-                                        uint index_number,
                                         const common::ColumnFamilyOptions &cf_options,
-                                        const char *subtable_name,
+                                        const schema::TableSchema &table_schema,
                                         bool create_table_space,
                                         int64_t &table_space_id,
                                         db::ColumnFamilyHandle **cf_handle)
 {
   /** create subtable physically */
-  const std::string subtable_name_str(subtable_name);
   common::ColumnFamilyOptions opts;
-  m_cf_options->get_cf_options(subtable_name_str, &opts);
+  m_cf_options->get_cf_options(&opts);
 
-  sql_print_information(
-      "SE: creating subtable: index_number(%d), subtable_name(%s)",
-      index_number, subtable_name_str.c_str());
+  sql_print_information("SEDDL: creating subtable: index_number(%d)", table_schema.get_index_id());
 
   /** write subtable log */
   if (xa_batch != nullptr) {
-    if (m_ddl_log_manager->write_drop_subtable_log(
-            xa_batch, index_number, thread_id, false)) {
+    if (m_ddl_log_manager->write_drop_subtable_log(xa_batch,
+                                                   table_schema.get_index_id(),
+                                                   thread_id,
+                                                   false)) {
       sql_print_error("SE: write drop_subtable_log error");
       return true;
     }
   }
 
   DBUG_EXECUTE_IF("ddl_log_crash_after_drop_subtable_log", DBUG_SUICIDE(););
-  struct db::CreateSubTableArgs args(index_number, cf_options, create_table_space, table_space_id);
-  const common::Status s =
-      se_db->CreateColumnFamily(args, cf_handle);
+  struct db::CreateSubTableArgs args(table_schema, cf_options, create_table_space, table_space_id);
+  const common::Status s = se_db->CreateColumnFamily(args, cf_handle);
   if (s.ok()) {
     m_subtable_id_map[(*cf_handle)->GetID()] = *cf_handle;
     if (create_table_space) {
       table_space_id = (reinterpret_cast<db::ColumnFamilyHandleImpl *>(*cf_handle))->cfd()->get_table_space_id();
     }
+  } else {
+    return true;
   }
 
+  sql_print_information("SEDDL: creating subtable successfully. index_number(%d), subtable_id(%d)",
+      table_schema.get_index_id(), (*cf_handle)->GetID());
 
-  sql_print_information("SE: creating subtable successfully. "
-                        "index_number(%d), subtable_id(%d), subtable_name(%s)",
-                        index_number, (*cf_handle)->GetID(), subtable_name_str.c_str());
   return false;
 }
 
@@ -147,52 +145,44 @@ bool SeSubtableManager::create_subtable(db::DB *const se_db,
   @detail
     See SeSubtableManager::get_cf
 */
-db::ColumnFamilyHandle *SeSubtableManager::get_or_create_cf(
+db::ColumnFamilyHandle *SeSubtableManager::get_or_create_subtable(
     db::DB *const se_db,
     db::WriteBatch *write_batch,
     ulong thread_id,
-    uint subtable_id,
-    const char *cf_name,
-    const std::string &db_table_name,
-    const char *const index_name,
-    bool *const is_automatic,
     const common::ColumnFamilyOptions &cf_options,
+    const schema::TableSchema &table_schema,
     bool create_table_space,
     int64_t &table_space_id)
 {
-
-  assert(se_db != nullptr);
+  int ret = common::Status::kOk;
+  db::ColumnFamilyHandle *handle = nullptr;
 
   SE_MUTEX_LOCK_CHECK(m_mutex);
-
-  db::ColumnFamilyHandle *cf_handle = nullptr;
-  const auto it = m_subtable_id_map.find(subtable_id);
-  if (it != m_subtable_id_map.end())
-    cf_handle = it->second;
-  else {
-    if (!create_subtable(se_db,
-                         write_batch,
-                         thread_id,
-                         subtable_id,
-                         cf_options,
-                         cf_name,
-                         create_table_space,
-                         table_space_id,
-                         &cf_handle)) {
-      sql_print_information("SE: create subtable successfully, thread_id(%ld), "
-                      "subtable_id(%d), cf_name(%s)",
-                      thread_id, cf_handle->GetID(), cf_name);
+  if (IS_NULL(se_db) || UNLIKELY(!table_schema.is_valid())) {
+    ret = common::Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(se_db), KP(write_batch), K(table_schema));
+  } else {
+    auto iter = m_subtable_id_map.find(table_schema.get_index_id());
+    if (m_subtable_id_map.end() != iter) {
+      handle = iter->second;
+    } else if (create_subtable(se_db,
+                               write_batch,
+                               thread_id,
+                               cf_options,
+                               table_schema,
+                               create_table_space,
+                               table_space_id,
+                               &handle)) {
+      handle = nullptr;
+      sql_print_error("SE: create subtable failed, %ld, %d", thread_id, table_schema.get_index_id());
     } else {
-      cf_handle = nullptr;
-      sql_print_error(
-          "SE: create subtable failed, %ld, %d, %s", thread_id,
-          subtable_id, cf_name);
+      se_assert(nullptr != handle);
+      sql_print_information("SE: create subtable successfully, thread_id(%ld), subtable_id(%d)", thread_id, handle->GetID());
     }
   }
-
   SE_MUTEX_UNLOCK_CHECK(m_mutex);
 
-  return cf_handle;
+  return handle;
 }
 
 /*

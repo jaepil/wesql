@@ -476,7 +476,6 @@ int ha_smartengine::create_inplace_key_defs(
     SeTableDef *const tbl_def_arg,
     const TABLE *const old_table_arg,
     const SeTableDef *const old_tbl_def_arg,
-    const std::array<key_def_cf_info, MAX_INDEXES + 1> &cfs,
     const std::array<uint32_t, MAX_INDEXES + 1> &index_ids) const
 {
   DBUG_ENTER_FUNC();
@@ -518,14 +517,31 @@ int ha_smartengine::create_inplace_key_defs(
          SeKeyDef is already constructed from dictionary, these meta info
          should be up-to-date to use
          */
-      new_key_descr[i] = std::make_shared<SeKeyDef>(
-          okd.get_index_number(), i, okd.get_cf(), okd.m_index_dict_version,
-          okd.m_index_type, okd.m_kv_format_version, okd.m_is_reverse_cf,
-          okd.m_is_auto_cf, new_key_name,
-          dict_manager.get_stats(okd.get_gl_index_id()));
-    } else if (create_key_def(table_arg, i, tbl_def_arg, &new_key_descr[i],
-                              cfs[i], index_ids[i])) {
+      new_key_descr[i] = std::make_shared<SeKeyDef>(okd.get_index_number(),
+                                                    i,
+                                                    okd.get_cf(),
+                                                    okd.m_index_dict_version,
+                                                    okd.m_index_type,
+                                                    okd.m_kv_format_version,
+                                                    okd.m_is_reverse_cf,
+                                                    okd.m_is_auto_cf,
+                                                    new_key_name,
+                                                    dict_manager.get_stats(okd.get_gl_index_id()));
+#ifndef NDEBUG
+      SE_LOG(INFO, "SEDDL: create new key def from old key def",
+          K(i), "index_id", index_ids[i], "old_index_id", okd.get_index_number());
+#endif
+    } else if (create_key_def(table_arg,
+                              i,
+                              tbl_def_arg,
+                              &new_key_descr[i],
+                              index_ids[i])) {
+      SE_LOG(WARN, "SEDDL: fail to create key def", K(i), "index_id", index_ids[i]);
       DBUG_RETURN(HA_EXIT_FAILURE);
+    } else {
+#ifndef NDEBUG
+      SE_LOG(INFO, "SEDDL: create new key def", K(i), "index_id", index_ids[i]);
+#endif
     }
 
     assert(new_key_descr[i] != nullptr);
@@ -535,6 +551,9 @@ int ha_smartengine::create_inplace_key_defs(
   DBUG_RETURN(HA_EXIT_SUCCESS);
 }
 
+// TODO(Zhao Dongsheng) : It is unnecessary to make this function a member
+// function of ha_smartengine. It can be implemented as a utility function
+// instead.
 /** Find the same old index definition in old table.
 @param[in] table_arg new_table
 @param[in] tbl_def_arg new se table definition
@@ -568,6 +587,9 @@ std::unordered_map<std::string, uint> ha_smartengine::get_old_key_positions(
   for (i = 0; i < old_tbl_def_arg->m_key_count; i++) {
     if (is_hidden_pk(i, old_table_arg, old_tbl_def_arg)) {
       old_key_pos[old_key_descr[i]->m_name] = i;
+#ifndef NDEBUG
+      SE_LOG(INFO, "SEDDL: reuse hidden primary key", K(i), "index_name", old_key_descr[i]->m_name);
+#endif
       continue;
     }
 
@@ -583,6 +605,9 @@ std::unordered_map<std::string, uint> ha_smartengine::get_old_key_positions(
     const KEY *const old_key = &old_table_arg->key_info[i];
     const auto &it = new_key_pos.find(old_key->name);
     if (it == new_key_pos.end()) {
+#ifndef NDEBUG
+      SE_LOG(INFO, "SEDDL: this key is not exist in new table", K(i), "old_key_name", old_key->name);
+#endif
       continue;
     }
 
@@ -590,29 +615,45 @@ std::unordered_map<std::string, uint> ha_smartengine::get_old_key_positions(
 
     /* If index algorithms are different we need to rebuild. */
     if (old_key->algorithm != new_key->algorithm) {
+#ifndef NDEBUG
+      SE_LOG(INFO, "SEDDL: the algorithm type of this key is different between old table and new table",
+          K(i), "key_name", old_key->name, KE(old_key->algorithm), KE(new_key->algorithm));
+#endif
       continue;
     }
-    /*
-       Check that the key is identical between old and new tables.
-       If so, we still need to create a new index.
-       The exception is if there is an index changed from unique to non-unique,
-       in these cases we don't need to rebuild as they are stored the same way
-       in
-       se.
-       */
-    bool unique_to_non_unique =
-        (old_key->flags ^ new_key->flags) == HA_NOSAME &&
-        (old_key->flags & HA_NOSAME);
-    if (!unique_to_non_unique && ((old_key->flags & HA_KEYFLAG_MASK) !=
-                                  (new_key->flags & HA_KEYFLAG_MASK))) {
+    // Check that the key is identical between old and new tables.
+    // If so, we still need to create a new index.
+    // The exception is if there is an index changed from unique to non-unique,
+    // in these cases we don't need to rebuild as they are stored the same way
+    // in smartengine.
+    bool unique_to_non_unique = (old_key->flags ^ new_key->flags) == HA_NOSAME &&
+                                (old_key->flags & HA_NOSAME);
+    if (!unique_to_non_unique &&
+        ((old_key->flags & HA_KEYFLAG_MASK) != (new_key->flags & HA_KEYFLAG_MASK))) {
+#ifndef NDEBUG
+      SE_LOG(INFO, "SEDDL: the type of this key is different between the old table and the new table",
+          K(i), "key_name", old_key->name, "old_key_flag", old_key->flags, "new_key_flag", new_key->flags);
+#endif
       continue;
     }
 
+    // TODO (Zhao Dongsheng):
+    // Simply modifying the field name will be considered as two different keys.
+    // However, in prepare_inplace_alter_table_collect_key_stats, it will be
+    // considered the same key.This will result in an extra index id being allocated
+    // and the creation of a redundant subtable.
     if (compare_key_parts(old_key, new_key)) {
+#ifndef NDEBUG
+      SE_LOG(INFO, "SEDDL: the parts of this key is different between the old table and new table",
+          K(i), "old_key_name", old_key->name);
+#endif
       continue;
     }
 
     old_key_pos[old_key->name] = i;
+#ifndef NDEBUG
+    SE_LOG(INFO, "SEDDL: this key is same between the old table and new table", K(i), "index_name", old_key->name);
+#endif
   }
 
   DBUG_RETURN(old_key_pos);
@@ -713,9 +754,9 @@ static void inplace_alter_table_release(SeTableDef* &tbl_def)
   @param    ha_alter_info     Structure describing changes to be done
   by ALTER TABLE and holding data used
   during in-place alter.
-  @param    old_table_def     dd::Table object describing old version of
+  @param    old_dd_table     dd::Table object describing old version of
   the table.
-  @param    new_table_def     dd::Table object for the new version of the
+  @param    new_dd_table     dd::Table object for the new version of the
   table. Can be adjusted by this call if SE
   supports atomic DDL. These changes to the
   table definition will be persisted in the
@@ -727,15 +768,15 @@ static void inplace_alter_table_release(SeTableDef* &tbl_def)
 bool ha_smartengine::prepare_inplace_alter_table(
     TABLE *const altered_table,
     my_core::Alter_inplace_info *const ha_alter_info,
-    const dd::Table *old_table_def,
-    dd::Table *new_table_def)
+    const dd::Table *old_dd_table,
+    dd::Table *new_dd_table)
 {
   DBUG_ENTER_FUNC();
 
   assert(altered_table != nullptr);
   assert(ha_alter_info != nullptr);
-  assert(old_table_def != nullptr);
-  assert(new_table_def != nullptr);
+  assert(old_dd_table != nullptr);
+  assert(new_dd_table != nullptr);
 
 #ifndef NDEBUG
   __XHANDLER_LOG(INFO, "SEDDL: prepare alter sql is %s", ha_thd()->query().str);
@@ -777,11 +818,17 @@ bool ha_smartengine::prepare_inplace_alter_table(
     XHANDLER_LOG(ERROR, "SEDDL: failed to init table_id for creating table",
                  "table_name", table->s->table_name.str);
     ret = HA_EXIT_FAILURE;
-  } else if ((ret = create_key_defs(altered_table, new_tdef, nullptr, table,
-                                    m_tbl_def.get(), need_rebuild))) {
+  } else if (common::Status::kOk != create_key_defs(altered_table,
+                                                    table,
+                                                    new_dd_table,
+                                                    new_tdef,
+                                                    m_tbl_def.get(),
+                                                    new_dd_table->engine_attribute(),
+                                                    need_rebuild)) {
+    ret = HA_EXIT_FAILURE;
     XHANDLER_LOG(ERROR, "SEDDL: failed creating new key definitions for altered table",
                  "table_name", table->s->table_name.str);
-  } else if (new_tdef->write_dd_table(new_table_def)) {
+  } else if (new_tdef->write_dd_table(new_dd_table)) {
     XHANDLER_LOG(ERROR, "SEDDL: failed to write dd::Table",
                  "table_name", table->s->table_name.str);
     ret = HA_EXIT_FAILURE;
@@ -896,6 +943,12 @@ int ha_smartengine::prepare_inplace_alter_table_collect_key_stats(
     new_key_stats.emplace(new_key_stat.key_name, new_key_stat);
   }
 
+#ifndef NDEBUG
+  for (auto &it : new_key_stats) {
+    assert(it.first == it.second.key_name);
+    SE_LOG(INFO, "SEDDL: ", "key stat", it.second.to_string().c_str());
+  }
+#endif
   DBUG_RETURN(HA_EXIT_SUCCESS);
 }
 
@@ -1412,9 +1465,9 @@ int ha_smartengine::prepare_inplace_alter_table_norebuild(
   @param    ha_alter_info     Structure describing changes to be done
   by ALTER TABLE and holding data used
   during in-place alter.
-  @param    old_table_def     dd::Table object describing old version of
+  @param    old_dd_table     dd::Table object describing old version of
   the table.
-  @param    new_table_def     dd::Table object for the new version of the
+  @param    new_dd_table     dd::Table object for the new version of the
   table. Can be adjusted by this call if SE
   supports atomic DDL. These changes to the
   table definition will be persisted in the
@@ -1426,8 +1479,8 @@ int ha_smartengine::prepare_inplace_alter_table_norebuild(
 bool ha_smartengine::inplace_alter_table(
     TABLE *const altered_table,
     my_core::Alter_inplace_info *const ha_alter_info,
-    const dd::Table *old_table_def,
-    dd::Table *new_table_def)
+    const dd::Table *old_dd_table,
+    dd::Table *new_dd_table)
 {
   DBUG_ENTER_FUNC();
 
@@ -2944,16 +2997,16 @@ int ha_smartengine::dd_commit_instant_table(const TABLE *old_table,
 }
 
 void ha_smartengine::dd_commit_inplace_no_change(
-    const dd::Table *old_dd_tab,
-    dd::Table *new_dd_tab)
+    const dd::Table *old_dd_table,
+    dd::Table *new_dd_table)
 {
-  DDOperateHelper::dd_copy_private(*new_dd_tab, *old_dd_tab);
+  DDOperateHelper::dd_copy_private(*new_dd_table, *old_dd_table);
 
   /* To remember old default values if exist */
-  DDOperateHelper::dd_copy_table_columns(*new_dd_tab, *old_dd_tab);
-  /*if (!dd_table_is_partitioned(new_dd_tab->table()) ||
-    dd_part_is_first(reinterpret_cast<dd::Partition *>(new_dd_tab))) {
-    dd_copy_table(new_dd_tab->table(), old_dd_tab->table());
+  DDOperateHelper::dd_copy_table_columns(*new_dd_table, *old_dd_table);
+  /*if (!dd_table_is_partitioned(new_dd_table->table()) ||
+    dd_part_is_first(reinterpret_cast<dd::Partition *>(new_dd_table))) {
+    dd_copy_table(new_dd_table->table(), old_dd_table->table());
     }*/
 }
 
@@ -2963,41 +3016,37 @@ void ha_smartengine::dd_commit_inplace_no_change(
   1. if add columns mixed with other ddl operation, it will be inplace type
   2. if data type changed or not-null/null attribute changed, it will be copy/rebuild
   so instant columns and instant nulls should be same to old_table
-  @param[in]  old_dd_tab  old dd::Table
-  @param[in]  new_dd_tab  new dd::Table */
+  @param[in]  old_dd_table  old dd::Table
+  @param[in]  new_dd_table  new dd::Table */
 void dd_commit_inplace_update_instant_meta(
     my_core::Alter_inplace_info *const ha_alter_info,
-    const dd::Table *old_dd_tab,
-    dd::Table *new_dd_tab,
+    const dd::Table *old_dd_table,
+    dd::Table *new_dd_table,
     TABLE *table,
     TABLE *altered_table)
 {
-  if (!DDOperateHelper::dd_table_has_instant_cols(*old_dd_tab)) {
+  if (!DDOperateHelper::dd_table_has_instant_cols(*old_dd_table)) {
     return;
   }
 
-  assert(old_dd_tab->se_private_data().exists(
+  assert(old_dd_table->se_private_data().exists(
       dd_table_key_strings[DD_TABLE_INSTANT_COLS]));
-  assert(old_dd_tab->se_private_data().exists(
+  assert(old_dd_table->se_private_data().exists(
       dd_table_key_strings[DD_TABLE_NULL_BYTES]));
 
   uint32_t instant_cols = 0;
-  old_dd_tab->se_private_data().get(dd_table_key_strings[DD_TABLE_INSTANT_COLS],
-                                    &instant_cols);
+  old_dd_table->se_private_data().get(dd_table_key_strings[DD_TABLE_INSTANT_COLS], &instant_cols);
 
-  new_dd_tab->se_private_data().set(dd_table_key_strings[DD_TABLE_INSTANT_COLS],
-                                    instant_cols);
+  new_dd_table->se_private_data().set(dd_table_key_strings[DD_TABLE_INSTANT_COLS], instant_cols);
 
   uint32_t null_bytes = 0;
-  old_dd_tab->se_private_data().get(dd_table_key_strings[DD_TABLE_NULL_BYTES],
-                                    &null_bytes);
+  old_dd_table->se_private_data().get(dd_table_key_strings[DD_TABLE_NULL_BYTES], &null_bytes);
 
-  new_dd_tab->se_private_data().set(dd_table_key_strings[DD_TABLE_NULL_BYTES],
-                                    null_bytes);
+  new_dd_table->se_private_data().set(dd_table_key_strings[DD_TABLE_NULL_BYTES], null_bytes);
   //update dd-column meta if necessary
   assert(table->s->fields == altered_table->s->fields);
   if (!(ha_alter_info->handler_flags & Alter_inplace_info::ALTER_COLUMN_NAME)) {
-    DDOperateHelper::dd_copy_table_columns(*new_dd_tab, *old_dd_tab);
+    DDOperateHelper::dd_copy_table_columns(*new_dd_table, *old_dd_table);
     return;
   }
 
@@ -3007,10 +3056,9 @@ void dd_commit_inplace_update_instant_meta(
     old_field = table->field[i];
     new_field = altered_table->field[i];
 
-    dd::Column *old_col = const_cast<dd::Column *>(DDOperateHelper::dd_find_column(old_dd_tab, old_field->field_name));
+    dd::Column *old_col = const_cast<dd::Column *>(DDOperateHelper::dd_find_column(old_dd_table, old_field->field_name));
 
-    dd::Column *new_col = const_cast<dd::Column *>(
-        DDOperateHelper::dd_find_column(new_dd_tab, new_field->field_name));
+    dd::Column *new_col = const_cast<dd::Column *>(DDOperateHelper::dd_find_column(new_dd_table, new_field->field_name));
 
 #ifndef NDEBUG
     if (new_field->all_flags() & FIELD_IS_RENAMED) {
@@ -3125,9 +3173,9 @@ int ha_smartengine::rollback_added_index(
   by ALTER TABLE and holding data used
   during in-place alter.
   @param    commit            True => Commit, False => Rollback.
-  @param    old_table_def     dd::Table object describing old version of
+  @param    old_dd_table     dd::Table object describing old version of
   the table.
-  @param    new_table_def     dd::Table object for the new version of the
+  @param    new_dd_table     dd::Table object for the new version of the
   table. Can be adjusted by this call if SE
   supports atomic DDL. These changes to the
   table definition will be persisted in the
@@ -3141,16 +3189,19 @@ bool ha_smartengine::commit_inplace_alter_table(
     my_core::TABLE *const altered_table,
     my_core::Alter_inplace_info *const ha_alter_info,
     bool commit,
-    const dd::Table *old_dd_tab,
-    dd::Table *new_dd_tab)
+    const dd::Table *old_dd_table,
+    dd::Table *new_dd_table)
 {
   DBUG_ENTER_FUNC();
   assert(nullptr != ha_alter_info);
 
   auto ctx = dynamic_cast<SeInplaceAlterCtx *>(ha_alter_info->handler_ctx);
   if (is_instant(ha_alter_info)) {
-    dd_commit_inplace_instant(ha_alter_info, table, altered_table, old_dd_tab,
-                              new_dd_tab);
+    dd_commit_inplace_instant(ha_alter_info,
+                              table,
+                              altered_table,
+                              old_dd_table,
+                              new_dd_table);
 #ifndef NDEBUG
   __XHANDLER_LOG(INFO, "SEDDL: commit instant alter sql is %s, commit is %d", ha_thd()->query().str, (int)commit);
 #endif
@@ -3163,11 +3214,17 @@ bool ha_smartengine::commit_inplace_alter_table(
     int ret = HA_EXIT_SUCCESS;
     bool is_rebuild = ctx->m_rebuild;
     if (ctx->m_rebuild) {
-      ret = commit_inplace_alter_table_rebuild(altered_table, ha_alter_info,
-                                               commit, old_dd_tab, new_dd_tab);
+      ret = commit_inplace_alter_table_rebuild(altered_table,
+                                               ha_alter_info,
+                                               commit,
+                                               old_dd_table,
+                                               new_dd_table);
     } else {
-      ret = commit_inplace_alter_table_norebuild(
-          altered_table, ha_alter_info, commit, old_dd_tab, new_dd_tab);
+      ret = commit_inplace_alter_table_norebuild(altered_table,
+                                                 ha_alter_info,
+                                                 commit,
+                                                 old_dd_table,
+                                                 new_dd_table);
     }
 
     if (!ret) {
@@ -3262,6 +3319,10 @@ int ha_smartengine::commit_inplace_alter_table_common(
 
   // current SeTableDef represented by m_tbl_def will be unreferenced
   // new SeTableDef represented by ctx0->m_new_tdef will be referenced
+#ifndef NDEBUG
+  SE_LOG(INFO, "SEDDL: table space info: ", "table_name", m_tbl_def->base_tablename(),
+      "old_table_space_id", m_tbl_def->space_id, "new_table_space_id", ctx0->m_new_tdef->space_id);
+#endif
   m_tbl_def = ctx0->m_new_tdef;
   m_key_descr_arr = m_tbl_def->m_key_descr_arr;
   m_pk_descr = m_key_descr_arr[pk_index(altered_table, m_tbl_def.get())];
@@ -3377,15 +3438,15 @@ int ha_smartengine::commit_inplace_alter_table_common(
 @param[in] altered_table  new table
 @param[in] ha_alter_info  DDL operation
 @param[in] commit, true is commit and false is rollback
-@param[in] old_dd_tab
-@param[in] new_dd_tab
+@param[in] old_dd_table
+@param[in] new_dd_table
 @return true is ERROR and false is Success */
 bool ha_smartengine::commit_inplace_alter_table_rebuild(
     my_core::TABLE *const altered_table,
     my_core::Alter_inplace_info *const ha_alter_info,
     bool commit,
-    const dd::Table *old_dd_tab,
-    dd::Table *new_dd_tab)
+    const dd::Table *old_dd_table,
+    dd::Table *new_dd_table)
 {
   DBUG_ENTER_FUNC();
 
@@ -3430,7 +3491,7 @@ bool ha_smartengine::commit_inplace_alter_table_rebuild(
   */
   DBUG_EXECUTE_IF("ddl_log_crash_before_inplace_ddl_commit", DBUG_SUICIDE(););
 
-  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, new_dd_tab, new_added_indexes);
+  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, new_dd_table, new_added_indexes);
 
 rebuild_fun_end:
   // any way, whether succeed or fail, we need to reload new_tdef for atomic ddl
@@ -3444,15 +3505,15 @@ rebuild_fun_end:
 @param[in] altered_table  new table
 @param[in] ha_alter_info  DDL operation
 @param[in] commit, true is commit and false is rollback
-@param[in] old_dd_tab
-@param[in] new_dd_tab
+@param[in] old_dd_table
+@param[in] new_dd_table
 @return true is ERROR and false is Success */
 bool ha_smartengine::commit_inplace_alter_table_norebuild(
     my_core::TABLE *const altered_table,
     my_core::Alter_inplace_info *const ha_alter_info,
     bool commit,
-    const dd::Table *old_dd_tab,
-    dd::Table *new_dd_tab)
+    const dd::Table *old_dd_table,
+    dd::Table *new_dd_table)
 {
   DBUG_ENTER_FUNC();
 
@@ -3505,7 +3566,7 @@ bool ha_smartengine::commit_inplace_alter_table_norebuild(
 
   DBUG_EXECUTE_IF("ddl_log_crash_before_inplace_ddl_commit", DBUG_SUICIDE(););
 
-  dd_commit_inplace_update_instant_meta(ha_alter_info, old_dd_tab, new_dd_tab, table, altered_table);
+  dd_commit_inplace_update_instant_meta(ha_alter_info, old_dd_table, new_dd_table, table, altered_table);
 
   /*
      For partitioned tables, we need to commit all changes to all tables at
@@ -3531,7 +3592,7 @@ bool ha_smartengine::commit_inplace_alter_table_norebuild(
   assert(ctx0 == ctx_array[0]);
   ha_alter_info->group_commit_ctx = nullptr;
 
-  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, new_dd_tab, ctx0->m_added_indexes);
+  ret = commit_inplace_alter_table_common(altered_table, ha_alter_info, new_dd_table, ctx0->m_added_indexes);
 
 fun_end:
   // any way, whether succeed or fail, we need to reload new_tdef for atomic ddl

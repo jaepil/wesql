@@ -235,6 +235,7 @@ void InternalIteratorTestBase::reset()
   storage_manager_.reset();
   ExtentSpaceManager::get_instance().destroy();
   ExtentMetaManager::get_instance().destroy();
+  WriteExtentJobScheduler::get_instance().stop();
   smartengine::common::Options* options = nullptr;
   if (nullptr != context_) {
     options = context_->options_;
@@ -317,7 +318,7 @@ void InternalIteratorTestBase::init(const TestArgs &args)
 
   // storage manager
   db::CreateSubTableArgs subtable_args;
-  subtable_args.index_id_ = 1;
+  //subtable_args.index_id_ = 1;
   storage_manager_.reset(new storage::StorageManager(nullptr,
                                                      context_->env_options_,
                                                      context_->icf_options_,
@@ -328,6 +329,7 @@ void InternalIteratorTestBase::init(const TestArgs &args)
   // space manager
   ExtentSpaceManager::get_instance().init(env_, global_ctx_->env_options_, context_->db_options_);
   ExtentSpaceManager::get_instance().create_table_space(0);
+  WriteExtentJobScheduler::get_instance().start(env_, 1);
   row_size_ = 16;
   key_size_ = 32;
   level_ = 1;
@@ -347,7 +349,8 @@ void InternalIteratorTestBase::open_extent_writer()
   ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
       context_->icf_options_.table_factory);
   schema::TableSchema table_schema;
-  ExtentWriterArgs args(cf_desc_.column_family_id_,
+  table_schema.set_index_id(cf_desc_.column_family_id_);
+  ExtentWriterArgs args(std::string(),
                         mini_tables_.table_space_id_,
                         tmp_factory->table_options().block_restart_interval,
                         context_->icf_options_.env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,

@@ -216,6 +216,7 @@ int ExtentLayer::recover_reference_extents()
       SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret));
     } else if (FAILED(ExtentSpaceManager::get_instance().reference(extent_meta->table_space_id_,
                                                                    extent_meta->extent_space_type_,
+                                                                   extent_meta->prefix_,
                                                                    extent_meta->extent_id_))) {
       SE_LOG(WARN, "fail to reference extent", K(ret), K(*extent_meta));
     } else {

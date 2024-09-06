@@ -885,9 +885,7 @@ Status DBImpl::SetOptions(
     const std::unordered_map<std::string, std::string>& options_map) {
   auto* cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family)->cfd();
   if (options_map.empty()) {
-    __SE_LOG(WARN,
-                   "SetOptions() on sub table [%s], empty input",
-                   cfd->GetName().c_str());
+    SE_LOG(WARN, "SetOptions with empty input", "index_id", cfd->get_table_schema().get_index_id());
     return Status::InvalidArgument("empty input");
   }
 
@@ -2071,7 +2069,9 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
 
 void DBImpl::NewThreadStatusCfInfo(ColumnFamilyData* cfd) const {
   if (immutable_db_options_.enable_thread_tracking) {
-    ThreadStatusUtil::NewColumnFamilyInfo(this, cfd, cfd->GetName(),
+    ThreadStatusUtil::NewColumnFamilyInfo(this,
+                                          cfd,
+                                          std::to_string(cfd->get_table_schema().get_index_id()),
                                           cfd->ioptions()->env);
   }
 }

@@ -93,21 +93,21 @@ TEST_F(TableSpaceTest, allocate_and_recycle)
   ExtentId extent_id;
 
   //not init
-  ret = table_space_->allocate(FILE_EXTENT_SPACE, extent);
+  ret = table_space_->allocate(FILE_EXTENT_SPACE, std::string(), extent);
   ASSERT_EQ(Status::kNotInit, ret);
 
   build_table_space_args(args);
   ret = table_space_->create(args);
   ASSERT_EQ(Status::kOk, ret);
   //the extent space not exist
-  ret = table_space_->allocate(OBJECT_EXTENT_SPACE, extent);
+  ret = table_space_->allocate(OBJECT_EXTENT_SPACE, std::string(), extent);
   ASSERT_EQ(Status::kErrorUnexpected, ret);
 
   //success to allocate
   ret = Status::kOk;
   for (int64_t i = 0; Status::kOk == ret && i < 2; ++i) {
     for (int64_t j = 1; Status::kOk == ret && j < 5120; ++j) {
-      ret = table_space_->allocate(FILE_EXTENT_SPACE, extent);
+      ret = table_space_->allocate(FILE_EXTENT_SPACE, std::string(), extent);
       ASSERT_EQ(Status::kOk, ret);
       ASSERT_EQ(i, extent.extent_id_.file_number);
       ASSERT_EQ(j, extent.extent_id_.offset);
@@ -120,7 +120,7 @@ TEST_F(TableSpaceTest, allocate_and_recycle)
     for (int64_t j = 1; Status::kOk == ret && j < 5120; ++j) {
       extent_id.file_number = i;
       extent_id.offset = j;
-      ret = table_space_->recycle(FILE_EXTENT_SPACE, extent_id);
+      ret = table_space_->recycle(FILE_EXTENT_SPACE, std::string(), extent_id);
       ASSERT_EQ(Status::kOk, ret);
     }
   }
@@ -129,7 +129,7 @@ TEST_F(TableSpaceTest, allocate_and_recycle)
   ret = Status::kOk;
   for (int64_t i = 0; Status::kOk == ret && i < 3; ++i) {
     for (int64_t j = 1; Status::kOk == ret && j < 5120; ++j) {
-      ret = table_space_->allocate(FILE_EXTENT_SPACE, extent);
+      ret = table_space_->allocate(FILE_EXTENT_SPACE, std::string(), extent);
       ASSERT_EQ(Status::kOk, ret);
       ASSERT_EQ(i, extent.extent_id_.file_number);
       ASSERT_EQ(j, extent.extent_id_.offset);
@@ -144,14 +144,14 @@ TEST_F(TableSpaceTest, recycle)
   ExtentId extent_id;
 
   //not init
-  ret = table_space_->recycle(FILE_EXTENT_SPACE, extent_id);
+  ret = table_space_->recycle(FILE_EXTENT_SPACE, std::string(), extent_id);
   ASSERT_EQ(Status::kNotInit, ret);
   
   build_table_space_args(args);
   ret = table_space_->create(args);
   ASSERT_EQ(Status::kOk, ret);
   //the extent space not exist
-  ret = table_space_->recycle(OBJECT_EXTENT_SPACE, extent_id);
+  ret = table_space_->recycle(OBJECT_EXTENT_SPACE, std::string(), extent_id);
   ASSERT_EQ(Status::kErrorUnexpected, ret);
 
 

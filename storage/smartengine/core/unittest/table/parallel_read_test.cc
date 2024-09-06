@@ -294,6 +294,7 @@ void ParallelReadTest::init(const TestArgs args) {
   ExtentMetaManager::get_instance().init();
   ExtentSpaceManager::get_instance().init(env_, context_->env_options_, context_->db_options_);
   ExtentSpaceManager::get_instance().create_table_space(0);
+  WriteExtentJobScheduler::get_instance().start(env_, 1);
 
   uint64_t file_number = 1;
   std::string manifest_filename =
@@ -316,7 +317,7 @@ void ParallelReadTest::init(const TestArgs args) {
 
   //create subtable
   CreateSubTableArgs subtable_args;
-  subtable_args.index_id_ = 1;
+  //subtable_args.index_id_ = 1;
 
   subtable_ = MOD_NEW_OBJECT(memory::ModId::kColumnFamilySet, ColumnFamilyData, global_ctx->options_);
 
@@ -397,7 +398,8 @@ void ParallelReadTest::open_for_write(const int64_t level, bool begin_trx)
   ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
       context_->icf_options_.table_factory);
   schema::TableSchema table_schema;
-  ExtentWriterArgs writer_args(cf_desc_.column_family_id_,
+  table_schema.set_index_id(cf_desc_.column_family_id_);
+  ExtentWriterArgs writer_args(std::string(),
                                0 /*table_space_id*/,
                                tmp_factory->table_options().block_restart_interval,
                                context_->icf_options_.env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,

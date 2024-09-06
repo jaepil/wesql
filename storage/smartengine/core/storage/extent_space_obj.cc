@@ -93,29 +93,31 @@ int ObjectExtentSpace::remove() {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, ObjectExtentSpace is not free", K(ret));
   } else {
+    se_assert(inused_extent_set_.empty());
     // remove all the extent
-    for (int32_t ext_off : inused_extent_set_) {
-      std::string extent_key = make_extent_key(ext_off);
-      ::objstore::Status st =
-          objstore_->delete_object(extent_bucket_, extent_key);
-      if (!st.is_succ()) {
-        ret = Status::kObjStoreError;
-        SE_LOG(WARN, "fail to remeve extent", K(extent_bucket_), K(extent_key),
-               K(int(st.error_code())), K(std::string(st.error_message())),
-               K(ret));
-        break;
-      }
-      assert(st.is_succ());
-    }
-    if (ret == Status::kOk) {
-      inused_extent_set_.clear();
-    }
+    //for (int32_t ext_off : inused_extent_set_) {
+    //  std::string extent_key = make_extent_key(ext_off);
+    //  ::objstore::Status st =
+    //      objstore_->delete_object(extent_bucket_, extent_key);
+    //  if (!st.is_succ()) {
+    //    ret = Status::kObjStoreError;
+    //    SE_LOG(WARN, "fail to remeve extent", K(extent_bucket_), K(extent_key),
+    //           K(int(st.error_code())), K(std::string(st.error_message())),
+    //           K(ret));
+    //    break;
+    //  }
+    //  assert(st.is_succ());
+    //}
+    //if (ret == Status::kOk) {
+    //  inused_extent_set_.clear();
+    //}
   }
 
   return ret;
 }
 
-int ObjectExtentSpace::allocate(ExtentIOInfo &io_info) {
+int ObjectExtentSpace::allocate(const std::string prefix, ExtentIOInfo &io_info)
+{
   int ret = Status::kOk;
 
   if (UNLIKELY(!is_inited_)) {
@@ -158,7 +160,8 @@ int ObjectExtentSpace::allocate(ExtentIOInfo &io_info) {
                           UniqueIdAllocator::get_instance().alloc(),
                           faked_fn,
                           objstore_,
-                          env_->GetObjectStoreBucket());
+                          env_->GetObjectStoreBucket(),
+                          prefix);
       } else {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "fail to insert extent into inused set", K(ret),
@@ -170,7 +173,7 @@ int ObjectExtentSpace::allocate(ExtentIOInfo &io_info) {
   return ret;
 }
 
-int ObjectExtentSpace::recycle(const ExtentId extent_id) {
+int ObjectExtentSpace::recycle(const std::string prefix, const ExtentId extent_id) {
   int ret = Status::kOk;
 
   if (UNLIKELY(!is_inited_)) {
@@ -185,7 +188,7 @@ int ObjectExtentSpace::recycle(const ExtentId extent_id) {
     SE_LOG(WARN, "unexpected error, can not find extent in inused set",
            K(extent_id.offset), K(ret));
   } else {
-    std::string extent_key = make_extent_key(extent_id.offset);
+    std::string extent_key = prefix + make_extent_key(extent_id.offset);
     ::objstore::Status st =
         objstore_->delete_object(extent_bucket_, extent_key);
     if (!st.is_succ()) {
@@ -203,7 +206,10 @@ int ObjectExtentSpace::recycle(const ExtentId extent_id) {
   return ret;
 }
 
-int ObjectExtentSpace::reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool &existed)
+int ObjectExtentSpace::reference_if_need(const std::string prefix,
+                                         const ExtentId extent_id,
+                                         ExtentIOInfo &io_info,
+                                         bool &existed)
 {
   int ret = Status::kOk;
   int32_t faked_fn = convert_table_space_to_fd(table_space_id_);
@@ -232,7 +238,8 @@ int ObjectExtentSpace::reference_if_need(const ExtentId extent_id, ExtentIOInfo 
                       UniqueIdAllocator::get_instance().alloc(),
                       faked_fn,
                       objstore_,
-                      env_->GetObjectStoreBucket());
+                      env_->GetObjectStoreBucket(),
+                      prefix);
 
     SE_LOG(DEBUG, "success to reference extent", K(extent_id));
   }
@@ -240,8 +247,12 @@ int ObjectExtentSpace::reference_if_need(const ExtentId extent_id, ExtentIOInfo 
 }
 
 int ObjectExtentSpace::get_shrink_info_if_need(
-    const ShrinkCondition &shrink_condition, bool &need_shrink,
-    ShrinkInfo &shrink_info) {
+    const ShrinkCondition &shrink_condition,
+    bool &need_shrink,
+    ShrinkInfo &shrink_info)
+{
+  UNUSED(shrink_condition);
+  UNUSED(shrink_info);
   int ret = Status::kOk;
 
   if (UNLIKELY(!is_inited_)) {

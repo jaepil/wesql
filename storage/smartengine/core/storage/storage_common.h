@@ -459,6 +459,7 @@ struct ExtentIOInfo
   int fd_;
   ::objstore::ObjectStore *object_store_;
   std::string bucket_;
+  std::string prefix_;
 
   ExtentIOInfo()
       : type_(FILE_EXTENT_SPACE),
@@ -467,7 +468,8 @@ struct ExtentIOInfo
         unique_id_(0),
         fd_(-1),
         object_store_(nullptr),
-        bucket_()
+        bucket_(),
+        prefix_()
   {
   }
   ExtentIOInfo(const ExtentIOInfo &) = default;
@@ -497,6 +499,7 @@ struct ExtentIOInfo
     fd_ = -1;
     object_store_ = nullptr;
     bucket_.clear();
+    prefix_.clear();
   }
 
   void set_param(ExtentSpaceType type,
@@ -518,7 +521,8 @@ struct ExtentIOInfo
                  int64_t unique_id,
                  int fd,
                  ::objstore::ObjectStore *object_store,
-                 const std::string bucket)
+                 const std::string &bucket,
+                 const std::string &prefix)
   {
     type_ = type;
     extent_id_ = extent_id;
@@ -527,10 +531,11 @@ struct ExtentIOInfo
     fd_ = fd;
     object_store_ = object_store;
     bucket_ = bucket;
+    prefix_ = prefix;
   }
 
   DECLARE_AND_DEFINE_TO_STRING(KVE_(type), KV_(extent_id), KV_(extent_size),
-      KV_(unique_id), KV_(fd), KVP_(object_store), KV_(bucket))
+      KV_(unique_id), KV_(fd), KVP_(object_store), KV_(bucket), KV_(prefix))
 };
 
 struct DataFileStatistics

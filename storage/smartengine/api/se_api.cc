@@ -607,7 +607,7 @@ se_err_t se_open_index_using_name(se_request_t req,
 	if (nullptr == db_key_def) {
 		return DB_NOT_FOUND;
 	}
-	se_iter_t *new_iter;
+	se_iter_t *new_iter = nullptr;
 	se_create_iter(req->table_def_, db_key_def, &new_iter);
 	// target index is found, create se iterator.
 	new_iter->key_def_ = static_cast<void *>(db_key_def);

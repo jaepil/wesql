@@ -53,6 +53,7 @@
 #include "options/options_helper.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
+#include "schema/table_schema.h"
 // TODO @zhencheng : use QUERY TRACE to print this.
 // #include "smartengine/perf_context.h"
 #include "transactions/optimistic_transaction_db.h"
@@ -3004,8 +3005,10 @@ class Benchmark {
         db->cfh.clear();
         db->cfh.push_back(dbimpl->DefaultColumnFamily());
         for (uint64_t i = 1; i <= num_hot; ++i) {
+          schema::TableSchema table_schema;
           ColumnFamilyOptions cf_options(options);
-          CreateSubTableArgs args(i, cf_options, true, i) ;
+          table_schema.set_index_id(i);
+          CreateSubTableArgs args(table_schema, cf_options, true, i) ;
           s = dbimpl->CreateColumnFamily(args, &cf_handle);
           if (!s.ok()) {
             abort();

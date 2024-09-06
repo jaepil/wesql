@@ -47,7 +47,6 @@ struct SstFileWriter::Rep {
   InternalKeyComparator internal_comparator;
   ExternalSstFileInfo file_info;
   InternalKey ikey;
-  std::string column_family_name;
   ColumnFamilyHandle* cfh;
   // If true, We will give the OS a hint that this file pages is not needed
   // everytime we write 1MB to the file
@@ -112,15 +111,8 @@ Status SstFileWriter::Open(const std::string& file_path) {
     compression_type = *(r->ioptions.compression_per_level.rbegin());
   }
 
-  uint32_t cf_id;
-
   se_assert(nullptr != r->cfh);
-  // user explicitly specified that this file will be ingested into cfh,
-  // we can persist this information in the file.
-  cf_id = r->cfh->GetID();
-  r->column_family_name = r->cfh->GetName();
-
-  ColumnFamilyData* cfd;
+  ColumnFamilyData* cfd =nullptr;
   auto column_family = reinterpret_cast<ColumnFamilyHandleImpl*>(r->cfh);
   cfd = column_family->cfd();
 
@@ -137,7 +129,7 @@ Status SstFileWriter::Open(const std::string& file_path) {
   /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
   table::ExtentBasedTableFactory *tmp_factory = reinterpret_cast<table::ExtentBasedTableFactory *>(
       r->ioptions.table_factory);
-  ExtentWriterArgs writer_args(cf_id,
+  ExtentWriterArgs writer_args(tmp_factory->table_options().cluster_id,
                                cfd->get_table_space_id(),
                                tmp_factory->table_options().block_restart_interval,
                                r->ioptions.env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,

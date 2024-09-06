@@ -1767,6 +1767,7 @@ int StorageManager::do_recycle_extent(ExtentMeta *extent_meta, bool for_recovery
       if (SUCCED(ret)) {
         if (FAILED(ExtentSpaceManager::get_instance().recycle(extent_meta->table_space_id_,
                                                               extent_meta->extent_space_type_,
+                                                              extent_meta->prefix_,
                                                               extent_meta->extent_id_))) {
           SE_LOG(WARN, "fail to recycle extent", K(ret));
         }

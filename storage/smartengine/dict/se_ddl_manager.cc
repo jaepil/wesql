@@ -1016,6 +1016,7 @@ SeKeyDef* SeDdlManager::restore_index_from_dd(const dd::Properties& prop,
 {
   int index_version_id = 0, kv_version = 0, key_flags = 0;
   db::ColumnFamilyHandle* cfh = nullptr;
+  SeKeyDef *key_def = nullptr;
   if (prop.get(dd_index_key_strings[DD_INDEX_VERSION_ID], &index_version_id) ||
       prop.get(dd_index_key_strings[DD_INDEX_KV_VERSION], &kv_version) ||
       prop.get(dd_index_key_strings[DD_INDEX_FLAGS], &key_flags)) {
@@ -1101,6 +1102,8 @@ SeTableDef* SeDdlManager::restore_table_from_dd(const dd::Table* dd_table,
         break;
       } else {
         tbl_def->m_key_descr_arr[keyno++].reset(kd);
+        // TODO(Zhao Dongsheng): save table space id at se private data of dd.
+        tbl_def->space_id = (reinterpret_cast<db::ColumnFamilyHandleImpl *>(kd->get_cf()))->cfd()->get_table_space_id();;
       }
     }
 
@@ -1119,6 +1122,7 @@ SeTableDef* SeDdlManager::restore_table_from_dd(const dd::Table* dd_table,
         error = true;
       } else {
         tbl_def->m_key_descr_arr[keyno].reset(kd);
+        tbl_def->space_id = (reinterpret_cast<db::ColumnFamilyHandleImpl *>(kd->get_cf()))->cfd()->get_table_space_id();;
       }
     }
 
@@ -1161,7 +1165,7 @@ uint SeSequenceGenerator::get_and_update_next_number(SeDictionaryManager *const 
 {
   assert(dict != nullptr);
 
-  uint res;
+  uint res = 0;
   SE_MUTEX_LOCK_CHECK(m_mutex);
 
   res = m_next_number++;

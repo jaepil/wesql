@@ -66,7 +66,6 @@ class ColumnFamilyHandleImpl : public ColumnFamilyHandle {
   virtual monitor::InstrumentedMutex* mutex() const { return mutex_; }
 
   virtual uint32_t GetID() const override;
-  virtual const std::string& GetName() const override;
   virtual common::Status GetDescriptor(ColumnFamilyDescriptor* desc) override;
   virtual const util::Comparator* GetComparator() const override;
 
@@ -174,12 +173,9 @@ public:
   void destroy();
   // thread-safe
 
-  int64_t GetID() const { return sub_table_meta_.index_id_; }
+  int64_t GetID() const { return sub_table_meta_.table_schema_.get_index_id(); }
   int64_t get_table_space_id() const { return sub_table_meta_.table_space_id_; }
   schema::TableSchema get_table_schema() const;
-  // thread-safe
-  // TODO(Zhao Dongsheng), deprecated?
-  const std::string& GetName() const { return name_; }
 
   // Ref() can only be called from a context where the caller can guarantee
   // that ColumnFamilyData is alive (while holding a non-zero ref already,
@@ -423,7 +419,7 @@ public:
 
   int get_extent_positions(storage::ExtentPositionMap &extent_positions)
   {
-    return storage_manager_.get_extent_positions(sub_table_meta_.index_id_, extent_positions);
+    return storage_manager_.get_extent_positions(sub_table_meta_.table_schema_.get_index_id(), extent_positions);
   }
 
   void set_autocheck_info(const int64_t delete_extents_size,
@@ -452,7 +448,7 @@ public:
   DECLARE_TO_STRING()
 
 #ifndef NDEBUG
-  void test_set_index_id(const int64_t index_id) { sub_table_meta_.index_id_ = index_id; }
+  void test_set_index_id(const int64_t index_id) { sub_table_meta_.table_schema_.set_index_id(index_id); }
 #endif 
 
  private:
@@ -640,7 +636,6 @@ class ColumnFamilySet {
   ColumnFamilyData* GetDefault() const;
   // GetColumnFamily() calls return nullptr if column family is not found
   ColumnFamilyData* GetColumnFamily(uint32_t id) const;
-  ColumnFamilyData* GetColumnFamily(const std::string& name) const;
   // this call will return the next available column family ID. it guarantees
   // that there is no column family with id greater than or equal to the
   // returned value in the current running instance or anytime in smartengine
@@ -648,7 +643,6 @@ class ColumnFamilySet {
   uint32_t GetNextColumnFamilyID();
   uint32_t GetMaxColumnFamily();
   void UpdateMaxColumnFamily(uint32_t new_max_column_family);
-  size_t NumberOfColumnFamilies() const;
 
   int CreateColumnFamily(const CreateSubTableArgs &args, ColumnFamilyData *&cfd);
   int add_sub_table(ColumnFamilyData *sub_table);
@@ -688,14 +682,13 @@ class ColumnFamilySet {
   void insert_into_cfd_list(ColumnFamilyData *cfd);
 
 
-  // column_families_ and column_family_data_ need to be protected:
+  // column_family_data_ need to be protected:
   // * when mutating both conditions have to be satisfied:
   // 1. DB mutex locked
   // 2. thread currently in single-threaded write thread
   // * when reading, at least one condition needs to be satisfied:
   // 1. DB mutex locked
   // 2. accessed from a single-threaded write thread
-  std::unordered_map<std::string, uint32_t> column_families_;
   std::unordered_map<int64_t, ColumnFamilyData *> column_family_data_;
   // TODO(ljc): should use std::set here
   std::unordered_map<int64_t, int64_t> dropped_column_family_data_;

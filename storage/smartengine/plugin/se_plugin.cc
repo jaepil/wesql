@@ -191,6 +191,7 @@ static int se_init_func(void *const p)
   se_tbl_options.cache_index_and_filter_blocks = true;
   se_tbl_options.cache_index_and_filter_blocks_with_high_priority = true;
   se_tbl_options.pin_l0_filter_and_index_blocks_in_cache = false;
+  se_tbl_options.cluster_id = opt_cluster_objstore_id;
   se_db_options.allow_concurrent_memtable_write = true;
   se_db_options.use_direct_write_for_wal = false;
   //se_db_options.concurrent_writable_file_buffer_num =

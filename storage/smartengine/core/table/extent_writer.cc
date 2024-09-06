@@ -25,6 +25,7 @@
 #include "table/column_block_writer.h"
 #include "table/large_object.h"
 #include "util/crc32c.h"
+#include "util/filename.h"
 
 namespace smartengine
 {
@@ -40,7 +41,7 @@ using namespace util;
 namespace table
 {
 ExtentWriterArgs::ExtentWriterArgs()
-    : index_id_(0),
+    : cluster_id_(),
       table_space_id_(0),
       block_restart_interval_(0),
       extent_space_type_(storage::FILE_EXTENT_SPACE),
@@ -53,18 +54,18 @@ ExtentWriterArgs::ExtentWriterArgs()
       change_info_(nullptr)
 {}
 
-ExtentWriterArgs::ExtentWriterArgs(const int64_t index_id,
-                                    const int64_t table_space_id,
-                                    const int64_t block_restart_interval,
-                                    const int32_t extent_space_type,
-                                    const TableSchema &table_schema,
-                                    const InternalKeyComparator *internal_key_comparator,
-                                    const LayerPosition &output_position,
-                                    cache::Cache *block_cache,
-                                    cache::RowCache *row_cache,
-                                    const CompressionType compress_type,
-                                    ChangeInfo *change_info)
-    : index_id_(index_id),
+ExtentWriterArgs::ExtentWriterArgs(const std::string &cluster_id,
+                                   const int64_t table_space_id,
+                                   const int64_t block_restart_interval,
+                                   const int32_t extent_space_type,
+                                   const TableSchema &table_schema,
+                                   const InternalKeyComparator *internal_key_comparator,
+                                   const LayerPosition &output_position,
+                                   cache::Cache *block_cache,
+                                   cache::RowCache *row_cache,
+                                   const CompressionType compress_type,
+                                   ChangeInfo *change_info)
+    : cluster_id_(cluster_id),
       table_space_id_(table_space_id),
       block_restart_interval_(block_restart_interval),
       extent_space_type_(extent_space_type),
@@ -84,8 +85,7 @@ bool ExtentWriterArgs::is_valid() const
 {
   //TODO(Zhao Dongsheng) : check compress type valid and row cache maybe nullptr
   //and block cache also can be nullptr.
-  return index_id_ >= 0 &&
-         table_space_id_ >= 0 &&
+  return table_space_id_ >= 0 &&
          block_restart_interval_ >= 0 &&
          is_valid_extent_space_type(extent_space_type_) &&
          table_schema_.is_valid() &&
@@ -94,14 +94,13 @@ bool ExtentWriterArgs::is_valid() const
          IS_NOTNULL(change_info_);
 }
 
-DEFINE_TO_STRING(ExtentWriterArgs, KV_(index_id), KV_(table_space_id),
+DEFINE_TO_STRING(ExtentWriterArgs, KV_(cluster_id), KV_(table_space_id),
     KV_(block_restart_interval), KV_(extent_space_type), KV_(table_schema),
     KVP_(internal_key_comparator), KV_(output_position), KVP_(block_cache),
     KVP_(row_cache), KVE_(compress_type), KVP_(change_info))
 
 ExtentWriter::ExtentWriter()
     : is_inited_(false),
-      index_id_(-1),
       table_space_id_(-1),
       extent_space_type_(FILE_EXTENT_SPACE),
       table_schema_(),
@@ -111,6 +110,7 @@ ExtentWriter::ExtentWriter()
       block_cache_(nullptr),
       row_cache_(nullptr),
       compressor_helper_(),
+      prefix_(),
       block_info_(),
       extent_info_(),
       writed_extent_infos_(),
@@ -155,7 +155,6 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     SE_LOG(WARN, "fail to allocate extent buf", K(ret));
   } else {
     buf_.assign(extent_buf, MAX_EXTENT_SIZE, 0 /**pos*/);
-    index_id_ = args.index_id_;
     table_space_id_ = args.table_space_id_;
     extent_space_type_ = args.extent_space_type_;
     table_schema_ = args.table_schema_;
@@ -167,6 +166,7 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     block_info_.set_probe_num(BloomFilter::DEFAULT_PROBE_NUM);
     block_info_.set_per_key_bits(BloomFilter::DEFAULT_PER_KEY_BITS);
     change_info_ = args.change_info_;
+    prefix_ = util::make_data_prefix(args.cluster_id_, table_schema_);
 
     is_inited_ = true;
   }
@@ -296,6 +296,7 @@ int ExtentWriter::rollback()
       const ExtentInfo &extent_info = writed_extent_infos_.at(i);
       if (Status::kOk != (recycle_ret = ExtentSpaceManager::get_instance().recycle(table_space_id_,
                                                                                    extent_space_type_,
+                                                                                   prefix_,
                                                                                    extent_info.extent_id_))) {
         SE_LOG(WARN, "fail to recycle extent meta", K(recycle_ret), K(extent_info));
       }
@@ -463,7 +464,7 @@ int ExtentWriter::prepare_append_row(const Slice &key, const Slice &value)
   } else {
     // TODO(Zhao Dongsheng) : intro level0 compaction or dump job also need evict row cache?
     if (0 == layer_position_.get_level() && IS_NOTNULL(row_cache_)) {
-      if (FAILED(row_cache_->evict(index_id_, key))) {
+      if (FAILED(row_cache_->evict(table_schema_.get_index_id(), key))) {
         SE_LOG(WARN, "fail to evict old version row from row cache", K(ret));
       }
     }
@@ -857,13 +858,19 @@ int ExtentWriter::flush_extent()
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
-  } else if (FAILED(ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, extent))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().allocate(table_space_id_,
+                                                                extent_space_type_,
+                                                                prefix_,
+                                                                extent))) {
     SE_LOG(WARN, "fail to allocate extent", K(ret));
   } else {
     extent_info_.table_space_id_ = table_space_id_;
     extent_info_.extent_space_type_ = extent_space_type_;
     extent_info_.extent_id_ = extent->get_extent_id();
-    ExtentMeta extent_meta(storage::ExtentMeta::F_NORMAL_EXTENT, extent_info_, table_schema_);
+    ExtentMeta extent_meta(storage::ExtentMeta::F_NORMAL_EXTENT,
+                           extent_info_,
+                           table_schema_,
+                           prefix_);
     if (FAILED(write_extent_meta(extent_meta, false /*is_large_object_extent*/))) {
       SE_LOG(WARN, "fail to write extent meta", K(ret));
     } else {
@@ -957,7 +964,10 @@ int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject 
              ? storage::MAX_EXTENT_SIZE : (compressed_value.size() - offset);
       memcpy(value_buf, compressed_value.data() + offset, size);
 
-      if (FAILED(storage::ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, extent))) {
+      if (FAILED(storage::ExtentSpaceManager::get_instance().allocate(table_space_id_,
+                                                                      extent_space_type_,
+                                                                      prefix_,
+                                                                      extent))) {
         SE_LOG(WARN, "fail to allocate writable extent", K(ret));
       } else if (FAILED(build_large_object_extent_meta(Slice(large_object.key_), extent->get_extent_id(), size, extent_meta))) {
         SE_LOG(WARN, "fail to build large object extent meta", K(ret));
@@ -998,8 +1008,12 @@ int ExtentWriter::recycle_large_object_extent(LargeObject &large_object)
   int ret = Status::kOk;
 
   for (uint32_t i = 0; SUCCED(ret) && i < large_object.value_.extents_.size(); ++i) {
-    if (FAILED(ExtentSpaceManager::get_instance().recycle(table_space_id_, extent_space_type_, large_object.value_.extents_[i]))) {
-      SE_LOG(WARN, "fail to recycle large object extent", K(ret), K(i), "extent_id", large_object.value_.extents_[i]);
+    if (FAILED(ExtentSpaceManager::get_instance().recycle(table_space_id_,
+                                                          extent_space_type_,
+                                                          prefix_,
+                                                          large_object.value_.extents_[i]))) {
+      SE_LOG(WARN, "fail to recycle large object extent", K(ret), K(i),
+          K_(prefix), "extent_id", large_object.value_.extents_[i]);
     }
   }
 
@@ -1060,6 +1074,7 @@ int ExtentWriter::build_large_object_extent_meta(const common::Slice &lob_key,
     extent_meta.num_deletes_ = 0;
     extent_meta.table_space_id_ = table_space_id_;
     extent_meta.extent_space_type_ = extent_space_type_;
+    extent_meta.prefix_ = prefix_;
   }
 
   return ret;

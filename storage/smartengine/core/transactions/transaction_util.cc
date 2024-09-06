@@ -39,8 +39,7 @@ Status TransactionUtil::CheckKeyForConflicts(DBImpl* db_impl,
     SuperVersion* sv = db_impl->GetAndRefSuperVersion(cfd);
 
     if (sv == nullptr) {
-      result = Status::InvalidArgument("Could not access sub table " +
-          cfh->GetName());
+      result = Status::InvalidArgument("Could not access sub table " + std::to_string(cfh->cfd()->get_table_schema().get_index_id()));
     }else{
       sv->cfd_ = cfd;
     }

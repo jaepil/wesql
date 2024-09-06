@@ -20,11 +20,10 @@ namespace smartengine
 {
 namespace schema
 {
-// TODO (Zhao Dongsheng): The initialize table schema is a valid value
-// for system subtable which index is 1 (a little confused).
 TableSchema::TableSchema()
-    : index_id_(1),
-      primary_index_id_(1),
+    : databae_name_(),
+      primary_index_id_(0),
+      index_id_(0),
       attr_(0),
       packed_column_count_(0),
       engine_attribute_(),
@@ -32,8 +31,9 @@ TableSchema::TableSchema()
 {}
 
 TableSchema::TableSchema(const TableSchema &table_schema)
-    : index_id_(table_schema.index_id_),
+    : databae_name_(table_schema.databae_name_),
       primary_index_id_(table_schema.primary_index_id_),
+      index_id_(table_schema.index_id_),
       attr_(table_schema.attr_),
       packed_column_count_(table_schema.packed_column_count_),
       engine_attribute_(table_schema.engine_attribute_),
@@ -42,8 +42,9 @@ TableSchema::TableSchema(const TableSchema &table_schema)
 
 TableSchema &TableSchema::operator=(const TableSchema &table_schema)
 {
-  index_id_ = table_schema.index_id_;
+  databae_name_ = table_schema.databae_name_;
   primary_index_id_ = table_schema.primary_index_id_;
+  index_id_ = table_schema.index_id_;
   attr_ = table_schema.attr_;
   packed_column_count_ = table_schema.packed_column_count_;
   engine_attribute_ = table_schema.engine_attribute_;
@@ -57,8 +58,9 @@ TableSchema::~TableSchema()
 
 void TableSchema::reset()
 {
-  index_id_ = 1;
-  primary_index_id_ = 1;
+  databae_name_.clear();
+  primary_index_id_ = 0;
+  index_id_ = 0;
   attr_ = 0;
   packed_column_count_ = 0;
   engine_attribute_.reset();
@@ -67,7 +69,7 @@ void TableSchema::reset()
 
 bool TableSchema::is_valid() const
 {
-  bool res = engine_attribute_.is_valid();
+  bool res = index_id_ >= 0 && engine_attribute_.is_valid();
   //TODO:Zhao Dongsheng, the hard code "1" should optimize
   //Check table schema's validation except system and default subtable
   if (res && primary_index_id_ > 1) {
@@ -80,11 +82,12 @@ bool TableSchema::is_valid() const
   return res;
 }
 
-DEFINE_TO_STRING(TableSchema, KV_(index_id), KV_(primary_index_id), KV_(attr), KV_(packed_column_count),
-    KV_(engine_attribute), KV_(column_schemas))
+DEFINE_TO_STRING(TableSchema, KV_(databae_name), KV_(primary_index_id), 
+    KV_(index_id), KV_(attr), KV_(packed_column_count), KV_(engine_attribute),
+    KV_(column_schemas))
 
-DEFINE_COMPACTIPLE_SERIALIZATION(TableSchema, index_id_, primary_index_id_, attr_, packed_column_count_,
-    engine_attribute_, column_schemas_)
+DEFINE_COMPACTIPLE_SERIALIZATION(TableSchema, databae_name_, primary_index_id_,
+    index_id_, attr_, packed_column_count_, engine_attribute_, column_schemas_)
 
 } // namespace schema
 } // namespace smartengine

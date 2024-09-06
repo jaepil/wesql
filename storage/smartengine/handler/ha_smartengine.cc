@@ -198,7 +198,7 @@ err:
 int ha_smartengine::create(const char *const name,
                            TABLE *const table_arg,
                            HA_CREATE_INFO *const create_info,
-                           dd::Table *table_def)
+                           dd::Table *dd_table)
 {
   DBUG_ENTER_FUNC();
 
@@ -233,25 +233,27 @@ int ha_smartengine::create(const char *const name,
 
   bool do_truncate = (thd->lex->sql_command == SQLCOM_TRUNCATE);
   bool from_dict = false;
-  auto tbl_def = table_def ? ddl_manager.find(table_def, str, &from_dict)
+  auto table_def = dd_table ? ddl_manager.find(dd_table, str, &from_dict)
                            : ddl_manager.find(thd, str, &from_dict);
-  if (tbl_def) {
+  if (table_def) {
     // for truncate, delete the table first
     if (do_truncate) {
       // put it into cache for later usage in delete_table
-      if (from_dict) ddl_manager.put(tbl_def);
-      err = delete_table(name, table_def);
+      if (from_dict) {
+        ddl_manager.put(table_def);
+      }
+      err = delete_table(name, dd_table);
       if (err != HA_EXIT_SUCCESS) {
         DBUG_RETURN(err);
       }
 
       DBUG_EXECUTE_IF("ddl_log_crash_truncate_after_delete_table", DBUG_SUICIDE(););
-    } else if (is_prefix(tbl_def->base_tablename().c_str(), tmp_file_prefix)) {
+    } else if (is_prefix(table_def->base_tablename().c_str(), tmp_file_prefix)) {
       XHANDLER_LOG(WARN, "SE: find garbage temporary table in dictionary",
                    "table_name", str);
       assert(!from_dict);
       // remove cache entry of the table
-      ddl_manager.remove_cache(tbl_def->full_tablename());
+      ddl_manager.remove_cache(table_def->full_tablename());
       se_drop_idx_thread.signal();
     } else {
       my_printf_error(ER_UNKNOWN_ERROR, "Table '%s' doesn't exist in SE, "
@@ -289,9 +291,10 @@ int ha_smartengine::create(const char *const name,
     n_keys += 1;
   }
 
-  if (do_truncate && (dd::INVALID_OBJECT_ID != table_def->se_private_id())) {
+  if (do_truncate && (dd::INVALID_OBJECT_ID != dd_table->se_private_id())) {
     // for truncate table, use old table_id
-    m_tbl_def->set_table_id(table_def->se_private_id());
+    // TODO (Zhao Dongsheng) : use old table space id?
+    m_tbl_def->set_table_id(dd_table->se_private_id());
   } else if (m_tbl_def->init_table_id(ddl_manager)) {
     goto error;
   }
@@ -300,11 +303,19 @@ int ha_smartengine::create(const char *const name,
   m_tbl_def->m_key_count = n_keys;
   m_tbl_def->m_key_descr_arr = m_key_descr_arr;
 
-  if (create_key_defs(table_arg, m_tbl_def.get(), create_info->alias)) {
+  // TODO(Zhao Dongsheng): the dd table here has engine attribute?
+  if (common::Status::kOk != create_key_defs(table_arg,
+                                             nullptr /*old_table*/,
+                                             dd_table,
+                                             m_tbl_def.get(),
+                                             nullptr /*old_table_def*/,
+                                             create_info->engine_attribute,
+                                             false /*need_rebuild*/)) {
+    SE_LOG(WARN, "fail to create key defs", "table_name", str);
     goto error;
-  }
+  } 
 
-  if (m_tbl_def->write_dd_table(table_def)) {
+  if (m_tbl_def->write_dd_table(dd_table)) {
     goto error;
   }
 
@@ -337,11 +348,6 @@ int ha_smartengine::create(const char *const name,
       DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
   }
   */
-
-  if (common::Status::kOk != pushdown_table_schema(table_arg, table_def, m_tbl_def.get(), create_info->engine_attribute)) {
-    XHANDLER_LOG(WARN, "fail to push down table schema");
-    goto error;
-  }
 
   DBUG_EXECUTE_IF("ddl_log_crash_create_after_se_success", DBUG_SUICIDE(););
 
@@ -613,6 +619,7 @@ int ha_smartengine::open(const char *const name,
     m_tbl_def = ddl_manager.find(table_def, fullname, &from_dict);
   else
     m_tbl_def = ddl_manager.find(ha_thd(), fullname, &from_dict);
+  // SE_LOG(INFO, "dongsheng debug", "table_name", m_tbl_def->base_tablename(), "space_id", m_tbl_def->space_id);
   if (m_tbl_def == nullptr) {
     my_error(ER_INTERNAL_ERROR, MYF(0),
              "Attempt to open a table that is not present in SE-SE data "
@@ -1437,7 +1444,7 @@ int ha_smartengine::finalize_bulk_load()
 }
 
 /*
-  Create structures needed for storing data in se. This is called when the
+  Create structures needed for storing data in smartengine. This is called when the
   table is created. The structures will be shared by all TABLE* objects.
 
   @param
@@ -1452,226 +1459,177 @@ int ha_smartengine::finalize_bulk_load()
     0      - Ok
     other  - error, either given table ddl is not supported by se or OOM.
 */
-int ha_smartengine::create_key_defs(const TABLE *const table_arg,
-                                    SeTableDef *tbl_def_arg,
-                                    const char *old_table_name,
-                                    const TABLE *const old_table_arg /* = nullptr */,
-                                    const SeTableDef *const old_tbl_def_arg /* = nullptr */,
-                                    const bool need_rebuild /* = false */) const
+int ha_smartengine::create_key_defs(const TABLE *new_table,
+                                    const TABLE *old_table,
+                                    const dd::Table *dd_table,
+                                    SeTableDef *new_table_def,
+                                    const SeTableDef *old_table_def,
+                                    LEX_CSTRING engine_attribute,
+                                    const bool need_rebuild)
 {
-  DBUG_ENTER_FUNC();
+  int ret = common::Status::kOk;
+  // These need to be one greater than MAX_INDEXES since the user can create
+  // MAX_INDEXES secondary keys and no primary key which would cause use to
+  // generate a hidden one.
+  std::array<uint32_t, MAX_INDEXES + 1> index_ids;
 
-  assert(table_arg != nullptr);
-  assert(table_arg->s != nullptr);
-
-  uint i;
-
-  /*
-    These need to be one greater than MAX_INDEXES since the user can create
-    MAX_INDEXES secondary keys and no primary key which would cause us
-    to generate a hidden one.
-  */
-  std::array<key_def_cf_info, MAX_INDEXES + 1> cfs;
-  std::array<uint32, MAX_INDEXES + 1> index_ids;
-
-  /*
-    NOTE: All new column families must be created before new index numbers are
-    allocated to each key definition. See below for more details.
-    http://github.com/MySQLOnRocksDB/mysql-5.6/issues/86#issuecomment-138515501
-  */
-  const char *table_name = nullptr;
-  if (old_tbl_def_arg) {
-    table_name = old_tbl_def_arg->base_tablename().c_str();
+  if (IS_NULL(new_table) || IS_NULL(dd_table) || IS_NULL(new_table_def)) {
+    ret = common::Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), KP(new_table), KP(dd_table), KP(new_table_def));
+  } else if (is_smartengine_system_database(new_table_def->base_dbname().c_str())) {
+    ret = common::Status::kNotSupported;
+    SE_LOG(WARN, "Not allowed to create user tables under the smartengine system database",
+        K(ret), "database_name", new_table_def->base_dbname());
   } else {
-    table_name = old_table_name;
-  }
+    // The logic below involves multiple traversals of the index structure.The reason for implementing
+    // it this way is that this function is only called in ddl statements, and typically, the number of
+    // indexes is not large.Therefore, it won't become a performance bottleneck.The benefit is that the
+    // implementation logic of the entire function becomes clearer.
 
-  if (create_cfs(table_arg, tbl_def_arg, &cfs, &index_ids, table_name,
-                 old_table_arg, old_tbl_def_arg, need_rebuild)) {
-    DBUG_RETURN(HA_EXIT_FAILURE);
-  };
-
-  if (!old_tbl_def_arg) {
-    /**
-       old_tbl_def doesn't exist. this means we are in the process of creating
-       a new  table.
-    */
-    for (i = 0; i < tbl_def_arg->m_key_count; i++) {
-      if (create_key_def(table_arg, i, tbl_def_arg, &m_key_descr_arr[i],
-                         cfs[i], index_ids[i])) {
-        DBUG_RETURN(HA_EXIT_FAILURE);
-      }
-      //TODO:Zhao Dongsheng. setup the SeKeyDef here, has any risk?
-      m_key_descr_arr[i]->setup(table_arg, tbl_def_arg);
-    }
-  } else if (need_rebuild) { /** for copy-online ddl */
-    for (i = 0; i < tbl_def_arg->m_key_count; i++) {
-      if (create_key_def(table_arg, i, tbl_def_arg, &tbl_def_arg->m_key_descr_arr[i],
-                         cfs[i], index_ids[i])) {
-        DBUG_RETURN(HA_EXIT_FAILURE);
-      }
-
-      assert(tbl_def_arg->m_key_descr_arr[i] != nullptr);
-      tbl_def_arg->m_key_descr_arr[i]->setup(table_arg, tbl_def_arg);
-    }
-  } else {
-    /*
-      old_tbl_def exists.  This means we are creating a new tbl_def as part of
-      in-place alter table.  Copy over existing keys from the old_tbl_def and
-      generate the necessary new key definitions if any.
-    */
-    if (create_inplace_key_defs(table_arg, tbl_def_arg, old_table_arg,
-                                old_tbl_def_arg, cfs, index_ids)) {
-      DBUG_RETURN(HA_EXIT_FAILURE);
-    }
-  }
-
-  DBUG_RETURN(HA_EXIT_SUCCESS);
-}
-
-/*
-  Checks index parameters and creates column families needed for storing data
-  in se if necessary.
-
-  @param in
-    table_arg     Table with definition
-    db_table      Table name
-    tbl_def_arg   Table def structure being populated
-
-  @param out
-    cfs           CF info for each key definition in 'key_info' order
-
-  @return
-    0      - Ok
-    other  - error
-*/
-int ha_smartengine::create_cfs(const TABLE *const table_arg,
-                               SeTableDef *tbl_def_arg,
-                               std::array<struct key_def_cf_info, MAX_INDEXES + 1> *const cfs,
-                               std::array<uint32_t, MAX_INDEXES + 1> *const index_ids,
-                               const char *table_name,
-                               const TABLE *const old_table_arg,
-                               const SeTableDef *const old_tbl_def_arg,
-                               const bool need_rebuild) const
-{
-  DBUG_ENTER_FUNC();
-
-  assert(table_arg != nullptr);
-  assert(table_arg->s != nullptr);
-
-  char tablename_sys[NAME_LEN + 1];
-
-  my_core::filename_to_tablename(tbl_def_arg->base_tablename().c_str(),
-                                 tablename_sys, sizeof(tablename_sys));
-
-  bool create_table_space = (nullptr == old_tbl_def_arg) ? true : false;
-  /*
-    The first loop checks the index parameters and creates
-    column families if necessary.
-  */
-  for (uint i = 0; i < tbl_def_arg->m_key_count; i++) {
-    db::ColumnFamilyHandle *cf_handle;
-
-    if (se_strict_collation_check &&
-        !is_hidden_pk(i, table_arg, tbl_def_arg)) {
-      for (uint part = 0; part < table_arg->key_info[i].actual_key_parts;
-           part++) {
-        /* for alter and create, we all need check collation is supported or not */
-        if (!se_is_index_collation_supported(
-                table_arg->key_info[i].key_part[part].field) &&
-            !se_collation_exceptions->matches(tablename_sys)) {
-          my_printf_error(
-              ER_UNKNOWN_ERROR, "Unsupported collation on string indexed column"
-                                " %s. Consider change to other collation (%s).",
-              MYF(0), table_arg->key_info[i].key_part[part].field->field_name,
-              gen_se_supported_collation_string().c_str());
-          DBUG_RETURN(HA_EXIT_FAILURE);
+    // For alter and create statements, it is necessary to check whether the collation is supported.
+    // TODO(Zhao Dongsheng) : For mtr case collation_exception.
+    char tablename_sys[NAME_LEN + 1] = {0};
+    my_core::filename_to_tablename(new_table_def->base_tablename().c_str(), tablename_sys, sizeof(tablename_sys));
+    for (uint32_t i = 0; SUCCED(ret) && i < new_table_def->m_key_count; ++i) {
+      if (se_strict_collation_check && !is_hidden_pk(i, new_table, new_table_def)) {
+        for (uint part = 0; SUCCED(ret) && part < new_table->key_info[i].actual_key_parts; ++part) {
+          if (!se_is_index_collation_supported(new_table->key_info[i].key_part[part].field) &&
+              !se_collation_exceptions->matches(tablename_sys)) {
+            ret = common::Status::kNotSupported;
+            SE_LOG(WARN, "Can't use collation which is not supported in smartengine",
+                K(ret), "database_name", new_table_def->base_dbname(), "table_name", new_table_def->base_tablename(),
+                K(i), "field_name", new_table->key_info[i].key_part[part].field->field_name);
+            my_printf_error(ER_UNKNOWN_ERROR, "Unsupported collation on string indexed column"
+                " %s. Consider change to other collation (%s).",
+                MYF(0), new_table->key_info[i].key_part[part].field->field_name,
+                gen_se_supported_collation_string().c_str());
+          }
         }
       }
     }
 
-    /*
-      index comment has Column Family name. If there was no comment, we get
-      NULL, and then we use dbname_tablename_indexno fake comment for each index.
-    */
-    const char *const key_name = get_key_name(i, table_arg, tbl_def_arg);
-
-    char comment[1024]; // use cf_index_number fake cf_name
-
-    // get old indexid if the index was found in old_table_arg
-    bool found_old_index_id = false;
-    if( nullptr != old_tbl_def_arg && !need_rebuild) {
-      assert(nullptr != old_table_arg);
-      const std::unordered_map<std::string, uint> old_key_pos =
-            get_old_key_positions(table_arg, tbl_def_arg, old_table_arg,
-                                  old_tbl_def_arg);
-
-      const auto &it = old_key_pos.find(key_name);
-      if (it != old_key_pos.end()){
-        const SeKeyDef &okd = *old_tbl_def_arg->m_key_descr_arr[it->second];
-        const GL_INDEX_ID gl_index_id = okd.get_gl_index_id();
-        (*index_ids)[i] = gl_index_id.index_id;
-        found_old_index_id = true;
+    // Setup index ids, try to reuse old index id in some alter statements, like add index.
+    if (SUCCED(ret)) {
+      const char *key_name = nullptr;
+      std::unordered_map<std::string, uint> old_key_pos;
+      if (IS_NOTNULL(old_table_def) && !need_rebuild) {
+        old_key_pos = get_old_key_positions(new_table, new_table_def, old_table, old_table_def);
+      }
+      for (uint32_t i = 0; SUCCED(ret) && i < new_table_def->m_key_count; ++i) {
+        if (IS_NULL(key_name = get_key_name(i, new_table, new_table_def))) {
+          ret = common::Status::kErrorUnexpected;
+          SE_LOG(WARN, "the key name must not be nullptr", K(ret), K(i), "table_name", new_table_def->base_tablename());
+        } else {
+          auto iter = old_key_pos.find(key_name);
+          if (old_key_pos.end() != iter) {
+            index_ids[i] = old_table_def->m_key_descr_arr[iter->second]->get_gl_index_id().index_id;
+            SE_LOG(INFO, "dongsheng debug, use old index id", K(key_name), K(i), "index_id", index_ids[i]);
+          } else {
+            index_ids[i] = ddl_manager.get_and_update_next_number(&dict_manager);
+            SE_LOG(INFO, "dongsheng debug, use new index id", K(key_name), K(i), "index_id", index_ids[i]);
+          }
+        }
       }
     }
 
-    if(!found_old_index_id){
-      (*index_ids)[i] = ddl_manager.get_and_update_next_number(&dict_manager);
-    }
-    // use old table name when tmp table
-    if (!strncmp(tbl_def_arg->base_tablename().c_str(), "#sql-", strlen("#sql-")) &&
-      table_name != nullptr) {
-      snprintf(comment, 1024, "%s.%s_%u", tbl_def_arg->base_dbname().c_str(),
-              table_name, (*index_ids)[i]);
-    } else {
-      const char *dbname_tablename = tbl_def_arg->full_tablename().c_str();
-      snprintf(comment, 1024, "%s_%u", dbname_tablename, (*index_ids)[i]);
-    }
-
-    if (looks_like_per_index_cf_typo(comment)) {
-      my_error(ER_NOT_SUPPORTED_YET, MYF(0),
-               "sub table name looks like a typo of $per_index_cf");
-      DBUG_RETURN(HA_EXIT_FAILURE);
-    }
-
-    /* Prevent create from using the system column family */
-    if (strcmp(DEFAULT_SYSTEM_SUBTABLE_NAME, comment) == 0) {
-      my_error(ER_WRONG_ARGUMENTS, MYF(0),
-               "column family not valid for storing index data");
-      DBUG_RETURN(HA_EXIT_FAILURE);
-    }
-    bool is_auto_cf_flag;
-
-    THD *const thd = table ? table->in_use : my_core::thd_get_current_thd();
-    SeTransaction *const tx = get_or_create_tx(thd);
-    se_register_tx(ht, thd, tx);
-    auto batch = dynamic_cast<db::WriteBatch *>(tx->get_blind_write_batch());
-
-    uint subtable_id = (*index_ids)[i];
-    int64_t table_space_id = 0;
-    if (!create_table_space) {
-      table_space_id = old_tbl_def_arg->space_id;
-    }
-    cf_handle = cf_manager.get_or_create_cf(
-        se_db, batch, thd_thread_id(thd), (*index_ids)[i], comment, tbl_def_arg->full_tablename(),
-        key_name, &is_auto_cf_flag, se_default_cf_options, create_table_space,
-        table_space_id);
-    if (create_table_space) {
-      tbl_def_arg->space_id = table_space_id;
+    // Create SeKeyDefs.
+    if (SUCCED(ret)) {
+      if (IS_NULL(old_table_def)) {
+        // The old_table_def does not exist, it means a new table is being created.
+        for (uint32_t i = 0; SUCCED(ret) && i < new_table_def->m_key_count; ++i) {
+          if (create_key_def(new_table, i, new_table_def, &m_key_descr_arr[i], /*cfs[i]*/ index_ids[i])) {
+            ret = common::Status::kErrorUnexpected;
+            SE_LOG(WARN, "fail to create key def", K(ret), K(i));
+          } else {
+            m_key_descr_arr[i]->setup(new_table, new_table_def);
+            SE_LOG(INFO, "create new key def", K(i), "index_id", index_ids[i]);
+          }
+        }
+      } else if (need_rebuild) {
+        // For copy-online ddl
+        for (uint32_t i = 0; SUCCED(ret) && i < new_table_def->m_key_count; ++i) {
+          if (create_key_def(new_table, i, new_table_def, &new_table_def->m_key_descr_arr[i], /*cfs[i],*/ index_ids[i])) {
+            ret = common::Status::kErrorUnexpected;
+            SE_LOG(WARN, "fail to create key def", K(ret), K(i));
+          } else {
+            assert(IS_NOTNULL(new_table_def->m_key_descr_arr[i]));
+            new_table_def->m_key_descr_arr[i]->setup(new_table, new_table_def);
+            SE_LOG(INFO, "create new key def", K(i), "index_id", index_ids[i]);
+          }
+        }
+      } else {
+        // The old_table_def exists and the need_rebuild is false, it means creating a new table def
+        // as part of in-place alter table.Copy over existing keys from the old_table_def and create
+        // new keys if necessary.
+        if (create_inplace_key_defs(new_table, new_table_def, old_table, old_table_def, /*cfs,*/ index_ids)) {
+          ret = common::Status::kErrorUnexpected;
+          SE_LOG(WARN, "fail to create key defs for inplace ddl", K(ret));
+        }
+      }
     }
 
-    if (!cf_handle)
-      DBUG_RETURN(HA_EXIT_FAILURE);
+    // Create subtables.
+    if (SUCCED(ret)) {
+      db::ColumnFamilyHandle *handle = nullptr;
+      schema::TableSchema table_schema;
+      bool create_table_space = true;
+      int64_t table_space_id = 0;
+      
+      if (IS_NOTNULL(old_table_def)) {
+        create_table_space = false;
+        table_space_id = old_table_def->space_id;
+        //se_assert(0 != table_space_id);
+      }
 
-    auto &cf = (*cfs)[i];
-    cf.cf_handle = cf_handle;
-    cf.is_reverse_cf = SeSubtableManager::is_cf_name_reverse(comment);
-    cf.is_auto_cf = false;
+      if (FAILED(build_table_schema(new_table,
+                                    dd_table,
+                                    new_table_def,
+                                    engine_attribute,
+                                    table_schema))) {
+        SE_LOG(WARN, "fail to build table schema", K(ret));
+      } else {
+        for (uint32_t i = 0; SUCCED(ret) && i < new_table_def->m_key_count; ++i) {
+          THD *thd = table ? table->in_use : my_core::thd_get_current_thd();
+          SeTransaction *trans = get_or_create_tx(thd);   
+          se_register_tx(ht, thd, trans);
+          db::WriteBatch *batch = dynamic_cast<db::WriteBatch *>(trans->get_blind_write_batch());
+          table_schema.set_index_id(index_ids[i]);
+
+          if (IS_NULL(handle = cf_manager.get_or_create_subtable(se_db,
+                                                                 batch,
+                                                                 thd_thread_id(thd),
+                                                                 //index_ids[i],
+                                                                 se_default_cf_options,
+                                                                 table_schema,
+                                                                 create_table_space,
+                                                                 table_space_id))) {
+            ret = common::Status::kErrorUnexpected;
+            SE_LOG(WARN, "fail to get or create subtable");
+          } else {
+            if (create_table_space) {
+              new_table_def->space_id = table_space_id;
+            }
+
+            // Associate the subtable with the corresponding SeKeyDef, some key
+            // defs may be copied from old table def in create_inplace_key_defs.
+            if (IS_NULL(new_table_def->m_key_descr_arr[i]->get_cf())) {
+              se_assert(new_table_def->m_key_descr_arr[i]->get_index_number() == handle->GetID());
+              new_table_def->m_key_descr_arr[i]->set_cf(handle);
+#ifndef NDEBUG
+              SE_LOG(INFO, "success to create new index", "full_tablename", new_table_def->full_tablename(),
+                  "base_dbname", new_table_def->base_dbname(), "base_tablename", new_table_def->base_tablename(),
+                  "index_name", get_key_name(i, new_table, new_table_def), "table_id", new_table_def->get_table_id(),
+                  K(table_schema));
+#endif
+            }
+          }
+        }
+      }
+    }
   }
 
-  DBUG_RETURN(HA_EXIT_SUCCESS);
+  return ret;
 }
-
 
 /*
   Create key definition needed for storing data in se.
@@ -1694,7 +1652,6 @@ int ha_smartengine::create_key_def(const TABLE *const table_arg,
                                    const uint &i,
                                    const SeTableDef *const tbl_def_arg,
                                    std::shared_ptr<SeKeyDef> *const new_key_def,
-                                   const struct key_def_cf_info &cf_info,
                                    const uint32_t index_id) const
 {
   DBUG_ENTER_FUNC();
@@ -1720,9 +1677,13 @@ int ha_smartengine::create_key_def(const TABLE *const table_arg,
   }
 
   const char *const key_name = get_key_name(i, table_arg, tbl_def_arg);
-  *new_key_def = std::make_shared<SeKeyDef>(
-      index_id, i, cf_info.cf_handle, index_dict_version, index_type,
-      kv_version, cf_info.is_reverse_cf, cf_info.is_auto_cf, key_name);
+  *new_key_def = std::make_shared<SeKeyDef>(index_id,
+                                            i,
+                                            index_dict_version,
+                                            index_type,
+                                            kv_version,
+                                            key_name,
+                                            SeIndexStats());
 
   DBUG_RETURN(HA_EXIT_SUCCESS);
 }
@@ -3697,7 +3658,8 @@ int ha_smartengine::build_table_schema(const TABLE *table,
   } else if (FAILED(table_schema.get_engine_attribute().parse(std::string(engine_attribute_str.str, engine_attribute_str.length)))) {
     SE_LOG(WARN, "fail to parse engine attribute", K(ret));
   } else {
-    table_schema.set_primary_index_id(primary_index->get_cf()->GetID());
+    table_schema.set_database_name(table_def->base_dbname());
+    table_schema.set_primary_index_id(primary_index->get_index_number());
     table_schema.set_packed_column_count(packed_column_count);
       
     /**primary key column*/
@@ -3822,6 +3784,7 @@ int ha_smartengine::pushdown_table_schema(const TABLE *table,
   db::ColumnFamilyHandle *subtable_handle = nullptr;
   schema::TableSchema table_schema;
   int64_t dummy_commit_lsn = 0;
+  const char *index_name = nullptr;
 
   if (IS_NULL(table) || IS_NULL(dd_table) || IS_NULL(table_def)) {
     ret = common::Status::kInvalidArgument;
@@ -3839,13 +3802,17 @@ int ha_smartengine::pushdown_table_schema(const TABLE *table,
       if (IS_NULL(subtable_handle = table_def->m_key_descr_arr[i]->get_cf())) {
         ret = common::Status::kErrorUnexpected;
         SE_LOG(WARN, "the subtable handle must not be nullptr", K(ret), K(i));
+      } else if (IS_NULL(index_name = get_key_name(i, table, table_def))) {
+        ret = common::Status::kErrorUnexpected;
+        SE_LOG(WARN, "the index name must not be nullptr", K(ret), K(i), K(table_schema));
       } else {
         table_schema.set_index_id(subtable_handle->GetID());
         if (FAILED(se_db->modify_table_schema(subtable_handle, table_schema))) {
           SE_LOG(WARN, "fail to modify table schema", K(ret), K(i), K(table_schema));
         } else {
-          SE_LOG(INFO, "success to push down table schema", "index_id", subtable_handle->GetID(),
-              "table_name", table->s->table_name.str);
+          SE_LOG(INFO, "success to push down table schema", "full_tablename", table_def->full_tablename(),
+              "base_dbname", table_def->base_dbname(), "base_tablename", table_def->base_tablename(),
+              "index_name", index_name, "table_id", table_def->get_table_id(), K(table_schema));
         }
       }
     }

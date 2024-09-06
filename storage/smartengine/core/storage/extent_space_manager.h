@@ -50,14 +50,17 @@ public:
   //extent relative function
   int allocate(const int64_t table_space_id,
                const int32_t extent_space_type,
+               const std::string prefix,
                IOExtent *&extent);
   int recycle(const int64_t table_space_id,
               const int32_t extent_space_type,
+              const std::string prefix,
               const ExtentId extent_id,
               bool has_meta = true);
   // mark the extent used, only used during recovery
   int reference(const int64_t table_space_id,
                 const int32_t extent_space_type,
+                const std::string prefix,
                 const ExtentId extent_id);
   int get_readable_extent(ExtentId extent_id, IOExtent *&extent);
 

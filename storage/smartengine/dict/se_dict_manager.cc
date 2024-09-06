@@ -19,6 +19,8 @@
 #include "dict/se_cf_manager.h"
 #include "dict/se_dict_util.h"
 #include "logger/log_module.h"
+#include "schema/table_schema.h"
+#include "storage/storage_logger.h"
 
 namespace smartengine {
 
@@ -26,27 +28,35 @@ extern SeSubtableManager cf_manager;
 
 bool SeDictionaryManager::init(db::DB *const se_dict, const common::ColumnFamilyOptions &cf_options)
 {
+  int ret = common::Status::kOk;
   mysql_mutex_init(0, &m_mutex, MY_MUTEX_INIT_FAST);
   m_db = se_dict;
-  bool is_automatic;
   bool create_table_space = false;
   int64_t sys_table_space_id = DEFAULT_SYSTEM_TABLE_SPACE_ID;
-  m_system_cfh = cf_manager.get_or_create_cf(
-      m_db, nullptr, -1, DEFAULT_SYSTEM_SUBTABLE_ID, DEFAULT_SYSTEM_SUBTABLE_NAME,
-      "", nullptr, &is_automatic, cf_options,
-      create_table_space, sys_table_space_id);
-  se_netbuf_store_index(m_key_buf_max_index_id, SeKeyDef::MAX_INDEX_ID);
-  m_key_slice_max_index_id =
-      common::Slice(reinterpret_cast<char *>(m_key_buf_max_index_id),
-                     SeKeyDef::INDEX_NUMBER_SIZE);
-  se_netbuf_store_index(m_key_buf_max_table_id, SeKeyDef::MAX_TABLE_ID);
-  m_key_slice_max_table_id =
-      common::Slice(reinterpret_cast<char *>(m_key_buf_max_table_id),
-                     SeKeyDef::INDEX_NUMBER_SIZE);
+  schema::TableSchema table_schema;
+  table_schema.set_database_name(DEFAULT_SYSTEM_DATABASE_NAME);
+  table_schema.set_primary_index_id(DEFAULT_SYSTEM_SUBTABLE_ID);
+  table_schema.set_index_id(DEFAULT_SYSTEM_SUBTABLE_ID);
+
+  if (IS_NULL(m_system_cfh = cf_manager.get_or_create_subtable(m_db,
+                                                               nullptr,
+                                                               -1,
+                                                               cf_options,
+                                                               table_schema,
+                                                               false,
+                                                               sys_table_space_id))) {
+    ret = common::Status::kErrorUnexpected;
+    SE_LOG(ERROR, "fail to get system table", K(ret), "index_id", DEFAULT_SYSTEM_SUBTABLE_ID, "index_name", DEFAULT_SYSTEM_SUBTABLE_NAME);
+  } else {
+      se_netbuf_store_index(m_key_buf_max_index_id, SeKeyDef::MAX_INDEX_ID);
+      m_key_slice_max_index_id =common::Slice(reinterpret_cast<char *>(m_key_buf_max_index_id), SeKeyDef::INDEX_NUMBER_SIZE);
+      se_netbuf_store_index(m_key_buf_max_table_id, SeKeyDef::MAX_TABLE_ID);
+      m_key_slice_max_table_id = common::Slice(reinterpret_cast<char *>(m_key_buf_max_table_id), SeKeyDef::INDEX_NUMBER_SIZE);
+  }
   //resume_drop_indexes();
   //rollback_ongoing_index_creation();
 
-  return (m_system_cfh == nullptr);
+  return FAILED(ret);
 }
 
 std::unique_ptr<db::WriteBatch> SeDictionaryManager::begin() const

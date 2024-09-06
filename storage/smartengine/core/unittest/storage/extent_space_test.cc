@@ -135,7 +135,7 @@ TEST_P(ExtentSpaceTest, file_extent_allocate_and_recycle) {
   ExtentId extent_id;
 
   // not init
-  ret = extent_space_->allocate(io_info);
+  ret = extent_space_->allocate(std::string(), io_info);
   ASSERT_EQ(Status::kNotInit, ret);
 
   // success to allocate
@@ -143,14 +143,14 @@ TEST_P(ExtentSpaceTest, file_extent_allocate_and_recycle) {
   ret = extent_space_->create(args);
   ASSERT_EQ(Status::kOk, ret);
   for (int64_t i = 1; Status::kOk == ret && i < 5120; ++i) {
-    ret = extent_space_->allocate(io_info);
+    ret = extent_space_->allocate(std::string(), io_info);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_EQ(0, io_info.extent_id_.file_number);
     ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int64_t i = 1; Status::kOk == ret && i < 5120; ++i) {
-    ret = extent_space_->allocate(io_info);
+    ret = extent_space_->allocate(std::string(), io_info);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_EQ(1, io_info.extent_id_.file_number);
     ASSERT_EQ(i, io_info.extent_id_.offset);
@@ -159,55 +159,55 @@ TEST_P(ExtentSpaceTest, file_extent_allocate_and_recycle) {
   // recycle extent, which datafile not exist
   extent_id.file_number = 2;
   extent_id.offset = 1;
-  ret = extent_space_->recycle(extent_id);
+  ret = extent_space_->recycle(std::string(), extent_id);
   ASSERT_EQ(Status::kErrorUnexpected, ret);
 
   // recycle extent, which offset is exceed the datafile
   extent_id.file_number = 1;
   extent_id.offset = 5122;
-  ret = extent_space_->recycle(extent_id);
+  ret = extent_space_->recycle(std::string(), extent_id);
   ASSERT_EQ(Status::kInvalidArgument, ret);
 
   // success to recycle extent
   extent_id.file_number = 1;
   extent_id.offset = 1;
-  ret = extent_space_->recycle(extent_id);
+  ret = extent_space_->recycle(std::string(), extent_id);
   ASSERT_EQ(Status::kOk, ret);
   ExtentIOInfo new_io_info;
-  ret = extent_space_->allocate(new_io_info);
+  ret = extent_space_->allocate(std::string(), new_io_info);
   ASSERT_EQ(1, new_io_info.extent_id_.file_number);
   ASSERT_EQ(1, new_io_info.extent_id_.offset);
 
   for (int32_t i = 1; Status::kOk == ret && i <= 256; ++i) {
     extent_id.file_number = 0;
     extent_id.offset = i;
-    ret = extent_space_->recycle(extent_id);
+    ret = extent_space_->recycle(std::string(), extent_id);
     ASSERT_EQ(Status::kOk, ret);
   }
 
   for (int32_t i = 1; Status::kOk == ret && i <= 256; ++i) {
     extent_id.file_number = 1;
     extent_id.offset = i;
-    ret = extent_space_->recycle(extent_id);
+    ret = extent_space_->recycle(std::string(), extent_id);
     ASSERT_EQ(Status::kOk, ret);
   }
 
   for (int32_t i = 1; Status::kOk == ret && i <= 256; ++i) {
-    ret = extent_space_->allocate(io_info);
+    ret = extent_space_->allocate(std::string(), io_info);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_EQ(0, io_info.extent_id_.file_number);
     ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int32_t i = 1; Status::kOk == ret && i <= 256; ++i) {
-    ret = extent_space_->allocate(io_info);
+    ret = extent_space_->allocate(std::string(), io_info);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_EQ(1, io_info.extent_id_.file_number);
     ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int32_t i = 1; Status::kOk == ret && i <= 512; ++i) {
-    ret = extent_space_->allocate(io_info);
+    ret = extent_space_->allocate(std::string(), io_info);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_EQ(2, io_info.extent_id_.file_number);
     ASSERT_EQ(i, io_info.extent_id_.offset);
@@ -226,7 +226,7 @@ TEST_P(ExtentSpaceTest, obj_extetn_allocate_and_recycle) {
   ExtentId extent_id;
 
   // not init
-  ret = extent_space_->allocate(io_info);
+  ret = extent_space_->allocate(std::string(), io_info);
   ASSERT_EQ(Status::kNotInit, ret);
 
   // success to allocate
@@ -234,14 +234,14 @@ TEST_P(ExtentSpaceTest, obj_extetn_allocate_and_recycle) {
   ret = extent_space_->create(args);
   ASSERT_EQ(Status::kOk, ret);
   for (int64_t i = 1; i <= 5120; ++i) {
-    ret = extent_space_->allocate(io_info);
+    ret = extent_space_->allocate(std::string(), io_info);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_LT(io_info.extent_id_.file_number, 0);
     ASSERT_EQ(i, io_info.extent_id_.offset);
   }
 
   for (int64_t i = 1; i <= 5120; ++i) {
-    ret = extent_space_->allocate(io_info);
+    ret = extent_space_->allocate(std::string(), io_info);
     ASSERT_EQ(Status::kOk, ret);
     ASSERT_LT(io_info.extent_id_.file_number, 0);
     ASSERT_EQ(i + 5120, io_info.extent_id_.offset);
@@ -253,28 +253,28 @@ TEST_P(ExtentSpaceTest, obj_extetn_allocate_and_recycle) {
   // recycle extent, which datafile is a positive value.
   extent_id.file_number = 2;
   extent_id.offset = 1;
-  ret = extent_space_->recycle(extent_id);
+  ret = extent_space_->recycle(std::string(), extent_id);
   ASSERT_EQ(Status::kInvalidArgument, ret);
 
   // recycle extent, which offset is exceed the datafile
   extent_id.file_number = correct_fd;
   extent_id.offset = 5120 * 3;
-  ret = extent_space_->recycle(extent_id);
+  ret = extent_space_->recycle(std::string(), extent_id);
   ASSERT_EQ(Status::kInvalidArgument, ret);
 
   // success to recycle extent and then reallocate
   extent_id.file_number = correct_fd;
   extent_id.offset = 1;
-  ret = extent_space_->recycle(extent_id);
+  ret = extent_space_->recycle(std::string(), extent_id);
   ASSERT_EQ(Status::kOk, ret);
   ExtentIOInfo new_io_info;
-  ret = extent_space_->allocate(new_io_info);
+  ret = extent_space_->allocate(std::string(), new_io_info);
   ASSERT_LT(new_io_info.extent_id_.file_number, 0);
   ASSERT_EQ(next_exent_id, new_io_info.extent_id_.offset);
 
   for (int32_t i = 2; i <= next_exent_id; ++i) {
     extent_id.offset = i;
-    ret = extent_space_->recycle(extent_id);
+    ret = extent_space_->recycle(std::string(), extent_id);
     ASSERT_EQ(Status::kOk, ret);
   }
 
@@ -292,7 +292,7 @@ TEST_P(ExtentSpaceTest, recycle) {
   ExtentId extent_id;
 
   //not init
-  ret = extent_space_->recycle(extent_id);
+  ret = extent_space_->recycle(std::string(), extent_id);
   ASSERT_EQ(Status::kNotInit, ret);
 }
 } //namespace storage

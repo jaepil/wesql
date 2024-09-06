@@ -82,26 +82,21 @@ public:
     - cf_name=nullptr means use default column family
     - cf_name=_auto_ means use 'dbname.tablename.indexname'
   */
-  db::ColumnFamilyHandle *
-  get_or_create_cf(db::DB *const se_db,
-                   db::WriteBatch *write_batch,
-                   ulong thread_id,
-                   uint subtable_id,
-                   const char *cf_name,
-                   const std::string &db_table_name,
-                   const char *const index_name,
-                   bool *const is_automatic,
-                   const common::ColumnFamilyOptions &cf_options,
-                   bool create_table_space,
-                   int64_t &table_space_id);
+  db::ColumnFamilyHandle *get_or_create_subtable(
+      db::DB *const se_db,
+      db::WriteBatch *write_batch,
+      ulong thread_id,
+      const common::ColumnFamilyOptions &cf_options,
+      const schema::TableSchema &table_schema,
+      bool create_table_space,
+      int64_t &table_space_id);
 
   /** create subtable physically */
   bool create_subtable(db::DB *const se_db,
                        db::WriteBatch *xa_batch,
                        ulong thread_id,
-                       uint index_number,
                        const common::ColumnFamilyOptions &cf_options,
-                       const char *subtable_name,
+                       const schema::TableSchema &table_schema,
                        bool create_table_space,
                        int64_t &table_space_id,
                        db::ColumnFamilyHandle **cf_handle);
@@ -126,10 +121,6 @@ public:
   /* drop column family if necessary */
   void drop_cf(db::DB *const se_db, const uint32_t cf_id);
 
-  void get_cf_options(const std::string &cf_name, common::ColumnFamilyOptions *const opts)
-  {
-    m_cf_options->get_cf_options(cf_name, opts);
-  }
 };
 
 } //namespace smartengine

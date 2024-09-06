@@ -199,6 +199,7 @@ class CompactionTest : public testing::Test {
     keys_.clear();
     ExtentMetaManager::get_instance().destroy();
     ExtentSpaceManager::get_instance().destroy();
+    WriteExtentJobScheduler::get_instance().stop();
     descriptor_log_.reset();
     db_dir = nullptr;
     mini_tables_.metas.clear();
@@ -256,6 +257,7 @@ class CompactionTest : public testing::Test {
     ExtentMetaManager::get_instance().init();
     ExtentSpaceManager::get_instance().init(env_, context_->env_options_, context_->db_options_);
     ExtentSpaceManager::get_instance().create_table_space(0);
+    WriteExtentJobScheduler::get_instance().start(env_, 4);
 
     uint64_t file_number = 1;
     std::string manifest_filename =
@@ -549,7 +551,8 @@ class CompactionTest : public testing::Test {
     ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
         context_->icf_options_.table_factory);
     schema::TableSchema table_schema;
-    ExtentWriterArgs writer_args(1 /**column_family_id*/,
+    table_schema.set_index_id(1);
+    ExtentWriterArgs writer_args(std::string(),
                                  0 /**table_space_id*/,
                                  tmp_factory->table_options().block_restart_interval,
                                  env_->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,

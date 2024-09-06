@@ -69,13 +69,10 @@ ColumnFamilyHandleImpl::~ColumnFamilyHandleImpl() {
 
 uint32_t ColumnFamilyHandleImpl::GetID() const { return cfd()->GetID(); }
 
-/** now engine use subtable_id intead of name, name is useless */
-const std::string &ColumnFamilyHandleImpl::GetName() const { return cfd()->GetName(); }
-
 Status ColumnFamilyHandleImpl::GetDescriptor(ColumnFamilyDescriptor* desc) {
   // accessing mutable cf-options requires db mutex.
   InstrumentedMutexLock l(mutex_);
-  *desc = ColumnFamilyDescriptor(cfd()->GetName(), cfd()->GetLatestCFOptions());
+  *desc = ColumnFamilyDescriptor(cfd()->GetLatestCFOptions());
   return Status::OK();
 }
 
@@ -215,7 +212,6 @@ void SuperVersionUnrefHandle(void* ptr) {
 ColumnFamilyData::ColumnFamilyData(Options &options)
     : is_inited_(false),
       has_release_mems_(false),
-      name_(),
       refs_(0),
       dropped_(false),
       bg_stopped_(false),
@@ -287,9 +283,9 @@ int ColumnFamilyData::init(const CreateSubTableArgs &args, GlobalContext *global
   } else if (FAILED(storage_manager_.init())) {
     SE_LOG(WARN, "fail to init storage manager", K(ret));
   } else {
-    sub_table_meta_.index_id_ = args.index_id_;
+    sub_table_meta_.table_schema_ = args.table_schema_;
     sub_table_meta_.table_space_id_ = args.table_space_id_;
-    task_picker_.set_cf_id(sub_table_meta_.index_id_);
+    task_picker_.set_cf_id(args.table_schema_.get_index_id());
     internal_stats_.reset(internal_stats);
     table_cache_.reset(table_cache);
     local_sv_.reset(local_sv);
@@ -375,7 +371,7 @@ int ColumnFamilyData::release_resource(bool for_recovery)
       if (FAILED(storage_manager_.release_extent_resource(for_recovery))) {
         SE_LOG(WARN, "fail to recycle extent in StorageManager", K(ret));
       } else {
-        SE_LOG(INFO, "success to release resource of dropped subtable", "index_id", sub_table_meta_.index_id_);
+        SE_LOG(INFO, "success to release resource of dropped subtable", K_(sub_table_meta));
       }
     }
   }
@@ -672,7 +668,7 @@ int ColumnFamilyData::get_from_storage_manager(const common::ReadOptions &read_o
                                          extent_meta->extent_id_,
                                          ikey,
                                          &get_context);
-        SE_LOG(DEBUG, "get from extent", "index_id", sub_table_meta_.index_id_, K(extent_meta));
+        SE_LOG(DEBUG, "get from extent", "index_id", sub_table_meta_.table_schema_.get_index_id(), K(extent_meta));
         if (Status::kOk != func_ret) {
           SE_LOG(WARN, "fail to get from table cache", K(func_ret), K(*extent_meta));
         } else {
@@ -736,7 +732,7 @@ int ColumnFamilyData::recover_m0_to_l0() {
       range_iter = ALLOC_OBJECT(MetaDataSingleIterator, arena, type, meta_iter);
       if (IS_NULL(range_iter)) {
         ret = Status::kMemoryLimit;
-        SE_LOG(WARN, "range iter is nullptr", K(ret), "index_id", sub_table_meta_.index_id_);
+        SE_LOG(WARN, "range iter is nullptr", K(ret), "index_id", sub_table_meta_.table_schema_.get_index_id());
       } else {
         range_iter->seek_to_first();
         while (range_iter->valid() && SUCCED(ret)) {
@@ -759,10 +755,10 @@ int ColumnFamilyData::recover_m0_to_l0() {
       } else if (FAILED(StorageLogger::get_instance().commit(dummy_log_seq))) {
         SE_LOG(WARN, "fail to commit trans", K(ret));
       } else {
-        SE_LOG(INFO, "success to recover dump extent layer to level0", "index_id", sub_table_meta_.index_id_);
+        SE_LOG(INFO, "success to recover dump extent layer to level0", "index_id", sub_table_meta_.table_schema_.get_index_id());
       }
     } else {
-      SE_LOG(WARN, "fail to recover dump extent layer to level0", K(ret), "index_id", sub_table_meta_.index_id_);
+      SE_LOG(WARN, "fail to recover dump extent layer to level0", K(ret), "index_id", sub_table_meta_.table_schema_.get_index_id());
     }
     PLACEMENT_DELETE(MetaDataSingleIterator, arena_, range_iter);
   }
@@ -780,7 +776,7 @@ int ColumnFamilyData::apply_change_info(storage::ChangeInfo &change_info,
                                       util::autovector<db::MemTable *> *to_delete)
 {
   int ret = Status::kOk;
-  storage::ModifySubTableLogEntry log_entry(sub_table_meta_.index_id_, change_info);
+  storage::ModifySubTableLogEntry log_entry(sub_table_meta_.table_schema_.get_index_id(), change_info);
   int64_t commit_log_seq = 0;
   if (nullptr != recovery_point) {
     log_entry.recovery_point_ = *recovery_point;
@@ -804,7 +800,7 @@ int ColumnFamilyData::apply_change_info(storage::ChangeInfo &change_info,
       if (is_replay) {
         mem_->set_recovery_point(*recovery_point);
       }
-      SE_LOG(INFO, "set recovery point", "index_id", sub_table_meta_.index_id_, K(*recovery_point));
+      SE_LOG(INFO, "set recovery point", "index_id", sub_table_meta_.table_schema_.get_index_id(), K(*recovery_point));
     }
   }
 
@@ -838,7 +834,7 @@ int ColumnFamilyData::apply_change_info(storage::ChangeInfo &change_info,
         SE_LOG(WARN, "fail to purge flushed memtable", K(ret));
       }
     }
-    SE_LOG(INFO, "success to apply change info", "index_id", sub_table_meta_.index_id_);
+    SE_LOG(INFO, "success to apply change info", "index_id", sub_table_meta_.table_schema_.get_index_id());
   }
 
   return ret;
@@ -1158,8 +1154,7 @@ int ColumnFamilyData::release_memtable_resource()
 }
 
 ColumnFamilySet::ColumnFamilySet(GlobalContext *global_ctx)
-    : column_families_(),
-      column_family_data_(),
+    : column_family_data_(),
       dropped_column_family_data_(),
       max_column_family_(0),
       dummy_cfd_(new ColumnFamilyData(global_ctx->options_)),
@@ -1204,18 +1199,6 @@ ColumnFamilyData* ColumnFamilySet::GetColumnFamily(uint32_t id) const {
   }
 }
 
-ColumnFamilyData* ColumnFamilySet::GetColumnFamily(
-    const std::string& name) const {
-  auto cfd_iter = column_families_.find(name);
-  if (cfd_iter != column_families_.end()) {
-    auto cfd = GetColumnFamily(cfd_iter->second);
-    assert(cfd != nullptr);
-    return cfd;
-  } else {
-    return nullptr;
-  }
-}
-
 uint32_t ColumnFamilySet::GetNextColumnFamilyID() {
   return ++max_column_family_;
 }
@@ -1224,10 +1207,6 @@ uint32_t ColumnFamilySet::GetMaxColumnFamily() { return max_column_family_; }
 
 void ColumnFamilySet::UpdateMaxColumnFamily(uint32_t new_max_column_family) {
   max_column_family_ = std::max(new_max_column_family, max_column_family_);
-}
-
-size_t ColumnFamilySet::NumberOfColumnFamilies() const {
-  return column_families_.size();
 }
 
 int ColumnFamilySet::CreateColumnFamily(const CreateSubTableArgs &args, ColumnFamilyData *&cfd)
@@ -1243,12 +1222,12 @@ int ColumnFamilySet::CreateColumnFamily(const CreateSubTableArgs &args, ColumnFa
     SE_LOG(WARN, "fail to allocate memory for ColumnFamilyData", K(ret));
   } else if (FAILED(tmp_cfd->init(args, global_ctx_, this))) {
     SE_LOG(WARN, "fail to init cfd", K(ret));
-  } else if (!(column_family_data_.emplace(args.index_id_, tmp_cfd).second)) {
+  } else if (!(column_family_data_.emplace(args.table_schema_.get_index_id(), tmp_cfd).second)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "fail to insert into cfd map", K(ret), K(args));
   } else {
     cfd = tmp_cfd;
-    if (0 == args.index_id_) {
+    if (0 == args.table_schema_.get_index_id()) {
       default_cfd_cache_ = cfd;
     }
     insert_into_cfd_list(cfd);
@@ -1300,7 +1279,6 @@ void ColumnFamilySet::RemoveColumnFamily(ColumnFamilyData* cfd) {
   auto cfd_iter = column_family_data_.find(cfd->GetID());
   assert(cfd_iter != column_family_data_.end());
   column_family_data_.erase(cfd_iter);
-  column_families_.erase(cfd->GetName());
   if (!(dropped_column_family_data_.emplace(cfd->GetID(), cfd->GetID()).second)) {
     SE_LOG(WARN, "fail to emplace back to dropped_column_family_data", "index_id", cfd->GetID());
   } else {

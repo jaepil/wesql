@@ -1811,12 +1811,12 @@ class StressTest {
           new_column_family_name_ =
               std::max(new_column_family_name_.load(), std::stoi(name) + 1);
         }
-        cf_descriptors.emplace_back(name, ColumnFamilyOptions(options_));
+        cf_descriptors.emplace_back(ColumnFamilyOptions(options_));
       }
       while (cf_descriptors.size() < (size_t)FLAGS_column_families) {
         std::string name = ToString(new_column_family_name_.load());
         new_column_family_name_++;
-        cf_descriptors.emplace_back(name, ColumnFamilyOptions(options_));
+        cf_descriptors.emplace_back(ColumnFamilyOptions(options_));
         column_family_names_.push_back(name);
       }
       s = DB::Open(options_, FLAGS_db, &column_families_, &db_);

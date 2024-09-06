@@ -187,7 +187,11 @@ public:
   {
     int ret = Status::kOk;
     ObjectIOExtent object_extent;
-    ret = object_extent.init(io_info_.extent_id_, 0, object_store_, Env::Default()->GetObjectStoreBucket());
+    ret = object_extent.init(io_info_.extent_id_,
+                             0,
+                             object_store_,
+                             Env::Default()->GetObjectStoreBucket(),
+                             std::string());
     ASSERT_EQ(Status::kOk, ret);
     memcpy(aligned_buf_, data_.data(), MAX_EXTENT_SIZE);
     ret = object_extent.write(Slice(aligned_buf_, MAX_EXTENT_SIZE));
@@ -383,15 +387,31 @@ TEST_F(ObjectIOExtentTest, object_io_extent_init)
   ObjectIOExtent object_extent;
 
   // invalid argument
-  ret = object_extent.init(io_info_.extent_id_, -1, object_store_, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           -1,
+                           object_store_,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kInvalidArgument, ret);
-  ret = object_extent.init(io_info_.extent_id_, 0, nullptr, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           nullptr,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kInvalidArgument, ret);
-  ret = object_extent.init(io_info_.extent_id_, 0, object_store_, std::string());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           object_store_,
+                           std::string(),
+                           std::string());
   ASSERT_EQ(Status::kInvalidArgument, ret);
 
   // success init
-  ret = object_extent.init(io_info_.extent_id_, 0, object_store_, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           object_store_,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kOk, ret);
 }
 
@@ -406,7 +426,11 @@ TEST_F(ObjectIOExtentTest, object_io_extent_write)
   ASSERT_EQ(Status::kNotInit, ret);
 
   // init object extent
-  ret = object_extent.init(io_info_.extent_id_, 0, object_store_, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           object_store_,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kOk, ret);
 
   // invalid argument
@@ -440,7 +464,11 @@ TEST_F(ObjectIOExtentTest, object_io_extent_sync_read)
   ASSERT_EQ(Status::kNotInit, ret);
 
   // Init
-  ret = object_extent.init(io_info_.extent_id_, 0, object_store_, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           object_store_,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kOk, ret);
 
   // Invalid offset
@@ -518,7 +546,11 @@ TEST_F(ObjectIOExtentTest, object_io_extent_sync_read_with_persistent_cache)
   ASSERT_EQ(Status::kNotInit, ret);
 
   // Init
-  ret = object_extent.init(io_info_.extent_id_, 0, object_store_, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           object_store_,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kOk, ret);
 
   // Invalid offset
@@ -590,7 +622,11 @@ TEST_F(ObjectIOExtentTest, object_io_extent_async_read)
   prepare_data();
 
   // Init
-  ret = object_extent.init(io_info_.extent_id_, 0, object_store_, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           object_store_,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kOk, ret);
 
   // Random async read
@@ -638,7 +674,11 @@ TEST_F(ObjectIOExtentTest, object_io_extent_async_read_with_persistent_cache)
   prepare_data();
 
   // Init
-  ret = object_extent.init(io_info_.extent_id_, 0, object_store_, Env::Default()->GetObjectStoreBucket());
+  ret = object_extent.init(io_info_.extent_id_,
+                           0,
+                           object_store_,
+                           Env::Default()->GetObjectStoreBucket(),
+                           std::string());
   ASSERT_EQ(Status::kOk, ret);
 
   // Random async read

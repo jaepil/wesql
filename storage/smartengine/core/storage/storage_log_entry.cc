@@ -82,21 +82,21 @@ DEFINE_COMPACTIPLE_SERIALIZATION(ManifestLogEntryHeader, trans_id_, log_entry_se
 DEFINE_TO_STRING(ManifestLogEntryHeader, KV_(trans_id), KV_(log_entry_seq), KV_(log_entry_type), KV_(log_entry_length))
 
 ChangeSubTableLogEntry::ChangeSubTableLogEntry()
-    : index_id_(-1),
+    : table_schema_(),
       table_space_id_(0)
 {
 }
-ChangeSubTableLogEntry::ChangeSubTableLogEntry(int64_t index_id, int64_t table_space_id)
-    : index_id_(index_id),
+ChangeSubTableLogEntry::ChangeSubTableLogEntry(const schema::TableSchema &table_schema, int64_t table_space_id)
+    : table_schema_(table_schema),
       table_space_id_(table_space_id)
 {
 }
 ChangeSubTableLogEntry::~ChangeSubTableLogEntry()
 {
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(ChangeSubTableLogEntry, index_id_, table_space_id_)
+DEFINE_COMPACTIPLE_SERIALIZATION(ChangeSubTableLogEntry, table_schema_, table_space_id_)
 
-DEFINE_TO_STRING(ChangeSubTableLogEntry, KV_(index_id), KV_(table_space_id))
+DEFINE_TO_STRING(ChangeSubTableLogEntry, KV_(table_schema), KV_(table_space_id))
 
 ModifySubTableLogEntry::ModifySubTableLogEntry(ChangeInfo &change_info)
     : index_id_(-1),

@@ -159,9 +159,8 @@ int BaseFlush::flush_data(const LayerPosition &output_layer_position,
   /**TODO(Zhao Dongsheng): The table space id pass by MiniTables is unsuitable.*/
   mini_tables.table_space_id_ = cfd_->get_table_space_id();
   /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
-  ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
-      cfd_->ioptions()->table_factory);
-  ExtentWriterArgs writer_args(cfd_->GetID(),
+  ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(cfd_->ioptions()->table_factory);
+  ExtentWriterArgs writer_args(tmp_factory->table_options().cluster_id,
                                cfd_->get_table_space_id(),
                                tmp_factory->table_options().block_restart_interval,
                                cfd_->ioptions()->env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
@@ -778,7 +777,7 @@ int FlushJob::build_mt_ext_compaction(
       }
     }
   }
-  storage::ColumnFamilyDesc cf_desc(cfd_->GetID(), cfd_->GetName(), cfd_->get_table_schema());
+  storage::ColumnFamilyDesc cf_desc(cfd_->GetID(), cfd_->get_table_schema());
   compaction_ = ALLOC_OBJECT(MtExtCompaction, arena_, compaction_context_, cf_desc, arena_);
   MemTable *last_mem = mems_.back();
   if (IS_NULL(compaction_)) {

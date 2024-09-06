@@ -140,7 +140,7 @@ int GeneralCompaction::open_extent() {
     /**TODO(Zhao Dongsheng): The way of obtaining the block cache is not elegent. */
     ExtentBasedTableFactory *tmp_factory = reinterpret_cast<ExtentBasedTableFactory *>(
         context_.cf_options_->table_factory);
-    ExtentWriterArgs writer_args(cf_desc_.column_family_id_,
+    ExtentWriterArgs writer_args(tmp_factory->table_options().cluster_id,
                                  context_.table_space_id_,
                                  tmp_factory->table_options().block_restart_interval,
                                  context_.cf_options_->env->IsObjectStoreInited() ? storage::OBJECT_EXTENT_SPACE : storage::FILE_EXTENT_SPACE,
@@ -209,14 +209,11 @@ int GeneralCompaction::close_extent(MiniTables *flush_tables)
 void GeneralCompaction::start_record_compaction_stats() {
   assert(nullptr != context_.cf_options_ && nullptr != context_.cf_options_->env);
   if (2 == context_.output_level_) {
-    COMPACTION_LOG(INFO, "begin to run major compaction.",
-        K(cf_desc_.column_family_id_),K(cf_desc_.column_family_name_.c_str()));
+    COMPACTION_LOG(INFO, "begin to run major compaction.", K(cf_desc_.column_family_id_));
   } else if (1 == context_.output_level_) {
-    COMPACTION_LOG(INFO, "begin to run minor compaction.",
-        K(cf_desc_.column_family_id_),K(cf_desc_.column_family_name_.c_str()));
+    COMPACTION_LOG(INFO, "begin to run minor compaction.", K(cf_desc_.column_family_id_));
   } else {
-    COMPACTION_LOG(INFO, "begin to run intra_l0 compaction.",
-        K(cf_desc_.column_family_id_),K(cf_desc_.column_family_name_.c_str()));
+    COMPACTION_LOG(INFO, "begin to run intra_l0 compaction.", K(cf_desc_.column_family_id_));
   }
   stats_.record_stats_.start_micros = context_.cf_options_->env->NowMicros();
 }

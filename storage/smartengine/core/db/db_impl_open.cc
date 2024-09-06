@@ -343,7 +343,9 @@ int DBImpl::recovery()
 int DBImpl::create_default_subtbale(const ColumnFamilyOptions &cf_options)
 {
   int ret = Status::kOk;
-  CreateSubTableArgs args(0, cf_options, true, 0);
+  schema::TableSchema table_schema;
+  table_schema.set_index_id(0);
+  CreateSubTableArgs args(table_schema, cf_options, true, 0);
   ColumnFamilyData *sub_table = nullptr;
 
   if (FAILED(versions_->add_sub_table(args, false, true /*is replay*/, sub_table))) {

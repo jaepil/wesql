@@ -44,6 +44,16 @@ extern const char *const se_hton_name;
 const char *const DEFAULT_CF_NAME = "default";
 
 /*
+  This is the databae_name of smartengine system table
+*/
+const char * DEFAULT_SYSTEM_DATABASE_NAME = "__smartengine__";
+
+/*
+  This is the table_name of smartengine system table
+*/
+const char * DEFAULT_SYSTEM_TABLE_NAME = "__system__";
+
+/*
   This is the name of the Column Family used for storing the data dictionary.
 */
 const char *const DEFAULT_SYSTEM_SUBTABLE_NAME = "__system__";
@@ -546,23 +556,10 @@ bool SeDdHelper::get_se_subtable_ids(THD* thd, ulong lock_timeout,
   return error;
 }
 
-bool se_parse_column_format_from_comment(const char *comment_str)
+bool is_smartengine_system_database(const char *database_name)
 {
-  const char *label = "SMARTENGINE_COLUMN_FORMAT=";
-  const int64_t label_size = strlen(label);
-  const char *pos = nullptr;
-  int64_t value = 0;
-
-  if (nullptr != comment_str) {
-    if (IS_NULL(pos = strcasestr(comment_str, label))) {
-      //The label isn't exist
-    } else {
-      value = atoi(pos + label_size);   
-      value = (value > 0) ? 1 : 0;
-    }
-  }
-
-  return (1 == value) ? true : false;
+  return (strlen(DEFAULT_SYSTEM_DATABASE_NAME) == strlen(database_name)) &&
+         (0 == strncasecmp(DEFAULT_SYSTEM_DATABASE_NAME, database_name, strlen(database_name)));
 }
 
 } // namespace smartengine

@@ -25,6 +25,7 @@
 #include "db/async_callback.h"
 #include "db/binlog_position.h"
 #include "options/options.h"
+#include "schema/table_schema.h"
 #include "table/iterator.h"
 #include "transactions/transaction_log.h"
 
@@ -104,34 +105,39 @@ extern thread_local std::unordered_map<std::string, std::string>
 #endif
 
 extern const std::string kDefaultColumnFamilyName;
+
+// TODO (Zhao Dongsheng) : The structure ColumnFamilyDescriptor is useless.
 struct ColumnFamilyDescriptor {
-  std::string name;
   common::ColumnFamilyOptions options;
-  ColumnFamilyDescriptor()
-      : name(kDefaultColumnFamilyName),
-        options(common::ColumnFamilyOptions()) {}
-  ColumnFamilyDescriptor(const std::string& _name,
-                         const common::ColumnFamilyOptions& _options)
-      : name(_name), options(_options) {}
+  ColumnFamilyDescriptor() : options(common::ColumnFamilyOptions()) {}
+  ColumnFamilyDescriptor(const common::ColumnFamilyOptions& _options) : options(_options) {}
 };
 
 struct CreateSubTableArgs
 {
-  int64_t index_id_;
+  schema::TableSchema table_schema_;
   common::ColumnFamilyOptions cf_options_;
   bool create_table_space_;
   int64_t table_space_id_;
 
-  CreateSubTableArgs() : index_id_(-1), cf_options_() {}
-  CreateSubTableArgs(int64_t index_id, common::ColumnFamilyOptions cf_options)
-      : index_id_(index_id),
+  CreateSubTableArgs() : table_schema_(),
+                         cf_options_(),
+                         create_table_space_(false),
+                         table_space_id_(-1) {}
+
+  CreateSubTableArgs(common::ColumnFamilyOptions cf_options)
+      : table_schema_(),
         cf_options_(cf_options),
         create_table_space_(false),
         table_space_id_(0)
   {
   }
-  CreateSubTableArgs(int64_t index_id, common::ColumnFamilyOptions cf_options, bool create_table_space, int64_t table_space_id)
-      : index_id_(index_id),
+
+  CreateSubTableArgs(const schema::TableSchema &table_schema,
+                     common::ColumnFamilyOptions cf_options,
+                     bool create_table_space,
+                     int64_t table_space_id)
+      : table_schema_(table_schema),
         cf_options_(cf_options),
         create_table_space_(create_table_space),
         table_space_id_(table_space_id)
@@ -141,16 +147,15 @@ struct CreateSubTableArgs
   ~CreateSubTableArgs() {}
   bool is_valid() const
   {
-    return index_id_ >= 0;
+    return table_schema_.is_valid();
   }
-  DECLARE_AND_DEFINE_TO_STRING(KV_(index_id), KV_(create_table_space), KV_(table_space_id))
+
+  DECLARE_AND_DEFINE_TO_STRING(KV_(table_schema), KV_(create_table_space), KV_(table_space_id))
 };
 
 class ColumnFamilyHandle {
  public:
   virtual ~ColumnFamilyHandle() {}
-  // Returns the name of the column family associated with the current handle.
-  virtual const std::string& GetName() const = 0;
   // Returns the ID of the column family associated with the current handle.
   virtual uint32_t GetID() const = 0;
   // Fills "*desc" with the up-to-date descriptor of the column family

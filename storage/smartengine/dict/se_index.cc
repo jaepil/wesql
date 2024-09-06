@@ -35,6 +35,32 @@ extern SeSubtableManager cf_manager;
 
 SeKeyDef::SeKeyDef(uint indexnr_arg,
                    uint keyno_arg,
+                   uint16_t index_dict_version_arg,
+                   uchar index_type_arg,
+                   uint16_t kv_format_version_arg,
+                   const std::string &name,
+                   const SeIndexStats &_stats)
+    : m_index_number(indexnr_arg),
+      m_cf_handle(nullptr),
+      m_index_dict_version(index_dict_version_arg),
+      m_index_type(index_type_arg),
+      m_kv_format_version(kv_format_version_arg),
+      m_is_reverse_cf(false),
+      m_is_auto_cf(false),
+      m_name(name),
+      m_stats(_stats),
+      m_pk_part_no(nullptr),
+      m_pack_info(nullptr),
+      m_keyno(keyno_arg),
+      m_key_parts(0),
+      m_maxlength(0) // means 'not intialized'
+{
+  mysql_mutex_init(0, &m_mutex, MY_MUTEX_INIT_FAST);
+  se_netbuf_store_index(m_index_number_storage_form, m_index_number);
+}
+
+SeKeyDef::SeKeyDef(uint indexnr_arg,
+                   uint keyno_arg,
                    db::ColumnFamilyHandle *cf_handle_arg,
                    uint16_t index_dict_version_arg,
                    uchar index_type_arg,
@@ -42,7 +68,7 @@ SeKeyDef::SeKeyDef(uint indexnr_arg,
                    bool is_reverse_cf_arg,
                    bool is_auto_cf_arg,
                    const std::string &name,
-                   SeIndexStats _stats)
+                   const SeIndexStats &_stats)
     : m_index_number(indexnr_arg),
       m_cf_handle(cf_handle_arg),
       m_index_dict_version(index_dict_version_arg),

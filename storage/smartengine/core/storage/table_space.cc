@@ -170,7 +170,9 @@ int TableSpace::unregister_subtable(const int64_t index_id)
   return ret;
 }
 
-int TableSpace::allocate(const int32_t extent_space_type, ExtentIOInfo &io_info)
+int TableSpace::allocate(const int32_t extent_space_type,
+                         const std::string prefix,
+                         ExtentIOInfo &io_info)
 {
   int ret = Status::kOk;
   ExtentSpace *extent_space = nullptr;
@@ -182,7 +184,7 @@ int TableSpace::allocate(const int32_t extent_space_type, ExtentIOInfo &io_info)
   } else if (IS_NULL(extent_space = get_extent_space(extent_space_type))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to get extent space", K(ret), K(extent_space_type));
-  } else if (FAILED(extent_space->allocate(io_info))) {
+  } else if (FAILED(extent_space->allocate(prefix, io_info))) {
     SE_LOG(WARN, "fail to allocate extent from ExtentSpace", K(ret), K(extent_space_type));
   } else {
     SE_LOG(DEBUG, "success to allocate extent", K(io_info));
@@ -191,7 +193,9 @@ int TableSpace::allocate(const int32_t extent_space_type, ExtentIOInfo &io_info)
   return ret;
 }
 
-int TableSpace::recycle(const int32_t extent_space_type, const ExtentId extent_id)
+int TableSpace::recycle(const int32_t extent_space_type,
+                        const std::string prefix,
+                        const ExtentId extent_id)
 {
   int ret = Status::kOk;
   ExtentSpace *extent_space = nullptr;
@@ -203,7 +207,7 @@ int TableSpace::recycle(const int32_t extent_space_type, const ExtentId extent_i
   } else if (IS_NULL(extent_space = get_extent_space(extent_space_type))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to get extent space", K(ret), K(extent_space_type));
-  } else if (FAILED(extent_space->recycle(extent_id))) {
+  } else if (FAILED(extent_space->recycle(prefix, extent_id))) {
     SE_LOG(WARN, "fail to recycle extent", K(ret), K(extent_id));
   } else {
     SE_LOG(DEBUG, "success to recycle extent", K(extent_id));
@@ -213,6 +217,7 @@ int TableSpace::recycle(const int32_t extent_space_type, const ExtentId extent_i
 }
 
 int TableSpace::reference_if_need(const int32_t extent_space_type,
+                                  const std::string prefix,
                                   const ExtentId extent_id,
                                   ExtentIOInfo &io_info,
                                   bool &existed)
@@ -227,7 +232,7 @@ int TableSpace::reference_if_need(const int32_t extent_space_type,
   } else if (IS_NULL(extent_space = get_extent_space(extent_space_type))) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "unexpected error, fail to get extent space", K(ret), K(extent_space_type));
-  } else if (FAILED(extent_space->reference_if_need(extent_id, io_info, existed))) {
+  } else if (FAILED(extent_space->reference_if_need(prefix, extent_id, io_info, existed))) {
     SE_LOG(WARN, "fail to reference extent", K(ret), K(extent_id));
   } else {
     SE_LOG(DEBUG, "success to reference extent", K(extent_id));

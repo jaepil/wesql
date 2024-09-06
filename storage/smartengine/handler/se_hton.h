@@ -60,6 +60,12 @@ extern SeBackgroundThread se_bg_thread;
 
 extern SeDropIndexThread se_drop_idx_thread;
 
+// TODO (Zhao Dongsheng) : In the original logic, se_collation_exceptions
+// was used to list the table names that would skip collation checks(as follow
+// comment), and there table names were configured through the system variable
+// strict_collation_exceptions. However, in the current logic for smartengine,
+// the supported characters sets are predefined, making this variable deprecated,
+// and it is being considered for removal in the future.
 // List of table names (using regex) that are exceptions to the strict
 // collation check requirement.
 extern Regex_list_handler *se_collation_exceptions;

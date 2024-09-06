@@ -266,9 +266,9 @@ void LDBCommand::OpenDB() {
     // existing DB.
     if (st.ok() && cf_list.size() > 1) {
       // Ignore single column family DB.
-      for (auto cf_name : cf_list) {
-        column_families_.emplace_back(cf_name, opt);
-      }
+      //for (auto cf_name : cf_list) {
+      //  column_families_.emplace_back(cf_name, opt);
+      //}
     }
   }
   if (column_families_.empty()) {
@@ -283,12 +283,12 @@ void LDBCommand::OpenDB() {
   } else if (!handles_opened.empty()) {
     assert(handles_opened.size() == column_families_.size());
     bool found_cf_name = false;
-    for (size_t i = 0; i < handles_opened.size(); i++) {
-      cf_handles_[column_families_[i].name] = handles_opened[i];
-      if (column_family_name_ == column_families_[i].name) {
-        found_cf_name = true;
-      }
-    }
+    //for (size_t i = 0; i < handles_opened.size(); i++) {
+    //  cf_handles_[column_families_[i].name] = handles_opened[i];
+    //  if (column_family_name_ == column_families_[i].name) {
+    //    found_cf_name = true;
+    //  }
+    //}
     if (!found_cf_name) {
       exec_state_ = LDBCommandExecuteResult::Failed(
           "Non-existing sub table " + column_family_name_);
@@ -1196,7 +1196,7 @@ int CheckpointDumpCommand::dump_version_set_checkpoint(util::RandomAccessFile *c
   CheckpointBlockHeader *block_header = nullptr;
   common::Options options;
   common::ColumnFamilyOptions cf_options;
-  CreateSubTableArgs dummy_args(1, cf_options);
+  CreateSubTableArgs dummy_args(cf_options);
   Slice result;
 
   if (nullptr == checkpoint_reader || nullptr == header) {

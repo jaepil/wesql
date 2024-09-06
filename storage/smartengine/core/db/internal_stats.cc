@@ -1333,7 +1333,7 @@ void InternalStats::dump_cfstats_nofile_histogram(std::string* value) {
 //  char* buf = heap_buf.get();
   char *buf = static_cast<char *>(memory::base_malloc(BUF_SIZE));
   // Per-ColumnFamily stats
-  PrintLevelStatsHeader(buf, BUF_SIZE, cfd_->GetName());
+  PrintLevelStatsHeader(buf, BUF_SIZE, std::to_string(cfd_->get_table_schema().get_index_id()));
   value->append(buf);
 
   // Print stats for each level
@@ -1450,7 +1450,7 @@ void InternalStats::DumpCFFileHistogram(std::string* value) {
   char buf[2000];
   snprintf(buf, sizeof(buf),
            "\n** File Read Latency Histogram By Level [%s] **\n",
-           cfd_->GetName().c_str());
+           std::to_string(cfd_->get_table_schema().get_index_id()).c_str());
   value->append(buf);
 
   for (int level = 0; level < 0/*no use*/; level++) {

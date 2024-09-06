@@ -46,7 +46,7 @@ struct RowBlock;
 struct ExtentWriterArgs
 {
 public:
-  int64_t index_id_;
+  std::string cluster_id_;
   int64_t table_space_id_;
   int64_t block_restart_interval_;
   int32_t extent_space_type_;
@@ -59,7 +59,7 @@ public:
   storage::ChangeInfo *change_info_;
 
   ExtentWriterArgs();
-  ExtentWriterArgs(const int64_t index_id,
+  ExtentWriterArgs(const std::string &cluster_id,
                    const int64_t table_space_id,
                    const int64_t block_restart_interval,
                    const int32_t extent_space_type_,
@@ -160,6 +160,7 @@ private:
   cache::Cache *block_cache_;
   cache::RowCache *row_cache_;
   util::CompressorHelper compressor_helper_;
+  std::string prefix_;
   BlockInfo block_info_;
   ExtentInfo extent_info_;
   std::vector<ExtentInfo> writed_extent_infos_;

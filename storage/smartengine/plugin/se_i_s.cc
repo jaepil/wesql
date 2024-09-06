@@ -1016,10 +1016,6 @@ int SeDdlScanner::add_table(SeTableDef *tdef) {
     field[SMARTENGINE_DDL_FIELD::KV_FORMAT_VERSION]->store(kd.m_kv_format_version,
                                                    true);
 
-    //std::string cf_name = kd.get_cf()->GetName();
-    //field[SMARTENGINE_DDL_FIELD::CF]->store("", 0,
-    //                                system_charset_info);
-
     ret = my_core::schema_table_store_record(m_thd, m_table);
     if (ret)
       return ret;

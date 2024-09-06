@@ -88,7 +88,8 @@ public:
   int init(const ExtentId &extent_id,
            int64_t unique_id,
            ::objstore::ObjectStore *object_store,
-           const std::string &bucket);
+           const std::string &bucket,
+           const std::string &prefix);
   int write(const common::Slice &data) override;
   int read(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, common::Slice &result) override;
   int prefetch(util::AIOHandle *aio_handle, int64_t offset, int64_t size) override; 
@@ -104,6 +105,7 @@ private:
 protected:
   ::objstore::ObjectStore *object_store_;
   std::string bucket_;
+  std::string prefix_;
 };
 
 class WriteExtentJob

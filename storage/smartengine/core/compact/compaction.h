@@ -112,21 +112,19 @@ struct CompactionContext
   }
 };
 
+// TODO(Zhao Dongsheng) : The structure ColumnFamilyDesc is useless,
+// because the column_family_id_ is exist in table_schema_.
 struct ColumnFamilyDesc {
   int32_t column_family_id_;
-  std::string column_family_name_;
   schema::TableSchema table_schema_;
 
   ColumnFamilyDesc() : column_family_id_(0),
-                       column_family_name_("default"),
                        table_schema_()
   {}
 
   ColumnFamilyDesc(int32_t index_id,
-                   const std::string &index_name,
                    const schema::TableSchema &table_schema)
       : column_family_id_(index_id),
-        column_family_name_(index_name),
         table_schema_(table_schema)
   {}
 };

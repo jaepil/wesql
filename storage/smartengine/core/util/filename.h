@@ -20,8 +20,15 @@
 #include "transactions/transaction_log.h"
 #include "util/concurrent_direct_file_writer.h"
 
-namespace smartengine {
-namespace util {
+namespace smartengine
+{
+namespace schema
+{
+class TableSchema;
+} // namespace schema
+
+namespace util
+{
 class Directory;
 class Env;
 class WritableFileWriter;
@@ -137,6 +144,12 @@ extern bool ParseFileName(const std::string& filename,
 
 // Make the IDENTITY file for the db
 extern common::Status SetIdentityFile(Env* env, const std::string& dbname);
+
+// Make index prefix name
+extern std::string make_index_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema);
+
+// Make extent prefix name
+extern std::string make_data_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema);
 
 }  // namespace util
 }  // namespace smartengine

@@ -102,8 +102,9 @@ int FileExtentSpace::remove()
   return ret;
 }
 
-int FileExtentSpace::allocate(ExtentIOInfo& io_info)
+int FileExtentSpace::allocate(const std::string prefix, ExtentIOInfo& io_info)
 {
+  UNUSED(prefix);
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
 
@@ -119,8 +120,9 @@ int FileExtentSpace::allocate(ExtentIOInfo& io_info)
   return ret;
 }
 
-int FileExtentSpace::recycle(const ExtentId extent_id)
+int FileExtentSpace::recycle(const std::string prefix, const ExtentId extent_id)
 {
+  UNUSED(prefix);
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
 
@@ -139,8 +141,12 @@ int FileExtentSpace::recycle(const ExtentId extent_id)
   return ret;
 }
 
-int FileExtentSpace::reference_if_need(const ExtentId extent_id, ExtentIOInfo &io_info, bool &existed)
+int FileExtentSpace::reference_if_need(const std::string prefix,
+                                       const ExtentId extent_id,
+                                       ExtentIOInfo &io_info,
+                                       bool &existed)
 {
+  UNUSED(prefix);
   int ret = Status::kOk;
   DataFile *data_file = nullptr;
 

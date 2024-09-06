@@ -53,6 +53,14 @@ const util::Comparator *SeSubtableOptions::get_cf_comparator(const std::string &
   }
 }
 
+void SeSubtableOptions::get_cf_options(common::ColumnFamilyOptions *const opts)
+{
+  *opts = m_default_cf_opts;
+  // Set the comparator according to 'rev:'
+  opts->comparator = &s_pk_comparator;
+}
+
+// TODO (Zhao Dongsheng) : deprecated.
 void SeSubtableOptions::get_cf_options(const std::string &cf_name, common::ColumnFamilyOptions *const opts)
 {
   *opts = m_default_cf_opts;

@@ -1392,8 +1392,8 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
                   if (FAILED(log_entry.deserialize(log_data, log_len, pos))) {
                     SE_LOG(WARN, "fail to deserialize log entry", K(ret), K(log_len), K(manifest_name));
                   } else {
-                    extent_ids_map.erase(log_entry.index_id_);
-                    SE_LOG(INFO, "Found a dropped subtable", K(log_entry.index_id_));
+                    extent_ids_map.erase(log_entry.table_schema_.get_index_id());
+                    SE_LOG(INFO, "Found a dropped subtable", K(log_entry.table_schema_));
                   }
                 } else {
                   // skip
@@ -1414,7 +1414,6 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
     }
     // write all extent ids to the file
     if (SUCCED(ret)) {
-//      std::unique_ptr<WritableFile> extent_ids_writer;
       WritableFile *extent_ids_writer = nullptr;
       EnvOptions opt_env_opts = env_options_;
       opt_env_opts.use_direct_writes = false;

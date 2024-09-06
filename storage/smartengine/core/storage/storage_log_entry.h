@@ -112,11 +112,11 @@ struct ManifestLogEntry
 struct ChangeSubTableLogEntry : public ManifestLogEntry
 {
   static const int64_t CHANGE_SUB_TABLE_LOG_ENTRY_VERSION = 1;
-  int64_t index_id_;
+  schema::TableSchema table_schema_;
   int64_t table_space_id_;
 
   ChangeSubTableLogEntry();
-  ChangeSubTableLogEntry(int64_t index_id, int64_t table_space_id);
+  ChangeSubTableLogEntry(const schema::TableSchema &table_schema, int64_t table_space_id);
   virtual ~ChangeSubTableLogEntry() override;
   DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(CHANGE_SUB_TABLE_LOG_ENTRY_VERSION)
   DECLARE_TO_STRING()

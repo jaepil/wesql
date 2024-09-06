@@ -104,10 +104,11 @@ TEST(InMemExtent, sim) {
   ExtentSpaceManager::get_instance().init(env, soptions, options);
   int ret = Status::kOk;
   ret = ExtentSpaceManager::get_instance().create_table_space(0);
+  WriteExtentJobScheduler::get_instance().start(env, 1);
   ASSERT_EQ(Status::kOk, ret);
   StorageLogger::get_instance().begin(storage::SeEvent::FLUSH);
   schema::TableSchema table_schema;
-  ExtentWriterArgs writer_args(0 /*column_family_id*/,
+  ExtentWriterArgs writer_args(std::string(),
                                0 /*table_space_id*/,
                                16 /*block_restart_interval*/,
                                storage::FILE_EXTENT_SPACE,

@@ -125,7 +125,6 @@ int SplitCompaction::run()
   int ret = 0;
   COMPACTION_LOG(INFO, "begin to run a split task.",
                  K(cf_desc_.column_family_id_),
-                 K(cf_desc_.column_family_name_.c_str()),
                  K(merge_extents_.size()));
   ExtSEIterator *iterator = ALLOC_OBJECT(ExtSEIterator, arena_,
       context_.data_comparator_, context_.internal_comparator_);

@@ -1555,7 +1555,7 @@ Status DBImpl::build_compaction_job(ColumnFamilyData *cfd,
   context.task_type_ = cf_job.task_info_.task_type_;
   context.enable_thread_tracking_ = immutable_db_options_.enable_thread_tracking;
   context.need_check_snapshot_ = cf_job.need_check_snapshot_;
-  storage::ColumnFamilyDesc cf_desc(cfd->GetID(), cfd->GetName(), cfd->get_table_schema());
+  storage::ColumnFamilyDesc cf_desc(cfd->GetID(), cfd->get_table_schema());
   const CompactionTasksPicker &task_picker = cfd->get_task_picker();
   CompactionTasksPicker::TaskInfo &task_info = cf_job.task_info_;
   if (FAILED(job->init(context, cf_desc, snapshot))) {
@@ -1608,7 +1608,6 @@ Status DBImpl::build_compaction_job(ColumnFamilyData *cfd,
     }
     SE_LOG(INFO, "build priority output_level job",
         K(cfd->GetID()),
-        K(cfd->GetName().c_str()),
         K((int)cfd->compaction_priority()),
         K(context.output_level_),
         K(job->get_task_size()));
@@ -1786,22 +1785,19 @@ Status DBImpl::BackgroundCompaction(bool* made_progress, JobContext* job_context
     // eventually be installed into SuperVersion
     auto* mutable_cf_options = cfd->GetLatestMutableCFOptions();
     if ((mutable_cf_options->disable_auto_compactions) || cfd->IsDropped()) {
-      SE_LOG(INFO, "disable auto compaction on cfd",
-          K(cfd->GetName().c_str()), K(cfd->GetID()), K(mutable_cf_options->disable_auto_compactions));
+      SE_LOG(INFO, "disable auto compaction on cfd", K(cfd->GetID()), K(mutable_cf_options->disable_auto_compactions));
       remove_compaction_job(cf_job, false);
     } else if (nullptr == cf_job->job_) {
       // Case 1, we should build compaction job when first scheduled this CF.
       status = build_compaction_job(cf_job->cfd_, cf_job->meta_snapshot_, job_context, cf_job->job_, *cf_job);
       if (!status.ok()) {
         // may be build at next round;We remove cf_job in case of memory leak;
-        SE_LOG(INFO, "first schedule cfd, failed to build,maybe try again",
-            K(cfd->GetName().c_str()), K(cfd->GetID()), K((int)status.code()));
+        SE_LOG(INFO, "first schedule cfd, failed to build,maybe try again", K(cfd->GetID()), KE(status.code()));
         assert(nullptr == cf_job->job_);
         remove_compaction_job(cf_job);
         return status;
       } else if (0 == cf_job->job_->get_task_size()) {
-        SE_LOG(INFO, "first schedule cfd, build empty compaction job",
-            K(cfd->GetName().c_str()), K(cfd->GetID()), K((int)status.code()));
+        SE_LOG(INFO, "first schedule cfd, build empty compaction job", K(cfd->GetID()), KE(status.code()));
         remove_compaction_job(cf_job);
         return status;
       }
@@ -1836,7 +1832,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress, JobContext* job_context
           Snapshot *s = cf_job->meta_snapshot_;
           cf_job->meta_snapshot_ = nullptr;
           cf_job->cfd_->release_meta_snapshot(s, &mutex_);
-          SE_LOG(DEBUG, "release meta snapshot cfd", K(cfd->GetName().c_str()), K(cfd->GetID()));
+          SE_LOG(DEBUG, "release meta snapshot cfd", K(cfd->GetID()));
         }
         MaybeScheduleFlushOrCompaction();
       }
