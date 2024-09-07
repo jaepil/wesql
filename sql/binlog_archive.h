@@ -138,8 +138,10 @@ class Binlog_archive {
                                       uint64_t &consensus_term,
                                       std::string &mysql_binlog,
                                       my_off_t &mysql_binlog_pos,
+                                      my_off_t &mysql_binlog_write_pos,
                                       std ::string &binlog,
-                                      my_off_t &binlog_pos);
+                                      my_off_t &binlog_pos,
+                                      my_off_t &binlog_write_pos);
 
  private:
   // the binlog archive THD handle.
@@ -169,7 +171,7 @@ class Binlog_archive {
   my_off_t
       m_binlog_archive_last_event_end_pos;  //  The last binlog event position
                                             //  persisted to objstore.
-  my_off_t m_binlog_write_last_event_end_pos;  // The last binlog event position
+  my_off_t m_binlog_archive_write_last_event_end_pos;  // The last binlog event position
                                                // writed to persistent cache.
   char m_mysql_binlog_start_file[FN_REFLEN + 1];
   my_off_t m_mysql_binlog_start_pos;  // mysql binlog archive start position.
@@ -195,6 +197,7 @@ class Binlog_archive {
   Diagnostics_area m_diag_area;
   String m_packet;
   bool m_binlog_in_transaction;
+  bool m_rotate_forbidden;
   uint64 m_binlog_archive_start_consensus_index;
   time_t m_slice_create_ts;
   int new_binlog_slice(bool new_binlog, const char *log_file, my_off_t log_pos,

@@ -48,6 +48,37 @@ SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
 SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
 --enable_warnings
 
+let $wait_condition= SELECT last_persistent_binlog_pos = last_persistent_binlog_write_pos FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_INFO;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
+
+--echo #Rotate forbidden in transaction
+set global debug= '+d, force_rotate_forbidded';
+
+BEGIN;
+INSERT INTO t1 SELECT * FROM t1 limit 100;
+COMMIT;
+BEGIN;
+INSERT INTO t1 SELECT * FROM t1 limit 100;
+COMMIT;
+BEGIN;
+INSERT INTO t1 SELECT * FROM t1 limit 100;
+COMMIT;
+
+let $wait_condition= SELECT last_persistent_binlog_write_pos > last_persistent_binlog_pos  FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_INFO;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
+
+set global debug= '-d, force_rotate_forbidded';
+
+let $wait_condition= SELECT last_persistent_binlog_pos = last_persistent_binlog_write_pos FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_INFO;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
+
+--disable_warnings
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+--enable_warnings
+
 --let logfile = query_get_value(SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX order by Log_name, Log_name, 2)
 --echo # Puge persistent binlog $logfile
 --eval SELECT binlog_persistent_purge('$logfile')
