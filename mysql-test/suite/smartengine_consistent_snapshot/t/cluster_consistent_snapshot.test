@@ -2,7 +2,7 @@
 # Test for consistent snapshot recovery from object store
 #
 --source include/have_consensus_replication.inc
---source include/paxos.inc
+--source include/consensus_replication.inc
 
 let $wait_condition= select role='Leader' from information_schema.wesql_cluster_local;
 let $wait_timeout= 600;

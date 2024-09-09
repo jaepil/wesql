@@ -546,7 +546,7 @@ write_file $BOOTSTRAP_SQL;
 EOF
 
 --echo # 2. First start the server with --initialize
---exec $MYSQLD $extra_args --secure-file-priv="" --initialize-insecure --datadir=$DDIR --init-file=$BOOTSTRAP_SQL --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info='127.0.0.1:23300@1'
+--exec $MYSQLD $extra_args --secure-file-priv="" --initialize-insecure --datadir=$DDIR --init-file=$BOOTSTRAP_SQL --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info='127.0.0.1:23300@1'
 
 --echo # 3. Restart the server against DDIR - should succeed.
 --exec echo "restart:" --datadir=$DDIR --lower_case_table_names=1 --secure-file-priv="" --no-console --log-error=$MYSQLD_LOG > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect

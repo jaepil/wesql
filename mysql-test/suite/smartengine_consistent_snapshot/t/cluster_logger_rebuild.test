@@ -2,7 +2,7 @@
 # Test for consistent snapshot recovery from object store
 #
 --source include/have_consensus_replication.inc
---source include/paxos.inc
+--source include/consensus_replication.inc
 --source include/have_wesql_test.inc
 
 --connect (conn1,127.0.0.1,root,,test,$MYPORT_1)
@@ -67,7 +67,7 @@ write_file $BOOTSTRAP_SQL;
   CREATE DATABASE test;
 EOF
 --echo # Initialize logger1
---exec $MYSQLD --no-defaults --initialize-insecure --datadir=$LOGGER1_DATADIR --table-on-objectstore=false --objectstore-region=$region --consensus-replication-log-type-node=on --consensus-replication-cluster-id=$CLUSTER_ID --consensus-replication-cluster-info='$LOGGER1_CLUSTER_INFO' --log_error_verbosity=3 --init-file=$BOOTSTRAP_SQL > $MYSQLD_LOG 2>&1
+--exec $MYSQLD --no-defaults --initialize-insecure --datadir=$LOGGER1_DATADIR --table-on-objectstore=false --objectstore-region=$region --raft-replication-log-type-node=on --raft-replication-cluster-id=$CLUSTER_ID --raft-replication-cluster-info='$LOGGER1_CLUSTER_INFO' --log_error_verbosity=3 --init-file=$BOOTSTRAP_SQL > $MYSQLD_LOG 2>&1
 
 --echo # Start logger1
 --let $wait_follower= 1

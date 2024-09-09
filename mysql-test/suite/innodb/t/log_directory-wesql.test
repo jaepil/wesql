@@ -81,7 +81,7 @@ let SEARCH_PATTERN=Bootstrapping complete;
 
 --echo # Start MySQL...
 --error 0
---exec $MYSQLD $args --initialize-insecure --consensus-replication-cluster-info='127.0.0.1:29273@1' --consensus-replication-cluster-id=1 --consensus-replication-start-index=1
+--exec $MYSQLD $args --initialize-insecure --raft-replication-cluster-info='127.0.0.1:29273@1' --raft-replication-cluster-id=1 --raft-replication-start-index=1
 
 --echo # Verify...
 

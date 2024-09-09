@@ -506,25 +506,25 @@ large_tests.innodb_innochecksum_3gb : BUG#000 Take too long (timeout)
 innodb_gis.rtree_split_geographic : BUG#000 Take too long (timeout)
 main.mysqlpump_extended : BUG#000 timeout
 
-consensus_replication.smart_uk_conflict                     : WL#001 smart replay mode is not supported
-consensus_replication.smart_row_image_not_full              : WL#001 smart replay mode is not supported
-consensus_replication.long_trx_leader_transfer              : WL#001 testcase issue
-consensus_replication.purge_local                           : WL#001 not stable
-consensus_replication.force_promote                         : WL#001 not stable
-consensus_replication.purge_log                             : WL#001 not stable
-consensus_replication.cascade_replication                   : WL#001 not stable
-consensus_replication.auto_leader_transfer                  : WL#001 not stable
-consensus_replication.force_single_mode                     : WL#001 not stable
-consensus_replication.event_scheduler                       : WL#001 not stable
-consensus_replication.xa_missing_binlogged                  : WL#001 not stable
-consensus_replication.failpoint                             : WL#001 only works with cmake -DWITH_FAIL_POINT=ON
-consensus_replication.leader_transfer_check                 : WL#001 not stable
-consensus_replication.learner_source                        : WL#001 disable tmp
-consensus_replication.member_change                         : WL#001 disable tmp
-consensus_replication.add_learner                           : WL#001 disable tmp
-consensus_replication.learner_after_purgelog                : WL#001 disable tmp
-consensus_replication.restart_learner                       : WL#001 disable tmp
-consensus_replication.add_follower                          : WL#001 disable tmp
+raft_replication.smart_uk_conflict                     : WL#001 smart replay mode is not supported
+raft_replication.smart_row_image_not_full              : WL#001 smart replay mode is not supported
+raft_replication.long_trx_leader_transfer              : WL#001 testcase issue
+raft_replication.purge_local                           : WL#001 not stable
+raft_replication.force_promote                         : WL#001 not stable
+raft_replication.purge_log                             : WL#001 not stable
+raft_replication.cascade_replication                   : WL#001 not stable
+raft_replication.auto_leader_transfer                  : WL#001 not stable
+raft_replication.force_single_mode                     : WL#001 not stable
+raft_replication.event_scheduler                       : WL#001 not stable
+raft_replication.xa_missing_binlogged                  : WL#001 not stable
+raft_replication.failpoint                             : WL#001 only works with cmake -DWITH_FAIL_POINT=ON
+raft_replication.leader_transfer_check                 : WL#001 not stable
+raft_replication.learner_source                        : WL#001 disable tmp
+raft_replication.member_change                         : WL#001 disable tmp
+raft_replication.add_learner                           : WL#001 disable tmp
+raft_replication.learner_after_purgelog                : WL#001 disable tmp
+raft_replication.restart_learner                       : WL#001 disable tmp
+raft_replication.add_follower                          : WL#001 disable tmp
 
 # Group Replication tests.
 

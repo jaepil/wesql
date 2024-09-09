@@ -24,7 +24,7 @@ EOF
 --echo # Stop the MTR default DB server
 --source include/shutdown_mysqld.inc
 
-let NEW_CMD = $MYSQLD --no-defaults --initialize-insecure --basedir=$MYSQLD_BASEDIR --datadir=$MYSQLD_DATADIR1 --init-file=$BOOTSTRAP_SQL --secure-file-priv="" --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info='127.0.0.1:29230@1' </dev/null>>$MYSQLTEST_VARDIR/tmp/bootstrap1.log 2>&1;
+let NEW_CMD = $MYSQLD --no-defaults --initialize-insecure --basedir=$MYSQLD_BASEDIR --datadir=$MYSQLD_DATADIR1 --init-file=$BOOTSTRAP_SQL --secure-file-priv="" --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info='127.0.0.1:29230@1' </dev/null>>$MYSQLTEST_VARDIR/tmp/bootstrap1.log 2>&1;
 
 --echo # Run the bootstrap command of datadir1
 --exec $NEW_CMD
@@ -96,7 +96,7 @@ LET $MYSQL_DATA_DIR = `select @@datadir`;
 --echo # Stop the non-encrypted server
 --source include/shutdown_mysqld.inc
 
-let NEW_CMD = $MYSQLD --no-defaults --initialize-insecure --basedir=$MYSQLD_BASEDIR --datadir=$MYSQLD_DATADIR1 --init-file=$BOOTSTRAP_SQL --secure-file-priv="" --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info='127.0.0.1:29231@1' </dev/null>>$MYSQLTEST_VARDIR/tmp/bootstrap2.log 2>&1;
+let NEW_CMD = $MYSQLD --no-defaults --initialize-insecure --basedir=$MYSQLD_BASEDIR --datadir=$MYSQLD_DATADIR1 --init-file=$BOOTSTRAP_SQL --secure-file-priv="" --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info='127.0.0.1:29231@1' </dev/null>>$MYSQLTEST_VARDIR/tmp/bootstrap2.log 2>&1;
 
 --echo # Run the bootstrap command of datadir1
 --exec $NEW_CMD

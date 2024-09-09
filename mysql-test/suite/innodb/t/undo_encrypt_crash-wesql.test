@@ -37,7 +37,7 @@ EOF
 --echo #########################################################################
 --echo # INITIALIZE NEW SERVER
 --echo #########################################################################
-let NEW_CMD = $MYSQLD --no-defaults --innodb_dedicated_server=OFF --initialize-insecure --innodb_redo_log_capacity=$LOG_CAPACITY --innodb_page_size=$START_PAGE_SIZE --innodb_data_home_dir=$MYSQLD_HOME_DATA_DIR --innodb_undo_directory=$MYSQLD_UNDO_DATADIR --basedir=$MYSQLD_BASEDIR --datadir=$MYSQLD_DATADIR --init-file=$BOOTSTRAP_SQL --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info='127.0.0.1:29243@1' --secure-file-priv="";
+let NEW_CMD = $MYSQLD --no-defaults --innodb_dedicated_server=OFF --initialize-insecure --innodb_redo_log_capacity=$LOG_CAPACITY --innodb_page_size=$START_PAGE_SIZE --innodb_data_home_dir=$MYSQLD_HOME_DATA_DIR --innodb_undo_directory=$MYSQLD_UNDO_DATADIR --basedir=$MYSQLD_BASEDIR --datadir=$MYSQLD_DATADIR --init-file=$BOOTSTRAP_SQL --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info='127.0.0.1:29243@1' --secure-file-priv="";
 
 --echo # Server should be initialized successfully.
 --exec $NEW_CMD

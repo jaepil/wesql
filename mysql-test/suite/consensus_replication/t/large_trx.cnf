@@ -1,5 +1,0 @@
-!include suite/consensus_replication/my.cnf
-
-[mysqld]
-consensus_replication_large_trx=ON
-slave_parallel_workers=0

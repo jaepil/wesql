@@ -44,10 +44,10 @@ write_file $bootstrap_sql_file;
   CREATE DATABASE test;
 EOF
 --let extra_args=--defaults-file='$MYSQLTEST_VARDIR/my.cnf' --console --skip-ssl --basedir=$BASEDIR --lc-messages-dir=$MYSQL_SHAREDIR --socket=$learner_socket_path
---let init_args=--server_id=$learner_server_id --consensus-replication-cluster-id=$learner_cluster_id --consensus-replication-learner-node=ON --consensus-replication-cluster-info=$learner_cluster_info
+--let init_args=--server_id=$learner_server_id --raft-replication-cluster-id=$learner_cluster_id --raft-replication-learner-node=ON --raft-replication-cluster-info=$learner_cluster_info
 --exec if [ -d $DDIR ]; then rm -rf $DDIR; fi
 --exec $MYSQLD $extra_args --initialize-insecure  --init-file=$bootstrap_sql_file --datadir=$DDIR $init_args > $MYSQLD_LOG 2>&1
---exec $MYSQLD $extra_args --datadir=$DDIR $init_args --consensus-replication-force-change-meta=ON --port=$learner_port >> $MYSQLD_LOG 2>&1 &
+--exec $MYSQLD $extra_args --datadir=$DDIR $init_args --raft-replication-force-change-meta=ON --port=$learner_port >> $MYSQLD_LOG 2>&1 &
 --remove_file $bootstrap_sql_file
 
 --disable_abort_on_error

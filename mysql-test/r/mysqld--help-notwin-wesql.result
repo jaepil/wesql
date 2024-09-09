@@ -317,19 +317,19 @@ The following options may be given as the first argument:
  memory counter
  --connection-memory-limit=# 
  Maximum amount of memory connection can consume
- --consensus-replication[=name] 
- Enable or disable consensus_replication plugin. Possible
+ --raft-replication[=name] 
+ Enable or disable raft_replication plugin. Possible
  values are ON, OFF, FORCE (don't start if the plugin
  fails to load).
- --consensus-replication-allow-no-valid-entry 
+ --raft-replication-allow-no-valid-entry 
  allow consensus log without any valid entry
- --consensus-replication-appliedindex-force-delay=# 
+ --raft-replication-appliedindex-force-delay=# 
  force set a smaller appliedindex
- --consensus-replication-archive-log-bin-index=name 
+ --raft-replication-archive-log-bin-index=name 
  File that holds the names for archived binary log files.
- --consensus-replication-archive-recovery 
+ --raft-replication-archive-recovery 
  archive recovery from the backup
- --consensus-replication-archive-recovery-stop-datetime=name 
+ --raft-replication-archive-recovery-stop-datetime=name 
  Stop recovery the archive binlog at first event having a
  datetime equal or posterior to the argument; the argument
  must be a date and time in the local time zone, in any
@@ -337,124 +337,124 @@ The following options may be given as the first argument:
  TIMESTAMP types, for example: 2004-12-25 11:25:56 (you
  should probably use quotes for your shell to set it
  properly).
- --consensus-replication-auto-leader-transfer 
+ --raft-replication-auto-leader-transfer 
  whether to enable auto leader transfer in consensus layer
- (Defaults to on; use --skip-consensus-replication-auto-leader-transfer to disable.)
- --consensus-replication-auto-leader-transfer-check-seconds=# 
+ (Defaults to on; use --skip-raft-replication-auto-leader-transfer to disable.)
+ --raft-replication-auto-leader-transfer-check-seconds=# 
  the interval between a leader check its health for a
  transfer
- --consensus-replication-auto-reset-match-index 
+ --raft-replication-auto-reset-match-index 
  enable auto reset match index when consensus follower has
  fewer logs
- (Defaults to on; use --skip-consensus-replication-auto-reset-match-index to disable.)
- --consensus-replication-check-commit-index-interval=# 
+ (Defaults to on; use --skip-raft-replication-auto-reset-match-index to disable.)
+ --raft-replication-check-commit-index-interval=# 
  check interval for slave calling checkCommitIndex
- --consensus-replication-checksum 
+ --raft-replication-checksum 
  Checksum when consensus receive log. Disabled by default.
- --consensus-replication-cluster-id=# 
+ --raft-replication-cluster-id=# 
  consensus cluster id
- --consensus-replication-cluster-info=name 
+ --raft-replication-cluster-info=name 
  Consensus cluster nodes ip-port information
- --consensus-replication-configure-change-timeout=# 
+ --raft-replication-configure-change-timeout=# 
  Consensus configure change timeout (ms). Default 1 min
- --consensus-replication-current-term=# 
+ --raft-replication-current-term=# 
  Consensus cluster nodes current term  information
- --consensus-replication-disable-election 
+ --raft-replication-disable-election 
  Disable consensus election and stepdown. Disabled by
  default.
- --consensus-replication-disable-fifo-cache 
+ --raft-replication-disable-fifo-cache 
  disable consensus fifo cache (run with weak consensus
  mode)
- --consensus-replication-dynamic-easyindex 
+ --raft-replication-dynamic-easyindex 
  Enable dynamic easy addr cidx. Enabled by default.
- (Defaults to on; use --skip-consensus-replication-dynamic-easyindex to disable.)
- --consensus-replication-election-timeout=# 
+ (Defaults to on; use --skip-raft-replication-dynamic-easyindex to disable.)
+ --raft-replication-election-timeout=# 
  Consensus election timeout
- --consensus-replication-flow-control=name 
+ --raft-replication-flow-control=name 
  consensus flow control (<-1: no log send, -1: only send
  log during heartbeat, 0: no flow control, >0: [TODO] flow
  control).
- --consensus-replication-force-change-meta 
+ --raft-replication-force-change-meta 
  Consensus cluster force to change meta
- --consensus-replication-force-recover-index=# 
+ --raft-replication-force-recover-index=# 
  Consensus cluster restore from leader set apply index
  point
- --consensus-replication-force-reset-meta 
+ --raft-replication-force-reset-meta 
  Consensus cluster force to reset meta
- --consensus-replication-force-single-mode 
+ --raft-replication-force-single-mode 
  Consensus cluster force to use single mode
- --consensus-replication-force-sync-epoch-diff=# 
+ --raft-replication-force-sync-epoch-diff=# 
  consensus forceSync epoch diff
- --consensus-replication-heartbeat-thread-cnt=# 
+ --raft-replication-heartbeat-thread-cnt=# 
  Number of consensus heartbeat thread
- --consensus-replication-io-thread-cnt=# 
+ --raft-replication-io-thread-cnt=# 
  Number of consensus io thread
- --consensus-replication-large-batch-ratio=# 
+ --raft-replication-large-batch-ratio=# 
  Large batch ratio of consensus server send at once
- --consensus-replication-large-event-split-size=# 
+ --raft-replication-large-event-split-size=# 
  split size for large event, dangerous to change this
  variable
- --consensus-replication-large-trx 
+ --raft-replication-large-trx 
  consensus large trx or not
- (Defaults to on; use --skip-consensus-replication-large-trx to disable.)
- --consensus-replication-learner-heartbeat 
+ (Defaults to on; use --skip-raft-replication-large-trx to disable.)
+ --raft-replication-learner-heartbeat 
  enable send heartbeat to learner
- (Defaults to on; use --skip-consensus-replication-learner-heartbeat to disable.)
- --consensus-replication-learner-node 
+ (Defaults to on; use --skip-raft-replication-learner-heartbeat to disable.)
+ --raft-replication-learner-node 
  Consensus cluster learner node type
- --consensus-replication-learner-pipelining 
+ --raft-replication-learner-pipelining 
  enable pipelining send msg to learner
- --consensus-replication-learner-timeout=# 
+ --raft-replication-learner-timeout=# 
  Consensus learner connection timeout
- --consensus-replication-log-cache-size=# 
+ --raft-replication-log-cache-size=# 
  Max cached logs size
- --consensus-replication-log-level=name 
+ --raft-replication-log-level=name 
  consensus log level
- --consensus-replication-log-type-node 
+ --raft-replication-log-type-node 
  Consensus cluster log type instance
- --consensus-replication-max-delay-index=# 
+ --raft-replication-max-delay-index=# 
  Max index delay for pipeline log delivery
- --consensus-replication-max-log-size=# 
+ --raft-replication-max-log-size=# 
  Max one log size. (default: 20M)
- --consensus-replication-max-packet-size=# 
+ --raft-replication-max-packet-size=# 
  Max package size the consensus server send at once
- --consensus-replication-min-delay-index=# 
+ --raft-replication-min-delay-index=# 
  Min index delay for pipeline log delivery
- --consensus-replication-mts-recover-use-index 
+ --raft-replication-mts-recover-use-index 
  Consensus cluster use idex to recover mts
- --consensus-replication-new-follower-threshold=# 
+ --raft-replication-new-follower-threshold=# 
  Max delay index to allow a learner becomes a follower
- --consensus-replication-optimistic-heartbeat 
+ --raft-replication-optimistic-heartbeat 
  whether to use optimistic heartbeat in consensus layer
- --consensus-replication-pipelining-timeout=# 
+ --raft-replication-pipelining-timeout=# 
  the timeout the consensus server cache the log
  (milliseconds)
- --consensus-replication-prefetch-cache-size=# 
+ --raft-replication-prefetch-cache-size=# 
  Max cached logs size
- --consensus-replication-prefetch-wakeup-ratio=# 
+ --raft-replication-prefetch-wakeup-ratio=# 
  prefetch wakeup ratio 
- --consensus-replication-prefetch-window-size=# 
+ --raft-replication-prefetch-window-size=# 
  prefetch window size
- --consensus-replication-purged-gtid=name 
+ --raft-replication-purged-gtid=name 
  Consensus cluster set the purged gtid
- --consensus-replication-recover-backup 
+ --raft-replication-recover-backup 
  recover from the backup created with xtrabackup or
  snapshot
- --consensus-replication-recover-new-cluster 
+ --raft-replication-recover-new-cluster 
  recover new cluster from the snapshot of cloud storage or
  the backup created with xtrabackup
- --consensus-replication-reset-prefetch-cache 
+ --raft-replication-reset-prefetch-cache 
  reset consensus prefetch_cache
- --consensus-replication-send-timeout=# 
+ --raft-replication-send-timeout=# 
  Consensus send packet timeout
- --consensus-replication-start-index=# 
+ --raft-replication-start-index=# 
  Consensus cluster start valid index
- --consensus-replication-sync-follower-meta-interva=# 
+ --raft-replication-sync-follower-meta-interva=# 
  Interval of leader sync follower's meta for learner
  source
- --consensus-replication-with-cache-log 
+ --raft-replication-with-cache-log 
  set server to replicate with cache log
- --consensus-replication-worker-thread-cnt=# 
+ --raft-replication-worker-thread-cnt=# 
  Number of consensus worker thread
  --consistent-snapshot-archive 
  Indicate if consistent snapshot archive enable.
@@ -2274,63 +2274,63 @@ concurrent-insert AUTO
 connect-timeout 10
 connection-memory-chunk-size 8192
 connection-memory-limit 18446744073709551615
-consensus-replication ON
-consensus-replication-allow-no-valid-entry FALSE
-consensus-replication-appliedindex-force-delay 0
-consensus-replication-archive-log-bin-index 
-consensus-replication-archive-recovery FALSE
-consensus-replication-archive-recovery-stop-datetime 
-consensus-replication-auto-leader-transfer TRUE
-consensus-replication-auto-leader-transfer-check-seconds 60
-consensus-replication-auto-reset-match-index TRUE
-consensus-replication-check-commit-index-interval 1000
-consensus-replication-checksum FALSE
-consensus-replication-cluster-id 0
-consensus-replication-cluster-info 
-consensus-replication-configure-change-timeout 60000
-consensus-replication-current-term 0
-consensus-replication-disable-election FALSE
-consensus-replication-disable-fifo-cache FALSE
-consensus-replication-dynamic-easyindex TRUE
-consensus-replication-election-timeout 5000
-consensus-replication-flow-control 
-consensus-replication-force-change-meta FALSE
-consensus-replication-force-recover-index 0
-consensus-replication-force-reset-meta FALSE
-consensus-replication-force-single-mode FALSE
-consensus-replication-force-sync-epoch-diff 0
-consensus-replication-heartbeat-thread-cnt 0
-consensus-replication-io-thread-cnt 4
-consensus-replication-large-batch-ratio 50
-consensus-replication-large-event-split-size 2097152
-consensus-replication-large-trx TRUE
-consensus-replication-learner-heartbeat TRUE
-consensus-replication-learner-node FALSE
-consensus-replication-learner-pipelining FALSE
-consensus-replication-learner-timeout 0
-consensus-replication-log-cache-size 67108864
-consensus-replication-log-level LOG_ERROR
-consensus-replication-log-type-node FALSE
-consensus-replication-max-delay-index 50000
-consensus-replication-max-log-size 20971520
-consensus-replication-max-packet-size 131072
-consensus-replication-min-delay-index 5000
-consensus-replication-mts-recover-use-index FALSE
-consensus-replication-new-follower-threshold 10000
-consensus-replication-optimistic-heartbeat FALSE
-consensus-replication-pipelining-timeout 1
-consensus-replication-prefetch-cache-size 67108864
-consensus-replication-prefetch-wakeup-ratio 2
-consensus-replication-prefetch-window-size 10
-consensus-replication-purged-gtid 
-consensus-replication-recover-backup FALSE
-consensus-replication-recover-new-cluster FALSE
-consensus-replication-reset-prefetch-cache FALSE
-consensus-replication-send-timeout 0
-consensus-replication-start-index 1
-consensus-replication-sync-follower-meta-interva 1
-consensus-replication-with-cache-log FALSE
-consensus-replication-worker-thread-cnt 4
+raft-replication ON
+raft-replication-allow-no-valid-entry FALSE
+raft-replication-appliedindex-force-delay 0
+raft-replication-archive-log-bin-index 
+raft-replication-archive-recovery FALSE
+raft-replication-archive-recovery-stop-datetime 
+raft-replication-auto-leader-transfer TRUE
+raft-replication-auto-leader-transfer-check-seconds 60
+raft-replication-auto-reset-match-index TRUE
+raft-replication-check-commit-index-interval 1000
+raft-replication-checksum FALSE
+raft-replication-cluster-id 0
+raft-replication-cluster-info 
+raft-replication-configure-change-timeout 60000
+raft-replication-current-term 0
+raft-replication-disable-election FALSE
+raft-replication-disable-fifo-cache FALSE
+raft-replication-dynamic-easyindex TRUE
+raft-replication-election-timeout 5000
+raft-replication-flow-control 
+raft-replication-force-change-meta FALSE
+raft-replication-force-recover-index 0
+raft-replication-force-reset-meta FALSE
+raft-replication-force-single-mode FALSE
+raft-replication-force-sync-epoch-diff 0
+raft-replication-heartbeat-thread-cnt 0
+raft-replication-io-thread-cnt 4
+raft-replication-large-batch-ratio 50
+raft-replication-large-event-split-size 2097152
+raft-replication-large-trx TRUE
+raft-replication-learner-heartbeat TRUE
+raft-replication-learner-node FALSE
+raft-replication-learner-pipelining FALSE
+raft-replication-learner-timeout 0
+raft-replication-log-cache-size 67108864
+raft-replication-log-level LOG_ERROR
+raft-replication-log-type-node FALSE
+raft-replication-max-delay-index 50000
+raft-replication-max-log-size 20971520
+raft-replication-max-packet-size 131072
+raft-replication-min-delay-index 5000
+raft-replication-mts-recover-use-index FALSE
+raft-replication-new-follower-threshold 10000
+raft-replication-optimistic-heartbeat FALSE
+raft-replication-pipelining-timeout 1
+raft-replication-prefetch-cache-size 67108864
+raft-replication-prefetch-wakeup-ratio 2
+raft-replication-prefetch-window-size 10
+raft-replication-purged-gtid 
+raft-replication-recover-backup FALSE
+raft-replication-recover-new-cluster FALSE
+raft-replication-reset-prefetch-cache FALSE
+raft-replication-send-timeout 0
+raft-replication-start-index 1
+raft-replication-sync-follower-meta-interva 1
+raft-replication-with-cache-log FALSE
+raft-replication-worker-thread-cnt 4
 consistent-snapshot-archive TRUE
 consistent-snapshot-archive-dir (No default value)
 consistent-snapshot-archive-period 600

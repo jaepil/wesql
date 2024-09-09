@@ -1,4 +1,0 @@
-!include suite/consensus_replication/my.cnf
-
-[mysqld]
-consensus_replication_log_cache_size=1

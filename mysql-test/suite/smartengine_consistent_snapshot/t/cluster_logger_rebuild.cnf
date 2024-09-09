@@ -1,4 +1,4 @@
-!include suite/consensus_replication/my.cnf
+!include suite/raft_replication/my.cnf
 
 [mysqld.1]
 smartengine=                            1
@@ -18,8 +18,8 @@ recovery_from_objectstore=              true
 smartengine=                                1
 default-storage-engine=                     smartengine
 default-tmp-storage_engine=                 innodb
-consensus-replication-log-type-node=        ON
-consensus_replication_auto_leader_transfer= ON
+raft-replication-log-type-node=        ON
+raft_replication_auto_leader_transfer= ON
 log-bin=                            logger1-bin
 log-bin=                            logger1-bin.index
 serverless=                         true
@@ -32,8 +32,8 @@ binlog_archive_expire_auto_purge=   false
 smartengine=                                1
 default-storage-engine=                     smartengine
 default-tmp-storage_engine=                 innodb
-consensus-replication-log-type-node=        ON
-consensus_replication_auto_leader_transfer= ON
+raft-replication-log-type-node=        ON
+raft_replication_auto_leader_transfer= ON
 log-bin=                            logger2-bin
 log-bin=                            logger2-bin.index
 serverless=                         true

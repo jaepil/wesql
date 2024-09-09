@@ -72,7 +72,7 @@ Retrieved_Gtid_Set
 Executed_Gtid_Set	
 Auto_Position	0
 Replicate_Rewrite_DB	
-Channel_Name	xpaxos_applier
+Channel_Name	raft_replication_applier
 Source_TLS_Version	
 Source_public_key_path	
 Get_Source_public_key	0
@@ -181,7 +181,7 @@ Retrieved_Gtid_Set
 Executed_Gtid_Set	
 Auto_Position	0
 Replicate_Rewrite_DB	
-Channel_Name	xpaxos_applier
+Channel_Name	raft_replication_applier
 Source_TLS_Version	
 Source_public_key_path	
 Get_Source_public_key	0

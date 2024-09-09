@@ -1,8 +1,0 @@
-!include suite/consensus_replication/my.cnf
-
-[mysqld]
-consensus_replication_large_trx=ON
-max_allowed_packet=1G
-slave_pending_jobs_size_max=1G
-slave_max_allowed_packet=1G
-consensus_replication_disable_fifo_cache=ON

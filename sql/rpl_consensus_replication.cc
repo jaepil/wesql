@@ -44,7 +44,7 @@ namespace {
   Static name of Consensus Replication plugin.
 */
 LEX_CSTRING consensus_replication_plugin_name_str = {
-    STRING_WITH_LEN("consensus_replication")};
+    STRING_WITH_LEN("raft_replication")};
 }  // namespace
 
 void cr_get_server_startup_prerequirements(Trans_context_info &requirements, Binlog_context_info &infos) {

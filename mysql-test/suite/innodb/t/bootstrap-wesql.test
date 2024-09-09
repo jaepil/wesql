@@ -48,7 +48,7 @@ let SEARCH_PATTERN=\[ERROR\] .*MY-\\d+.* File .*ibdata1: 'open' returned OS erro
 --remove_file $bugdir/data/auto.cnf
 
 --echo # Start mysqld to create tablespaces according to my.cnf
---exec $MYSQLD $args --initialize-insecure --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info='127.0.0.1:29221@1'
+--exec $MYSQLD $args --initialize-insecure --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info='127.0.0.1:29221@1'
 
 --echo # Backup the datadir
 --force-cpdir $bugdir/data $bugdir/data_backup

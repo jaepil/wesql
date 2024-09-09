@@ -5,12 +5,12 @@ Warnings:
 Warning	1287	'@@binlog_format' is deprecated and will be removed in a future release.
 show variables like '%log_bin%';
 Variable_name	Value
-consensus_replication_archive_log_bin_index	#
 log_bin	#
 log_bin_basename	#
 log_bin_index	#
 log_bin_trust_function_creators	#
 log_bin_use_v1_row_events	#
+raft_replication_archive_log_bin_index	#
 sql_log_bin	#
 show variables like '%binlog_format%';
 Variable_name	Value

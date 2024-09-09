@@ -92,8 +92,8 @@ SET GLOBAL innodb_max_undo_log_size=20000000;
 SET GLOBAL innodb_fast_shutdown=0;
 SET GLOBAL innodb_purge_rseg_truncate_frequency=1;
 SET GLOBAL innodb_purge_run_now=ON;
-restart_parameters: ""restart: --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info=\'127.0.0.1:29234@1\'""
-# restart: --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info='127.0.0.1:29234@1'
+restart_parameters: ""restart: --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info=\'127.0.0.1:29234@1\'""
+# restart: --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info='127.0.0.1:29234@1'
 # Compare the undo tablespace sizes before and after truncation.
 SELECT NAME, SPACE_TYPE, STATE, AUTOEXTEND_SIZE FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
 WHERE SPACE_TYPE = 'Undo' ORDER BY NAME;
