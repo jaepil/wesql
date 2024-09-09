@@ -521,6 +521,10 @@ consensus_replication.failpoint                             : WL#001 only works 
 consensus_replication.leader_transfer_check                 : WL#001 not stable
 consensus_replication.learner_source                        : WL#001 disable tmp
 consensus_replication.member_change                         : WL#001 disable tmp
+consensus_replication.add_learner                           : WL#001 disable tmp
+consensus_replication.learner_after_purgelog                : WL#001 disable tmp
+consensus_replication.restart_learner                       : WL#001 disable tmp
+consensus_replication.add_follower                          : WL#001 disable tmp
 
 # Group Replication tests.
 

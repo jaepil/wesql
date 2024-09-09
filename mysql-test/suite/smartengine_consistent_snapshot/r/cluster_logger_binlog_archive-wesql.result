@@ -10,7 +10,7 @@ master-bin.000002	#	#
 master-bin.000003	#	#
 master-bin.000004	#	#
 # Wait persistent binlog finish on mysqld.1 as leader after flush 3 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -50,7 +50,7 @@ master-bin.000007	#	#
 master-bin.000008	#	#
 master-bin.000009	#	#
 # Wait persistent binlog finish on mysqld.1 as leader after flush 5 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -83,7 +83,7 @@ show binary logs;
 Log_name	File_size	Encrypted
 logger1-bin.000001	#	#
 # Wait persistent binlog finish on mysqld2 as new leader.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -104,7 +104,7 @@ logger1-bin.000002	#	#
 logger1-bin.000003	#	#
 logger1-bin.000004	#	#
 # Wait persistent binlog finish on mysqld.2 as new leader after flush 3 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -136,7 +136,7 @@ master-bin.000007	#	#
 master-bin.000008	#	#
 master-bin.000009	#	#
 # Wait persistent binlog finish on mysqld.1 as new leader.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -169,7 +169,7 @@ master-bin.000009	#	#
 master-bin.000010	#	#
 master-bin.000011	#	#
 # Wait persistent binlog finish on mysqld.1 as new leader after flush 2 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002

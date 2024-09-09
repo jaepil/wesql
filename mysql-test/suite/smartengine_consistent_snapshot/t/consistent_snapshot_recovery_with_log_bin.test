@@ -7,7 +7,7 @@
 --let $region = `select @@objectstore_region`
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(distinct Log_name) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -20,11 +20,11 @@ FLUSH logs;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(distinct Log_name) = 2 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 2 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 
 --echo # Crash
 set debug = 'd, crash_commit_before_log';
@@ -59,11 +59,11 @@ let $wait_timeout= 600;
 
 --source include/show_binary_logs.inc
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(distinct Log_name) = 3 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 3 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
@@ -93,11 +93,11 @@ SELECT count(*) FROM t1;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(distinct Log_name) = 8 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 8 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 
 --echo # Crash
 set debug = 'd, crash_commit_before_log';
@@ -136,11 +136,11 @@ SELECT count(*) FROM t1;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(distinct Log_name) = 9 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 9 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 
 --echo # Crash
 set debug = 'd, crash_commit_before_log';
@@ -188,11 +188,11 @@ SELECT count(*) FROM t1;
 --source include/show_binary_logs.inc
 
 --echo # Wait persistent binlog finish. 
-let $wait_condition= SELECT count(distinct Log_name) = 10 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+let $wait_condition= SELECT count(distinct Log_name) = 10 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 
 DROP TABLE t1;
 DROP DATABASE db1;

@@ -64,7 +64,7 @@ user_comment
 Separator	-----------------------------------------------------
 TABLE_CATALOG	def
 TABLE_SCHEMA	information_schema
-TABLE_NAME	BINLOG_PERSISTENT_FILES
+TABLE_NAME	BINLOG_PERSISTENT_SLICES
 TABLE_TYPE	SYSTEM VIEW
 ENGINE	NULL
 VERSION	10
@@ -87,7 +87,7 @@ user_comment
 Separator	-----------------------------------------------------
 TABLE_CATALOG	def
 TABLE_SCHEMA	information_schema
-TABLE_NAME	BINLOG_PERSISTENT_FILE_INDEX
+TABLE_NAME	BINLOG_PERSISTENT_SLICE_INDEX
 TABLE_TYPE	SYSTEM VIEW
 ENGINE	NULL
 VERSION	10
@@ -1326,7 +1326,7 @@ user_comment
 Separator	-----------------------------------------------------
 TABLE_CATALOG	def
 TABLE_SCHEMA	information_schema
-TABLE_NAME	BINLOG_PERSISTENT_FILES
+TABLE_NAME	BINLOG_PERSISTENT_SLICES
 TABLE_TYPE	SYSTEM VIEW
 ENGINE	NULL
 VERSION	10
@@ -1349,7 +1349,7 @@ user_comment
 Separator	-----------------------------------------------------
 TABLE_CATALOG	def
 TABLE_SCHEMA	information_schema
-TABLE_NAME	BINLOG_PERSISTENT_FILE_INDEX
+TABLE_NAME	BINLOG_PERSISTENT_SLICE_INDEX
 TABLE_TYPE	SYSTEM VIEW
 ENGINE	NULL
 VERSION	10

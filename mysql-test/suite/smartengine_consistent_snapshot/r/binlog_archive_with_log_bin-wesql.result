@@ -38,14 +38,14 @@ master-bin.000003	#	#
 master-bin.000004	#	#
 master-bin.000005	#	#
 master-bin.000006	#	#
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
 binlog.000003
 binlog.000004
 binlog.000005
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 Log_slice_key
 binlog/binlog.000001.00000000000000000002.0000004448
 binlog/binlog.000001.00000000000000000002.0000004496
@@ -58,13 +58,13 @@ binlog/binlog.000005.00000000000000000002.0000007566
 SELECT binlog_persistent_purge('binlog.000002');
 binlog_persistent_purge('binlog.000002')
 Purge binlog persistent files successfully
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX order by Log_name;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX order by Log_name;
 Log_name
 binlog.000002
 binlog.000003
 binlog.000004
 binlog.000005
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 Log_slice_key
 binlog/binlog.000002.00000000000000000002.0000000643
 binlog/binlog.000003.00000000000000000002.0000000299

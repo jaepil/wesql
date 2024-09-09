@@ -76,8 +76,8 @@ jobs:
         run: |
           cd bu
           cd mysql-test
-          ./mysql-test-run.pl --suite=consensus_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
-          ./mysql-test-run.pl --suite=smartengine --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
+          ./mysql-test-run.pl --suite=consensus_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests --initialize="--serverless=false"
+          ./mysql-test-run.pl --suite=smartengine --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests --initialize="--serverless=false"
 
       - name: view logs of mtr on normal file
         if: ${{ failure() }}

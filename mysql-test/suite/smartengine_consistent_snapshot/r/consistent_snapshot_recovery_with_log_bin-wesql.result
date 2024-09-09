@@ -7,7 +7,7 @@ Log_name	File_size	Encrypted
 master-bin.000001	#	#
 master-bin.000002	#	#
 # Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -26,7 +26,7 @@ master-bin.000001	#	#
 master-bin.000002	#	#
 master-bin.000003	#	#
 # Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -67,7 +67,7 @@ master-bin.000006	#	#
 master-bin.000007	#	#
 master-bin.000008	#	#
 # Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -101,7 +101,7 @@ custom-binlog.000007	#	#
 custom-binlog.000008	#	#
 custom-binlog.000009	#	#
 # Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
@@ -130,7 +130,7 @@ master-bin.000008	#	#
 master-bin.000009	#	#
 master-bin.000010	#	#
 # Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002

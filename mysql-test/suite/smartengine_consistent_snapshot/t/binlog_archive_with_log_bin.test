@@ -33,18 +33,18 @@ SHOW CREATE TABLE t1;
 
 sleep 1;
 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 --disable_warnings
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 --enable_warnings
 
---let logfile = query_get_value(SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX order by Log_name, Log_name, 2)
+--let logfile = query_get_value(SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX order by Log_name, Log_name, 2)
 --echo # Puge persistent binlog $logfile
 --eval SELECT binlog_persistent_purge('$logfile')
 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX order by Log_name;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX order by Log_name;
 --disable_warnings
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 --enable_warnings
 --source include/show_binary_logs.inc
 

@@ -1,9 +1,9 @@
 # Binlog persist to object store
 # Wait for first binlog persistent after startup 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 Log_slice_key
 binlog/binlog.000001.00000000000000000002.0000000559
 CREATE DATABASE db1;
@@ -45,14 +45,14 @@ binlog.000003	#	#
 binlog.000004	#	#
 binlog.000005	#	#
 binlog.000006	#	#
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
 binlog.000002
 binlog.000003
 binlog.000004
 binlog.000005
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 Log_slice_key
 binlog/binlog.000001.00000000000000000002.0000000559
 binlog/binlog.000001.00000000000000000002.0000004492
@@ -73,7 +73,7 @@ BEGIN;
 INSERT INTO t1 SELECT * FROM t1 limit 100;
 COMMIT;
 set global debug= '-d, force_rotate_forbidded';
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 Log_slice_key
 binlog/binlog.000001.00000000000000000002.0000000559
 binlog/binlog.000001.00000000000000000002.0000004492
@@ -89,7 +89,7 @@ binlog/binlog.000007.00000000000000000002.0000004550
 SELECT binlog_persistent_purge('binlog.000002');
 binlog_persistent_purge('binlog.000002')
 Purge binlog persistent files successfully
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILE_INDEX order by Log_name;
+SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX order by Log_name;
 Log_name
 binlog.000002
 binlog.000003
@@ -97,7 +97,7 @@ binlog.000004
 binlog.000005
 binlog.000006
 binlog.000007
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_FILES order by Log_slice_key;
+SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 Log_slice_key
 binlog/binlog.000002.00000000000000000002.0000000639
 binlog/binlog.000003.00000000000000000002.0000000295

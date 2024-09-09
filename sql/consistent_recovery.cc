@@ -87,13 +87,13 @@ Consistent_recovery::Consistent_recovery()
  */
 int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   DBUG_TRACE;
-  if (!opt_recovery_from_objstore) return 0;
+  if (!opt_recovery_from_objstore && !opt_initialize_from_objstore) return 0;
 
   // Initialize database from consistent snapshot for PITR or clone.
   // If opt_recovery_consistent_snapshot_timestamp is set, recover to the
   // specified timestamp. Otherwise, recover to the latest consistent snapshot.
   my_setwd(mysql_real_data_home, MYF(0));
-  if (opt_initialize) {
+  if (opt_initialize && opt_initialize_from_objstore) {
     m_recovery_type = CONSISTENT_RECOVERY_PITR;
     std::string err_msg;
     err_msg.assign("Init database from object store consistent snapshot ");
@@ -102,18 +102,18 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
     }
     LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 
-    objstore::init_objstore_provider(opt_recovery_objstore_provider);
+    objstore::init_objstore_provider(opt_initialize_objstore_provider);
 
     std::string_view endpoint(
-        opt_recovery_objstore_endpoint
-            ? std::string_view(opt_recovery_objstore_endpoint)
+        opt_initialize_objstore_endpoint
+            ? std::string_view(opt_initialize_objstore_endpoint)
             : "");
     std::string obj_error_msg;
     recovery_objstore = objstore::create_object_store(
-        std::string_view(opt_recovery_objstore_provider),
-        std::string_view(opt_recovery_objstore_region),
-        opt_recovery_objstore_endpoint ? &endpoint : nullptr,
-        opt_recovery_objstore_use_https, obj_error_msg);
+        std::string_view(opt_initialize_objstore_provider),
+        std::string_view(opt_initialize_objstore_region),
+        opt_initialize_objstore_endpoint ? &endpoint : nullptr,
+        opt_initialize_objstore_use_https, obj_error_msg);
     if (recovery_objstore == nullptr) {
       err_msg.assign("Failed to create object store instance");
       if (!obj_error_msg.empty()) {
@@ -123,8 +123,8 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return 1;
     }
-    if (opt_recovery_objstore_bucket) {
-      strmake(m_objstore_bucket, opt_recovery_objstore_bucket,
+    if (opt_initialize_objstore_bucket) {
+      strmake(m_objstore_bucket, opt_initialize_objstore_bucket,
               sizeof(m_objstore_bucket) - 1);
     } else {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
@@ -132,7 +132,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
              "--recovery_objstore_bucket");
       return 1;
     }
-  } else {
+  } else if (!opt_initialize && opt_recovery_from_objstore) {
     // Crash recovery database from consistent snapshot.
     m_recovery_type = CONSISTENT_RECOVERY_REBULD;
     if (opt_recovery_consistent_snapshot_timestamp) {

@@ -142,14 +142,14 @@ int start_binlog_archive() {
     }
   }
 
-  if (!opt_consistent_snapshot_archive_dir) {
-    opt_consistent_snapshot_archive_dir = mysql_tmpdir;
+  if (!opt_binlog_archive_dir) {
+    opt_binlog_archive_dir = mysql_tmpdir;
   }
 
   // Check if the mysql archive path is set.
-  if (opt_consistent_snapshot_archive_dir == nullptr) {
+  if (opt_binlog_archive_dir == nullptr) {
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
-           "must set consistent_snapshot_archive_dir");
+           "must set binlog_archive_dir");
     return 1;
   }
 
@@ -159,29 +159,29 @@ int start_binlog_archive() {
   }
 
   MY_STAT d_stat;
-  // Check if opt_consistent_snapshot_archive_dir exists.
-  if (!my_stat(opt_consistent_snapshot_archive_dir, &d_stat, MYF(0)) ||
+  // Check if opt_binlog_archive_dir exists.
+  if (!my_stat(opt_binlog_archive_dir, &d_stat, MYF(0)) ||
       !MY_S_ISDIR(d_stat.st_mode) ||
-      my_access(opt_consistent_snapshot_archive_dir, (F_OK | W_OK))) {
+      my_access(opt_binlog_archive_dir, (F_OK | W_OK))) {
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
-           "consistent_snapshot_archive_dir path not exists");
+           "binlog_archive_dir path not exists");
     return 1;
   }
 
   // data home can not include archive directory.
-  if (test_if_data_home_dir(opt_consistent_snapshot_archive_dir)) {
+  if (test_if_data_home_dir(opt_binlog_archive_dir)) {
     std::string err_msg;
     err_msg.assign(
-        "consistent_snapshot_archive_dir is within the current data "
+        "binlog_archive_dir is within the current data "
         "directory: ");
-    err_msg.append(opt_consistent_snapshot_archive_dir);
+    err_msg.append(opt_binlog_archive_dir);
     LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, err_msg.c_str());
     return 1;
   }
 
   // Check if archive binlog dir exists. If not exists, create it.
   char tmp_archive_binlog_dir[FN_REFLEN + 1] = {0};
-  strmake(tmp_archive_binlog_dir, opt_consistent_snapshot_archive_dir,
+  strmake(tmp_archive_binlog_dir, opt_binlog_archive_dir,
           sizeof(tmp_archive_binlog_dir) - BINLOG_ARCHIVE_SUBDIR_LEN - 1);
   strmake(
       convert_dirname(tmp_archive_binlog_dir, tmp_archive_binlog_dir, NullS),
@@ -491,7 +491,7 @@ void Binlog_archive::run() {
   mysql_cond_broadcast(&m_run_cond);
   mysql_mutex_unlock(&m_run_lock);
 
-  strmake(m_mysql_archive_dir, opt_consistent_snapshot_archive_dir,
+  strmake(m_mysql_archive_dir, opt_binlog_archive_dir,
           sizeof(m_mysql_archive_dir) - 1);
   convert_dirname(m_mysql_archive_dir, m_mysql_archive_dir, NullS);
   strmake(strmake(m_binlog_archive_dir, m_mysql_archive_dir,
