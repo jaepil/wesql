@@ -44,6 +44,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions &options)
       row_cache(options.row_cache),
       avoid_flush_during_recovery(options.avoid_flush_during_recovery),
       table_cache_size(options.table_cache_size),
+      persistent_cache_dir(options.persistent_cache_dir),
       persistent_cache_size(options.persistent_cache_size),
       parallel_flush_log(options.parallel_flush_log)
 {}
@@ -77,6 +78,7 @@ void ImmutableDBOptions::Dump() const {
   __SE_LOG(INFO, "                              Options.row_cache: %p", row_cache.get());
   __SE_LOG(INFO, "            Options.avoid_flush_during_recovery: %d", avoid_flush_during_recovery);
   __SE_LOG(INFO, "                       Options.table_cache_size: %d", table_cache_size);
+  __SE_LOG(INFO, "                   Options.persistent_cache_dir: %s", persistent_cache_dir);
   __SE_LOG(INFO, "                  Options.persistent_cache_size: %d", persistent_cache_size);
   __SE_LOG(INFO, " .                   Options.parallel_flush_log: %d", parallel_flush_log);
 }

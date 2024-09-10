@@ -135,6 +135,7 @@ DBOptions::DBOptions(const Options &options)
       auto_shrink_schedule_interval(options.auto_shrink_schedule_interval),
       estimate_cost_depth(options.estimate_cost_depth),
       master_thread_compaction_enabled(options.master_thread_compaction_enabled),
+      persistent_cache_dir(options.persistent_cache_dir),
       persistent_cache_size(options.persistent_cache_size),
       parallel_flush_log(options.parallel_flush_log)
 {}

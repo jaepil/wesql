@@ -176,6 +176,7 @@ static int se_init_func(void *const p)
   se_db_options.parallel_wal_recovery = se_parallel_wal_recovery;
   se_db_options.parallel_recovery_thread_num = se_parallel_recovery_thread_num;
 
+  se_db_options.persistent_cache_dir = se_persistent_cache_dir; 
   if (!se_tbl_options.no_block_cache) {
     se_tbl_options.block_cache =
         smartengine::cache::NewLRUCache(se_block_cache_size, -1, false, 0.1, 0.375,

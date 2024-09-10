@@ -272,7 +272,7 @@ int PersistentCacheFile::set_free_extent(const storage::ExtentId &extent_id)
   return ret;
 }
 
-const char *PersistentCacheFile::DEFAULT_PERSISTENT_FILE_NAME = "PERSISTENT_CACHE_FILE";
+const char *PersistentCacheFile::DEFAULT_PERSISTENT_FILE_NAME = "SMARTENGINE_PERSISTENT_CACHE";
 
 PersistentCacheInfo::PersistentCacheInfo() : cache_file_(nullptr), extent_id_() {}
 
@@ -343,7 +343,6 @@ int PersistentCache::init(Env *env, const std::string &cache_file_path, int64_t 
       SE_LOG(WARN, "fail to open persistent cache file", K(ret), K(cache_file_path), K(actual_cache_size));
     } else {
       is_inited_ = true;
-
       SE_LOG(INFO, "success to enable PersistentCache", K(cache_file_path), K(cache_size));
     }
   }

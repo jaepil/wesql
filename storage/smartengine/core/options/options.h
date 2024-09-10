@@ -503,6 +503,7 @@ struct DBOptions {
   uint64_t auto_shrink_schedule_interval = 60 * 60; // 1 hour
   uint64_t estimate_cost_depth = 0;
   bool master_thread_compaction_enabled = true;
+  std::string persistent_cache_dir = "";
   uint64_t persistent_cache_size = 0;
   bool parallel_flush_log = false;
 };

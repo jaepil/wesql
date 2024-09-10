@@ -85,6 +85,14 @@ DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src) {
     result.db_paths.emplace_back(dbname, std::numeric_limits<uint64_t>::max());
   }
 
+  if (result.persistent_cache_dir.empty()) {
+    // Use dbname(data dir) as default persistent cache dir
+    result.persistent_cache_dir = dbname;
+  }
+  if ('/' == result.persistent_cache_dir.back()) {
+    result.persistent_cache_dir = result.persistent_cache_dir.substr(0, result.persistent_cache_dir.size() - 1);
+  }
+
   return result;
 }
 
@@ -131,9 +139,12 @@ Status DBImpl::Directories::CreateAndNewDirectory(
   return env->NewDirectory(dirname, directory);
 }
 
-Status DBImpl::Directories::SetDirectories(
-    Env* env, const std::string& dbname, const std::string& wal_dir,
-    const std::vector<DbPath>& data_paths) {
+Status DBImpl::Directories::SetDirectories(Env *env,
+                                           const std::string &dbname,
+                                           const std::string &wal_dir,
+                                           const std::vector<DbPath> &data_paths,
+                                           const std::string &persistent_cache_dir)
+{
   util::Directory *ptr = nullptr;
   Status s = CreateAndNewDirectory(env, dbname, ptr);
   db_dir_.reset(ptr);
@@ -164,6 +175,16 @@ Status DBImpl::Directories::SetDirectories(
     }
   }
   assert(data_dirs_.size() == data_paths.size());
+
+  if (!persistent_cache_dir.empty() && dbname != persistent_cache_dir) {
+    util::Directory *persist_cache_dir_ptr = nullptr;
+    s = CreateAndNewDirectory(env, persistent_cache_dir, persist_cache_dir_ptr);
+    if (!s.ok()) {
+      return s;
+    }
+    persistent_cache_dir_.reset(persist_cache_dir_ptr);
+  }
+
   return Status::OK();
 }
 
@@ -190,10 +211,13 @@ int DBImpl::prepare_recovery(const ColumnFamilyOptions &cf_options)
   int ret = Status::kOk;
   const uint64_t t1 = env_->NowMicros();
 
-  if (FAILED(directories_.SetDirectories(env_, dbname_,
+  if (FAILED(directories_.SetDirectories(env_,
+                                         dbname_,
                                          immutable_db_options_.wal_dir,
-                                         immutable_db_options_.db_paths).code())) {
-    SE_LOG(INFO, "fail to set directories", K(ret), K_(dbname), "wal_dir", immutable_db_options_.wal_dir);
+                                         immutable_db_options_.db_paths,
+                                         immutable_db_options_.persistent_cache_dir).code())) {
+    SE_LOG(INFO, "fail to set directories", K(ret), K_(dbname),
+        "wal_dir", immutable_db_options_.wal_dir, "persist_cache_dir", immutable_db_options_.persistent_cache_dir);
   } else if (FAILED(env_->LockFile(LockFileName(dbname_), &db_lock_).code())) {
     SE_LOG(INFO, "fail to lock file", K(ret), K_(dbname));
   } else {
@@ -224,6 +248,19 @@ int DBImpl::prepare_recovery(const ColumnFamilyOptions &cf_options)
         }
       }
     }
+
+    // TODO(Zhao Dongsheng): Temporarily place the initialization of the persistent 
+    // cache here, because it depends on the creation of persistent_cache_dir.
+    // In the future, during the refactoring of the start process, move it to an
+    // appropriate position.
+    if (SUCCED(ret)) {
+      if (FAILED(cache::PersistentCache::get_instance().init(env_,
+                                                             immutable_db_options_.persistent_cache_dir,
+                                                             immutable_db_options_.persistent_cache_size))) {
+        SE_LOG(WARN, "fail to init PersistentCache", K(ret), "persist_cache_dir", immutable_db_options_.persistent_cache_dir,
+            "persistent_cache_size", immutable_db_options_.persistent_cache_size);
+      }
+    }  
   }
 
   if (SUCCED(ret)) {
@@ -1346,8 +1383,6 @@ Status DB::Open(const Options &options,
     SE_LOG(WARN, "unexpected error, table cache must not nullptr", K(ret));
   } else if (FAILED(WriteExtentJobScheduler::get_instance().start(impl->env_, total_flush_compaction_thread_count))) {
     SE_LOG(WARN, "fail to start write extent job scheduler", K(ret), K(total_flush_compaction_thread_count));
-  } else if (FAILED(cache::PersistentCache::get_instance().init(impl->env_, dbname, impl->immutable_db_options_.persistent_cache_size))) {
-    SE_LOG(WARN, "fail to init PersistentCache", K(ret), K(dbname), "persistent_cache_size", impl->immutable_db_options_.persistent_cache_size);
   } else if (FAILED(StorageLogger::get_instance().init(impl->env_,
                                                        dbname,
                                                        impl->env_options_,

@@ -39,6 +39,8 @@ extern char *se_datadir;
 
 extern char *se_wal_dir;
 
+extern char *se_persistent_cache_dir;
+
 extern char se_backup_status[][16];
 
 extern table::BlockBasedTableOptions se_tbl_options;

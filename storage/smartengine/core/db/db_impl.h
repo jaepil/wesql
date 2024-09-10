@@ -1110,10 +1110,15 @@ protected:
     Directories()
        :db_dir_(nullptr),
         data_dirs_(),
-        wal_dir_(nullptr) {}
-    common::Status SetDirectories(
-        util::Env* env, const std::string& dbname, const std::string& wal_dir,
-        const std::vector<common::DbPath>& data_paths);
+        wal_dir_(nullptr),
+        persistent_cache_dir_(nullptr)
+    {}
+
+    common::Status SetDirectories(util::Env *env,
+                                  const std::string &dbname,
+                                  const std::string &wal_dir,
+                                  const std::vector<common::DbPath> &data_paths,
+                                  const std::string &persistent_cache_dir);
 
     util::Directory* GetDataDir(size_t path_id);
 
@@ -1127,9 +1132,10 @@ protected:
     util::Directory* GetDbDir() { return db_dir_.get(); }
 
    private:
-    std::unique_ptr<util::Directory, memory::ptr_destruct_delete<util::Directory>>db_dir_;
+    std::unique_ptr<util::Directory, memory::ptr_destruct_delete<util::Directory>> db_dir_;
     std::vector<util::Directory *> data_dirs_;
-    std::unique_ptr<util::Directory, memory::ptr_destruct_delete<util::Directory>>wal_dir_;
+    std::unique_ptr<util::Directory, memory::ptr_destruct_delete<util::Directory>> wal_dir_;
+    std::unique_ptr<util::Directory, memory::ptr_destruct_delete<util::Directory>> persistent_cache_dir_;
 
     common::Status CreateAndNewDirectory(
         util::Env* env, const std::string& dirname,

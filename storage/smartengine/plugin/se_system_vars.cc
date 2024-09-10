@@ -37,6 +37,8 @@ char *se_datadir = nullptr;
 
 char *se_wal_dir = nullptr;
 
+char *se_persistent_cache_dir = nullptr;
+
 char se_backup_status[][16] = {"checkpoint",
                                "acquire",
                                "incremental",
@@ -1469,6 +1471,13 @@ static MYSQL_SYSVAR_BOOL(master_thread_compaction_enabled,
                          nullptr, se_set_master_thread_compaction_enabled,
                          se_db_options.master_thread_compaction_enabled);
 
+static MYSQL_SYSVAR_STR(
+    persistent_cache_dir,
+    se_persistent_cache_dir,
+    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
+    "DBOptions::persistent_cache_diror SE",
+    nullptr, nullptr, se_db_options.persistent_cache_dir.c_str());
+
 static MYSQL_SYSVAR_ULONG(
     persistent_cache_size,
     se_db_options.persistent_cache_size,
@@ -1606,6 +1615,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(scan_add_blocks_limit),
     MYSQL_SYSVAR(master_thread_monitor_interval_ms),
     MYSQL_SYSVAR(master_thread_compaction_enabled),
+    MYSQL_SYSVAR(persistent_cache_dir),
     MYSQL_SYSVAR(persistent_cache_size),
     MYSQL_SYSVAR(parallel_flush_log),
     nullptr};
