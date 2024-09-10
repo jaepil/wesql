@@ -545,7 +545,7 @@ bool MYSQL_BIN_LOG::open_exist_consensus_binlog(const char *log_name,
   */
   m_dependency_tracker.rotate();
 
-  update_binlog_end_pos();
+  if (is_consensus_write) update_binlog_end_pos();
   return false;
 }
 

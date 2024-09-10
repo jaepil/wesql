@@ -1970,7 +1970,7 @@ int consensus_append_log_entry(MYSQL_BIN_LOG *binlog, ConsensusLogEntry &log,
 
   consensus_log_manager.set_sync_index_if_greater(*index);
 
-  binlog->update_binlog_end_pos();
+  if (binlog->is_consensus_write) binlog->update_binlog_end_pos();
 
   if (opt_cluster_log_type_instance) rpl_consensus_update_applied_index(*index);
 err:
@@ -2017,7 +2017,7 @@ int consensus_append_multi_log_entries(MYSQL_BIN_LOG *binlog,
 
   consensus_log_manager.set_sync_index_if_greater(flush_index);
 
-  binlog->update_binlog_end_pos();
+  if (binlog->is_consensus_write) binlog->update_binlog_end_pos();
 
   if (opt_cluster_log_type_instance)
     rpl_consensus_update_applied_index(flush_index);
