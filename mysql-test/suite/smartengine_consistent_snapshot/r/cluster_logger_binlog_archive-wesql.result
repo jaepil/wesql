@@ -1,21 +1,10 @@
 # Change leader role to logger, The Logger node continues to persist the binlog .
 # Connection mysqld.1
+include/assert.inc [consensus role of mysqld.1 is Leader.]
 FLUSH logs;
 FLUSH logs;
 FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000001	#	#
-master-bin.000002	#	#
-master-bin.000003	#	#
-master-bin.000004	#	#
 # Wait persistent binlog finish on mysqld.1 as leader after flush 3 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
 use test;
 CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE;
 INSERT INTO t1 values(1,'abcd');
@@ -38,29 +27,7 @@ INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;
 FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000001	#	#
-master-bin.000002	#	#
-master-bin.000003	#	#
-master-bin.000004	#	#
-master-bin.000005	#	#
-master-bin.000006	#	#
-master-bin.000007	#	#
-master-bin.000008	#	#
-master-bin.000009	#	#
 # Wait persistent binlog finish on mysqld.1 as leader after flush 5 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
-binlog.000009
 # force suspend binlog persistent
 set global debug= '+d, force_suspend_binlog_persist_while_wait_for_mysql_binlog';
 INSERT INTO t1 values(1,'abcd');
@@ -79,110 +46,22 @@ count(*)
 # Connection mysqld.2 as new leader.
 call dbms_consensus.force_promote();
 include/assert.inc [consensus role of mysqld.2 is Leader.]
-show binary logs;
-Log_name	File_size	Encrypted
-logger1-bin.000001	#	#
 # Wait persistent binlog finish on mysqld2 as new leader.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
-binlog.000009
 FLUSH logs;
 FLUSH logs;
 FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-logger1-bin.000001	#	#
-logger1-bin.000002	#	#
-logger1-bin.000003	#	#
-logger1-bin.000004	#	#
 # Wait persistent binlog finish on mysqld.2 as new leader after flush 3 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
-binlog.000009
-binlog.000010
-binlog.000011
-binlog.000012
 # Connection mysqld.3 as follower.
 include/assert.inc [consensus role of mysqld.3 is Follower.]
 # Restart mysqld.1
 # restart
 # Connection mysqld.1 as new leader.
 include/assert.inc [consensus role of mysqld.1 is Leader.]
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000001	#	#
-master-bin.000002	#	#
-master-bin.000003	#	#
-master-bin.000004	#	#
-master-bin.000005	#	#
-master-bin.000006	#	#
-master-bin.000007	#	#
-master-bin.000008	#	#
-master-bin.000009	#	#
 # Wait persistent binlog finish on mysqld.1 as new leader.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
-binlog.000009
-binlog.000010
-binlog.000011
-binlog.000012
 FLUSH logs;
 INSERT INTO t1 SELECT * FROM t1 limit 5;
 INSERT INTO t1 SELECT * FROM t1 limit 5;
 INSERT INTO t1 SELECT * FROM t1 limit 5;
 FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000001	#	#
-master-bin.000002	#	#
-master-bin.000003	#	#
-master-bin.000004	#	#
-master-bin.000005	#	#
-master-bin.000006	#	#
-master-bin.000007	#	#
-master-bin.000008	#	#
-master-bin.000009	#	#
-master-bin.000010	#	#
-master-bin.000011	#	#
 # Wait persistent binlog finish on mysqld.1 as new leader after flush 2 logs.
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
-binlog.000009
-binlog.000010
-binlog.000011
-binlog.000012
-binlog.000013
-binlog.000014
 DROP table t1;

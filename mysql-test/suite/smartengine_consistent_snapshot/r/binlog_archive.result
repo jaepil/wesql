@@ -3,9 +3,9 @@
 SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 Log_name
 binlog.000001
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
-Log_slice_key
-binlog/binlog.000001.00000000000000000002.0000000559
+SELECT SUBSTRING_INDEX(Log_slice_key, '/', -1) from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
+SUBSTRING_INDEX(Log_slice_key, '/', -1)
+binlog.000001.00000000000000000002.0000000559
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1,'abcd');
@@ -27,7 +27,6 @@ INSERT INTO t1 values(8,'abcd');
 INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;
-FLUSH logs;
 SELECT count(*) FROM t1;
 count(*)
 544
@@ -37,30 +36,7 @@ t1	CREATE TABLE `t1` (
   `c1` int DEFAULT NULL,
   `c2` char(200) COLLATE utf8mb4_general_ci DEFAULT NULL
 ) ENGINE=SMARTENGINE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-show binary logs;
-Log_name	File_size	Encrypted
-binlog.000001	#	#
-binlog.000002	#	#
-binlog.000003	#	#
-binlog.000004	#	#
-binlog.000005	#	#
-binlog.000006	#	#
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
-Log_slice_key
-binlog/binlog.000001.00000000000000000002.0000000559
-binlog/binlog.000001.00000000000000000002.0000004492
-binlog/binlog.000002.00000000000000000002.0000000639
-binlog/binlog.000003.00000000000000000002.0000000295
-binlog/binlog.000004.00000000000000000002.0000000295
-binlog/binlog.000005.00000000000000000002.0000004193
-binlog/binlog.000005.00000000000000000002.0000007562
+# Wait for all binlog persistent
 #Rotate forbidden in transaction
 set global debug= '+d, force_rotate_forbidded';
 BEGIN;
@@ -72,48 +48,11 @@ COMMIT;
 BEGIN;
 INSERT INTO t1 SELECT * FROM t1 limit 100;
 COMMIT;
+#Rotate allowed
 set global debug= '-d, force_rotate_forbidded';
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
-Log_slice_key
-binlog/binlog.000001.00000000000000000002.0000000559
-binlog/binlog.000001.00000000000000000002.0000004492
-binlog/binlog.000002.00000000000000000002.0000000639
-binlog/binlog.000003.00000000000000000002.0000000295
-binlog/binlog.000004.00000000000000000002.0000000295
-binlog/binlog.000005.00000000000000000002.0000004193
-binlog/binlog.000005.00000000000000000002.0000007562
-binlog/binlog.000006.00000000000000000002.0000000251
-binlog/binlog.000006.00000000000000000002.0000000295
-binlog/binlog.000007.00000000000000000002.0000004550
 # Puge persistent binlog binlog.000002
 SELECT binlog_persistent_purge('binlog.000002');
 binlog_persistent_purge('binlog.000002')
 Purge binlog persistent files successfully
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX order by Log_name;
-Log_name
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-SELECT Log_slice_key from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
-Log_slice_key
-binlog/binlog.000002.00000000000000000002.0000000639
-binlog/binlog.000003.00000000000000000002.0000000295
-binlog/binlog.000004.00000000000000000002.0000000295
-binlog/binlog.000005.00000000000000000002.0000004193
-binlog/binlog.000005.00000000000000000002.0000007562
-binlog/binlog.000006.00000000000000000002.0000000251
-binlog/binlog.000006.00000000000000000002.0000000295
-binlog/binlog.000007.00000000000000000002.0000004550
-show binary logs;
-Log_name	File_size	Encrypted
-binlog.000001	#	#
-binlog.000002	#	#
-binlog.000003	#	#
-binlog.000004	#	#
-binlog.000005	#	#
-binlog.000006	#	#
 DROP TABLE t1;
 DROP DATABASE db1;

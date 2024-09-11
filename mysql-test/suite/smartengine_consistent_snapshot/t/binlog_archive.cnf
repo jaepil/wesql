@@ -9,4 +9,5 @@ default-tmp-storage_engine= innodb
 serverless=                 true
 binlog_archive_expire_auto_purge= false
 binlog_archive_slice_max_size= 4096
+binlog_archive_period=            5
 consistent_snapshot_archive= false

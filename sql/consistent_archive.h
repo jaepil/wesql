@@ -23,8 +23,8 @@
 #include "sql/rpl_io_monitor.h"
 #include "sql/sql_plugin_ref.h"
 
-#define CONSISTENT_ARCHIVE_SUBDIR "data"
-#define CONSISTENT_ARCHIVE_SUBDIR_LEN 4
+#define CONSISTENT_ARCHIVE_SUBDIR "consistent_snapshot"
+#define CONSISTENT_ARCHIVE_SUBDIR_LEN (sizeof(CONSISTENT_ARCHIVE_SUBDIR) - 1)
 #define CONSISTENT_TAR_SUFFIX ".tar"
 #define CONSISTENT_TAR_SUFFIX_LEN 4
 #define CONSISTENT_TAR_GZ_SUFFIX ".tar.gz"
@@ -43,9 +43,9 @@
 #define MYSQL_SE_WAL_FILE_SUFFIX_LEN 4
 #define MYSQL_SE_TMP_BACKUP_DIR "hotbackup_tmp"
 #define MYSQL_SE_TMP_BACKUP_DIR_LEN 13
-#define CONSISTENT_NO_TAR           0
-#define CONSISTENT_TAR              1
-#define CONSISTENT_TAR_COMPRESSION  2
+#define CONSISTENT_NO_TAR 0
+#define CONSISTENT_TAR 1
+#define CONSISTENT_TAR_COMPRESSION 2
 
 class THD;
 
@@ -99,9 +99,7 @@ class Consistent_archive {
   inline void set_objstore(objstore::ObjectStore *objstore) {
     snapshot_objstore = objstore;
   }
-  inline objstore::ObjectStore *get_objstore() {
-    return snapshot_objstore;
-  }
+  inline objstore::ObjectStore *get_objstore() { return snapshot_objstore; }
 
  private:
   pthread_t m_thread;
@@ -122,6 +120,7 @@ class Consistent_archive {
 
   char m_mysql_archive_dir[FN_REFLEN + 1];
   char m_mysql_archive_data_dir[FN_REFLEN + 1];
+  char m_archive_dir[FN_REFLEN + 1];
   objstore::ObjectStore *snapshot_objstore;
   uint64_t m_consensus_term;
   ulong m_innodb_tar_compression_mode;
@@ -130,11 +129,12 @@ class Consistent_archive {
   int archive_consistent_snapshot_data();
   int archive_consistent_snapshot_binlog();
   int archive_consistent_snapshot_cleanup(bool failed);
-  int wait_for_consistent_archive(const std::chrono::seconds &timeout, bool &abort);
+  int wait_for_consistent_archive(const std::chrono::seconds &timeout,
+                                  bool &abort);
   void signal_consistent_archive();
   // index file for every archive type.
   bool open_index_file(const char *index_file_name_arg, const char *log_name,
-                       Archive_type arch_type, bool need_lock=false);
+                       Archive_type arch_type, bool need_lock = false);
   void close_index_file(Archive_type arch_type);
   int find_line_from_index(LOG_INFO *linfo, const char *match_name,
                            Archive_type arch_type);
@@ -156,9 +156,11 @@ class Consistent_archive {
   char m_mysql_innodb_clone_dir[FN_REFLEN + 1];
   char m_mysql_clone_name[FN_REFLEN + 1];
   char m_mysql_clone_keyid[FN_REFLEN + 1];
-  char m_mysql_clone_index_file_name[FN_REFLEN + 1];
   IO_CACHE m_mysql_clone_index_file;
   IO_CACHE m_crash_safe_mysql_clone_index_file;
+  IO_CACHE m_purge_mysql_clone_index_file;
+  char m_mysql_clone_index_file_name[FN_REFLEN + 1];
+  char m_purge_mysql_clone_index_file_name[FN_REFLEN];
   char m_crash_safe_mysql_clone_index_file_name[FN_REFLEN];
   uint64_t m_mysql_clone_next_index_number;
 
@@ -170,18 +172,21 @@ class Consistent_archive {
   uint64_t m_mysql_binlog_pos_previous_snapshot;
   uint64_t m_mysql_binlog_pos;
   uint64_t m_consensus_index;
-  char m_mysql_binlog_file_previous_snapshot[FN_REFLEN + 1]; // mysql binlog index entry name.
-  char m_mysql_binlog_file[FN_REFLEN + 1]; // mysql binlog index entry name.
+  char m_mysql_binlog_file_previous_snapshot
+      [FN_REFLEN + 1];                      // mysql binlog index entry name.
+  char m_mysql_binlog_file[FN_REFLEN + 1];  // mysql binlog index entry name.
   char m_binlog_file[FN_REFLEN + 1];
   uint64_t m_se_snapshot_id;
   /**smartengine tmp backup directory, which stores hard link for smartengine
    files, protect them from be deleted before copy completely.*/
   mysql_mutex_t m_se_backup_index_lock;
   char m_se_temp_backup_dir[FN_REFLEN + 1];
-  char m_se_backup_index_file_name[FN_REFLEN + 1];
   IO_CACHE m_se_backup_index_file;
   IO_CACHE m_crash_safe_se_backup_index_file;
+  IO_CACHE m_purge_se_backup_index_file;
+  char m_se_backup_index_file_name[FN_REFLEN + 1];
   char m_crash_safe_se_backup_index_file_name[FN_REFLEN];
+  char m_purge_se_backup_index_file_name[FN_REFLEN];
   uint64_t m_se_backup_next_index_number;
   char m_se_snapshot_dir[FN_REFLEN + 1];
   char m_se_backup_name[FN_REFLEN + 1];
@@ -196,17 +201,16 @@ class Consistent_archive {
   char m_crash_safe_consistent_snapshot_index_file_name[FN_REFLEN];
   IO_CACHE m_crash_safe_consistent_snapshot_index_file;
 
-  IO_CACHE m_purge_index_file;
-  char m_purge_index_file_name[FN_REFLEN];
   int purge_archive(const char *match_name, Archive_type arch_type);
-  int set_purge_index_file_name(const char *base_file_name);
-  int open_purge_index_file(bool destroy);
-  bool purge_index_file_is_inited();
-  int close_purge_index_file();
-  int sync_purge_index_file();
-  int register_purge_index_entry(const char *entry);
-  int register_create_index_entry(const char *entry);
-  int purge_index_entry(ulonglong *decrease_log_space);
+  int purge_archive_garbage(const char *dirty_end_archive,
+                            Archive_type arch_type);
+  int set_purge_index_file_name(const char *base_file_name, Archive_type arch_type);
+  int open_purge_index_file(bool destroy, Archive_type arch_type);
+  int close_purge_index_file(Archive_type arch_type);
+  int sync_purge_index_file(Archive_type arch_type);
+  int register_purge_index_entry(const char *entry, Archive_type arch_type);
+  int register_create_index_entry(const char *entry, Archive_type arch_type);
+  int purge_index_entry(Archive_type arch_type);
 };
 
 extern int start_consistent_archive();

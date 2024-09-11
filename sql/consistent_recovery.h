@@ -77,7 +77,8 @@ class Consistent_recovery {
   int truncate_binlogs_from_objstore(const char *log_file_name_arg,
                                      my_off_t log_pos);
   int merge_slice_to_binlog_file(const char *to_binlog_file,
-                                 const char *to_mysql_binlog_basename);
+                                 std::string mysql_binlog_name,
+                                 my_off_t &mysql_binlog_end_pos);
   int truncate_binlog_slice_from_objstore(const char *log_file_name_arg,
                                           my_off_t log_pos, bool &has_truncated);
 
@@ -102,14 +103,17 @@ class Consistent_recovery {
   uint64_t m_consensus_index;
   uint64_t m_se_snapshot_id;
   char m_objstore_bucket[FN_REFLEN + 1];
+  char m_binlog_archive_dir[FN_REFLEN + 1];
   char m_binlog_start_file[FN_REFLEN + 1];
   char m_mysql_binlog_start_file[FN_REFLEN + 1];
   char m_mysql_binlog_end_file[FN_REFLEN + 1];
+  my_off_t m_mysql_binlog_end_pos;
   char m_snapshot_end_binlog_file[FN_REFLEN + 1];
   char m_binlog_index_keyid[FN_REFLEN + 1];
   IO_CACHE m_binlog_index_file;
-  char m_binlog_index_file_name[FN_REFLEN + 1];;
+  char m_binlog_index_file_name[FN_REFLEN + 1];
 
+  char m_consistent_snapshot_archive_dir[FN_REFLEN + 1];
   char m_mysql_archive_recovery_dir[FN_REFLEN + 1];
   char m_mysql_archive_recovery_data_dir[FN_REFLEN + 1];
   char m_mysql_archive_recovery_binlog_dir[FN_REFLEN + 1];

@@ -160,8 +160,9 @@ class Binlog_archive {
   */
   // current archive binlog file name, copy from mysql binlog file name
   char m_binlog_archive_file_name[FN_REFLEN + 1];
-  char m_mysql_archive_dir[FN_REFLEN + 1];
   char m_binlog_archive_dir[FN_REFLEN + 1];
+  char m_mysql_archive_dir[FN_REFLEN + 1];
+  char m_mysql_binlog_archive_dir[FN_REFLEN + 1];
   Format_description_event m_description_event;
   objstore::ObjectStore *binlog_objstore;
   mysql_mutex_t m_rotate_lock;
@@ -218,7 +219,8 @@ class Binlog_archive {
   bool binlog_is_archived(const char *log_file_name_arg,
                           char *persistent_log_file_name, my_off_t log_pos,
                           uint64_t consensus_index);
-  int merge_slice_to_binlog_file(const char *to_binlog_file);
+  int merge_slice_to_binlog_file(const char *log_name,
+                                 const char *to_binlog_file);
   inline bool event_checksum_on() {
     return m_event_checksum_alg > binary_log::BINLOG_CHECKSUM_ALG_OFF &&
            m_event_checksum_alg < binary_log::BINLOG_CHECKSUM_ALG_ENUM_END;
