@@ -54,10 +54,12 @@ struct RecycleBackupMetaSnapshotArgs
 
 namespace storage
 {
-StorageManager::StorageManager(const util::EnvOptions &env_options,
+StorageManager::StorageManager(const db::ColumnFamilyData *owner,
+                               const util::EnvOptions &env_options,
                                const common::ImmutableCFOptions &imm_cf_options,
                                const common::MutableCFOptions &mutable_cf_options)
     : is_inited_(false),
+      owner_(owner),
       env_options_(env_options),
       immutable_cfoptions_(imm_cf_options),
       mutable_cf_options_(mutable_cf_options),
@@ -71,7 +73,9 @@ StorageManager::StorageManager(const util::EnvOptions &env_options,
       waiting_delete_versions_(),
       extent_stats_updated_(false),
       extent_stats_(),
-      lob_extent_mgr_(nullptr) {}
+      lob_extent_mgr_(nullptr)
+{
+}
 
 StorageManager::~StorageManager()
 {
@@ -1435,10 +1439,12 @@ int StorageManager::update_current_meta_snapshot(ExtentLayerVersion **new_extent
     }
 
     if (SUCCED(ret)) {
+      int64_t index_id = IS_NOTNULL(owner_) ? owner_->GetID() : -1;
+
       if (IS_NULL(new_current_meta = MOD_NEW_OBJECT(ModId::kStorageMgr, db::SnapshotImpl))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for new current meta", K(ret));
-      } else if (FAILED(new_current_meta->init(extent_layer_versions_, ++meta_version_))) {
+      } else if (FAILED(new_current_meta->init(index_id, extent_layer_versions_, ++meta_version_))) {
         SE_LOG(WARN, "fail to init new current meta", K(ret));
       } else {
         if (nullptr != current_meta_) {
@@ -1865,8 +1871,13 @@ int StorageManager::release_extent_resource(bool for_recovery)
   } else {
     release_meta_snapshot_unsafe(current_meta_);
     current_meta_ = nullptr;
+    if (storage::MAX_TIER_COUNT != waiting_delete_versions_.size()) {
+      int64_t index_id = IS_NOTNULL(owner_) ? owner_->GetID() : -1;
+      SE_LOG(INFO, "some extent layer versions may be referenced by a backup snapshot at now", K(index_id));
+    }
+
     if (0 == waiting_delete_versions_.size()) {
-      SE_LOG(INFO, "meta snapshot must be referenced by a backup snapshot, can't release now");
+      // do noting
     } else if (FAILED(recycle_unsafe(for_recovery))) {
       SE_LOG(WARN, "fail to recycle unsafe", K(ret));
     } else if (FAILED(lob_extent_mgr_->force_recycle(for_recovery))) {

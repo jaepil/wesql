@@ -52,7 +52,8 @@ struct RecycleArgs
 class StorageManager
 {
 public:
-  explicit StorageManager(const util::EnvOptions &env_options,
+  explicit StorageManager(const db::ColumnFamilyData *owner,
+                          const util::EnvOptions &env_options,
                           const common::ImmutableCFOptions &imm_cf_options,
                           const common::MutableCFOptions &mutable_cf_options);
   virtual ~StorageManager();
@@ -225,6 +226,7 @@ private:
   friend class db::ColumnFamilyData;
 
   bool is_inited_;
+  const db::ColumnFamilyData *owner_;
   const util::EnvOptions &env_options_;
   const common::ImmutableCFOptions &immutable_cfoptions_;
   const common::MutableCFOptions &mutable_cf_options_;

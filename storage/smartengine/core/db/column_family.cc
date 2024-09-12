@@ -240,7 +240,7 @@ ColumnFamilyData::ColumnFamilyData(Options &options)
       compaction_priority_(CompactionPriority::LOW),
       allow_2pc_(options.allow_2pc),
       meta_snapshots_(),
-      storage_manager_(env_options_, ioptions_, mutable_cf_options_),
+      storage_manager_(this, env_options_, ioptions_, mutable_cf_options_),
       imm_largest_seq_(0),
       allocator_(nullptr),
       subtable_structure_mutex_(),
@@ -251,7 +251,8 @@ ColumnFamilyData::ColumnFamilyData(Options &options)
       dcfd_(nullptr),
       cancel_task_type_(0),
       range_start_(0),
-      range_end_(0) {
+      range_end_(0)
+{
   Ref();
 }
 

@@ -15,7 +15,7 @@ using namespace common;
 using namespace storage;
 namespace db {
 
-SnapshotImpl::SnapshotImpl() : number_(0), ref_(0), backup_ref_(0)
+SnapshotImpl::SnapshotImpl() : index_id_(-1), number_(0), ref_(0), backup_ref_(0)
 {
   for (int64_t level = 0; level < storage::MAX_TIER_COUNT; ++level) {
     extent_layer_versions_[level] = nullptr;
@@ -25,13 +25,17 @@ SnapshotImpl::SnapshotImpl() : number_(0), ref_(0), backup_ref_(0)
 SnapshotImpl::~SnapshotImpl()
 {
 }
-int SnapshotImpl::init(storage::ExtentLayerVersion **extent_layer_versions, common::SequenceNumber seq_num) {
+int SnapshotImpl::init(int64_t index_id,
+                       storage::ExtentLayerVersion **extent_layer_versions,
+                       common::SequenceNumber seq_num)
+{
   int ret = common::Status::kOk;
 
   if (IS_NULL(extent_layer_versions)) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), KP(extent_layer_versions));
   } else {
+    index_id_ = index_id;
     number_ = seq_num;
     for (int64_t level = 0; level < storage::MAX_TIER_COUNT; ++level) {
       extent_layer_versions_[level] = extent_layer_versions[level];
@@ -199,6 +203,8 @@ int SnapshotImpl::deserialize(char *buf, int64_t buf_len, int64_t &pos, const ut
       pos += sizeof(size);
       version = *((int64_t *)(buf + pos));
       pos += sizeof(version);
+      index_id_ = *((int64_t *)(buf + pos));
+      pos += sizeof(index_id_);
 
       if (FAILED(extent_layer_versions_deserialize(buf, buf_len, pos))) {
         SE_LOG(WARN, "failed to deserialize extent layer versions", K(ret));
@@ -226,6 +232,8 @@ int SnapshotImpl::serialize(char *buf, int64_t buf_len, int64_t &pos) const {
     pos += sizeof(int64_t);
     *reinterpret_cast<int64_t *>(buf + pos) = version;
     pos += sizeof(int64_t);
+    *reinterpret_cast<int64_t *>(buf + pos) = index_id_;
+    pos += sizeof(int64_t);
 
     if (FAILED(extent_layer_versions_serialize(buf, buf_len, pos))) {
       SE_LOG(WARN, "failed to serialize extent layer versions", K(ret));
@@ -242,6 +250,7 @@ int64_t SnapshotImpl::get_serialize_size() const {
   int64_t size = 0;
 
   size += 2 * sizeof(int64_t); // size and version
+  size += sizeof(index_id_);
   size += extent_layer_versions_get_serialize_size();
   return size;
 }

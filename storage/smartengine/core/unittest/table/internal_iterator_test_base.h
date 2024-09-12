@@ -318,7 +318,10 @@ void InternalIteratorTestBase::init(const TestArgs &args)
   // storage manager
   db::CreateSubTableArgs subtable_args;
   subtable_args.index_id_ = 1;
-  storage_manager_.reset(new storage::StorageManager(context_->env_options_, context_->icf_options_, context_->mutable_cf_options_));
+  storage_manager_.reset(new storage::StorageManager(nullptr,
+                                                     context_->env_options_,
+                                                     context_->icf_options_,
+                                                     context_->mutable_cf_options_));
   storage_manager_->init();
 
   ExtentMetaManager::get_instance().init();

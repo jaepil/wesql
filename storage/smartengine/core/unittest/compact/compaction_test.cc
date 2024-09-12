@@ -275,7 +275,12 @@ class CompactionTest : public testing::Test {
       }
     }
     ColumnFamilyData *sub_table = nullptr;
-    storage_manager_ = ALLOC_OBJECT(StorageManager, alloc_, context_->env_options_, context_->icf_options_, context_->mutable_cf_options_);
+    storage_manager_ = ALLOC_OBJECT(StorageManager,
+                                    alloc_,
+                                    nullptr,
+                                    context_->env_options_,
+                                    context_->icf_options_,
+                                    context_->mutable_cf_options_);
     storage_manager_->init();
 
     assert(s.ok());
