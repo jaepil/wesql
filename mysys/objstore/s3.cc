@@ -288,13 +288,16 @@ Status S3ObjectStore::get_object(const std::string_view &bucket,
   }
 
   std::ostringstream oss;
-  oss << outcome.GetResult().GetBody().rdbuf();
-  if (!oss) {
-    return Status(Errors::SE_IO_ERROR, 0,
-                  "unable to read data from response stream");
+  if (outcome.GetResult().GetBody().rdbuf()->in_avail() > 0) {
+    oss << outcome.GetResult().GetBody().rdbuf();
+    if (!oss) {
+      return Status(Errors::SE_IO_ERROR, 0,
+                    "unable to read data from response stream");
+    }
+    body = oss.str();
+  } else {
+    body = "";
   }
-
-  body = oss.str();
 
   return Status();
 }
@@ -335,14 +338,16 @@ Status S3ObjectStore::get_object(const std::string_view &bucket,
   }
 
   std::ostringstream oss;
-  oss << outcome.GetResult().GetBody().rdbuf();
-  if (!oss) {
-    return Status(Errors::SE_IO_ERROR, 0,
-                  "unable to read data from response stream");
+  if (outcome.GetResult().GetBody().rdbuf()->in_avail() > 0) {
+    oss << outcome.GetResult().GetBody().rdbuf();
+    if (!oss) {
+      return Status(Errors::SE_IO_ERROR, 0,
+                    "unable to read data from response stream");
+    }
+    body = oss.str();
+  } else {
+    body = "";
   }
-
-  body = oss.str();
-
   return Status();
 }
 

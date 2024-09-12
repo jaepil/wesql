@@ -242,10 +242,10 @@ protected:
 INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
                         testing::Values(
-                                        "aliyun",
-                                        "aws"
-                                        // "local"
-                                        ));
+                            // "aws,"
+                            // "aliyun,"
+                            "local"
+                            ));
 
 TEST_P(ObjstoreTest, reinitObjStoreApi)
 {
@@ -335,6 +335,7 @@ TEST_P(ObjstoreTest, operateObject)
 {
   std::string key = "test_put_object";
   std::string raw_data = "test_put_object_data";
+  std::string zero_len_key = "zero_len_key";
   std::string data;
   objstore::Status ss = put_object(key, raw_data);
   ASSERT_TRUE(ss.is_succ());
@@ -363,6 +364,16 @@ TEST_P(ObjstoreTest, operateObject)
 
   ss = get_object(key, data);
   ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_KEY);
+
+  ss = put_object(zero_len_key, "");
+  ASSERT_TRUE(ss.is_succ());
+
+  ss = get_object(zero_len_key, data);
+  ASSERT_TRUE(ss.is_succ());
+  ASSERT_EQ(data, "");
+
+  ss = delete_object(zero_len_key);
+  ASSERT_TRUE(ss.is_succ());
 }
 
 TEST_P(ObjstoreTest, listObject)

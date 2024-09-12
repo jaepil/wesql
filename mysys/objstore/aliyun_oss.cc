@@ -158,12 +158,16 @@ Status AliyunOssObjectStore::get_object(const std::string_view &bucket,
     return Status(err_type, outcome.error().Code(), outcome.error().Message());
   }
   std::ostringstream oss;
-  oss << outcome.result().Content()->rdbuf();
-  if (!oss) {
-    Errors err_type = aliyun_oss_error_to_se_error(outcome.error());
-    return Status(err_type, outcome.error().Code(), outcome.error().Message());
+  if (outcome.result().Content()->rdbuf()->in_avail() > 0) {
+    oss << outcome.result().Content()->rdbuf();
+    if (!oss) {
+      Errors err_type = aliyun_oss_error_to_se_error(outcome.error());
+      return Status(err_type, outcome.error().Code(), outcome.error().Message());
+    }
+    input = oss.str();
+  } else {
+    input = "";
   }
-  input = oss.str();
   return Status();
 }
 
@@ -178,13 +182,16 @@ Status AliyunOssObjectStore::get_object(const std::string_view &bucket,
   }
 
   std::ostringstream oss;
-  oss << outcome.result().Content()->rdbuf();
-  if (!oss) {
-    return Status(Errors::SE_IO_ERROR, 0,
-                  "unable to read data from response stream");
+  if (outcome.result().Content()->rdbuf()->in_avail() > 0) {
+    oss << outcome.result().Content()->rdbuf();
+    if (!oss) {
+      return Status(Errors::SE_IO_ERROR, 0,
+                    "unable to read data from response stream");
+    }
+    body = oss.str();
+  } else {
+    body = "";
   }
-
-  body = oss.str();
   if (off >= body.length()) {
     return Status(Errors::CLOUD_PROVIDER_UNRECOVERABLE_ERROR, 0, "Unable to parse ExceptionName: InvalidRange Message: The requested range is not satisfiable");
   }
