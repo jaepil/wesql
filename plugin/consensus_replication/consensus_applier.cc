@@ -290,7 +290,10 @@ void update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
             ->start_new_group();
       }
     }
-  } else if (!ev->is_control_event()) {
+  } else if (!ev->is_control_event() ||
+             ev->get_type_code() == binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
+    /* The Previous_gtids_event serves as the event marking the end of the
+     * binlog file header, allowing to advance to this point. */
     MYSQL_BIN_LOG *binlog = consensus_state_process.get_binlog();
     mysql_mutex_lock(binlog->get_log_lock());
     binlog->switch_and_seek_log(rli->get_event_relay_log_name(),
