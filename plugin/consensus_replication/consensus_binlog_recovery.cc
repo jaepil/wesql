@@ -95,6 +95,7 @@ class Consensus_binlog_recovery : public binlog::Binlog_recovery {
   ~Consensus_binlog_recovery(){}
 
   Consensus_binlog_recovery &consensus_recover(bool ha_recover,
+                                               bool has_ha_recover_end,
                                                uint64 ha_recover_end_index,
                                                bool log_recover_only);
 
@@ -210,7 +211,8 @@ void Consensus_binlog_recovery::after_process_xa_commit_or_rollback(
 }
 
 Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
-    bool ha_recover, uint64 ha_recover_end_index, bool log_recover_only) {
+    bool ha_recover, bool has_ha_recover_end, uint64 ha_recover_end_index,
+    bool log_recover_only) {
   bool pos_set_by_previous = false;
   bool enable_rotate = true;
   bool ha_recover_end = false;
@@ -333,8 +335,10 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
         recovery_manager.max_committed_index > 0
             ? recovery_manager.max_committed_index
             : start_index - 1);
+  } else if (has_ha_recover_end) {
+    assert(!opt_cluster_log_type_instance && ha_recover_end_index == 0);
+    consensus_state_process.set_recovery_index_hwl(0);
   } else if (!log_recover_only) {
-    assert(ha_recover_end_index == 0);
     consensus_state_process.set_recovery_index_hwl(this->valid_index);
   }
 
@@ -354,8 +358,8 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
 
 int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
                               uint64 ha_recover_end_index,
-                              char *recover_end_file,
-                              my_off_t *recover_end_pos) {
+                              char *binlog_end_file,
+                              my_off_t *binlog_end_pos) {
   LOG_INFO log_info;
   Log_event *ev = nullptr;
   int error = 0;
@@ -464,7 +468,7 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
   delete ev;
 
   Consensus_binlog_recovery bl_recovery{binlog_file_reader};
-  bl_recovery.consensus_recover(should_ha_recover, ha_recover_end_index, false);
+  bl_recovery.consensus_recover(should_ha_recover, has_ha_recover_end, ha_recover_end_index, false);
   valid_pos = bl_recovery.get_valid_pos();
   binlog_size = binlog_file_reader.ifile()->length();
 
@@ -533,7 +537,7 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
 
     /* Scan the log file and recovery consensus log status */
     Consensus_binlog_recovery bl_scan{binlog_file_reader};
-    bl_scan.consensus_recover(false, 0, true);
+    bl_scan.consensus_recover(false, false, 0, true);
     valid_pos = bl_scan.get_valid_pos();
     binlog_size = binlog_file_reader.ifile()->length();
 
@@ -548,9 +552,9 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
   /* Trim the crashed binlog file to last valid transaction
     or event (non-transaction) base on valid_pos. */
   if (valid_pos > 0) {
-    if (recover_end_file != nullptr && recover_end_pos != nullptr) {
-      strncpy(recover_end_file, log_name, FN_REFLEN);
-      *recover_end_pos = valid_pos;
+    if (binlog_end_file != nullptr && binlog_end_pos != nullptr) {
+      strncpy(binlog_end_file, log_name, FN_REFLEN);
+      *binlog_end_pos = valid_pos;
     }
     error = truncate_binlog_file_to_valid_pos(log_name, valid_pos, binlog_size,
                                               true);
