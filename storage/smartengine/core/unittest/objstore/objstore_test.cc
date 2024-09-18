@@ -80,6 +80,8 @@ public:
     ss = obs->create_bucket(bucket_);
     if (!ss.is_succ()) {
       std::cout << "set up:" << ss.error_code() << " " << ss.error_message() << std::endl;
+    } else {
+      std::cout << "set up: create bucket " << bucket_ << ", provider:" << provider_ << std::endl;
     }
     ASSERT_TRUE(ss.is_succ());
   }
@@ -177,11 +179,12 @@ public:
     return ss; 
   }
   objstore::Status list_object(const std::string &prefix,
+                               bool recursive,
                                std::string &start_after,
                                bool &finished,
                                std::vector<objstore::ObjectMeta> &objects)
   {
-    objstore::Status ss = obj_store_->list_object(bucket_, prefix, start_after, finished, objects);
+    objstore::Status ss = obj_store_->list_object(bucket_, prefix, recursive, start_after, finished, objects);
     if (!ss.is_succ()) {
       std::cout << "list object: " << ss.error_code() << " " << ss.error_message() << std::endl;
     }
@@ -242,10 +245,9 @@ protected:
 INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
                         testing::Values(
-                            // "aws,"
-                            // "aliyun,"
-                            "local"
-                            ));
+                            // "aws"
+                            // ",aliyun,"
+                            "local"));
 
 TEST_P(ObjstoreTest, reinitObjStoreApi)
 {
@@ -283,19 +285,36 @@ TEST_P(ObjstoreTest, noBucket)
   std::string data;
 
   ss = get_object("x", data);
-  ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  if (provider_ == LOCAL_PROVIDER) {
+    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_KEY);
+  } else {
+    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  }
 
   ss = put_object("x", "x");
-  ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  if (provider_ == LOCAL_PROVIDER) {
+    // local object store will create the bucket automatically
+    ASSERT_TRUE(ss.is_succ());
+  } else {
+    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  }
 
   ss = delete_object("x");
-  ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  if (provider_ == LOCAL_PROVIDER) {
+    ASSERT_TRUE(ss.is_succ());
+  } else {
+    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  }
 
   bool finished = false;
   std::string start_after;
   std::vector<objstore::ObjectMeta> objects;
-  ss = list_object("x", start_after, finished, objects);
-  ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  ss = list_object("x", true, start_after, finished, objects);
+  if (provider_ == LOCAL_PROVIDER) {
+    ASSERT_TRUE(ss.is_succ());
+  } else {
+    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+  }
 
   ss = create_bucket();
   ASSERT_TRUE(ss.is_succ());
@@ -390,14 +409,20 @@ TEST_P(ObjstoreTest, listObject)
     ASSERT_TRUE(ss.is_succ());
   }
 
-  ss = list_object("test_list_object_", start_after, finished, objects);
+  ss = list_object("test_list_object_", true, start_after, finished, objects);
   // s3 list object api returns 1000 objects at most
-  ASSERT_EQ(objects.size(), 1000);
+  if (provider_ == LOCAL_PROVIDER) {
+    ASSERT_EQ(objects.size(), 1001);
+    ASSERT_EQ(start_after, "");
+    ASSERT_TRUE(finished);
+  } else {
+    ASSERT_EQ(objects.size(), 1000);
+    ASSERT_EQ(start_after, "test_list_object_998");
+    ASSERT_FALSE(finished);
+  }
   // list object is ordered in lexicographical order, so the last(1001-th) is "test_list_object_999", but not
   // "test_list_object_1000", and the 1000-th object is "test_list_object_998"
   ASSERT_EQ(objects[999].key, "test_list_object_998");
-  ASSERT_EQ(start_after, "test_list_object_998");
-  ASSERT_FALSE(finished);
 
   // check the results are ordered by key in lexicographical order
   for (int i = 0; i < 999; i++) {
@@ -405,17 +430,139 @@ TEST_P(ObjstoreTest, listObject)
   }
   objects.clear();
 
-  ss = list_object("test_list_object_", start_after, finished, objects);
-  // the `start_after` key("test_list_object_998") is not included.
-  ASSERT_EQ(objects.size(), 1);
-  ASSERT_EQ(objects[0].key, "test_list_object_999");
-  ASSERT_TRUE(finished);
-  ASSERT_EQ(start_after, "");
-  objects.clear();
+  if (provider_ != LOCAL_PROVIDER) {
+    ss = list_object("test_list_object_", true, start_after, finished, objects);
+    // the `start_after` key("test_list_object_998") is not included.
+    ASSERT_EQ(objects.size(), 1);
+    ASSERT_EQ(objects[0].key, "test_list_object_999");
+    ASSERT_TRUE(finished);
+    ASSERT_EQ(start_after, "");
+    objects.clear();
+  }
 
   for (int i = 0; i < 1001; i++) {
     std::string key = "test_list_object_" + std::to_string(i);
     ss = delete_object(key);
+    ASSERT_TRUE(ss.is_succ());
+  }
+
+  ss = put_object("empty_dir/", "");
+  ASSERT_TRUE(ss.is_succ());
+  ss = list_object("empty_dir", true, start_after, finished, objects);
+  ASSERT_EQ(objects.size(), 1);
+  ASSERT_EQ(objects[0].key, "empty_dir/");
+  ss = delete_object("empty_dir/");
+  ASSERT_TRUE(ss.is_succ());
+}
+
+TEST_P(ObjstoreTest, listObjectWithRecursiveOption)
+{
+  objstore::Status ss;
+  std::vector<objstore::ObjectMeta> objects;
+  bool finished = false;
+  std::string start_after;
+
+  // NOTICE:
+  // there are some different behaviors for `local` mode and `s3` and `aliyun` mode.
+
+  // 1. for `local` mode, if a key is a directory, it should be ended with '/',
+  // and a file name and a directory name should be distinguished. for example,
+  // if we put a file with key "a", we can't put a directory with key "a/".
+  // vice versa, if we put a directory with key "a/", we can't put a file with key "a".
+
+  // for `s3` and `aliyun` mode, a directory key and a file key can have the same name,
+  // for example, we can put a file with key "a", and then put a directory with key "a/".
+  // vice versa, we can put a directory with key "a/", and then put a file with key "a".
+
+  // 2. for `local` mode, when we delete a directory key, all the objects under the directory will be deleted.
+  // for example, if we put a directory with key "a/", and then put a file with key "a/b", and then delete "a/" key,
+  // the directory key "a/" and the file key "a/b" will be all eleted.
+
+  // for `s3` and `aliyun` mode, when we delete a directory key, all the objects under the directory will not be
+  // deleted. for example, if we put a directory with key "a/", and then put a file with key "a/b", and then delete "a/"
+  // key, the directory key "a/" will be deleted, but the file key "a/b" will not be deleted.
+
+  if (provider_ == LOCAL_PROVIDER) {
+    ss = put_object("a/", "");
+    ASSERT_TRUE(ss.is_succ());
+    ss = put_object("a/b/", "");
+    ASSERT_TRUE(ss.is_succ());
+    ss = put_object("a/b/c", "");
+    ASSERT_TRUE(ss.is_succ());
+
+    ss = list_object("a", true, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 3);
+    objects.clear();
+
+    ss = list_object("a/", true, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 3);
+    objects.clear();
+
+    ss = list_object("a", false, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 1);
+    ASSERT_EQ(objects[0].key, "a/");
+
+    ss = list_object("a/", false, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 2);
+    ASSERT_EQ(objects[0].key, "a/");
+    ASSERT_EQ(objects[1].key, "a/b/");
+
+    ss = delete_object("a/b/c");
+    ASSERT_TRUE(ss.is_succ());
+    ss = delete_object("a/b/");
+    ASSERT_TRUE(ss.is_succ());
+    ss = delete_object("a");
+    ASSERT_TRUE(ss.is_succ());
+  } else {
+    ss = put_object("a", "");
+    ASSERT_TRUE(ss.is_succ());
+    ss = put_object("a/", "");
+    ASSERT_TRUE(ss.is_succ());
+    ss = put_object("a/b", "");
+    ASSERT_TRUE(ss.is_succ());
+    ss = put_object("a/b/", "");
+    ASSERT_TRUE(ss.is_succ());
+    ss = put_object("a/b/c", "");
+    ASSERT_TRUE(ss.is_succ());
+
+    ss = list_object("a", true, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 5);
+    objects.clear();
+
+    ss = list_object("a/", true, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 4);
+    objects.clear();
+
+    ss = list_object("a", false, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 2);
+    ASSERT_EQ(objects[0].key, "a");
+    ASSERT_EQ(objects[1].key, "a/");
+    objects.clear();
+
+    ss = list_object("a/", false, start_after, finished, objects);
+    ASSERT_TRUE(ss.is_succ());
+    ASSERT_EQ(objects.size(), 3);
+    ASSERT_EQ(objects[0].key, "a/");
+    ASSERT_EQ(objects[1].key, "a/b");
+    ASSERT_EQ(objects[2].key, "a/b/");
+    objects.clear();
+
+    ss = delete_object("a");
+    ASSERT_TRUE(ss.is_succ());
+    ss = delete_object("a/");
+    ASSERT_TRUE(ss.is_succ());
+    ss = delete_object("a/b");
+    ASSERT_TRUE(ss.is_succ());
+    ss = delete_object("a/b/");
+    ASSERT_TRUE(ss.is_succ());
+    ss = delete_object("a/b/c");
     ASSERT_TRUE(ss.is_succ());
   }
 }
@@ -513,6 +660,7 @@ TEST_P(ObjstoreTest, copyDir)
   for (int i = 0; i < 30; i++) {
     std::string sub_dir = upload_local_dir + "/subdir" + std::to_string(i);
     ASSERT_TRUE(fs::create_directories(sub_dir));
+    expect_keys.push_back(remote_dir + "subdir" + std::to_string(i) + "/");
     for (int j = 0; j < 40; j++) {
       std::string file_path = sub_dir + "/" + std::to_string(j);
       expect_keys.push_back(remote_dir + "subdir" + std::to_string(i) + "/" + std::to_string(j));
@@ -522,6 +670,10 @@ TEST_P(ObjstoreTest, copyDir)
       file.close();
     }
   }
+  std::string empty_dir = upload_local_dir + "/empty_dir";
+  ASSERT_TRUE(fs::create_directories(empty_dir));
+  expect_keys.push_back(remote_dir + "empty_dir/");
+
   objstore::Status ss = put_objects_from_dir(upload_local_dir, remote_dir);
   ASSERT_TRUE(ss.is_succ());
 
@@ -531,9 +683,10 @@ TEST_P(ObjstoreTest, copyDir)
     std::string start_after;
     bool finished = false;
     while (!finished) {
-      ss = list_object(remote_dir, start_after, finished, objects);
+      ss = list_object(remote_dir, true, start_after, finished, objects);
       ASSERT_TRUE(ss.is_succ());
     }
+    ASSERT_EQ(expect_keys.size(), 1231);
     ASSERT_EQ(expect_keys.size(), objects.size());
     std::sort(expect_keys.begin(), expect_keys.end());
     std::sort(objects.begin(), objects.end(), [&](const objstore::ObjectMeta &a, objstore::ObjectMeta &b) { return a.key < b.key; });
@@ -590,11 +743,7 @@ TEST_P(ObjstoreTest, deleteDir)
     std::string data;
     ss = get_object(key1, data);
     ASSERT_TRUE(!ss.is_succ());
-    if (provider_ == LOCAL_PROVIDER) {
-      ASSERT_EQ(ss.error_code(), objstore::Errors::SE_IO_ERROR);
-    } else {
-      ASSERT_EQ(ss.error_code(), objstore::Errors::SE_NO_SUCH_KEY);
-    }
+    ASSERT_EQ(ss.error_code(), objstore::Errors::SE_NO_SUCH_KEY);
 
     ss = get_object(key2, data);
     ASSERT_TRUE(ss.is_succ());
@@ -609,6 +758,28 @@ TEST_P(ObjstoreTest, deleteDir)
   ASSERT_TRUE(ss.is_succ());
   ss = delete_directory(dir3);
   ASSERT_TRUE(ss.is_succ());
+}
+
+TEST_P(ObjstoreTest, is_first_level_sub_key)
+{
+  ASSERT_TRUE(objstore::is_first_level_sub_key("a", ""));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("a/", ""));
+  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b", ""));
+
+  ASSERT_TRUE(objstore::is_first_level_sub_key("a", "a"));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("ab", ""));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("a/", "a"));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("aa/", "a"));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("ab/", ""));
+  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b", "a"));
+  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b/", "a"));
+  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b/c", "a"));
+
+  ASSERT_FALSE(objstore::is_first_level_sub_key("a", "a/"));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("a/", "a/"));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("a/b", "a/"));
+  ASSERT_TRUE(objstore::is_first_level_sub_key("a/b/", "a/"));
+  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b/c", "a/"));
 }
 
 } // namespace obj

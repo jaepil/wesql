@@ -51,7 +51,7 @@ class LocalObjectStore : public ObjectStore {
                          ObjectMeta &meta) override;
 
   Status list_object(const std::string_view &bucket,
-                     const std::string_view &prefix,
+                     const std::string_view &prefix, bool recursive,
                      std::string &start_after, bool &finished,
                      std::vector<ObjectMeta> &objects) override;
 
@@ -79,8 +79,7 @@ class LocalObjectStore : public ObjectStore {
   std::string generate_path(const std::string_view &bucket);
   std::string generate_path(const std::string_view &bucket,
                             const std::string_view &key);
-  Status copy_directory(const std::string_view &bucket,
-                        const std::string_view &src_dir,
+  Status copy_directory(const std::string_view &src_dir,
                         const std::string_view &dst_dir);
 
  private:

@@ -26,6 +26,51 @@ namespace objstore {
 
 namespace fs = std::filesystem;
 
+std::string remove_prefix(const std::string &str, const std::string &prefix) {
+  int pos = str.find(prefix);
+  if (pos == 0) {
+    return str.substr(prefix.size());
+  }
+  return str;
+}
+
+/*
+this function check whether a key is frist-level sub key in a s3/oss/...
+directory (like `aws s3 ls ...`).
+
+if prefix is "a", the following are first-level sub keys:
+====
+"a"
+"ab"
+"a/"
+"aa"
+"aa/"
+"ab/"
+====
+
+if prefix is "a/", the following are first level sub keys:
+====
+"a/"
+"a/b"
+"a/b/"
+====
+and the following are not:
+====
+"aa/"
+"a/b/c"
+====
+*/
+bool is_first_level_sub_key(const std::string_view &key,
+                            const std::string_view &prefix) {
+  if (key.size() >= prefix.size()) {
+    if (key.find('/', prefix.size()) == std::string::npos ||
+        key.find('/', prefix.size()) == key.size() - 1) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int mkdir_p(std::string_view path) {
   std::error_code errcode;
   fs::create_directories(path, errcode);
@@ -75,7 +120,8 @@ Status ObjectStore::delete_directory(const std::string_view &bucket,
   bool finished = false;
   std::vector<ObjectMeta> objects;
   while (!finished) {
-    Status s = list_object(bucket, dir_prefix, start_after, finished, objects);
+    Status s =
+        list_object(bucket, dir_prefix, true, start_after, finished, objects);
     if (!s.is_succ()) {
       return s;
     }
@@ -113,14 +159,25 @@ Status ObjectStore::put_objects_from_dir(const std::string_view &src_dir,
     return Status(Errors::SE_INVALID, ENOTDIR, err_msg.c_str());
   }
 
-  for (const fs::directory_entry &entry : fs::recursive_directory_iterator(src_dir_path)) {
-    if (entry.is_regular_file()) {
-      std::string key = fs::relative(entry.path(), src_dir_path);
-      if (!dst_objstore_dir_path.empty()) {
-        key = dst_objstore_dir_path + key;
+  for (const fs::directory_entry &entry :
+       fs::recursive_directory_iterator(src_dir_path)) {
+    std::string key = fs::relative(entry.path(), src_dir_path);
+    if (!dst_objstore_dir_path.empty()) {
+      key = dst_objstore_dir_path + key;
+    }
+
+    if (entry.is_directory()) {
+      if (key.back() != '/') {
+        key.append("/");
       }
+      Status s = put_object(dst_objstore_bucket, key, "");
+      if (!s.is_succ()) {
+        return s;
+      }
+    } else if (entry.is_regular_file()) {
       std::string abs_src_file_path = fs::absolute(entry.path());
-      Status s = put_object_from_file(dst_objstore_bucket, key, abs_src_file_path);
+      Status s =
+          put_object_from_file(dst_objstore_bucket, key, abs_src_file_path);
       if (!s.is_succ()) {
         return s;
       }
@@ -155,7 +212,8 @@ Status ObjectStore::get_objects_to_dir(const std::string_view &src_objstore_buck
   std::string start_after;
   fs::path last_parent_path;
   while (!finished) {
-    s = list_object(src_objstore_bucket, src_objstore_dir_path, start_after, finished, object_metas);
+    s = list_object(src_objstore_bucket, src_objstore_dir_path, true,
+                    start_after, finished, object_metas);
     if (!s.is_succ()) {
       return s;
     }
@@ -166,17 +224,32 @@ Status ObjectStore::get_objects_to_dir(const std::string_view &src_objstore_buck
         key = remove_prefix(key, src_objstore_dir_path);
       }
       fs::path dst_file_path = abs_dst_dir_path / key;
-      if (dst_file_path.parent_path() != last_parent_path && !fs::exists(dst_file_path.parent_path())) {
-        int ret = mkdir_p(dst_file_path.parent_path().native());
-        if (ret != 0) {
-          return Status(Errors::SE_IO_ERROR, ret, std::generic_category().message(ret));
+
+      if (obj.key.back() == '/') {
+        // this is a sub directory of object store bucket
+        if (!fs::exists(dst_file_path)) {
+          int ret = mkdir_p(dst_file_path.native());
+          if (ret != 0) {
+            return Status(Errors::SE_IO_ERROR, ret,
+                          std::generic_category().message(ret));
+          }
         }
-        last_parent_path = dst_file_path.parent_path();
+      } else {
+        if (dst_file_path.parent_path() != last_parent_path &&
+            !fs::exists(dst_file_path.parent_path())) {
+          int ret = mkdir_p(dst_file_path.parent_path().native());
+          if (ret != 0) {
+            return Status(Errors::SE_IO_ERROR, ret,
+                          std::generic_category().message(ret));
+          }
+          last_parent_path = dst_file_path.parent_path();
+        }
+        s = get_object_to_file(src_objstore_bucket, obj.key,
+                               dst_file_path.native());
+        if (!s.is_succ()) {
+          return s;
+        }
       }
-      s = get_object_to_file(src_objstore_bucket, obj.key, dst_file_path.native());
-      if (!s.is_succ()) {
-        return s;
-      } 
     }
     object_metas.clear();
   }

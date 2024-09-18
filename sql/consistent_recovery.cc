@@ -873,8 +873,7 @@ bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
       objstore::Status ss = recovery_objstore->list_object(
-          std::string_view(m_objstore_bucket),
-          binlog_index_prefix,
+          std::string_view(m_objstore_bucket), binlog_index_prefix, true,
           start_after, finished, tmp_objects);
       if (!ss.is_succ()) {
         err_msg.assign("List persistent binlog index files failed: ");
@@ -1192,8 +1191,8 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(
   do {
     std::vector<objstore::ObjectMeta> tmp_objects;
     ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
-                                        binlog_keyid, start_after, finished,
-                                        tmp_objects);
+                                        binlog_keyid, true, start_after,
+                                        finished, tmp_objects);
     // The binlog present in persistent binlog-index.index should also exist in
     // object store.
     if (!ss.is_succ()) {
@@ -1644,8 +1643,8 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
       ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
-                                          binlog_keyid, start_after, finished,
-                                          objects);
+                                          binlog_keyid, true, start_after,
+                                          finished, objects);
       if (!ss.is_succ() &&
           ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {
         err_msg.assign("list persistent binlog slice failed: ");

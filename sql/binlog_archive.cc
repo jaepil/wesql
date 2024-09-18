@@ -2097,7 +2097,7 @@ bool Binlog_archive::open_index_file() {
       binlog_index_prefix.assign(m_binlog_archive_dir);
       binlog_index_prefix.append(BINLOG_ARCHIVE_INDEX_FILE_BASENAME);
       objstore::Status ss = binlog_objstore->list_object(
-          std::string_view(opt_objstore_bucket), binlog_index_prefix,
+          std::string_view(opt_objstore_bucket), binlog_index_prefix, true,
           start_after, finished, tmp_objects);
       if (!ss.is_succ()) {
         LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LIST_OBJECT,
@@ -2956,8 +2956,8 @@ err:
       do {
         std::vector<objstore::ObjectMeta> tmp_objects;
         objstore::Status ss = binlog_objstore->list_object(
-            std::string_view(opt_objstore_bucket), binlog_prefix, start_after,
-            finished, tmp_objects);
+            std::string_view(opt_objstore_bucket), binlog_prefix, true,
+            start_after, finished, tmp_objects);
         if (!ss.is_succ()) {
           error = 1;
           LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LIST_OBJECT,
@@ -3022,7 +3022,7 @@ err:
         binlog_index_prefix.assign(m_binlog_archive_dir);
         binlog_index_prefix.append(BINLOG_ARCHIVE_INDEX_FILE_BASENAME);
         objstore::Status ss = binlog_objstore->list_object(
-            std::string_view(opt_objstore_bucket), binlog_index_prefix,
+            std::string_view(opt_objstore_bucket), binlog_index_prefix, true,
             start_after, finished, tmp_objects);
         if (!ss.is_succ()) {
           error = 1;
@@ -3317,8 +3317,8 @@ int Binlog_archive::show_binlog_persistent_files(
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
       objstore::Status ss = binlog_objstore->list_object(
-          std::string_view(opt_objstore_bucket), binlog_prefix, start_after,
-          finished, tmp_objects);
+          std::string_view(opt_objstore_bucket), binlog_prefix, true,
+          start_after, finished, tmp_objects);
       if (!ss.is_succ()) {
         std::string err_msg;
         if (ss.error_code() == objstore::Errors::SE_NO_SUCH_KEY) {

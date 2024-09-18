@@ -151,7 +151,7 @@ class ObjectStore {
                                  ObjectMeta &meta) = 0;
 
   virtual Status list_object(const std::string_view &bucket,
-                             const std::string_view &prefix,
+                             const std::string_view &prefix, bool recursive,
                              std::string &start_after, bool &finished,
                              std::vector<ObjectMeta> &objects) = 0;
 
@@ -205,6 +205,11 @@ void cleanup_objstore_provider(ObjectStore *objstore);
 int mkdir_p(std::string_view path);
 
 int rm_f(std::string_view path);
+
+bool is_first_level_sub_key(const std::string_view &key,
+                            const std::string_view &prefix);
+
+std::string remove_prefix(const std::string &str, const std::string &prefix);
 
 }  // namespace objstore
 

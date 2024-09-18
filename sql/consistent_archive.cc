@@ -2953,8 +2953,8 @@ int Consistent_archive::purge_archive_garbage(const char *dirty_end_archive,
     // innodb_archive_000001.tar or innodb_archive_000001.tar
     // or innodb_archive_000001/
     objstore::Status ss = snapshot_objstore->list_object(
-        std::string_view(opt_objstore_bucket), archive_prefix, start_after,
-        finished, tmp_objects);
+        std::string_view(opt_objstore_bucket), archive_prefix, true,
+        start_after, finished, tmp_objects);
     if (!ss.is_succ()) {
       error = 1;
       err_msg.assign("list persistent object files: ");
@@ -3308,9 +3308,10 @@ int Consistent_archive::show_innodb_persistent_files(
       // only return the files and directories at the first-level directory.
       // innodb_archive_000001.tar or innodb_archive_000001.tar
       // or innodb_archive_000001/
-      objstore::Status ss = snapshot_objstore->list_object(
-          std::string_view(opt_objstore_bucket),
-          std::string_view(innodb_prefix), start_after, finished, tmp_objects);
+      objstore::Status ss =
+          snapshot_objstore->list_object(std::string_view(opt_objstore_bucket),
+                                         std::string_view(innodb_prefix), true,
+                                         start_after, finished, tmp_objects);
       if (!ss.is_succ()) {
         std::string err_msg;
         if (ss.error_code() == objstore::Errors::SE_NO_SUCH_KEY) {
@@ -3349,7 +3350,7 @@ int Consistent_archive::show_se_persistent_files(
       // innodb_archive_000001.tar or innodb_archive_000001.tar
       // or innodb_archive_000001/
       objstore::Status ss = snapshot_objstore->list_object(
-          std::string_view(opt_objstore_bucket), se_prefix, start_after,
+          std::string_view(opt_objstore_bucket), se_prefix, true, start_after,
           finished, tmp_objects);
       if (!ss.is_succ()) {
         std::string err_msg;

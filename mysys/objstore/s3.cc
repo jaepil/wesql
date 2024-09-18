@@ -392,7 +392,8 @@ Status S3ObjectStore::get_object_meta(const std::string_view &bucket,
 
 Status S3ObjectStore::list_object(const std::string_view &bucket,
                                   const std::string_view &prefix,
-                                  std::string &start_after, bool &finished,
+                                  bool recursive, std::string &start_after,
+                                  bool &finished,
                                   std::vector<ObjectMeta> &objects) {
   Aws::S3::Model::ListObjectsRequest request;
   Aws::String full_prefix;
@@ -430,6 +431,10 @@ Status S3ObjectStore::list_object(const std::string_view &bucket,
       outcome.GetResult().GetContents();
 
   for (const auto &obj : s3_objects) {
+    // only list first-level sub keys
+    if (!recursive && !is_first_level_sub_key(obj.GetKey(), prefix)) {
+      continue;
+    }
     ObjectMeta meta;
     meta.key = obj.GetKey();
     meta.last_modified = obj.GetLastModified().Millis();
@@ -537,14 +542,6 @@ Status S3ObjectStore::delete_objects(const std::string_view &bucket,
   }
   
   return Status();
-}
-
-std::string remove_prefix(const std::string &str, const std::string &prefix) {
-  int pos = str.find(prefix);
-  if (pos == 0) {
-    return str.substr(prefix.size());
-  }
-  return str;
 }
 
 void init_aws_api() {

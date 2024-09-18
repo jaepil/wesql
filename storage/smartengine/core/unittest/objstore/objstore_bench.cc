@@ -139,11 +139,12 @@ public:
     return ss;
   }
   objstore::Status list_object(const std::string &prefix,
+                               bool recursive,
                                std::string &start_after,
                                bool &finished,
                                std::vector<objstore::ObjectMeta> &objects)
   {
-    objstore::Status ss = obj_store_->list_object(bucket_, prefix, start_after, finished, objects);
+    objstore::Status ss = obj_store_->list_object(bucket_, prefix, recursive, start_after, finished, objects);
     if (!ss.is_succ()) {
       std::cout << "list object failed:" << ss.error_code() << " " << ss.error_message() << std::endl;
       std::abort();

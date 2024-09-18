@@ -215,6 +215,7 @@ Status AliyunOssObjectStore::get_object_meta(const std::string_view &bucket,
 
 Status AliyunOssObjectStore::list_object(const std::string_view &bucket,
                                          const std::string_view &prefix,
+                                         bool recursive,
                                          std::string &start_after,
                                          bool &finished,
                                          std::vector<ObjectMeta> &objects) {
@@ -232,6 +233,10 @@ Status AliyunOssObjectStore::list_object(const std::string_view &bucket,
 
   const auto & aliyun_objects = outcome.result().ObjectSummarys();
   for (const auto &obj : aliyun_objects) {
+    // only list first-level sub keys
+    if (!recursive && !is_first_level_sub_key(obj.Key(), prefix)) {
+      continue;
+    }
     ObjectMeta meta;
     meta.key = obj.Key();
     meta.last_modified = convertTimeStr2Int64(obj.LastModified());

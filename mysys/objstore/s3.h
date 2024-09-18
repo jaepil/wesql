@@ -65,12 +65,13 @@ class S3ObjectStore : public ObjectStore {
 
   // param[in] bucket: the bucket name
   // param[in] prefix: the prefix of the object key
+  // param[in] recursive: list all sub keys or only the first-level sub keys
   // param[in & out] start_after: the object key to start after, and return the
   // object key for the next time to start after if there are more objects.
   // param[out] finished: whether the list is finished
   // param[out] objects: the object list returned.
   Status list_object(const std::string_view &bucket,
-                     const std::string_view &prefix,
+                     const std::string_view &prefix, bool recursive,
                      std::string &start_after, bool &finished,
                      std::vector<ObjectMeta> &objects) override;
 

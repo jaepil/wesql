@@ -69,7 +69,7 @@ class AliyunOssObjectStore : public ObjectStore {
                          ObjectMeta &meta) override;
 
   Status list_object(const std::string_view &bucket,
-                     const std::string_view &prefix,
+                     const std::string_view &prefix, bool recursive,
                      std::string &start_after, bool &finished,
                      std::vector<ObjectMeta> &objects) override;
 
