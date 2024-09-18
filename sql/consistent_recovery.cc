@@ -62,8 +62,7 @@ Consistent_recovery::Consistent_recovery()
       m_se_backup_index(0) {
   m_objstore_bucket[0] = '\0';
   m_binlog_archive_dir[0] = '\0';
-  m_binlog_start_file[0] = '\0';
-  m_mysql_binlog_start_file[0] = '\0';
+  m_binlog_file[0] = '\0';
   m_mysql_binlog_end_file[0] = '\0';
   m_snapshot_end_binlog_file[0] = '\0';
   m_binlog_index_keyid[0] = '\0';
@@ -304,19 +303,13 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
            "Recovery data exists already, skip pull data from object store.");
     m_state = CONSISTENT_RECOVERY_STATE_END;
     // For consensus archive recovery.
-    consistent_snapshot_recovery = true;
-    consistent_recovery_start_position = recovery_status.m_start_binlog_pos;
-    consistent_recovery_start_consensus_index =
-        recovery_status.m_start_consensus_index;
-    strncpy(consistent_recovery_start_binlog,
-            recovery_status.m_start_binlog_file,
-            sizeof(consistent_recovery_start_binlog) - 1);
-    strncpy(consistent_recovery_stop_timestamp,
-            recovery_status.m_stop_timestamp,
-            sizeof(consistent_recovery_stop_timestamp) - 1);
-    strncpy(consistent_recovery_binlog_index,
-            recovery_status.m_binlog_index_file,
-            sizeof(consistent_recovery_binlog_index) - 1);
+    consistent_recovery_consensus_recovery = true;
+    consistent_recovery_snapshot_end_binlog_position = recovery_status.m_end_binlog_pos;
+    consistent_recovery_snasphot_end_consensus_index =
+        recovery_status.m_end_consensus_index;
+    strncpy(consistent_recovery_apply_stop_timestamp,
+            recovery_status.m_apply_stop_timestamp,
+            sizeof(consistent_recovery_apply_stop_timestamp) - 1);
     return 0;
   }
 
@@ -465,8 +458,8 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
     strncpy(m_mysql_clone_keyid, innodb_name.c_str(),
             sizeof(m_mysql_clone_keyid) - 1);
     strncpy(m_se_backup_keyid, se_name.c_str(), sizeof(m_se_backup_keyid) - 1);
-    strncpy(m_binlog_start_file, binlog_name.c_str(),
-            sizeof(m_binlog_start_file) - 1);
+    strncpy(m_binlog_file, binlog_name.c_str(),
+            sizeof(m_binlog_file) - 1);
     m_mysql_binlog_pos = std::stoull(binlog_pos);
     m_consensus_index = std::stoull(consensus_index);
     m_se_snapshot_id = std::stoull(se_snapshot_id);
@@ -494,7 +487,7 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
   err_msg.append(" ");
   err_msg.append(m_se_backup_keyid);
   err_msg.append(" ");
-  err_msg.append(m_binlog_start_file);
+  err_msg.append(m_binlog_file);
   err_msg.append(" ");
   err_msg.append(std::to_string(m_mysql_binlog_pos));
   err_msg.append(" ");
@@ -832,7 +825,7 @@ bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg
       m_state == CONSISTENT_RECOVERY_STATE_END)
     return false;
   err_msg.assign("recovery binlog from ");
-  err_msg.append(m_binlog_start_file);
+  err_msg.append(m_binlog_file);
   err_msg.append(":");
   err_msg.append(std::to_string(m_mysql_binlog_pos));
   err_msg.append(" consensus_index=");
@@ -937,13 +930,13 @@ bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg
     return true;
   }
 
-  // Check if m_binlog_start_file exists in objstore's binlog.index
-  // Starting from m_binlog_start_file.
-  // If m_binlog_start_file[0] == '\0', indicate that all persistent binlog is
-  // required to be recovered. m_binlog_start_file is from consistent snapshot.
+  // Check if m_binlog_file exists in objstore's binlog.index
+  // Starting from m_binlog_file.
+  // If m_binlog_file[0] == '\0', indicate that all persistent binlog is
+  // required to be recovered. m_binlog_file is from consistent snapshot.
   int error = 0;
   error = Binlog_archive::find_log_pos_common(&m_binlog_index_file, &log_info,
-                                              m_binlog_start_file, 0);
+                                              m_binlog_file, 0);
   if (error != 0) {
     // Persistent binlog is empty.
     if (error == LOG_INFO_EOF) {
@@ -951,24 +944,14 @@ bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg
       return false;
     }
     err_msg.assign("Failed to find persistent binlog file: ");
-    err_msg.append(m_binlog_start_file);
+    err_msg.append(m_binlog_file);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     close_binlog_index_file(&mysql_binlog_index_file);
     close_binlog_index_file(&m_binlog_index_file);
     return true;
   }
 
-  // Convert to mysql binlog full name using persistent binlog name.
-  if (log_info.log_file_name[0] != '\0') {
-    std::string mysql_binlog_name;
-    mysql_binlog_name.assign(mysql_binlog_basename);
-    const char *ext = fn_ext(log_info.log_file_name);
-    mysql_binlog_name.append(ext);
-    fn_format(m_mysql_binlog_start_file, mysql_binlog_name.c_str(),
-              mysql_data_home, "", 4);
-  }
-
-  // All binlogs after m_binlog_start_file on S3 should be downloaded locally
+  // All binlogs after m_binlog_file on S3 should be downloaded locally
   // for recovery, as the binlogs persisted to S3 are already committed.
   // Otherwise, these binlogs still need to be synchronized from the logger node
   // for recovery.
@@ -1070,37 +1053,28 @@ bool Consistent_recovery::recovery_consistent_snapshot_finish() {
       m_state == CONSISTENT_RECOVERY_STATE_END)
     return false;
   m_state = CONSISTENT_RECOVERY_STATE_END;
-  consistent_snapshot_recovery = true;
   Consistent_snapshot_recovery_status recovery_status;
   memset(&recovery_status, 0, sizeof(recovery_status));
   recovery_status.m_recovery_status =
       CONSISTENT_SNAPSHOT_RECOVERY_STAGE_DATA_READY;
-  strmake(recovery_status.m_start_binlog_file, m_mysql_binlog_start_file,
-          sizeof(recovery_status.m_start_binlog_file) - 1);
-  recovery_status.m_start_binlog_pos = m_mysql_binlog_pos;
-  recovery_status.m_start_consensus_index = m_consensus_index;
+  recovery_status.m_end_binlog_pos = m_mysql_binlog_pos;
+  recovery_status.m_end_consensus_index = m_consensus_index;
   if (opt_recovery_consistent_snapshot_timestamp)
-    strmake(recovery_status.m_stop_timestamp,
+    strmake(recovery_status.m_apply_stop_timestamp,
             opt_recovery_consistent_snapshot_timestamp,
-            sizeof(recovery_status.m_stop_timestamp) - 1);
-  strmake(recovery_status.m_binlog_index_file, m_mysql_binlog_index_file_name,
-          sizeof(recovery_status.m_binlog_index_file) - 1);
+            sizeof(recovery_status.m_apply_stop_timestamp) - 1);
   if (write_consistent_snapshot_recovery_status(recovery_status)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
            "Failed to write consistent snapshot recovery status.");
     return 1;
   }
   // Write global variables for consensus archive recovery.
-  consistent_snapshot_recovery = true;
-  consistent_recovery_start_position = recovery_status.m_start_binlog_pos;
-  consistent_recovery_start_consensus_index =
-      recovery_status.m_start_consensus_index;
-  strncpy(consistent_recovery_start_binlog, recovery_status.m_start_binlog_file,
-          sizeof(consistent_recovery_start_binlog) - 1);
-  strncpy(consistent_recovery_stop_timestamp, recovery_status.m_stop_timestamp,
-          sizeof(consistent_recovery_stop_timestamp) - 1);
-  strncpy(consistent_recovery_binlog_index, recovery_status.m_binlog_index_file,
-          sizeof(consistent_recovery_binlog_index) - 1);
+  consistent_recovery_consensus_recovery = true;
+  consistent_recovery_snapshot_end_binlog_position = recovery_status.m_end_binlog_pos;
+  consistent_recovery_snasphot_end_consensus_index =
+      recovery_status.m_end_consensus_index;
+  strncpy(consistent_recovery_apply_stop_timestamp, recovery_status.m_apply_stop_timestamp,
+          sizeof(consistent_recovery_apply_stop_timestamp) - 1);
 
   if (opt_recovery_consistent_snapshot_only) {
     std::string file_name;
@@ -1113,8 +1087,13 @@ bool Consistent_recovery::recovery_consistent_snapshot_finish() {
 }
 
 /**
- * @brief
- *
+ * @brief If a binlog truncation occurs after consensus recovery and apply, the
+ * already persisted binlog must also be truncated. Otherwise, it will result in
+ * an inconsistency between the MySQL binlog and the persisted binlog, which is
+ * invalid. The last truncated MySQL binlog file returned by consensus. The
+ * final binlog may contain incomplete transactions that need to be truncated,
+ * but with the current binlog archive design, incomplete transactions should
+ * not occur.
  * @return int
  */
 int Consistent_recovery::consistent_snapshot_consensus_recovery_finish() {
@@ -1127,25 +1106,25 @@ int Consistent_recovery::consistent_snapshot_consensus_recovery_finish() {
              "recovey consistent snapshot only finish.");
     } else if (!opt_initialize) {
       if (compare_log_name(m_mysql_binlog_end_file,
-                           consistent_recovery_end_binlog) != 0 ||
-          m_mysql_binlog_end_pos != consistent_recovery_end_position) {
+                           consistent_recovery_consensus_truncated_end_binlog) != 0 ||
+          m_mysql_binlog_end_pos != consistent_recovery_consensus_truncated_end_position) {
         LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
                "recovey consistent snapshot binlog mismatch consensus recovery "
                "binlog.");
         return 1;
       } else {
         assert(compare_log_name(m_mysql_binlog_end_file,
-                                consistent_recovery_end_binlog) == 0);
-        assert(m_mysql_binlog_end_pos == consistent_recovery_end_position);
+                                consistent_recovery_consensus_truncated_end_binlog) == 0);
+        assert(m_mysql_binlog_end_pos == consistent_recovery_consensus_truncated_end_position);
         /*
         std::string persistent_end_binlog;
         // Convert mysql binlog to persistent binlog.
         persistent_end_binlog.assign(BINLOG_ARCHIVE_BASENAME);
-        const char *ext = fn_ext(consistent_recovery_end_binlog);
+        const char *ext = fn_ext(consistent_recovery_consensus_truncated_end_binlog);
         persistent_end_binlog.append(ext);
         truncate_binlogs_from_objstore(
             persistent_end_binlog.c_str(),
-            static_cast<my_off_t>(consistent_recovery_end_position));
+            static_cast<my_off_t>(consistent_recovery_consensus_truncated_end_position));
         */
       }
     }
@@ -1446,11 +1425,9 @@ int Consistent_recovery::write_consistent_snapshot_recovery_status(
     return 1;
   }
   status_file << recovery_status.m_recovery_status << std::endl;
-  status_file << recovery_status.m_start_binlog_pos << std::endl;
-  status_file << recovery_status.m_start_binlog_file << std::endl;
-  status_file << recovery_status.m_start_consensus_index << std::endl;
-  status_file << recovery_status.m_stop_timestamp << std::endl;
-  status_file << recovery_status.m_binlog_index_file << std::endl;
+  status_file << recovery_status.m_end_binlog_pos << std::endl;
+  status_file << recovery_status.m_end_consensus_index << std::endl;
+  status_file << recovery_status.m_apply_stop_timestamp << std::endl;
   status_file.close();
   return 0;
 }
@@ -1483,22 +1460,14 @@ int Consistent_recovery::read_consistent_snapshot_recovery_status(
         file_data >> recovery_status.m_recovery_status;
         break;
       case 2:
-        file_data >> recovery_status.m_start_binlog_pos;
+        file_data >> recovery_status.m_end_binlog_pos;
         break;
       case 3:
-        strncpy(recovery_status.m_start_binlog_file, file_line.c_str(),
-                sizeof(recovery_status.m_start_binlog_file) - 1);
+        file_data >> recovery_status.m_end_consensus_index;
         break;
       case 4:
-        file_data >> recovery_status.m_start_consensus_index;
-        break;
-      case 5:
-        strncpy(recovery_status.m_stop_timestamp, file_line.c_str(),
-                sizeof(recovery_status.m_stop_timestamp) - 1);
-        break;
-      case 6:
-        strncpy(recovery_status.m_binlog_index_file, file_line.c_str(),
-                sizeof(recovery_status.m_binlog_index_file) - 1);
+        strncpy(recovery_status.m_apply_stop_timestamp, file_line.c_str(),
+                sizeof(recovery_status.m_apply_stop_timestamp) - 1);
         break;
       default:
         break;

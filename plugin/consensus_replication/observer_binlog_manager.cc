@@ -33,12 +33,12 @@ static int consensus_binlog_manager_binlog_recovery(
 
   return opt_initialize
              ? 0
-             : (consistent_snapshot_recovery
+             : (consistent_recovery_consensus_recovery
                     ? consensus_binlog_recovery(
                           param->binlog, true,
-                          (uint64)consistent_recovery_start_consensus_index,
-                          consistent_recovery_end_binlog,
-                          &consistent_recovery_end_position)
+                          (uint64)consistent_recovery_snasphot_end_consensus_index,
+                          consistent_recovery_consensus_truncated_end_binlog,
+                          &consistent_recovery_consensus_truncated_end_position)
                     : consensus_binlog_recovery(param->binlog, false, 0,
                                                 nullptr, nullptr));
 }

@@ -1,6 +1,6 @@
 # Change leader role to logger, The Logger node continues to persist the binlog .
 # Connection mysqld.1
-include/assert.inc [consensus role of mysqld.1 is Leader.]
+include/assert.inc [raft role of mysqld.1 is Leader.]
 FLUSH logs;
 FLUSH logs;
 FLUSH logs;
@@ -45,18 +45,18 @@ count(*)
 # Kill the server
 # Connection mysqld.2 as new leader.
 call dbms_consensus.force_promote();
-include/assert.inc [consensus role of mysqld.2 is Leader.]
+include/assert.inc [raft role of mysqld.2 is Leader.]
 # Wait persistent binlog finish on mysqld2 as new leader.
 FLUSH logs;
 FLUSH logs;
 FLUSH logs;
 # Wait persistent binlog finish on mysqld.2 as new leader after flush 3 logs.
 # Connection mysqld.3 as follower.
-include/assert.inc [consensus role of mysqld.3 is Follower.]
+include/assert.inc [raft role of mysqld.3 is Follower.]
 # Restart mysqld.1
 # restart
 # Connection mysqld.1 as new leader.
-include/assert.inc [consensus role of mysqld.1 is Leader.]
+include/assert.inc [raft role of mysqld.1 is Leader.]
 # Wait persistent binlog finish on mysqld.1 as new leader.
 FLUSH logs;
 INSERT INTO t1 SELECT * FROM t1 limit 5;

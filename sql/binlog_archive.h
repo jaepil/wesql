@@ -195,11 +195,13 @@ class Binlog_archive {
                                                  // consensus index
                                                  // of previous
                                                  // mysql binlog
+  uint64 m_binlog_archive_start_consensus_index;
+  Log_event_type m_binlog_last_event_type;
+  const char *m_binlog_last_event_type_str;
   Diagnostics_area m_diag_area;
   String m_packet;
   bool m_binlog_in_transaction;
   bool m_rotate_forbidden;
-  uint64 m_binlog_archive_start_consensus_index;
   time_t m_slice_create_ts;
   int new_binlog_slice(bool new_binlog, const char *log_file, my_off_t log_pos,
                        uint64_t previous_consensus_index);

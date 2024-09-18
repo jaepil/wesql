@@ -3,7 +3,7 @@
 #
 
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) >= 1 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >= 1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 --source include/wait_condition_or_abort.inc
 
 CREATE DATABASE db1;
@@ -16,7 +16,7 @@ SELECT * FROM t1;
 SHOW CREATE TABLE t1;
 
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) >= 2 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >= 2 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 --source include/wait_condition_or_abort.inc
 
 --let $MYSQLD_DATADIR=`select @@datadir`

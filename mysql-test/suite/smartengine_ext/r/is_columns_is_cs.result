@@ -89,14 +89,14 @@ def	information_schema	CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	mysql_innodb_archi
 def	information_schema	CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	smartengine_archive_name	2		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
 def	information_schema	CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	binlog_archive_name	3		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
 def	information_schema	CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	binlog_pos	4		YES	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint unsigned			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	last_modified	2		NO	timestamp	NULL	NULL	NULL	NULL	NULL	NULL	NULL	timestamp			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	size	3		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT_INDEX	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	last_modified	2		NO	timestamp	NULL	NULL	NULL	NULL	NULL	NULL	NULL	timestamp			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	size	3		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint			select			NULL
-def	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT_INDEX	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS	last_modified	2		NO	timestamp	NULL	NULL	NULL	NULL	NULL	NULL	NULL	timestamp			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS	size	3		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS	last_modified	2		NO	timestamp	NULL	NULL	NULL	NULL	NULL	NULL	NULL	timestamp			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS	size	3		NO	bigint	NULL	NULL	NULL	NULL	NULL	NULL	NULL	bigint			select			NULL
+def	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX	archive_name	1		NO	varchar	170	512	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(512)			select			NULL
 def	information_schema	ENABLED_ROLES	ROLE_NAME	1	NULL	YES	varchar	255	1020	NULL	NULL	NULL	utf8mb4	utf8mb4_0900_ai_ci	varchar(255)			select			NULL
 def	information_schema	ENABLED_ROLES	ROLE_HOST	2	NULL	YES	varchar	255	1020	NULL	NULL	NULL	utf8mb4	utf8mb4_0900_ai_ci	varchar(255)			select			NULL
 def	information_schema	ENABLED_ROLES	IS_DEFAULT	3	NULL	YES	varchar	3	9	NULL	NULL	NULL	utf8mb3	utf8mb3_general_ci	varchar(3)			select			NULL
@@ -779,14 +779,14 @@ NULL	information_schema	COLUMN_STATISTICS	HISTOGRAM	json	NULL	NULL	NULL	NULL	jso
 3.0118	information_schema	CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	smartengine_archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
 3.0118	information_schema	CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	binlog_archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
 NULL	information_schema	CONSISTENT_PERSISTENT_CURRENT_SNAPSHOT	binlog_pos	bigint	NULL	NULL	NULL	NULL	bigint unsigned
-3.0118	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
-NULL	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	last_modified	timestamp	NULL	NULL	NULL	NULL	timestamp
-NULL	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT	size	bigint	NULL	NULL	NULL	NULL	bigint
-3.0118	information_schema	CONSISTENT_PERSISTENT_INNODB_SNAPSHOT_INDEX	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
-3.0118	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
-NULL	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	last_modified	timestamp	NULL	NULL	NULL	NULL	timestamp
-NULL	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT	size	bigint	NULL	NULL	NULL	NULL	bigint
-3.0118	information_schema	CONSISTENT_PERSISTENT_SMARTENGINE_SNAPSHOT_INDEX	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
+3.0118	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
+NULL	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS	last_modified	timestamp	NULL	NULL	NULL	NULL	timestamp
+NULL	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS	size	bigint	NULL	NULL	NULL	NULL	bigint
+3.0118	information_schema	CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
+3.0118	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
+NULL	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS	last_modified	timestamp	NULL	NULL	NULL	NULL	timestamp
+NULL	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS	size	bigint	NULL	NULL	NULL	NULL	bigint
+3.0118	information_schema	CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX	archive_name	varchar	170	512	utf8mb3	utf8mb3_general_ci	varchar(512)
 4.0000	information_schema	ENABLED_ROLES	ROLE_NAME	varchar	255	1020	utf8mb4	utf8mb4_0900_ai_ci	varchar(255)
 4.0000	information_schema	ENABLED_ROLES	ROLE_HOST	varchar	255	1020	utf8mb4	utf8mb4_0900_ai_ci	varchar(255)
 3.0000	information_schema	ENABLED_ROLES	IS_DEFAULT	varchar	3	9	utf8mb3	utf8mb3_general_ci	varchar(3)

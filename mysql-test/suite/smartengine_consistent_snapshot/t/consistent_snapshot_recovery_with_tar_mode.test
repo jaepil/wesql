@@ -3,7 +3,7 @@
 #
 
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) >=1 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >=1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 --source include/wait_condition_or_abort.inc
 
 set global consistent_snapshot_innodb_tar_mode='tar';
@@ -19,7 +19,7 @@ SELECT * FROM t1;
 SHOW CREATE TABLE t1;
 
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) >0 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX where right(mysql_innodb_archive_name, 4) = '.tar' and right(smartengine_archive_name, 4) = '.tar';
+let $wait_condition= SELECT count(*) >0 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX where right(MYSQL_INNODB_SNAPSHOT_NAME, 4) = '.tar' and right(SMARTENGINE_SNAPSHOT_NAME, 4) = '.tar';
 --source include/wait_condition_or_abort.inc
 
 set global consistent_snapshot_innodb_tar_mode='tar_and_compress';
@@ -30,7 +30,7 @@ INSERT INTO t1 values(6);
 SELECT * FROM t1;
 
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) >0 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX where right(mysql_innodb_archive_name, 3) = '.gz' and right(smartengine_archive_name, 3) = '.gz';
+let $wait_condition= SELECT count(*) >0 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX where right(MYSQL_INNODB_SNAPSHOT_NAME, 3) = '.gz' and right(SMARTENGINE_SNAPSHOT_NAME, 3) = '.gz';
 --source include/wait_condition_or_abort.inc
 
 

@@ -37,11 +37,9 @@
 
 typedef struct Consistent_snapshot_recovery_status {
   int m_recovery_status;
-  uint64_t m_start_binlog_pos;
-  uint64_t m_start_consensus_index;
-  char m_start_binlog_file[FN_REFLEN + 1];
-  char m_stop_timestamp[MAX_DATETIME_FULL_WIDTH + 4];
-  char m_binlog_index_file[FN_REFLEN + 1];
+  uint64_t m_end_binlog_pos;
+  uint64_t m_end_consensus_index;
+  char m_apply_stop_timestamp[MAX_DATETIME_FULL_WIDTH + 4];
 } Consistent_snapshot_recovery_status;
 
 /**
@@ -99,13 +97,17 @@ class Consistent_recovery {
   Consistent_recovery_type m_recovery_type;
   Consistent_recovery_state m_state;
   objstore::ObjectStore *recovery_objstore;
-  uint64_t m_mysql_binlog_pos;
-  uint64_t m_consensus_index;
-  uint64_t m_se_snapshot_id;
   char m_objstore_bucket[FN_REFLEN + 1];
   char m_binlog_archive_dir[FN_REFLEN + 1];
-  char m_binlog_start_file[FN_REFLEN + 1];
-  char m_mysql_binlog_start_file[FN_REFLEN + 1];
+  // Binlog file required for recovering consistent snapshot to a consistent
+  // state
+  char m_binlog_file[FN_REFLEN + 1];
+  // End binlog position for recovering the consistent snapshot to a consistent state
+  // Only used when consensus replication is disabled.
+  uint64_t m_mysql_binlog_pos;
+  // End consensus index for recovering the consistent snapshot to a consistent state
+  uint64_t m_consensus_index;
+  uint64_t m_se_snapshot_id;
   char m_mysql_binlog_end_file[FN_REFLEN + 1];
   my_off_t m_mysql_binlog_end_pos;
   char m_snapshot_end_binlog_file[FN_REFLEN + 1];

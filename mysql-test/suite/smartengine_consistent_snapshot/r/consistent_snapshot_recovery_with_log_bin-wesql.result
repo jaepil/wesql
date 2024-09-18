@@ -1,39 +1,24 @@
 # Consistent snapshot, change log-bin and consistent snapshot recovey.
-# Wait persistent binlog finish. 
 # Wait for first snapshots to be generated after startup 
-FLUSH logs;
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000001	#	#
-master-bin.000002	#	#
-# Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
+use test;
+CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1,'abcd');
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+1
+# Wait for all binlog persistent
 # Crash
 set debug = 'd, crash_commit_before_log';
-create table t1(id int);
+INSERT INTO t1 values(1,'abcd');
 ERROR HY000: Lost connection to MySQL server during query
 # Force rmdir datadir for recovery test
 # Create an empty data directory...
-# Recovery start using consistent snapshot with consensus_index = 0
+# 1. Recovery start using consistent snapshot with raft_index = 0
 # restart: 
 # Wait for first snapshots to be generated after startup recovery.
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000001	#	#
-master-bin.000002	#	#
-master-bin.000003	#	#
-# Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-CREATE DATABASE db1;
-CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
-INSERT INTO t1 values(1,'abcd');
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+1
 INSERT INTO t1 values(2,'abcd');
 INSERT INTO t1 values(3,'abcd');
 INSERT INTO t1 values(4,'abcd');
@@ -43,104 +28,48 @@ INSERT INTO t1 SELECT * FROM t1;
 INSERT INTO t1 SELECT * FROM t1;
 FLUSH logs;
 INSERT INTO t1 values(5,'abcd');
-FLUSH logs;
-FLUSH logs;
-FLUSH logs;
 INSERT INTO t1 values(6,'abcd');
 INSERT INTO t1 values(7,'abcd');
 INSERT INTO t1 values(8,'abcd');
-INSERT INTO t1 SELECT * FROM t1;
-INSERT INTO t1 SELECT * FROM t1;
-INSERT INTO t1 SELECT * FROM t1;
 FLUSH logs;
+INSERT INTO t1 SELECT * FROM t1;
+INSERT INTO t1 SELECT * FROM t1;
+INSERT INTO t1 SELECT * FROM t1;
 SELECT count(*) FROM t1;
 count(*)
 544
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000001	#	#
-master-bin.000002	#	#
-master-bin.000003	#	#
-master-bin.000004	#	#
-master-bin.000005	#	#
-master-bin.000006	#	#
-master-bin.000007	#	#
-master-bin.000008	#	#
-# Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
+# Wait for all binlog persistent
 # Crash
 set debug = 'd, crash_commit_before_log';
 INSERT INTO t1 values(100,'abcd');
 ERROR HY000: Lost connection to MySQL server during query
 # Force rmdir datadir for recovery test
 # Create an empty data directory...
-# Recovery start using consistent snapshot, and change --log-bin=custom-binlog
-# restart
+# 2. Recovery start using consistent snapshot
+# restart: 
 # Wait for snapshots to be generated after startup recovery
 SELECT count(*) FROM t1;
 count(*)
 544
-show binary logs;
-Log_name	File_size	Encrypted
-custom-binlog.000001	#	#
-custom-binlog.000002	#	#
-custom-binlog.000003	#	#
-custom-binlog.000004	#	#
-custom-binlog.000005	#	#
-custom-binlog.000006	#	#
-custom-binlog.000007	#	#
-custom-binlog.000008	#	#
-custom-binlog.000009	#	#
-# Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
-binlog.000009
+FLUSH Logs;
+INSERT INTO t1 values(8,'abcd');
+INSERT INTO t1 values(9,'abcd');
+INSERT INTO t1 values(10,'abcd');
+INSERT INTO t1 SELECT * FROM t1;
+SELECT count(*) FROM t1;
+count(*)
+1094
+# Wait for all binlog persistent
 # Crash
 set debug = 'd, crash_commit_before_log';
 INSERT INTO t1 values(100,'abcd');
 ERROR HY000: Lost connection to MySQL server during query
 # Force rmdir datadir for recovery test
 # Create an empty data directory...
-# Recovery start using consistent snapshot
+# 3. Recovery start using consistent snapshot
 # restart
 # Wait for snapshots to be generated after startup recovery 
 SELECT count(*) FROM t1;
 count(*)
-544
-show binary logs;
-Log_name	File_size	Encrypted
-master-bin.000008	#	#
-master-bin.000009	#	#
-master-bin.000010	#	#
-# Wait persistent binlog finish. 
-SELECT distinct Log_name from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
-Log_name
-binlog.000001
-binlog.000002
-binlog.000003
-binlog.000004
-binlog.000005
-binlog.000006
-binlog.000007
-binlog.000008
-binlog.000009
-binlog.000010
+1094
 DROP TABLE t1;
-DROP DATABASE db1;

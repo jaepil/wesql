@@ -12,7 +12,7 @@
 --connection conn1
 --enable_reconnect
 
---let $assert_text= consensus role of mysqld.1 is Leader.
+--let $assert_text= raft role of mysqld.1 is Leader.
 --let $assert_cond= role = \'Leader\' from information_schema.wesql_cluster_local
 --source include/assert.inc
 
@@ -85,7 +85,7 @@ let $wait_condition= select role='Prepared' from information_schema.wesql_cluste
 let $wait_timeout= 600;
 --source include/wait_condition.inc
 
---let $assert_text= consensus role of mysqld.2 is Leader.
+--let $assert_text= raft role of mysqld.2 is Leader.
 --let $assert_cond= role = \'Prepared\' from information_schema.wesql_cluster_local
 --source include/assert.inc
 
@@ -114,7 +114,7 @@ let $wait_timeout= 600;
 --connection conn3
 --enable_reconnect
 
---let $assert_text= consensus role of mysqld.3 is Follower.
+--let $assert_text= raft role of mysqld.3 is Follower.
 --let $assert_cond= role = \'Follower\' from information_schema.wesql_cluster_local
 --source include/assert.inc
 
@@ -128,7 +128,7 @@ let $wait_condition= select role='Leader' from information_schema.wesql_cluster_
 let $wait_timeout= 600;
 --source include/wait_condition.inc
 
---let $assert_text= consensus role of mysqld.1 is Leader.
+--let $assert_text= raft role of mysqld.1 is Leader.
 --let $assert_cond= role = \'Leader\' from information_schema.wesql_cluster_local
 --source include/assert.inc
 

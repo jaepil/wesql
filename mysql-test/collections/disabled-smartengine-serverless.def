@@ -19,4 +19,3 @@ smartengine.tbl_standard_opts                   : WL#41 Can't run in serverless 
 smartengine.smartengine_icp                     : WL#41 Can't run in serverless mode
 smartengine.online_ddl_stage_no_pk_text         : WL#41 Can't run in serverless mode
 smartengine.smartengine_hotbackup               : WL#41 Can't run in serverless mode
-smartengine_consistent_snapshot.consistent_snapshot_recovery_with_log_bin: WL#00 unstable

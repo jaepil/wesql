@@ -9,7 +9,7 @@ let $wait_timeout= 600;
 --source include/wait_condition.inc
 
 --echo # Wait for first snapshots to be generated after startup 
-let $wait_condition= SELECT count(*) >= 1 FROM INFORMATION_SCHEMA.CONSISTENT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >= 1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -46,7 +46,7 @@ INSERT INTO t1 values(9);
 
 sleep 5;
 
-# recovery from consensus index=0
+# recovery from raft index=0
 --echo # Recovery start from object store.
 --source include/start_mysqld.inc
 --source include/wait_until_connected_again.inc
