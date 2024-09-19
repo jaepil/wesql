@@ -8,7 +8,6 @@ default-storage-engine=     smartengine
 default-tmp-storage_engine= innodb
 serverless=                 true
 log-bin=                    master-bin
-plugin-load-add=            mysql_clone.so
 consistent_snapshot_archive_period=     1
 consistent_snapshot_expire_auto_purge=  false
 binlog_archive_expire_auto_purge=       false

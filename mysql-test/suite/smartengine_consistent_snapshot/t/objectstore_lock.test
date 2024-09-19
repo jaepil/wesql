@@ -23,7 +23,7 @@
 --echo Starting the server with inconsisted objectstore id
 --let MYSQLD_LOG=$MYSQL_TMP_DIR/wrong_objectstore_id.log
 --error 1
---exec $MYSQLD --defaults-file=$MYSQLTEST_VARDIR/my.cnf --defaults-group-suffix=.1 --plugin-load-add=mysql_clone.so --serverless=true --log_error_verbosity=3 --cluster_objectstore_id=yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyy >$MYSQLD_LOG 2>&1
+--exec $MYSQLD --defaults-file=$MYSQLTEST_VARDIR/my.cnf --defaults-group-suffix=.1 --serverless=true --log_error_verbosity=3 --cluster_objectstore_id=yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyy >$MYSQLD_LOG 2>&1
 --let $grep_file=$MYSQLD_LOG
 --let $grep_pattern=Failed to verify the ID of data directory in the object store
 --let $grep_output= print_count
@@ -35,7 +35,7 @@
 --echo # Remove objectsotre lock file data.lock
 --remove_file $MYSQLD_DIR/$region/$bucket/$objectstore_id/data.lock
 --error 1
---exec $MYSQLD --defaults-file=$MYSQLTEST_VARDIR/my.cnf --defaults-group-suffix=.1 --plugin-load-add=mysql_clone.so --serverless=true --log_error_verbosity=3  >$MYSQLD_LOG 2>&1
+--exec $MYSQLD --defaults-file=$MYSQLTEST_VARDIR/my.cnf --defaults-group-suffix=.1 --serverless=true --log_error_verbosity=3  >$MYSQLD_LOG 2>&1
 --let $grep_file=$MYSQLD_LOG
 --let $grep_pattern=lock file does not exist
 --let $grep_output= print_count

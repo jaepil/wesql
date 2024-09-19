@@ -9,7 +9,6 @@ consistent_snapshot_archive=            false
 log-bin=                                master-bin
 log-bin=                                master-bin.index
 binlog_archive_slice_max_size=          4096
-plugin-load-add=                        mysql_clone.so
 binlog_archive_expire_auto_purge=       false
 log-error-verbosity=                    3
 

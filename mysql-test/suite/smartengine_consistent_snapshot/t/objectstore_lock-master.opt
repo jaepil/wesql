@@ -1,1 +1,1 @@
---initialize plugin-load-add=mysql_clone.so --initialize serverless=true --initialize cluster_objectstore_id='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+--initialize serverless=true --initialize cluster_objectstore_id='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'

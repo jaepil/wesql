@@ -46,6 +46,7 @@ jobs:
             -DWITH_SSL="system" \
             -DCMAKE_BUILD_TYPE="Debug" \
             -DWITH_WESQL_TEST=1   \
+            -DWITH_CLONE=1 \
             -DDOWNLOAD_BOOST=1 \
             -DWITH_BOOST="../extra/"
 
@@ -67,7 +68,7 @@ jobs:
       - name: view logs of mtr serverless
         if: ${{ failure() }}
         run: |
-          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
+          for logfile in $( ls bu/mysql-test/var/*/log/*.err ); do
               echo "logfile:"$logfile
               cat $logfile
           done
@@ -82,7 +83,7 @@ jobs:
       - name: view logs of mtr on normal file
         if: ${{ failure() }}
         run: |
-          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
+          for logfile in $( ls bu/mysql-test/var/*/log/*.err ); do
               echo "logfile:"$logfile
               cat $logfile
           done
