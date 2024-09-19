@@ -121,7 +121,7 @@ static int consensus_binlog_manager_new_file(
 
   if (!error) {
     if (!param->binlog->is_consensus_write)
-      consensus_log_manager.set_first_event_in_file(true);
+      consensus_log_manager.set_next_event_rotate_flag(true);
 
     std::string file_name(log_file_name);
     consensus_log_manager.get_log_file_index()->add_to_index_list(
@@ -508,12 +508,9 @@ static int consensus_binlog_manager_get_unique_index_from_pos(
   // If the plugin is not running, return failed.
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  bool reached_stop_point;
-  uint64 current_term;
-  uint64 next_index;
+  uint64 next_index = consensus_log_manager.get_next_index_from_position(
+      log_file_name, log_pos, true);
 
-  next_index = consensus_get_next_index(log_file_name, false, 0, log_pos,
-                                        reached_stop_point, current_term);
   unique_index = next_index > 0 ? next_index - 1 : 0;
 
   return (next_index == 0);
@@ -530,9 +527,8 @@ static int consensus_binlog_manager_get_pos_from_unique_index(Binlog_manager_par
   // If the plugin is not running, return failed.
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  return consensus_get_log_end_position(
-      consensus_log_manager.get_log_file_index(), unique_index, log_file_name,
-      &log_pos);
+  return consensus_log_manager.get_log_end_position(unique_index, true,
+                                                    log_file_name, &log_pos);
 }
 
 Binlog_manager_observer cr_binlog_mananger_observer = {

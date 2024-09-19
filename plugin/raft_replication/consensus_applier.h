@@ -3,6 +3,7 @@
 #include <atomic>
 
 #include "my_inttypes.h"
+#include "my_io.h"
 #include "my_macros.h"
 #include "my_sys.h"
 
@@ -19,7 +20,9 @@ class ConsensusApplier {
         apply_term(0),
         in_large_trx(false),
         apply_catchup(false),
-        stop_term(UINT64_MAX) {}
+        stop_term(UINT64_MAX) {
+    applying_log_name[0] = 0;
+  }
   ~ConsensusApplier() {}
 
   int init();
@@ -45,6 +48,13 @@ class ConsensusApplier {
     in_large_trx = in_large_trx_arg;
   }
 
+  const char *get_applying_log_name() { return applying_log_name; }
+  void set_applying_log_name(const char *log_file_name) {
+    strmake(applying_log_name, log_file_name,
+            sizeof(applying_log_name) - 1);
+  }
+  void clear_applying_log_name() { applying_log_name[0] = '\0'; }
+
   mysql_mutex_t *get_apply_thread_lock() {
     return &LOCK_consensus_applier_catchup;
   }
@@ -59,6 +69,8 @@ class ConsensusApplier {
   std::atomic<uint64> real_apply_index;  // for large trx
   std::atomic<uint64> apply_term;        // sql thread coordinator apply term
   std::atomic<bool> in_large_trx;
+
+  char applying_log_name[FN_REFLEN];      // current applying log name
 
   /* Consensus applier exit */
   mysql_mutex_t LOCK_consensus_applier_catchup;
@@ -78,7 +90,7 @@ bool applier_mts_recovery_groups(Relay_log_info *rli);
 int mts_recovery_max_consensus_index();
 int start_consensus_apply_threads(Master_info *mi);
 int check_exec_consensus_log_end_condition(Relay_log_info *rli);
-void update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev);
+int update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev);
 int calculate_consensus_apply_start_pos(Relay_log_info *rli);
 void update_consensus_applied_index(uint64 applied_index);
 

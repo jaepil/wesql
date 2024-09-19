@@ -57,7 +57,7 @@ class ConsensusLogManager {
  public:
   ConsensusLogManager()
       : inited(false),
-        first_event_in_file(false),
+        next_event_rotate_flag(false),
         start_without_log(false),
         prefetch_manager(nullptr),
         fifo_cache_manager(nullptr),
@@ -81,8 +81,8 @@ class ConsensusLogManager {
   IO_CACHE_binlog_cache_storage *get_log_cache() { return cache_log; }
   std::string get_empty_log() { return empty_log_event_content; }
 
-  bool get_first_event_in_file() { return first_event_in_file; }
-  void set_first_event_in_file(bool arg) { first_event_in_file = arg; }
+  bool get_next_event_rotate_flag() { return next_event_rotate_flag; }
+  void set_next_event_rotate_flag(bool arg) { next_event_rotate_flag = arg; }
 
   ConsensusLogIndex *get_log_file_index() { return log_file_index; }
   ConsensusPreFetchManager *get_prefetch_manager() { return prefetch_manager; }
@@ -114,6 +114,9 @@ class ConsensusLogManager {
   uint64 get_last_log_term() { return last_log_term; }
   void set_last_log_term(uint64 arg) { last_log_term = arg; }
 
+  std::string get_first_in_use_file() { return first_in_use_file; }
+  void set_first_in_use_file(std::string &arg) { first_in_use_file = arg; }
+
   // consensus commit index
   uint64 get_commit_index() { return commit_index; }
   bool advance_commit_index_if_greater(uint64 arg, bool force);
@@ -143,6 +146,10 @@ class ConsensusLogManager {
                             uint64 consensus_index);
   int get_log_position(uint64 consensus_index, bool need_lock, char *log_name,
                        my_off_t *pos);
+  int get_log_end_position(uint64 consensus_index, bool need_lock,
+                           char *log_name, my_off_t *pos);
+  uint64 get_next_index_from_position(const char *log_file_name,
+                                      my_off_t log_pos, bool need_lock = true);
   uint64 get_next_trx_index(uint64 consensus_index, bool need_lock = true);
   int truncate_log(uint64 consensus_index);
   int purge_log(uint64 consensus_index);
@@ -162,7 +169,7 @@ class ConsensusLogManager {
 
  private:
   bool inited;
-  bool first_event_in_file;
+  bool next_event_rotate_flag;
   bool start_without_log;
 
   std::string empty_log_event_content;
@@ -178,6 +185,8 @@ class ConsensusLogManager {
   std::atomic<uint64> sync_index;     // last log entry has been synced
 
   std::atomic<uint64> last_log_term;   // last log term, don't decrease if truncated
+
+  std::string first_in_use_file;  // the first log file in use
 
   mysql_rwlock_t LOCK_consensuslog_rotate;
   uint64 local_system_log_index;  // last local system log

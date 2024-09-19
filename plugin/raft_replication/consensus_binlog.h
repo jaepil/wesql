@@ -45,14 +45,17 @@ int consensus_get_next_index(const char *file_name, bool skip_large_trx,
                              const ulong stop_datetime, const my_off_t stop_pos,
                              bool &reached_stop_point, uint64 &current_term);
 
+int consensus_get_last_index_of_term(uint64 term, uint64 &last_index);
+
 int consensus_build_log_file_index(MYSQL_BIN_LOG *binlog);
 int copy_from_consensus_log_cache(IO_CACHE_binlog_cache_storage *from,
                                   uchar *to, my_off_t max_len);
 
+int write_rotate_event_into_consensus_log(MYSQL_BIN_LOG *binlog);
+
 void update_pos_map_by_start_index(ConsensusLogIndex *log_file_index,
                                    const uint64 start_index,
-                                   Consensus_log_event *ev, my_off_t start_pos,
-                                   my_off_t end_pos, bool &next_set);
+                                   Consensus_log_event *ev, my_off_t start_pos);
 
 int rotate_consensus_log(THD *thd, bool force_rotate);
 int purge_consensus_logs_on_conditions(ulong purge_time, ulong purge_size,

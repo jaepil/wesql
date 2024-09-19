@@ -344,9 +344,9 @@ static int do_write_large_event(THD *thd, my_off_t total_trx_size,
       flag |= Consensus_log_event_flag::FLAG_BLOB;
     }
 
-    if (consensus_log_manager.get_first_event_in_file()) {
+    if (consensus_log_manager.get_next_event_rotate_flag()) {
       flag |= Consensus_log_event_flag::FLAG_ROTATE;
-      consensus_log_manager.set_first_event_in_file(false);
+      consensus_log_manager.set_next_event_rotate_flag(false);
     }
 
     thd->consensus_context.consensus_index =
@@ -466,9 +466,9 @@ static int large_trx_flush_log_cache(THD *thd,
   DBUG_TRACE;
   my_off_t batch_size = log_cache->length();
 
-  if (consensus_log_manager.get_first_event_in_file()) {
+  if (consensus_log_manager.get_next_event_rotate_flag()) {
     flag |= Consensus_log_event_flag::FLAG_ROTATE;
-    consensus_log_manager.set_first_event_in_file(false);
+    consensus_log_manager.set_next_event_rotate_flag(false);
   }
 
   if ((opt_consensus_checksum && calc_consensus_crc(log_cache, crc32))) {
@@ -671,28 +671,15 @@ void consensus_before_commit(THD *thd) {
 
 void update_pos_map_by_start_index(ConsensusLogIndex *log_file_index,
                                    const uint64 start_index,
-                                   Consensus_log_event *ev, my_off_t start_pos,
-                                   my_off_t end_pos, bool &next_set) {
+                                   Consensus_log_event *ev, my_off_t start_pos) {
   DBUG_TRACE;
   /* Normal consensus entry or first part of large event. And not set by
    * previous consensus event */
-  if (!next_set &&
-      !(ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB_END) &&
+  if (!(ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB_END) &&
       (!(ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB) ||
        (ev->get_flag() & Consensus_log_event_flag::FLAG_BLOB_START))) {
     log_file_index->update_pos_map_by_start_index(start_index, ev->get_index(),
                                                   start_pos);
-  }
-
-  /* Not large event. Set next index pos by end position */
-  if (!(ev->get_flag() & (Consensus_log_event_flag::FLAG_BLOB |
-                          Consensus_log_event_flag::FLAG_BLOB_START |
-                          Consensus_log_event_flag::FLAG_BLOB_END))) {
-    log_file_index->update_pos_map_by_start_index(start_index,
-                                                  ev->get_index() + 1, end_pos);
-    next_set = true;
-  } else {
-    next_set = false;
   }
 }
 
@@ -746,7 +733,6 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
                                  uint64 start_index) {
   DBUG_TRACE;
 
-  bool next_set = false;
   my_off_t lower_start_pos;
   bool matched;
   get_lower_bound_pos_of_index(consensus_log_manager.get_log_file_index(),
@@ -800,8 +786,7 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
 
       update_pos_map_by_start_index(consensus_log_manager.get_log_file_index(),
                                     file_start_index, consensus_log_ev,
-                                    binlog_file_reader.event_start_pos(),
-                                    start_pos + consensus_log_length, next_set);
+                                    binlog_file_reader.event_start_pos());
       delete ev;
       continue;
     }
@@ -913,7 +898,6 @@ static int read_log_by_index(ConsensusLogIndex *log_file_index,
                              std::string &log_content, bool *outer, uint *flag,
                              uint64 *checksum, bool need_content) {
   my_off_t lower_start_pos;
-  bool next_set = false;
   bool matched;
   DBUG_TRACE;
 
@@ -962,9 +946,7 @@ static int read_log_by_index(ConsensusLogIndex *log_file_index,
         }
         update_pos_map_by_start_index(
             log_file_index, start_index, consensus_log_ev,
-            binlog_file_reader.event_start_pos(),
-            binlog_file_reader.position() + consensus_log_ev->get_length(),
-            next_set);
+            binlog_file_reader.event_start_pos());
         break;
       default:
         if (!ev->is_control_event()) {
@@ -1156,7 +1138,6 @@ int consensus_find_pos_by_index(ConsensusLogIndex *log_file_index,
                                 const char *file_name, const uint64 start_index,
                                 const uint64 consensus_index, my_off_t *pos) {
   my_off_t start_pos;
-  bool next_set = false;
   bool matched;
   DBUG_TRACE;
 
@@ -1180,33 +1161,31 @@ int consensus_find_pos_by_index(ConsensusLogIndex *log_file_index,
   Consensus_log_event *consensus_log_ev = nullptr;
   Previous_consensus_index_log_event *consensus_prev_ev = nullptr;
   bool found = false;
-  bool first_log_in_file = false;
+  bool found_previous_gtid = false;
+  bool found_next = false;
+  bool found_previous_index = false;
 
   while (!found && (ev = binlog_file_reader.read_event_object()) != nullptr) {
     switch (ev->get_type_code()) {
       case binary_log::CONSENSUS_LOG_EVENT:
         consensus_log_ev = (Consensus_log_event *)ev;
-        if (consensus_index == consensus_log_ev->get_index()) found = true;
-        if (consensus_index == consensus_log_ev->get_index() + 1) {
+        if (consensus_index == consensus_log_ev->get_index()) {
           found = true;
-          *pos = binlog_file_reader.position() + consensus_log_ev->get_length();
+          *pos = binlog_file_reader.event_start_pos();
+        } else if (consensus_index == consensus_log_ev->get_index() + 1) {
+          found_next = true;
         }
         update_pos_map_by_start_index(
             log_file_index, start_index, consensus_log_ev,
-            binlog_file_reader.event_start_pos(),
-            binlog_file_reader.position() + consensus_log_ev->get_length(),
-            next_set);
+            binlog_file_reader.event_start_pos());
         break;
       case binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT:
         consensus_prev_ev = (Previous_consensus_index_log_event *)ev;
         if (consensus_index == consensus_prev_ev->get_index())
-          first_log_in_file = true;
+          found_previous_index = true;
         break;
       case binary_log::PREVIOUS_GTIDS_LOG_EVENT:
-        if (first_log_in_file) {
-          *pos = binlog_file_reader.position();
-          found = true;
-        }
+        found_previous_gtid = true;
         break;
       default:
         break;
@@ -1217,6 +1196,11 @@ int consensus_find_pos_by_index(ConsensusLogIndex *log_file_index,
   if (binlog_file_reader.has_fatal_error()) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR, file_name,
                  binlog_file_reader.get_error_str());
+  } else if (!found &&
+             ((found_previous_index && found_previous_gtid) || found_next)) {
+    // If it is the next event in the file, return the end-of-file position
+    *pos = binlog_file_reader.position();
+    found = true;
   }
 
   return !found;
@@ -1256,12 +1240,8 @@ static int consensus_find_end_pos_by_index(ConsensusLogIndex *log_file_index,
   bool matched;
   DBUG_TRACE;
 
-  get_lower_bound_pos_of_index(log_file_index, start_index, consensus_index + 1,
+  get_lower_bound_pos_of_index(log_file_index, start_index, consensus_index,
                                lower_start_pos, matched);
-  if (matched) {
-    *pos = lower_start_pos;
-    return 0;
-  }
   if (lower_start_pos == 0) lower_start_pos = BIN_LOG_HEADER_SIZE;
 
   Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
@@ -1274,7 +1254,6 @@ static int consensus_find_end_pos_by_index(ConsensusLogIndex *log_file_index,
   Log_event *ev = nullptr;
   Consensus_log_event *consensus_log_ev = nullptr;
   bool found = false;
-  bool next_set;
   bool stop_scan = false;
 
   while (!stop_scan &&
@@ -1284,9 +1263,7 @@ static int consensus_find_end_pos_by_index(ConsensusLogIndex *log_file_index,
         consensus_log_ev = (Consensus_log_event *)ev;
         update_pos_map_by_start_index(
             log_file_index, start_index, consensus_log_ev,
-            binlog_file_reader.event_start_pos(),
-            binlog_file_reader.position() + consensus_log_ev->get_length(),
-            next_set);
+            binlog_file_reader.event_start_pos());
         if (consensus_log_ev->get_index() == consensus_index) {
           found = true;
           *pos = binlog_file_reader.position() + consensus_log_ev->get_length();
@@ -1314,12 +1291,17 @@ int consensus_get_log_end_position(ConsensusLogIndex *log_file_index,
                                    my_off_t *pos) {
   std::string file_name;
   uint64 start_index;
+  uint64 first_index;
   int ret = 0;
   DBUG_TRACE;
 
-  // use another io_cache , so do not need lock LOCK_log
-  if (consensus_find_log_by_index(log_file_index, consensus_index, file_name,
-                                  start_index)) {
+  first_index = log_file_index->get_first_index();
+  if (consensus_index < first_index) {
+    assert(consensus_index == first_index - 1);
+    return consensus_get_log_position(log_file_index, first_index, log_name,
+                                      pos);
+  } else if (consensus_find_log_by_index(log_file_index, consensus_index,
+                                         file_name, start_index)) {
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR, consensus_index,
                  "getting log end position");
     ret = 1;
@@ -1549,6 +1531,74 @@ static uint32 abstract_event_timestamp_from_cache(
   return tv_event;
 }
 
+int consensus_get_last_index_of_term(uint64 term, uint64 &last_index) {
+  // if the last log term equals the laster leader term
+  if (consensus_state_process.get_recovery_term() == term &&
+      consensus_log_manager.get_sync_index() > 0) {
+    last_index = consensus_log_manager.get_sync_index();
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_MTS_RECOVERY_LAST_LEAD_TERM_INDEX,
+                 term, last_index, consensus_state_process.get_recovery_term());
+
+    return 0;
+  }
+
+  int error = 0;
+  bool found = false;
+  uint64 found_index = 0;
+  std::vector<ConsensusLogIndexEntry> consensus_file_entry_vector;
+  Binlog_file_reader binlog_file_reader(opt_source_verify_checksum);
+
+  consensus_log_manager.get_log_file_index()->get_log_file_entry_list(
+      consensus_file_entry_vector);
+
+  for (auto iter = consensus_file_entry_vector.rbegin();
+       !found && iter != consensus_file_entry_vector.rend(); ++iter) {
+    if (binlog_file_reader.open(iter->file_name.c_str())) {
+      LogPluginErr(ERROR_LEVEL, ER_BINLOG_FILE_OPEN_FAILED,
+                   binlog_file_reader.get_error_str());
+      return 1;
+    }
+    binlog_file_reader.seek(BIN_LOG_HEADER_SIZE);
+
+    Log_event *ev = NULL;
+    while ((ev = binlog_file_reader.read_event_object()) != nullptr) {
+      if (ev->get_type_code() == binary_log::CONSENSUS_LOG_EVENT) {
+        Consensus_log_event *consensus_log_ev = (Consensus_log_event *)ev;
+        uint64 current_index = consensus_log_ev->get_index();
+        if (consensus_log_ev->get_term() > term) {
+          break;
+        } else {
+          update_pos_map_by_start_index(
+              consensus_log_manager.get_log_file_index(), iter->index,
+              consensus_log_ev, binlog_file_reader.event_start_pos());
+          if (!(consensus_log_ev->get_flag() &
+                Consensus_log_event_flag::FLAG_LARGE_TRX)) {
+            found = true;
+            found_index = current_index;
+          }
+        }
+      }
+      delete ev;
+    }
+
+    if (binlog_file_reader.has_fatal_error()) {
+      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_READ_FILE_ERROR,
+                   iter->file_name.c_str(), binlog_file_reader.get_error_str());
+      error = 1;
+      break;
+    }
+
+    binlog_file_reader.close();
+  }
+
+  last_index = found ? found_index : 0;
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_MTS_RECOVERY_LAST_LEAD_TERM_INDEX,
+               term, last_index, consensus_state_process.get_recovery_term());
+
+  return error;
+}
+
 static uint32 abstract_event_timestamp_from_buffer(uchar *buf, size_t len) {
   uchar *header = buf;
   uint32 tv_event = 0;
@@ -1639,9 +1689,9 @@ static int do_write_binlog_cache(THD *thd, Gtid_log_event &gtid_event,
   DBUG_EXECUTE_IF("force_large_trx", { is_large_trx = true; });
   if (!is_large_trx) {
     uint32 crc32 = 0;
-    if (consensus_log_manager.get_first_event_in_file()) {
+    if (consensus_log_manager.get_next_event_rotate_flag()) {
       flag |= Consensus_log_event_flag::FLAG_ROTATE;
-      consensus_log_manager.set_first_event_in_file(false);
+      consensus_log_manager.set_next_event_rotate_flag(false);
     }
     /* write_consensus_log_event will advance current_index */
     thd->consensus_context.consensus_index =
@@ -1720,6 +1770,24 @@ static int do_write_binlog_cache(THD *thd, Gtid_log_event &gtid_event,
 end:
   mysql_mutex_unlock(consensus_state_process.get_log_term_lock());
   return error;
+}
+
+int write_rotate_event_into_consensus_log(MYSQL_BIN_LOG *binlog) {
+  DBUG_TRACE;
+
+  mysql_mutex_assert_owner(binlog->get_log_lock());
+
+  DBUG_PRINT("info", ("writing a Rotate event to the consensus log"));
+
+  char *log_fname = binlog->get_log_fname();
+  Rotate_log_event r(log_fname + dirname_length(log_fname), 0, LOG_EVENT_OFFSET,
+                     0);
+
+  // don't be ignored by slave SQL thread
+  r.server_id = 0;
+  r.common_header->when.tv_sec = consensus_log_manager.get_event_timestamp();
+
+  return binlog->write_event_to_binlog(&r);
 }
 
 static int append_one_log_entry(ConsensusLogEntry &log,
@@ -1956,8 +2024,14 @@ int consensus_append_log_entry(MYSQL_BIN_LOG *binlog, ConsensusLogEntry &log,
     return 0;
   }
 
-  error =
-      append_one_log_entry(log, binlog->get_binlog_file(), add_to_cache, rli);
+  MYSQL_BIN_LOG::Binlog_ofile *binlog_file = binlog->get_binlog_file();
+
+  if (log.flag & Consensus_log_event_flag::FLAG_ROTATE) {
+    error = write_rotate_event_into_consensus_log(binlog);
+    if (error) goto err;
+  }
+
+  error = append_one_log_entry(log, binlog_file, add_to_cache, rli);
 
   if (!error) error = binlog->flush_and_sync(false);
 
@@ -1998,6 +2072,11 @@ int consensus_append_multi_log_entries(MYSQL_BIN_LOG *binlog,
 
     flush_index = consensus_log_manager.get_current_index();
 
+    if (iter->flag & Consensus_log_event_flag::FLAG_ROTATE) {
+      error = write_rotate_event_into_consensus_log(binlog);
+      if (error) break;
+    }
+
     error = append_one_log_entry(*iter, binlog->get_binlog_file(), add_to_cache,
                                  rli);
     if (error) break;
@@ -2029,9 +2108,10 @@ err:
 
 static int add_to_consensus_log_file_index(
     std::vector<std::string> consensuslog_file_name_vector,
-    ConsensusLogIndex *log_file_index, bool remove_dup = false,
-    ulong stop_datetime = 0) {
+    ConsensusLogIndex *log_file_index, std::string &first_in_use_file,
+    bool remove_dup = false, ulong stop_datetime = 0) {
   bool reached_stop_point = false;
+  bool found_in_use_file = false;
   DBUG_TRACE;
 
   for (auto iter = consensuslog_file_name_vector.begin();
@@ -2067,6 +2147,14 @@ static int add_to_consensus_log_file_index(
           find_prev_consensus_log = true;
           break;
         }
+        case binary_log::FORMAT_DESCRIPTION_EVENT: {
+          if (!found_in_use_file &&
+              (ev->common_header->flags & LOG_EVENT_BINLOG_IN_USE_F)) {
+            found_in_use_file = true;
+            first_in_use_file = *iter;
+          }
+        break;
+        }
         default:
           break;
       }
@@ -2091,6 +2179,7 @@ static int add_to_consensus_log_file_index(
 int consensus_build_log_file_index(MYSQL_BIN_LOG *binlog) {
   int error = 0;
   std::vector<std::string> consensuslog_file_name_vector;
+  std::string first_in_use_file;
   DBUG_TRACE;
 
   error = binlog->get_file_names(consensuslog_file_name_vector);
@@ -2098,8 +2187,10 @@ int consensus_build_log_file_index(MYSQL_BIN_LOG *binlog) {
 
   error = add_to_consensus_log_file_index(
       consensuslog_file_name_vector, consensus_log_manager.get_log_file_index(),
-      false);
+      first_in_use_file, false);
   if (error) return error;
+
+  consensus_log_manager.set_first_in_use_file(first_in_use_file);
 
   return 0;
 }
@@ -2421,10 +2512,11 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
   }
 
   /* Build archived log index */
+  std::string not_used_string;
   if (archive_log.get_file_names(consensus_file_name_vector) ||
       add_to_consensus_log_file_index(consensus_file_name_vector,
-                                      &consensus_log_index, true,
-                                      stop_datetime)) {
+                                      &consensus_log_index, not_used_string,
+                                      true, stop_datetime)) {
     archive_log.close();
     consensus_log_index.cleanup();
     return 1;

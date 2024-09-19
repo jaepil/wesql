@@ -191,6 +191,7 @@ static int initialize_plugin_and_join(Binlog_context_info *infos) {
   consensus_applier.init();
   consensus_state_process.init();
   consensus_state_process.set_binlog(infos->binlog);
+  infos->binlog->is_consensus_log = true;
 
   lv.consensus_replication_running = true;
 

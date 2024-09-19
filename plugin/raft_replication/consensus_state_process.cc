@@ -268,9 +268,20 @@ int ConsensusStateProcess::wait_follower_upgraded(uint64 term, uint64 index) {
     error = 2;
     goto end;
   }
+
+  if (write_rotate_event_into_consensus_log(binlog)) {
+    mysql_mutex_unlock(log_lock);
+    mysql_rwlock_unlock(&LOCK_consensuslog_status);
+    error = 2;
+    goto end;
+  }
+
   binlog->unlock_index();
   mysql_mutex_unlock(log_lock);
   this->status = Consensus_Log_System_Status::BINLOG_WORKING;
+
+  // set rotate flag for next event
+  consensus_log_manager.set_next_event_rotate_flag(true);
 
   // reset apply start point displayed in information_schema
   consensus_applier.set_apply_index(0);
@@ -456,20 +467,30 @@ static uint64 get_applier_start_index() {
   assert(consensus_state_process.get_status() ==
          Consensus_Log_System_Status::BINLOG_WORKING);
   start_apply_index = consensus_info->get_start_apply_index();
-  uint64 last_applied_index = consensus_state_process.get_recovery_index_hwl();
+  uint64 recovery_applied_index =
+      consensus_state_process.get_recovery_index_hwl();
 
   LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_APPLIED_INDEX_START,
                recover_status, first_index, start_apply_index,
-               last_applied_index, applier_info->get_consensus_apply_index());
+               recovery_applied_index,
+               applier_info->get_consensus_apply_index());
 
   if (recover_status == Consensus_Log_System_Status::BINLOG_WORKING) {
-    if (opt_cluster_recover_from_backup || consistent_recovery_consensus_recovery ||
-        last_applied_index == 0) {
-      next_index = last_applied_index < first_index
+    if (consensus_state_process.get_recovery_ignored() &&
+        consensus_get_last_index_of_term(consensus_info->get_last_leader_term(),
+                                         recovery_applied_index)) {
+      // last leader log may be truncated
+      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_LAST_TERM_INDEX);
+      return 0;
+    }
+
+    if (opt_cluster_recover_from_backup ||
+        consistent_recovery_consensus_recovery || recovery_applied_index == 0) {
+      next_index = recovery_applied_index < first_index
                        ? first_index
                        : consensus_log_manager.get_next_trx_index(
-                             last_applied_index, false);
-      consensus_info->set_start_apply_index(last_applied_index);
+                             recovery_applied_index, false);
+      consensus_info->set_start_apply_index(recovery_applied_index);
       if (consensus_info->flush_info(true, true)) {
         next_index = 0;
         LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FATAL_ERROR,
@@ -477,15 +498,15 @@ static uint64 get_applier_start_index() {
       }
     } else if (start_apply_index == 0) {
 #ifdef WESQL_TEST
-      next_index = last_applied_index < first_index
+      next_index = recovery_applied_index < first_index
                        ? first_index
                        : consensus_log_manager.get_next_trx_index(
-                             last_applied_index, false);
+                             recovery_applied_index, false);
 #else
-      next_index =
-          consensus_log_manager.get_next_trx_index(last_applied_index, false);
+      next_index = consensus_log_manager.get_next_trx_index(
+          recovery_applied_index, false);
 #endif
-      consensus_info->set_start_apply_index(last_applied_index);
+      consensus_info->set_start_apply_index(recovery_applied_index);
       if (consensus_info->flush_info(true, true)) {
         next_index = 0;
         LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FATAL_ERROR,
@@ -493,12 +514,12 @@ static uint64 get_applier_start_index() {
       }
     } else {
 #ifdef WESQL_TEST
-      next_index = last_applied_index < first_index
+      next_index = recovery_applied_index < first_index
                        ? first_index
                        : consensus_log_manager.get_next_trx_index(
                              start_apply_index, false);
 #else
-      assert(start_apply_index >= first_index);
+      assert(recovery_applied_index >= first_index);
       next_index =
           consensus_log_manager.get_next_trx_index(start_apply_index, false);
 #endif
@@ -632,8 +653,8 @@ int ConsensusStateProcess::recovery_applier_status() {
   if (!opt_initialize && !opt_cluster_log_type_instance &&
       !consensus_log_manager.get_start_without_log()) {
     assert(next_index > 0);
-    if (consensus_log_manager.get_log_position(next_index, false, log_name,
-                                               &log_pos)) {
+    if (consensus_log_manager.get_log_end_position(next_index - 1, false,
+                                                   log_name, &log_pos)) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_POSITION_ERROR,
                    next_index, "recovery applier status");
       abort();
@@ -652,8 +673,8 @@ int ConsensusStateProcess::recovery_applier_status() {
   if (!opt_initialize && !opt_cluster_log_type_instance &&
       consensus_log_manager.get_start_without_log()) {
     assert(next_index > 0);
-    if (consensus_log_manager.get_log_position(next_index, false, log_name,
-                                               &log_pos)) {
+    if (consensus_log_manager.get_log_end_position(next_index - 1, false,
+                                                   log_name, &log_pos)) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_POSITION_ERROR,
                    next_index, "recovery applier status");
       abort();
@@ -704,8 +725,10 @@ int ConsensusStateProcess::recovery_applier_status() {
     if (!opt_cluster_log_type_instance) {
       mysql_mutex_lock(binlog->get_log_lock());
       if (consensus_log_manager.advance_commit_index_if_greater(next_index - 1,
-                                                                false)) {
-        binlog->switch_and_seek_log(log_name, log_pos, true);
+                                                                false) &&
+          binlog->switch_and_seek_log(log_name, log_pos, true)) {
+        mysql_mutex_unlock(binlog->get_log_lock());
+        return -1;
       }
       mysql_mutex_unlock(binlog->get_log_lock());
     }

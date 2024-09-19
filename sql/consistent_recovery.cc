@@ -997,6 +997,15 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
     // Using mysql binlog full name.
     strmake(m_mysql_binlog_end_file, mysql_binlog_full_name,
             sizeof(m_mysql_binlog_end_file) - 1);
+
+    // Clear LOG_EVENT_BINLOG_IN_USE_F for binlog file.
+    if (!update_log_file_set_flag_in_use(m_mysql_binlog_end_file, false)) {
+      err_msg.assign("Failed to set last msyql binlog in_use flag: ");
+      err_msg.append(m_mysql_binlog_end_file);
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+
     // End binlog file download.
     // If opt_recovery_consistent_snapshot_only is set, only download the
     // binlog file specified by snapshot.
@@ -1034,14 +1043,6 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
     file_ostream.close();
   }
   */
-
-  // set flag LOG_EVENT_BINLOG_IN_USE_F for last binlog file.
-  if (!update_log_file_set_flag_in_use(m_mysql_binlog_end_file)) {
-    err_msg.assign("Failed to set last msyql binlog in_use flag: ");
-    err_msg.append(m_mysql_binlog_end_file);
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    return true;
-  }
 
   m_state = CONSISTENT_RECOVERY_STATE_BINLOG;
   return false;

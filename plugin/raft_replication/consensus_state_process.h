@@ -30,6 +30,8 @@ class ConsensusStateProcess {
         current_term(1),
         current_state_degrade_term(0),
         recovery_index_hwl(0),
+        recovery_term(0),
+        recovery_ignored(false),
         status(Consensus_Log_System_Status::BINLOG_WORKING),
         binlog(nullptr),
         rli_info(nullptr),
@@ -76,6 +78,13 @@ class ConsensusStateProcess {
   void set_recovery_index_hwl(uint64 index_arg) {
     recovery_index_hwl = index_arg;
   }
+  uint64 get_recovery_term() { return recovery_term; }
+  void set_recovery_term(uint64 term_arg) { recovery_term = term_arg; }
+
+  bool get_recovery_ignored() { return recovery_ignored; }
+  void set_recovery_ignored(bool recovery_term_arg) {
+    recovery_ignored = recovery_term_arg;
+  }
 
   // for concurrency
   inline mysql_mutex_t *get_log_term_lock() { return &LOCK_consensuslog_term; }
@@ -115,7 +124,9 @@ class ConsensusStateProcess {
   std::atomic<uint64> current_state_degrade_term;  // the term when degrade
 
   /* Consensus recovery and applier */
-  uint64 recovery_index_hwl;  // for crash recovery
+  uint64 recovery_index_hwl;  // only for crash recovery
+  uint64 recovery_term;       // only for crash recovery
+  bool recovery_ignored;      // only for crash recovery
 
   mysql_rwlock_t LOCK_consensuslog_commit;  // protect consensus commit
 

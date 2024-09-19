@@ -201,6 +201,16 @@ uint64 ConsensusLogIndex::get_first_index() {
   return first_index;
 }
 
+uint64 ConsensusLogIndex::get_start_index_of_last_file() {
+  DBUG_TRACE;
+  uint64 first_index = 0;
+  mysql_mutex_lock(&LOCK_consensuslog_index);
+  auto iter = index_list.rbegin();
+  if (iter != index_list.rend()) first_index = iter->second.index;
+  mysql_mutex_unlock(&LOCK_consensuslog_index);
+  return first_index;
+}
+
 uint64 ConsensusLogIndex::get_start_index_of_file(const std::string &log_name) {
   DBUG_TRACE;
   uint64 index = 0;

@@ -155,9 +155,9 @@ static int consensus_applier_before_apply_event(Binlog_applier_param *param,
   assert(!is_mts_worker(thd));
   mysql_mutex_assert_owner(&param->rli->data_lock);
 
-  if (thd->consensus_context.consensus_replication_applier) {
-    update_consensus_apply_pos(param->rli, ev);
-  }
+  if (thd->consensus_context.consensus_replication_applier)
+    return update_consensus_apply_pos(param->rli, ev);
+
   return 0;
 }
 
@@ -338,12 +338,17 @@ static int consensus_applier_after_stop(Binlog_applier_param *param) {
   if (!plugin_is_consensus_replication_running()) return 1;
 
   DBUG_TRACE;
+  Relay_log_info *rli = param->rli;
   THD *thd = param->rli->info_thd;
 
   if (thd->consensus_context.consensus_replication_applier) {
     if (!is_mts_worker(thd)) {
       Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
-      destory_applier_workers(param->rli, applier_info);
+      destory_applier_workers(rli, applier_info);
+
+      (void)update_log_file_set_flag_in_use(
+          consensus_applier.get_applying_log_name(), false);
+      consensus_applier.clear_applying_log_name();
     }
   }
 

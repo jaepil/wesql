@@ -233,8 +233,9 @@ int check_exec_consensus_log_end_condition(Relay_log_info *rli) {
   return 0;
 }
 
-void update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
+int update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
   DBUG_TRACE;
+  int error = 0;
 
   // update apply index
   /* for large trx, use the first one */
@@ -242,7 +243,6 @@ void update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
     Consensus_log_event *r_ev = static_cast<Consensus_log_event *>(ev);
     uint64 consensus_index = r_ev->get_index();
     uint64 consensus_term = r_ev->get_term();
-    uint64 last_apply_term = consensus_applier.get_apply_term();
     if (r_ev->get_flag() & Consensus_log_event_flag::FLAG_LARGE_TRX) {
       if (!consensus_applier.get_in_large_trx()) {
         consensus_applier.set_apply_index(consensus_index);
@@ -261,30 +261,31 @@ void update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
     consensus_applier.set_real_apply_index(consensus_index);
     if (!rli->is_parallel_exec())
       rpl_consensus_update_applied_index(consensus_index);
+  } else if (ev->get_type_code() == binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
+    const char *last_log_name = consensus_applier.get_applying_log_name();
 
-    // force the coordinator to start a new binlog segment.
-    if ((r_ev->get_flag() & Consensus_log_event_flag::FLAG_ROTATE) ||
-        last_apply_term != consensus_applier.get_apply_term()) {
-      assert(rli->is_parallel_exec()
-                 ? (rli->mts_group_status != Relay_log_info::MTS_IN_GROUP)
-                 : !rli->is_in_group());
-      if (!is_mts_db_partitioned(rli)) {
-        static_cast<Mts_submode_logical_clock *>(rli->current_mts_submode)
-            ->start_new_group();
+    if (last_log_name[0] != '\0' &&
+        !update_log_file_set_flag_in_use(last_log_name, false)) {
+      error = 1;
+    } else if (consensus_log_manager.advance_commit_index_if_greater(
+                   consensus_applier.get_real_apply_index(), true)) {
+      /* The Previous_gtids_event serves as the event marking the end of the
+       * binlog file header, allowing to advance to this point. */
+      MYSQL_BIN_LOG *binlog = consensus_state_process.get_binlog();
+      mysql_mutex_lock(binlog->get_log_lock());
+      error = binlog->switch_and_seek_log(rli->get_event_relay_log_name(),
+                                          ev->future_event_relay_log_pos, true);
+      mysql_mutex_unlock(binlog->get_log_lock());
+    } else {
+      consensus_applier.set_applying_log_name(rli->get_event_relay_log_name());
+      if (!update_log_file_set_flag_in_use(
+              consensus_applier.get_applying_log_name(), true)) {
+        error = 1;
       }
     }
-  } else if (ev->get_type_code() == binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
-    /* The Previous_gtids_event serves as the event marking the end of the
-     * binlog file header, allowing to advance to this point. */
-    MYSQL_BIN_LOG *binlog = consensus_state_process.get_binlog();
-    mysql_mutex_lock(binlog->get_log_lock());
-    if (consensus_log_manager.advance_commit_index_if_greater(
-            consensus_applier.get_real_apply_index(), true)) {
-      binlog->switch_and_seek_log(rli->get_event_relay_log_name(),
-                                  ev->future_event_relay_log_pos, true);
-    }
-    mysql_mutex_unlock(binlog->get_log_lock());
   }
+
+  return error;
 }
 
 int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
@@ -321,8 +322,8 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
             ? first_index
             : consensus_log_manager.get_next_trx_index(start_index, false);
 
-    if (consensus_log_manager.get_log_position(next_index, false, log_name,
-                                               &log_pos)) {
+    if (consensus_log_manager.get_log_end_position(next_index - 1, false,
+                                                   log_name, &log_pos)) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_POSITION_ERROR,
                    next_index, "getting applier start position");
       abort();
@@ -338,8 +339,8 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
         start_index < first_index
             ? first_index
             : consensus_log_manager.get_next_trx_index(start_index, false);
-    if (consensus_log_manager.get_log_position(next_index, false, log_name,
-                                               &log_pos)) {
+    if (consensus_log_manager.get_log_end_position(next_index - 1, false,
+                                                   log_name, &log_pos)) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_POSITION_ERROR,
                    next_index, "getting applier start position");
       abort();
@@ -350,7 +351,7 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
 
   rli->set_group_relay_log_name(log_name);
   rli->set_group_relay_log_pos(log_pos);
-  rli->flush_info(true);
+  rli->flush_info(Relay_log_info::RLI_FLUSH_IGNORE_SYNC_OPT);
 
   // deal with appliedindex
   rli_appliedindex = applier_info->get_consensus_apply_index();
@@ -367,10 +368,19 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
     return -1;
   }
 
+  consensus_applier.set_applying_log_name(log_name);
+  if (!update_log_file_set_flag_in_use(
+          consensus_applier.get_applying_log_name(), true)) {
+    return -1;
+  }
+
   MYSQL_BIN_LOG *binlog = consensus_state_process.get_binlog();
   mysql_mutex_lock(binlog->get_log_lock());
-  if (consensus_log_manager.advance_commit_index_if_greater(next_index - 1, false)) {
-    binlog->switch_and_seek_log(log_name, log_pos, true);
+  if (consensus_log_manager.advance_commit_index_if_greater(next_index - 1,
+                                                            false) &&
+      binlog->switch_and_seek_log(log_name, log_pos, true)) {
+    mysql_mutex_unlock(binlog->get_log_lock());
+    return -1;
   }
   mysql_mutex_unlock(binlog->get_log_lock());
 
@@ -637,8 +647,8 @@ bool applier_mts_recovery_groups(Relay_log_info *rli) {
     my_off_t log_pos = 0;
     uint64 next_index = consensus_log_manager.get_next_trx_index(
         applier_info->get_consensus_apply_index(), false);
-    if (consensus_log_manager.get_log_position(next_index, false, log_name,
-                                               &log_pos)) {
+    if (consensus_log_manager.get_log_end_position(next_index - 1, false,
+                                                   log_name, &log_pos)) {
       LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_FIND_POSITION_ERROR,
                    next_index, "recovering MTS group");
       abort();

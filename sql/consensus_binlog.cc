@@ -395,6 +395,7 @@ int MYSQL_BIN_LOG::switch_and_seek_log(const char *file_name, my_off_t offset,
     std::unique_ptr<Binlog_ofile> ofile(
         m_binlog_file->open_existing(m_key_file_log, log_file_name, flags));
     if (ofile == nullptr) {
+      mysql_mutex_unlock(&LOCK_sync);
       if (need_lock_index) mysql_mutex_unlock(&LOCK_index);
       LogErr(ERROR_LEVEL, ER_BINLOG_CANT_OPEN_FOR_LOGGING, name, errno);
       error = 1;
@@ -996,6 +997,8 @@ int MYSQL_BIN_LOG::init_consensus_binlog(bool null_created_arg,
     }
     DBUG_PRINT("info", ("Generating PREVIOUS_GTIDS for binlog file."));
     Previous_gtids_log_event prev_gtids_ev(previous_logged_gtids);
+    if (is_consensus_write && tv_sec > 0)
+      prev_gtids_ev.common_header->when.tv_sec = tv_sec;
     if (need_sid_lock) sid_lock->unlock();
     if (write_event_to_binlog(&prev_gtids_ev)) goto err;
   } else  // !(current_thd)
@@ -1032,6 +1035,7 @@ int MYSQL_BIN_LOG::init_consensus_binlog(bool null_created_arg,
       DBUG_PRINT("info", ("Generating PREVIOUS_GTIDS for relaylog file."));
       Previous_gtids_log_event prev_gtids_ev(previous_gtid_set_relaylog);
       prev_gtids_ev.set_relay_log_event();
+      if (tv_sec > 0) prev_gtids_ev.common_header->when.tv_sec = tv_sec;
 
       if (need_sid_lock) sid_lock->unlock();
       if (write_event_to_binlog(&prev_gtids_ev)) goto err;
@@ -1296,6 +1300,7 @@ bool MYSQL_BIN_LOG::open_binlog_from_archive(
   std::unique_ptr<Binlog_ofile> ofile;
   std::string file_name;
   my_off_t file_off = 0;
+  uchar in_use_flags = 0;
   MY_STAT info;
 
   flags = flags | MY_REPORT_WAITING_IF_FULL;
@@ -1363,6 +1368,14 @@ bool MYSQL_BIN_LOG::open_binlog_from_archive(
     goto err;
   }
   delete m_binlog_file;
+
+  /* Clear LOG_EVENT_BINLOG_IN_USE_F */
+  in_use_flags = 0;
+  if (ofile->update(&in_use_flags, 1, BIN_LOG_HEADER_SIZE + FLAGS_OFFSET)) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_CLEAR_IN_USE_FLAG_FOR_CRASHED_BINLOG);
+    goto err;
+  }
+
   m_binlog_file = ofile.release();
 
   // write from the end

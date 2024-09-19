@@ -411,6 +411,22 @@ int ConsensusLogManager::get_log_position(uint64 consensus_index,
   return error;
 }
 
+int ConsensusLogManager::get_log_end_position(uint64 consensus_index,
+                                              bool need_lock, char *log_name,
+                                              my_off_t *pos) {
+  int error = 0;
+  DBUG_TRACE;
+  if (need_lock)
+    mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+  if (consensus_get_log_end_position(get_log_file_index(), consensus_index,
+                                     log_name, pos)) {
+    error = 1;
+  }
+  if (need_lock)
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
+  return error;
+}
+
 uint64 ConsensusLogManager::get_next_trx_index(uint64 consensus_index,
                                                bool need_lock) {
   uint64 retIndex = consensus_index;
@@ -431,6 +447,25 @@ uint64 ConsensusLogManager::get_next_trx_index(uint64 consensus_index,
   LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_FIND_NEXT_TRX_LOG,
                consensus_index, retIndex + 1);
   return retIndex + 1;
+}
+
+uint64 ConsensusLogManager::get_next_index_from_position(
+    const char *log_file_name, my_off_t log_pos, bool need_lock) {
+  bool reached_stop_point;
+  uint64 current_term;
+  uint64 next_index;
+  DBUG_TRACE;
+
+  if (need_lock)
+    mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+
+  next_index = consensus_get_next_index(log_file_name, false, 0, log_pos,
+                                        reached_stop_point, current_term);
+
+  if (need_lock)
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
+
+  return next_index;
 }
 
 int ConsensusLogManager::truncate_log(uint64 consensus_index) {
@@ -704,7 +739,7 @@ int ConsensusLogManager::try_advance_commit_position(uint64 timeout) {
   commit_index = get_commit_index();
   index = rpl_consensus_get_commit_index();
   if (index <= commit_index) {
-    index = rpl_consensus_timed_wait_commit_index_update(term, commit_index + 1,
+    index = rpl_consensus_timed_wait_commit_index_update(commit_index + 1, term,
                                                          timeout);
     if (index <= commit_index) return 0;
   }
@@ -720,7 +755,7 @@ int ConsensusLogManager::try_advance_commit_position(uint64 timeout) {
 
   mysql_mutex_lock(log->get_log_lock());
   if (advance_commit_index_if_greater(index, false)) {
-    log->switch_and_seek_log(log_name, pos, true);
+    (void)log->switch_and_seek_log(log_name, pos, true);
   }
   mysql_mutex_unlock(log->get_log_lock());
 
