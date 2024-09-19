@@ -90,6 +90,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   DBUG_TRACE;
   if (!opt_recovery_from_objstore && !opt_initialize_from_objstore) return 0;
 
+  if (!opt_serverless) return 0;
   // Initialize database from consistent snapshot for PITR or clone.
   // If opt_recovery_consistent_snapshot_timestamp is set, recover to the
   // specified timestamp. Otherwise, recover to the latest consistent snapshot.
@@ -97,7 +98,8 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   if (opt_initialize && opt_initialize_from_objstore) {
     m_recovery_type = CONSISTENT_RECOVERY_PITR;
     std::string err_msg;
-    err_msg.assign("Initialize database from object store consistent snapshot ");
+    err_msg.assign(
+        "Initialize database from object store consistent snapshot ");
     err_msg.append(" provider=");
     err_msg.append(opt_initialize_objstore_provider);
     err_msg.append(" region=");
@@ -155,7 +157,8 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
               STRING_WITH_LEN(BINLOG_ARCHIVE_SUBDIR));
       convert_dirname(m_binlog_archive_dir, m_binlog_archive_dir, NullS);
 
-      strmake(m_consistent_snapshot_archive_dir, opt_initialize_cluster_objstore_id,
+      strmake(m_consistent_snapshot_archive_dir,
+              opt_initialize_cluster_objstore_id,
               sizeof(m_consistent_snapshot_archive_dir) - 1);
       convert_dirname(m_consistent_snapshot_archive_dir,
                       m_consistent_snapshot_archive_dir, NullS);
@@ -368,8 +371,8 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
   // Delete the local consistent snapshot file if it exists.
   remove_file(consistent_file_name);
   objstore::Status ss = recovery_objstore->get_object_to_file(
-      std::string_view(m_objstore_bucket),
-      consistent_file_keyid, consistent_file_name);
+      std::string_view(m_objstore_bucket), consistent_file_keyid,
+      consistent_file_name);
   if (!ss.is_succ()) {
     std::string err_msg;
     err_msg.assign("Failed to download consistent snapshot index file: ");
@@ -524,8 +527,10 @@ bool Consistent_recovery::recovery_mysql_innodb() {
   std::string mysql_clone_file_name;
   std::string mysql_clone_basename;
   mysql_clone_file_name.assign(m_mysql_archive_recovery_data_dir);
-  mysql_clone_file_name.append(m_mysql_clone_keyid + dirname_length(m_mysql_clone_keyid));
-  mysql_clone_basename.assign(m_mysql_clone_keyid + dirname_length(m_mysql_clone_keyid));
+  mysql_clone_file_name.append(m_mysql_clone_keyid +
+                               dirname_length(m_mysql_clone_keyid));
+  mysql_clone_basename.assign(m_mysql_clone_keyid +
+                              dirname_length(m_mysql_clone_keyid));
   size_t idx = mysql_clone_basename.find(".");
   // Check if with ".tar" or ".tar.gz" extension.
   if (idx == std::string::npos) {
@@ -694,7 +699,8 @@ bool Consistent_recovery::recovery_smartengine() {
   LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 
   std::string se_backup_basename;
-  se_backup_basename.assign(m_se_backup_keyid + dirname_length(m_se_backup_keyid));
+  se_backup_basename.assign(m_se_backup_keyid +
+                            dirname_length(m_se_backup_keyid));
   size_t idx = se_backup_basename.find(".");
   // se_archive_000001
   if (idx == std::string::npos) {
@@ -714,7 +720,7 @@ bool Consistent_recovery::recovery_smartengine() {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return true;
     }
-  } else { // se_archive_000001.tar or se_archive_000001.tar.gz
+  } else {  // se_archive_000001.tar or se_archive_000001.tar.gz
     std::string se_file_name;
     se_file_name.assign(m_mysql_archive_recovery_data_dir);
     se_file_name.append(m_se_backup_keyid + dirname_length(m_se_backup_keyid));
@@ -804,8 +810,8 @@ bool Consistent_recovery::recovery_smartengine() {
 
 // TODO: Initialize the smartengine extents from object store.
 // If --table_on_objstore is set, the extents will be copy from
-// recovery_objectstore_bucket to objstore_bucket. Otherwise, the extents will be
-// download from recovery_objectstore_bucket to mysql_real_data_home.
+// recovery_objectstore_bucket to objstore_bucket. Otherwise, the extents will
+// be download from recovery_objectstore_bucket to mysql_real_data_home.
 
 /**
  * @brief Recovery binlog and index file from object store.
@@ -814,9 +820,9 @@ bool Consistent_recovery::recovery_smartengine() {
  * @return true
  * @return false
  */
-bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg
+bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
                                           [[maybe_unused]],
-                                          const char *log_name
+                                          const char *bin_log_name
                                           [[maybe_unused]]) {
   LOG_ARCHIVED_INFO log_info;
   std::string err_msg = {};
@@ -845,11 +851,11 @@ bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg
             MY_UNPACK_FILENAME);
   myf opt = MY_UNPACK_FILENAME;
   // ref: mysql_bin_log.open_index_file()
-  if (!index_file_name_arg) {
-    index_file_name_arg = log_name;  // Use same basename for index file
+  if (!binlog_index_name) {
+    binlog_index_name = bin_log_name;  // Use same basename for index file
     opt = MY_UNPACK_FILENAME | MY_REPLACE_EXT;
   }
-  fn_format(mysql_binlog_index_basename, index_file_name_arg, mysql_data_home,
+  fn_format(mysql_binlog_index_basename, binlog_index_name, mysql_data_home,
             ".index", opt);
 
   // Download binlog.index from object store to recover tmp dir.
@@ -858,7 +864,7 @@ bool Consistent_recovery::recovery_binlog(const char *index_file_name_arg
   binlog_index_file_name.assign(m_mysql_archive_recovery_binlog_dir);
   binlog_index_file_name.append(BINLOG_ARCHIVE_INDEX_LOCAL_FILE);
   strmake(m_binlog_index_file_name, binlog_index_file_name.c_str(),
-          sizeof(m_binlog_index_file) - 1);
+          sizeof(m_binlog_index_file_name) - 1);
   std::string last_index_keyid;
   // The persisted `binlog-index.index` is based on multiple versions of the
   // consensus term, so the `binlog-index.index` with the highest consensus term
@@ -1136,6 +1142,226 @@ int Consistent_recovery::consistent_snapshot_consensus_recovery_finish() {
   return 1;
 }
 
+int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
+  DBUG_TRACE;
+  char binlog_archive_dir[FN_REFLEN + 1] = {0};
+  char mysql_archive_recovery_dir[FN_REFLEN + 1] = {0};
+  char mysql_archive_recovery_binlog_dir[FN_REFLEN + 1] = {0};
+  IO_CACHE binlog_index_file{};
+  std::string binlog_index_file_name{};
+  std::string last_index_keyid{};
+  std::string err_msg{};
+  int error = 0;
+  LOG_ARCHIVED_INFO log_info{};
+
+  if (!opt_serverless) return 0;
+
+#ifdef WESQL_CLUSTER
+  if (!is_consensus_replication_log_mode()) return 0;
+#endif
+  objstore::init_objstore_provider(opt_objstore_provider);
+  std::string_view endpoint(
+      opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
+  std::string obj_error_msg;
+  objstore::ObjectStore *objstore =
+      objstore::create_object_store(std::string_view(opt_objstore_provider),
+                                    std::string_view(opt_objstore_region),
+                                    opt_objstore_endpoint ? &endpoint : nullptr,
+                                    opt_objstore_use_https, obj_error_msg);
+  if (objstore == nullptr) {
+    err_msg.assign("Failed to create object store instance");
+    if (!obj_error_msg.empty()) {
+      err_msg.append(": ");
+      err_msg.append(obj_error_msg);
+    }
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+    error = 1;
+    goto err;
+  }
+
+  if (opt_cluster_objstore_id) {
+    strmake(binlog_archive_dir, opt_cluster_objstore_id,
+            sizeof(binlog_archive_dir) - 1);
+    convert_dirname(binlog_archive_dir, binlog_archive_dir, NullS);
+    strmake(binlog_archive_dir + strlen(binlog_archive_dir),
+            STRING_WITH_LEN(BINLOG_ARCHIVE_SUBDIR));
+    convert_dirname(binlog_archive_dir, binlog_archive_dir, NullS);
+  } else {
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           "In serverless mode, must set --cluster_objectstore_id");
+    error = 1;
+    goto err;
+  }
+
+  if (!opt_recovery_consistent_snapshot_tmpdir) {
+    LogErr(
+        ERROR_LEVEL, ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+        "In serverless mode, must set --recovery_consistent_snapshot_tmpdir");
+    error = 1;
+    goto err;
+  }
+
+  convert_dirname(mysql_real_data_home, mysql_real_data_home, NullS);
+
+  if (test_if_hard_path(opt_recovery_consistent_snapshot_tmpdir)) {
+    strmake(mysql_archive_recovery_dir, opt_recovery_consistent_snapshot_tmpdir,
+            sizeof(mysql_archive_recovery_dir) - 1);
+  } else {
+    strxnmov(mysql_archive_recovery_dir, sizeof(mysql_archive_recovery_dir) - 1,
+             mysql_real_data_home, opt_recovery_consistent_snapshot_tmpdir,
+             NullS);
+  }
+  // create new tmp recovery dir.
+  convert_dirname(mysql_archive_recovery_dir, mysql_archive_recovery_dir,
+                  NullS);
+  remove_file(mysql_archive_recovery_dir);
+  if (my_mkdir(mysql_archive_recovery_dir, 0777, MYF(0))) {
+    err_msg.assign("Failed to create tmp recovery dir: ");
+    err_msg.append(mysql_archive_recovery_dir);
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+    error = 1;
+    goto err;
+  }
+
+  // create new recovery binlog dir.
+  strmake(strmake(mysql_archive_recovery_binlog_dir, mysql_archive_recovery_dir,
+                  sizeof(mysql_archive_recovery_binlog_dir) -
+                      BINLOG_ARCHIVE_SUBDIR_LEN - 1),
+          STRING_WITH_LEN(BINLOG_ARCHIVE_SUBDIR));
+  convert_dirname(mysql_archive_recovery_binlog_dir,
+                  mysql_archive_recovery_binlog_dir, NullS);
+  remove_file(mysql_archive_recovery_binlog_dir);
+  if (my_mkdir(mysql_archive_recovery_binlog_dir, 0777, MYF(0))) {
+    err_msg.assign("Failed to create tmp recovery binlog dir: ");
+    err_msg.append(mysql_archive_recovery_binlog_dir);
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+    error = 1;
+    goto err;
+  }
+
+  // Download binlog.index from object store to recover tmp dir.
+  // And open objstore binlog index file.
+  binlog_index_file_name.assign(mysql_archive_recovery_binlog_dir);
+  binlog_index_file_name.append(BINLOG_ARCHIVE_INDEX_LOCAL_FILE);
+  // The persisted `binlog-index.index` is based on multiple versions of the
+  // consensus term, so the `binlog-index.index` with the highest consensus term
+  // should be obtained as the initial one.
+  {
+    std::vector<objstore::ObjectMeta> objects{};
+    bool finished = false;
+    std::string start_after{};
+    std::string binlog_index_prefix{};
+    binlog_index_prefix.assign(binlog_archive_dir);
+    binlog_index_prefix.append(BINLOG_ARCHIVE_INDEX_FILE_BASENAME);
+    do {
+      std::vector<objstore::ObjectMeta> tmp_objects{};
+      objstore::Status ss = objstore->list_object(
+          std::string_view(opt_objstore_bucket), binlog_index_prefix,
+          true, start_after, finished, tmp_objects);
+      if (!ss.is_succ()) {
+        err_msg.assign("List persistent binlog index files failed: ");
+        err_msg.append(binlog_index_prefix);
+        err_msg.append(" error=");
+        err_msg.append(ss.error_message());
+        LogErr(ERROR_LEVEL,
+               ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+               err_msg.c_str());
+        error = 1;
+        goto err;
+      }
+      objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
+    } while (finished == false);
+    // if no persistent binlog.index, return.
+    if (objects.empty()) {
+      error = 0;
+      goto err;
+    }
+    last_index_keyid.assign((objects.back()).key);
+    err_msg.assign("the last persistent binlog index is ");
+    err_msg.append(last_index_keyid);
+    LogErr(INFORMATION_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+  }
+  remove_file(binlog_index_file_name);
+  {
+    objstore::Status ss = objstore->get_object_to_file(
+        std::string_view(opt_objstore_bucket), last_index_keyid,
+        std::string_view(binlog_index_file_name));
+    if (!ss.is_succ()) {
+      err_msg.assign("download persistent binlog index file failed: ");
+      err_msg.append("key=");
+      err_msg.append(last_index_keyid);
+      err_msg.append(" to ");
+      err_msg.append(binlog_index_file_name);
+      LogErr(ERROR_LEVEL,
+             ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+             err_msg.c_str());
+      error = 1;
+      goto err;
+    }
+  }
+
+  if (open_binlog_index_file(&binlog_index_file, binlog_index_file_name.c_str(),
+                             READ_CACHE)) {
+    err_msg.assign("Failed to open persistent binlog-index.index");
+    err_msg.append(binlog_index_file_name);
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+    error = 1;
+    goto err;
+  }
+
+  error = Binlog_archive::find_log_pos_common(&binlog_index_file, &log_info,
+                                              nullptr, 0);
+  if (error != 0) {
+    err_msg.assign("Failed to find binlog slice entry");
+    err_msg.append(binlog_index_file_name);
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+    error = 1;
+    goto err;
+  }
+  do {
+  } while (0 == (error = Binlog_archive::find_next_log_common(
+                     &binlog_index_file, &log_info)));
+  if (error == LOG_INFO_IO) {
+    err_msg.assign("Failed to find binlog slice entry");
+    err_msg.append(binlog_index_file_name);
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+    error = 1;
+    goto err;
+  }
+  error = 0;
+  consistent_recovery_snasphot_end_consensus_index = log_info.previous_consensus_index;
+
+  err_msg.assign("last previous consensus index=");
+  err_msg.append(std::to_string(consistent_recovery_snasphot_end_consensus_index));
+  err_msg.append(" log slice entry=");
+  err_msg.append(log_info.log_slice_name);
+  LogErr(INFORMATION_LEVEL,
+         ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+         err_msg.c_str());
+err:
+  close_binlog_index_file(&binlog_index_file);
+  if (objstore) {
+    objstore::cleanup_objstore_provider(objstore);
+    objstore::destroy_object_store(objstore);
+  }
+
+  return error;
+}
 static bool is_number(const char *str, ulonglong *res, bool allow_wildcards) {
   int flag;
   const char *start;

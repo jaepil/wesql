@@ -1,0 +1,43 @@
+!include suite/consensus_replication/my.cnf
+
+[mysqld.1]
+smartengine=                            1
+default-storage-engine=                 smartengine
+default-tmp-storage_engine=             innodb
+serverless=                             true
+log-bin=                                master-bin
+log-bin=                                master-bin.index
+binlog_archive_slice_max_size=          4096
+plugin-load-add=                        mysql_clone.so
+consistent_snapshot_archive_period=     1000
+consistent_snapshot_expire_auto_purge=  false
+binlog_archive_expire_auto_purge=       false
+recovery_from_objectstore=              true
+
+[mysqld.2]
+#!use-slave-opt
+smartengine=                                1
+default-storage-engine=                     smartengine
+default-tmp-storage_engine=                 innodb
+consensus-replication-log-type-node=        ON
+consensus_replication_auto_leader_transfer= ON
+log-bin=                            logger1-bin
+log-bin=                            logger1-bin.index
+serverless=                         true
+table_on_objectstore =              false
+consistent_snapshot_archive=        false
+binlog_archive_expire_auto_purge=   false
+
+[mysqld.3]
+#!use-slave-opt
+smartengine=                                1
+default-storage-engine=                     smartengine
+default-tmp-storage_engine=                 innodb
+consensus-replication-log-type-node=        ON
+consensus_replication_auto_leader_transfer= ON
+log-bin=                            logger2-bin
+log-bin=                            logger2-bin.index
+serverless=                         true
+table_on_objectstore =              false
+consistent_snapshot_archive=        false
+binlog_archive_expire_auto_purge=   false

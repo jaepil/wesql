@@ -65,11 +65,18 @@ static int consensus_binlog_manager_after_binlog_recovery(
   mysql_mutex_lock(log_lock);
 
   if (binlog_file_list.empty()) {
+    if (opt_serverless && opt_cluster_log_type_instance) {
+      /* Use the next index of the last persisted binlog as a starting index */
+      consensus_log_manager.set_current_index(
+          consistent_recovery_snasphot_end_consensus_index + 1);
+    }
+
     if (param->binlog->open_binlog(opt_bin_logname, nullptr, max_binlog_size,
                                    false, true /*need_lock_index=true*/,
                                    true /*need_sid_lock=true*/, nullptr)) {
       error = 1;
     }
+
     consensus_log_manager.set_start_without_log(true);
     consensus_log_manager.set_sync_index_if_greater(
         consensus_log_manager.get_current_index() - 1);

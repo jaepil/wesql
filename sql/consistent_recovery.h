@@ -60,7 +60,8 @@ class Consistent_recovery {
   // recovery smartengine
   bool recovery_smartengine();
   // recovery binlog
-  bool recovery_binlog(const char *index_file_name_arg, const char *log_name);
+  bool recovery_binlog(const char *binlog_index_name, const char *bin_log_name);
+  int get_last_persistent_binlog_consensus_index();
   int read_consistent_snapshot_recovery_status(
       Consistent_snapshot_recovery_status &recovery_status);
   int write_consistent_snapshot_recovery_status(
