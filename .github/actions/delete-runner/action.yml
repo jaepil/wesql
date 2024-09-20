@@ -1,0 +1,34 @@
+name: Delete Self Runner Name
+description: 'Delete the specified Self Runner Name.'
+
+inputs:
+  runner-name:
+    description: 'The self runner name to be deleted.'
+    required: true
+    type: string
+  github-token:
+    description: 'The github token.'
+    required: true
+    type: string
+
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout apecloud-cd
+      uses: actions/checkout@v4
+      with:
+        repository: apecloud-inc/apecloud-cd
+        path: ./apecloud-cd
+
+    - name: remove self runner
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        RUNNER_NAME: ${{ inputs.runner-name }}
+      run: |
+        cd apecloud-cd
+        bash .github/utils/utils.sh --type 25 \
+            --github-token "${{ env.GITHUB_TOKEN }}" \
+            --github-repo "${{ github.repository }}" \
+            --runner-name "${{ env.RUNNER_NAME }}"

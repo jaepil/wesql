@@ -46,21 +46,24 @@ env:
 
 jobs:
   enable-amd-runner:
-    uses: ./.github/workflows/enable-gke-runner.yml
+    uses: ./.github/workflows/enable-self-runner.yml
     with:
-      RUNNER_LABEL: "gke-oracle8-amd-runner"
+      CLOUD_PROVIDER: "eks"
+      RUNNER_LABEL: "eks-oracle8-amd-runner"
     secrets: inherit
 
   enable-arm-runner:
-    uses: ./.github/workflows/enable-gke-runner.yml
+    uses: ./.github/workflows/enable-self-runner.yml
     with:
-      RUNNER_LABEL: "gke-arm-runner"
+      RUNNER_LABEL: "eks-arm-runner"
     secrets: inherit
 
   release-rpm:
     name: release x86_64 rpm
     needs: [ enable-amd-runner ]
-    runs-on: [self-hosted, gke-oracle8-amd-runner ]
+    runs-on: [self-hosted, eks-oracle8-amd-runner ]
+    outputs:
+      runner-name: ${{ steps.get_runner_name.outputs.runner-name }}
     steps:
       - uses: actions/checkout@v3
       - name: rpm build
@@ -96,11 +99,19 @@ jobs:
           sshpass -p ${{ env.SSH_PASSWORD }} ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
             createrepo --update /var/www/html/release/8/rpms/x86_64/
 
+      - name: get self runner name
+        id: get_runner_name
+        if: ${{ always() }}
+        run: |
+          echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
+
 
   release-arm-rpm:
     name: release aarch64 rpm
     needs: [ enable-arm-runner ]
-    runs-on: [ self-hosted, gke-arm-runner ]
+    runs-on: [ self-hosted, eks-arm-runner ]
+    outputs:
+      runner-name: ${{ steps.get_runner_name.outputs.runner-name }}
     steps:
       - uses: actions/checkout@v3
       - name: rpm build
@@ -158,10 +169,36 @@ jobs:
         run: |
           sudo rm -rf ${{ github.workspace }}/rpm
 
-  disable-gke-runner:
+      - name: get self runner name
+        id: get_runner_name
+        if: ${{ always() }}
+        run: |
+          echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
+
+  remove-runner:
+    runs-on: ubuntu-latest
+    needs: [ release-rpm, release-arm-rpm ]
+    if: ${{ always() }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Delete self runner
+        uses: './.github/actions/delete-runner'
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          runner-name: ${{ needs.release-rpm.outputs.runner-name }}
+
+      - name: Delete self runner
+        uses: './.github/actions/delete-runner'
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          runner-name: ${{ needs.release-arm-rpm.outputs.runner-name }}
+
+  disable-runner:
     needs: [ release-rpm, release-arm-rpm  ]
     if: ${{ always() }}
-    uses: ./.github/workflows/enable-gke-runner.yml
+    uses: ./.github/workflows/enable-self-runner.yml
     with:
       ENABLE: "disable"
     secrets: inherit
