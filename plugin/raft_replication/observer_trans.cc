@@ -76,14 +76,14 @@ int consensus_replication_trans_begin(Trans_param *param [[maybe_unused]],
   DBUG_TRACE;
   out = 0;
 
-  /* If the plugin is not running, before commit should return success. */
   if (opt_initialize || !current_thd) {
     return 0;
   }
 
+  /* If the plugin is not running, before commit should return success. */
   if (!plugin_is_consensus_replication_running()) return 0;
 
-  if (!rpl_consensus_inited) {
+  if (!rpl_consensus_is_ready()) {
     current_thd->consensus_context.binlog_disabled =
         (current_thd->variables.option_bits & OPTION_BIN_LOG);
     current_thd->variables.option_bits &= ~OPTION_BIN_LOG;
@@ -92,8 +92,9 @@ int consensus_replication_trans_begin(Trans_param *param [[maybe_unused]],
 
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
-  if (rpl_consensus_inited && (!current_thd->slave_thread ||
-                               param->rpl_channel_type != CR_APPLIER_CHANNEL)) {
+  if (rpl_consensus_is_ready() &&
+      (!current_thd->slave_thread ||
+       param->rpl_channel_type != CR_APPLIER_CHANNEL)) {
     if (disabled_command_for_consensus_replication(
             current_thd->lex->sql_command)) {
       out = ER_CONSENSUS_NOT_SUPPORT;
@@ -139,7 +140,7 @@ int consensus_replication_trans_after_commit(Trans_param *) {
   /* If the plugin is not running, return success. */
   if (!plugin_is_consensus_replication_running()) return 0;
 
-  if (!rpl_consensus_inited && current_thd &&
+  if (!rpl_consensus_is_ready() && current_thd &&
       current_thd->consensus_context.binlog_disabled) {
     current_thd->variables.option_bits |= OPTION_BIN_LOG;
     current_thd->consensus_context.binlog_disabled = false;

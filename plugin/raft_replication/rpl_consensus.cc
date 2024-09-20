@@ -12,7 +12,8 @@ std::shared_ptr<BLConsensusLog> consensus_log =
     std::make_shared<BLConsensusLog>();
 std::shared_ptr<alisql::AliSQLServer> alisql_server;
 alisql::Paxos *consensus_ptr = nullptr;
-bool rpl_consensus_inited = false;
+std::atomic<bool> rpl_consensus_inited = false;
+std::atomic<bool> rpl_consensus_ready = false;
 
 extern void stateChangeCb(StateType state, uint64_t term, uint64_t commitIndex);
 extern uint32 binlog_checksum_crc32_callback(uint32 crc,
@@ -87,6 +88,13 @@ void rpl_consensus_init(bool is_learner, uint64 mock_start_index,
 
   rpl_consensus_inited = true;
 }
+
+void rpl_consensus_set_ready() {
+  assert(rpl_consensus_inited && consensus_ptr != nullptr);
+  rpl_consensus_ready = true;
+}
+
+bool rpl_consensus_is_ready() { return rpl_consensus_ready; }
 
 void rpl_consensus_shutdown() {
   if (rpl_consensus_inited && consensus_ptr && !consensus_ptr->isShutdown())

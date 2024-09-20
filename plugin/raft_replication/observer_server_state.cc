@@ -92,6 +92,15 @@ int consensus_replication_after_recovery(Server_state_param *) {
 }
 
 int consensus_replication_before_handle_connection(Server_state_param *) {
+  DBUG_TRACE;
+
+  if (!opt_bin_log) return 0;
+
+  /* If the plugin is not running, return failed. */
+  if (!plugin_is_consensus_replication_running()) return 1;
+
+  if (!opt_initialize) rpl_consensus_set_ready();
+
   return 0;
 }
 

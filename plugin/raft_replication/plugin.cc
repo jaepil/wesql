@@ -118,6 +118,8 @@ struct st_mysql_consensus_replication consensus_replication_descriptor = {
   Initialize Package dbms_consensus context.
 */
 static void init_consensus_package_context() {
+  if (!opt_bin_log || opt_initialize) return;
+
   register_package<Proc, Consensus_proc_change_leader>(CONSENSUS_PROC_SCHEMA);
   register_package<Proc, Consensus_proc_add_learner>(CONSENSUS_PROC_SCHEMA);
   register_package<Proc, Consensus_proc_add_follower>(CONSENSUS_PROC_SCHEMA);

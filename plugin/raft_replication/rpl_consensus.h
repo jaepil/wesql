@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <atomic>
 
 #include "my_inttypes.h"
 
@@ -72,11 +73,15 @@ typedef struct cluster_memebership_change {
   std::string command;
 } cluster_memebership_change;
 
-extern bool rpl_consensus_inited;
+extern std::atomic<bool> rpl_consensus_inited;
+extern std::atomic<bool> rpl_consensus_ready;
 extern void rpl_consensus_init(bool is_learner, uint64 mock_start_index,
                                ConsensusLogManager *consensus_log_manager,
                                ConsensusMeta *consensus_meta,
                                ConsensusStateProcess *consensus_state_process);
+
+extern bool rpl_consensus_is_ready();
+extern void rpl_consensus_set_ready();
 extern bool rpl_consensus_is_shutdown();
 extern void rpl_consensus_shutdown();
 extern void rpl_consensus_cleanup();
