@@ -30,13 +30,9 @@ INSERT INTO t1 values(5);
 --source include/wait_until_disconnected.inc
 
 --echo # Force rmdir datadir for recovery test
---let $BACKUP_DATADIR = $MYSQL_TMP_DIR/$region
---force-cpdir $MYSQLD_DATADIR/$region $BACKUP_DATADIR
 --force-rmdir $MYSQLD_DATADIR
 --echo # Create an empty data directory...
 --mkdir $MYSQLD_DATADIR
---force-cpdir $BACKUP_DATADIR $MYSQLD_DATADIR/$region
---force-rmdir $BACKUP_DATADIR
 
 # consistent snapshot recovery
 --echo # Recovery start from object store.

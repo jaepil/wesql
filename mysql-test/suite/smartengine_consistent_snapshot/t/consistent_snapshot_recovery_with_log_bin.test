@@ -30,13 +30,9 @@ INSERT INTO t1 values(1,'abcd');
 --source include/wait_until_disconnected.inc
 
 --echo # Force rmdir datadir for recovery test
---let $BACKUP_DATADIR = $MYSQL_TMP_DIR/$region
---force-cpdir $MYSQLD_DATADIR/$region $BACKUP_DATADIR
 --force-rmdir $MYSQLD_DATADIR
 --echo # Create an empty data directory...
 --mkdir $MYSQLD_DATADIR
---force-cpdir $BACKUP_DATADIR $MYSQLD_DATADIR/$region
---force-rmdir $BACKUP_DATADIR
 
 # Recovery start using consistent snapshot with raft_index = 0
 --echo # 1. Recovery start using consistent snapshot with raft_index = 0
@@ -87,13 +83,9 @@ INSERT INTO t1 values(100,'abcd');
 --source include/wait_until_disconnected.inc
 
 --echo # Force rmdir datadir for recovery test
---let $BACKUP_DATADIR = $MYSQL_TMP_DIR/$region
---force-cpdir $MYSQLD_DATADIR/$region $BACKUP_DATADIR
 --force-rmdir $MYSQLD_DATADIR
 --echo # Create an empty data directory...
 --mkdir $MYSQLD_DATADIR
---force-cpdir $BACKUP_DATADIR $MYSQLD_DATADIR/$region
---force-rmdir $BACKUP_DATADIR
 
 # Recovery test using consistent snapshot
 --echo # 2. Recovery start using consistent snapshot
@@ -133,13 +125,9 @@ INSERT INTO t1 values(100,'abcd');
 --source include/wait_until_disconnected.inc
 
 --echo # Force rmdir datadir for recovery test
---let $BACKUP_DATADIR = $MYSQL_TMP_DIR/$region
---force-cpdir $MYSQLD_DATADIR/$region $BACKUP_DATADIR
 --force-rmdir $MYSQLD_DATADIR
 --echo # Create an empty data directory...
 --mkdir $MYSQLD_DATADIR
---force-cpdir $BACKUP_DATADIR $MYSQLD_DATADIR/$region
---force-rmdir $BACKUP_DATADIR
 
 # Recovery start using consistent snapshot
 --echo # 3. Recovery start using consistent snapshot

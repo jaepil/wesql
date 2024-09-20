@@ -523,6 +523,8 @@ int Consistent_archive::generate_innodb_new_name() {
       // Get rid of ".tar" or ".tar.gz" extension
       if (idx != std::string::npos) {
         entry = last_entry.substr(0, idx);
+      } else if (entry.back() == FN_LIBCHAR) {
+        entry = entry.substr(0, entry.length() - 1);
       }
       is_number(entry.c_str() + dirname_length(entry.c_str()) +
                     strlen(CONSISTENT_INNODB_ARCHIVE_BASENAME),
@@ -574,6 +576,9 @@ int Consistent_archive::generate_se_new_name() {
       // Get rid of ".tar" or ".tar.gz" extension
       if (idx != std::string::npos) {
         entry = last_entry.substr(0, idx);
+      } else if (entry.back() == FN_LIBCHAR) {
+        // Get rid of last '/'
+        entry = entry.substr(0, entry.length() - 1);
       }
       is_number(entry.c_str() + dirname_length(entry.c_str()) +
                     strlen(CONSISTENT_SE_ARCHIVE_BASENAME),
@@ -1309,9 +1314,11 @@ int Consistent_archive::archive_innodb_data() {
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
            "persistent innodb clone to object store end.");
   } else {
-    clone_keyid.append(clone_full_name);
+    assert(m_innodb_tar_compression_mode == CONSISTENT_SNAPSHOT_NO_TAR);
 
-    // Directly persistent clone dir to objstore.
+    clone_keyid.append(clone_full_name);
+    clone_keyid.append(FN_DIRSEP);
+    // Directly persistent clone dir innodb_archive_000001/ to objstore.
     err_msg.assign("directly persistent innodb clone to object store begin: ");
     err_msg.append(" keyid=");
     err_msg.append(clone_keyid);
@@ -1501,6 +1508,31 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
     err_msg.append(m_se_backup_name);
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
            err_msg.c_str());
+    std::string se_keyid_prefix;
+    // key = prefix + se_backup_name + "/"
+    se_keyid_prefix.assign(m_archive_dir);
+    se_keyid_prefix.append(se_backup_full_name);
+    se_keyid_prefix.append(FN_DIRSEP);
+    strmake(m_se_backup_keyid, se_keyid_prefix.c_str(),
+            sizeof(m_se_backup_keyid) - 1);
+    // It is necessary to persist `se_archive_000001/` as a separate key;
+    // otherwise, `list_object("se_archive_")` will not be able to find
+    // `se_archive_000001/`.
+    objstore::Status ss = snapshot_objstore->put_object(
+        std::string_view(opt_objstore_bucket),
+        std::string_view(m_se_backup_keyid), std::string_view(""));
+
+    if (!ss.is_succ()) {
+      err_msg.assign(
+          "persistent smartengine archive dir to object store failed: ");
+      err_msg.append("key=");
+      err_msg.append(m_se_backup_keyid);
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
+             err_msg.c_str());
+      return true;
+    }
   } else {
     if (my_mkdir(m_se_snapshot_dir, 0777, MYF(0)) < 0) {
       err_msg.assign("Failed to create smartengine archive local directory: ");
@@ -1553,12 +1585,8 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
     // Directly persistent file to object store, not tar.
     if (m_se_tar_compression_mode == CONSISTENT_SNAPSHOT_NO_TAR) {
       std::string se_keyid;
-      // key = prefix + se_backup_name
-      se_keyid.assign(m_archive_dir);
-      se_keyid.append(se_backup_full_name);
-      strmake(m_se_backup_keyid, se_keyid.c_str(),
-              sizeof(m_se_backup_keyid) - 1);
-      se_keyid.append(FN_DIRSEP);
+      // key = prefix + se_backup_name + "/"
+      se_keyid.assign(m_se_backup_keyid);
       se_keyid.append(file->name);
 
       objstore::Status ss = snapshot_objstore->put_object_from_file(
@@ -2889,8 +2917,6 @@ int Consistent_archive::purge_archive(const char *match_name,
 
   /* We know how many files to delete. Update index file. */
   if ((error = remove_line_from_index(&log_info, arch_type))) {
-    err_msg.assign("Failed to remove_line_from_index");
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG, err_msg.c_str());
     goto err;
   }
 
@@ -2948,12 +2974,11 @@ int Consistent_archive::purge_archive_garbage(const char *dirty_end_archive,
   std::vector<objstore::ObjectMeta> objects;
   do {
     std::vector<objstore::ObjectMeta> tmp_objects;
-    // TODO: list_object need add recursive option,
-    // only return the files and directories at the first-level directory.
-    // innodb_archive_000001.tar or innodb_archive_000001.tar
+    // Only return the files and directories at the first-level directory.
+    // innodb_archive_000001.tar or innodb_archive_000001.tar.gz
     // or innodb_archive_000001/
     objstore::Status ss = snapshot_objstore->list_object(
-        std::string_view(opt_objstore_bucket), archive_prefix, true,
+        std::string_view(opt_objstore_bucket), archive_prefix, false,
         start_after, finished, tmp_objects);
     if (!ss.is_succ()) {
       error = 1;
@@ -2977,8 +3002,14 @@ int Consistent_archive::purge_archive_garbage(const char *dirty_end_archive,
         err_msg.append(object.key);
         LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG,
                err_msg.c_str());
-        objstore::Status ss = snapshot_objstore->delete_object(
-            std::string_view(opt_objstore_bucket), object.key);
+        objstore::Status ss;
+        if (object.key.back() == FN_LIBCHAR) {
+          ss = snapshot_objstore->delete_directory(
+              std::string_view(opt_objstore_bucket), object.key);
+        } else {
+          ss = snapshot_objstore->delete_object(
+              std::string_view(opt_objstore_bucket), object.key);
+        }
         if (!ss.is_succ()) {
           err_msg.append(" error=");
           err_msg.append(ss.error_message());
@@ -3177,8 +3208,14 @@ int Consistent_archive::purge_index_entry(Archive_type arch_type) {
     err_msg.append(archive_keyid);
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG,
            err_msg.c_str());
-    objstore::Status ss = snapshot_objstore->delete_object(
-        std::string_view(opt_objstore_bucket), archive_keyid);
+    objstore::Status ss;
+    if (archive_keyid.back() == FN_LIBCHAR) {
+      ss = snapshot_objstore->delete_directory(
+          std::string_view(opt_objstore_bucket), archive_keyid);
+    } else {
+      ss = snapshot_objstore->delete_object(
+          std::string_view(opt_objstore_bucket), archive_keyid);
+    }
     if (!ss.is_succ()) {
       // If not exists, ignore it.
       if (ss.error_code() == objstore::Errors::SE_NO_SUCH_KEY) {
@@ -3254,7 +3291,7 @@ int Consistent_archive::remove_line_from_index(LOG_INFO *log_info,
 
   if (close_crash_safe_index_file(arch_type)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "failed to close_crash_safe_index_file.");
+           "failed to close_crash_safe_index_file in remove_line_from_index.");
     goto err;
   }
 
@@ -3266,7 +3303,8 @@ int Consistent_archive::remove_line_from_index(LOG_INFO *log_info,
   // index from the object store again and reopen it.
   if (move_crash_safe_index_file_to_index_file(arch_type)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "failed to move_crash_safe_index_file_to_index_file.");
+           "failed to move_crash_safe_index_file_to_index_file in "
+           "remove_line_from_index.");
     goto err;
   }
   {
@@ -3275,7 +3313,9 @@ int Consistent_archive::remove_line_from_index(LOG_INFO *log_info,
         std::string_view(opt_objstore_bucket), index_keyid, index_file_name);
     if (!ss.is_succ()) {
       std::string err_msg;
-      err_msg.assign("Failed to upload index file to object store: ");
+      err_msg.assign(
+          "Failed to upload index file to object store in "
+          "remove_line_from_index: ");
       err_msg.append(index_keyid);
       err_msg.append(" error=");
       err_msg.append(ss.error_message());
@@ -3304,13 +3344,12 @@ int Consistent_archive::show_innodb_persistent_files(
     innodb_prefix.append(CONSISTENT_INNODB_ARCHIVE_BASENAME);
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
-      // TODO: list_object need add recursive option,
-      // only return the files and directories at the first-level directory.
-      // innodb_archive_000001.tar or innodb_archive_000001.tar
+      // Only return the files and directories at the first-level directory.
+      // innodb_archive_000001.tar or innodb_archive_000001.tar.gz
       // or innodb_archive_000001/
       objstore::Status ss =
           snapshot_objstore->list_object(std::string_view(opt_objstore_bucket),
-                                         std::string_view(innodb_prefix), true,
+                                         std::string_view(innodb_prefix), false,
                                          start_after, finished, tmp_objects);
       if (!ss.is_succ()) {
         std::string err_msg;
@@ -3345,12 +3384,11 @@ int Consistent_archive::show_se_persistent_files(
     se_prefix.append(CONSISTENT_SE_ARCHIVE_BASENAME);
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
-      // TODO: list_object need add recursive option,
-      // only return the files and directories at the first-level directory.
-      // innodb_archive_000001.tar or innodb_archive_000001.tar
+      // Only return the files and directories at the first-level directory.
+      // innodb_archive_000001.tar or innodb_archive_000001.tar.gz
       // or innodb_archive_000001/
       objstore::Status ss = snapshot_objstore->list_object(
-          std::string_view(opt_objstore_bucket), se_prefix, true, start_after,
+          std::string_view(opt_objstore_bucket), se_prefix, false, start_after,
           finished, tmp_objects);
       if (!ss.is_succ()) {
         std::string err_msg;

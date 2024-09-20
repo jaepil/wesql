@@ -524,16 +524,12 @@ bool Consistent_recovery::recovery_mysql_innodb() {
   err_msg.append(mysql_real_data_home);
   LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 
-  std::string mysql_clone_file_name;
   std::string mysql_clone_basename;
-  mysql_clone_file_name.assign(m_mysql_archive_recovery_data_dir);
-  mysql_clone_file_name.append(m_mysql_clone_keyid +
-                               dirname_length(m_mysql_clone_keyid));
   mysql_clone_basename.assign(m_mysql_clone_keyid +
-                              dirname_length(m_mysql_clone_keyid));
+                                dirname_length(m_mysql_clone_keyid));
   size_t idx = mysql_clone_basename.find(".");
   // Check if with ".tar" or ".tar.gz" extension.
-  if (idx == std::string::npos) {
+  if (idx == std::string::npos) { // innodb_archive_000001/
     // Directly recover to mysql data directory.
     err_msg.assign("download mysql innodb clone dir: ");
     err_msg.append(" key=");
@@ -551,8 +547,13 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       return true;
     }
   } else {
-    std::string clone_name_ext = mysql_clone_basename.substr(idx);
+    std::string clone_name_ext = mysql_clone_basename.substr(idx); // .tar or .tar.gz
+    // innodb_archive_000001.tar.gz --> innodb_archive_000001
     mysql_clone_basename = mysql_clone_basename.substr(0, idx);
+    std::string mysql_clone_file_name;
+    mysql_clone_file_name.assign(m_mysql_archive_recovery_data_dir);
+    mysql_clone_file_name.append(m_mysql_clone_keyid +
+                                dirname_length(m_mysql_clone_keyid));
     // delete the local clone data if it exists.
     remove_file(mysql_clone_file_name);
     // download m_mysql_clone_keyid from object store
@@ -694,7 +695,7 @@ bool Consistent_recovery::recovery_smartengine() {
 
   err_msg.assign("recover persistent smartengine wals and meta ");
   err_msg.append(m_se_backup_keyid);
-  err_msg.append("to smartengine datadir ");
+  err_msg.append(" to smartengine datadir ");
   err_msg.append(smartengine_real_data_home);
   LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 
@@ -702,9 +703,8 @@ bool Consistent_recovery::recovery_smartengine() {
   se_backup_basename.assign(m_se_backup_keyid +
                             dirname_length(m_se_backup_keyid));
   size_t idx = se_backup_basename.find(".");
-  // se_archive_000001
-  if (idx == std::string::npos) {
-    // Directly recover to mysql data directory.
+  if (idx == std::string::npos) { //se_archive_000001/
+    // Directly recover se_archive_000001/ to smartengine data directory.
     err_msg.assign("download persistent smartengine dir: ");
     err_msg.append(" key=");
     err_msg.append(m_se_backup_keyid);
@@ -729,7 +729,7 @@ bool Consistent_recovery::recovery_smartengine() {
     // delete the local expired data if it exists.
     remove_file(se_file_name);
     // download m_se_backup_keyid from object store
-    err_msg.assign("download smartengine backup file: ");
+    err_msg.assign("download smartengine archive file: ");
     err_msg.append(" key=");
     err_msg.append(m_se_backup_keyid);
     err_msg.append(" file=");
@@ -770,7 +770,7 @@ bool Consistent_recovery::recovery_smartengine() {
       cmd << "tar -xf " << se_file_name << " -C "
           << m_mysql_archive_recovery_data_dir;
     }
-    err_msg.assign("untar mysql innodb clone file: ");
+    err_msg.assign("untar smartengine archive file: ");
     err_msg.append(cmd.str());
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     if ((err = system(cmd.str().c_str())) != 0) {
@@ -879,7 +879,7 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
       objstore::Status ss = recovery_objstore->list_object(
-          std::string_view(m_objstore_bucket), binlog_index_prefix, true,
+          std::string_view(m_objstore_bucket), binlog_index_prefix, false,
           start_after, finished, tmp_objects);
       if (!ss.is_succ()) {
         err_msg.assign("List persistent binlog index files failed: ");
@@ -1264,7 +1264,7 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
       std::vector<objstore::ObjectMeta> tmp_objects{};
       objstore::Status ss = objstore->list_object(
           std::string_view(opt_objstore_bucket), binlog_index_prefix,
-          true, start_after, finished, tmp_objects);
+          false, start_after, finished, tmp_objects);
       if (!ss.is_succ()) {
         err_msg.assign("List persistent binlog index files failed: ");
         err_msg.append(binlog_index_prefix);
@@ -1417,7 +1417,7 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(
   do {
     std::vector<objstore::ObjectMeta> tmp_objects;
     ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
-                                        binlog_keyid, true, start_after,
+                                        binlog_keyid, false, start_after,
                                         finished, tmp_objects);
     // The binlog present in persistent binlog-index.index should also exist in
     // object store.
@@ -1869,7 +1869,7 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
     do {
       std::vector<objstore::ObjectMeta> tmp_objects;
       ss = recovery_objstore->list_object(std::string_view(m_objstore_bucket),
-                                          binlog_keyid, true, start_after,
+                                          binlog_keyid, false, start_after,
                                           finished, objects);
       if (!ss.is_succ() &&
           ss.error_code() != objstore::Errors::SE_NO_SUCH_KEY) {

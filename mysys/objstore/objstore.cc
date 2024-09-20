@@ -159,6 +159,12 @@ Status ObjectStore::put_objects_from_dir(const std::string_view &src_dir,
     return Status(Errors::SE_INVALID, ENOTDIR, err_msg.c_str());
   }
 
+  if (!dst_objstore_dir_path.empty()) {
+    Status s = put_object(dst_objstore_bucket, dst_objstore_dir_path, "");
+    if (!s.is_succ()) {
+      return s;
+    }
+  }
   for (const fs::directory_entry &entry :
        fs::recursive_directory_iterator(src_dir_path)) {
     std::string key = fs::relative(entry.path(), src_dir_path);

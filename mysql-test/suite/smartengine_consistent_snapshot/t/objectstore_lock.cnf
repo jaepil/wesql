@@ -7,3 +7,5 @@ smartengine=                1
 default-storage-engine=     smartengine
 default-tmp-storage_engine= innodb
 cluster_objectstore_id=     'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+consistent_snapshot_smartengine_tar_mode='TAR'
+consistent_snapshot_innodb_tar_mode='TAR'

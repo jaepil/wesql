@@ -246,7 +246,7 @@ INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
                         testing::Values(
                             // "aws"
-                            // ",aliyun,"
+                            // "aliyun"
                             "local"));
 
 TEST_P(ObjstoreTest, reinitObjStoreApi)
@@ -657,6 +657,8 @@ TEST_P(ObjstoreTest, copyDir)
   // upload 1200 keys totally
   fs::remove_all(upload_local_dir);
   ASSERT_TRUE(fs::create_directories(upload_local_dir));
+
+  expect_keys.push_back(remote_dir);
   for (int i = 0; i < 30; i++) {
     std::string sub_dir = upload_local_dir + "/subdir" + std::to_string(i);
     ASSERT_TRUE(fs::create_directories(sub_dir));
@@ -686,7 +688,7 @@ TEST_P(ObjstoreTest, copyDir)
       ss = list_object(remote_dir, true, start_after, finished, objects);
       ASSERT_TRUE(ss.is_succ());
     }
-    ASSERT_EQ(expect_keys.size(), 1231);
+    ASSERT_EQ(expect_keys.size(), 1232);
     ASSERT_EQ(expect_keys.size(), objects.size());
     std::sort(expect_keys.begin(), expect_keys.end());
     std::sort(objects.begin(), objects.end(), [&](const objstore::ObjectMeta &a, objstore::ObjectMeta &b) { return a.key < b.key; });
