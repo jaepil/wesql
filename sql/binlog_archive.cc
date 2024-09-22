@@ -2433,7 +2433,7 @@ int Binlog_archive::find_next_log_slice(LOG_ARCHIVED_INFO *linfo) {
   return find_next_log_common(&m_index_file, linfo, true);
 }
 
-int Binlog_archive::get_binlog_last_consensus_index(
+int Binlog_archive::show_binlog_archive_task_info(
     uint64_t &consensus_index, uint64_t &consensus_term,
     std::string &mysql_binlog, my_off_t &mysql_binlog_pos,
     my_off_t &mysql_binlog_write_pos, std ::string &binlog,

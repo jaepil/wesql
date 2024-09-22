@@ -55,6 +55,39 @@ typedef enum Consistent_snapshot_tar_mode {
   CONSISTENT_SNAPSHOT_TAR_COMMPRESSION = 2
 } Consistent_snapshot_tar_mode;
 
+typedef enum Consistent_snapshot_archive_progress {
+  STAGE_NONE = 0,
+  STAGE_ACQUIRE_BACKUP_LOCK = 1,
+  STAGE_SMARTENGINE_SNAPSHOT,
+  STAGE_INNODB_CLONE,
+  STAGE_RELEASE_BACKUP_LOCK,
+  STAGE_WAIT_BINLOG_ARCHIVE,
+  STAGE_INNODB_SNAPSHOT_ARCHIVE,
+  STAGE_SMARTENGINE_SNAPSHOT_ARCHIVE,
+  STAGE_WRITE_CONSISTENT_SNAPSHOT_INDEX,
+  STAGE_END,
+  NUM_STAGES
+} Consistent_snapshot_archive_progress;
+
+typedef struct Consistent_snapshot_task_info {
+  char archive_progress[FN_REFLEN + 1];
+  char consistent_snapshot_archive_start_ts[iso8601_size];
+  char consistent_snapshot_archive_end_ts[iso8601_size];
+  uint64_t consensus_term;
+  char mysql_clone_name[FN_REFLEN + 1];
+  int64 innodb_clone_duration;
+  int64 innodb_archive_duration;
+  char se_backup_name[FN_REFLEN + 1];
+  uint64_t se_snapshot_id;
+  int64 se_backup_duration;
+  int64 se_archive_duration;
+  char mysql_binlog_file[FN_REFLEN + 1];
+  uint64_t mysql_binlog_pos;
+  uint64_t consensus_index;
+  char binlog_file[FN_REFLEN + 1];
+  int64 wait_binlog_archive_duration;
+} Consistent_snapshot_task_info;
+
 class Consistent_archive {
  public:
   Consistent_archive();
@@ -96,6 +129,8 @@ class Consistent_archive {
   int show_innodb_persistent_files(std::vector<objstore::ObjectMeta> &objects);
   int show_se_persistent_files(std::vector<objstore::ObjectMeta> &objects);
   int show_se_backup_snapshot(THD *thd, std::vector<uint64_t> &backup_ids);
+  int show_consistent_snapshot_task_info(
+      Consistent_snapshot_task_info &task_info);
   inline void set_objstore(objstore::ObjectStore *objstore) {
     snapshot_objstore = objstore;
   }
@@ -125,8 +160,11 @@ class Consistent_archive {
   uint64_t m_consensus_term;
   ulong m_innodb_tar_compression_mode;
   ulong m_se_tar_compression_mode;
+
+  std::atomic<Consistent_snapshot_archive_progress> m_atomic_archive_progress;
+  int64 m_consistent_snapshot_archive_start_ts;
+  int64 m_consistent_snapshot_archive_end_ts;
   bool archive_consistent_snapshot();
-  int archive_consistent_snapshot_data();
   int archive_consistent_snapshot_binlog();
   int archive_consistent_snapshot_cleanup(bool failed);
   int wait_for_consistent_archive(const std::chrono::seconds &timeout,
@@ -146,6 +184,7 @@ class Consistent_archive {
   int set_crash_safe_index_file_name(const char *base_file_name,
                                      Archive_type arch_type);
   int remove_line_from_index(LOG_INFO *log_info, Archive_type arch_type);
+  int64 m_wait_binlog_archive_duration;
 
   // Archive mysql innodb
   int generate_innodb_new_name();
@@ -163,6 +202,8 @@ class Consistent_archive {
   char m_purge_mysql_clone_index_file_name[FN_REFLEN];
   char m_crash_safe_mysql_clone_index_file_name[FN_REFLEN];
   uint64_t m_mysql_clone_next_index_number;
+  int64 m_innodb_clone_duration;
+  int64 m_innodb_archive_duration;
 
   // Archive smartengine.
   int generate_se_new_name();
@@ -191,6 +232,8 @@ class Consistent_archive {
   char m_se_snapshot_dir[FN_REFLEN + 1];
   char m_se_backup_name[FN_REFLEN + 1];
   char m_se_backup_keyid[FN_REFLEN + 1];
+  int64 m_se_backup_duration;
+  int64 m_se_archive_duration;
 
   // Archive consistent snapshot file
   bool write_consistent_snapshot_file();
@@ -204,7 +247,8 @@ class Consistent_archive {
   int purge_archive(const char *match_name, Archive_type arch_type);
   int purge_archive_garbage(const char *dirty_end_archive,
                             Archive_type arch_type);
-  int set_purge_index_file_name(const char *base_file_name, Archive_type arch_type);
+  int set_purge_index_file_name(const char *base_file_name,
+                                Archive_type arch_type);
   int open_purge_index_file(bool destroy, Archive_type arch_type);
   int close_purge_index_file(Archive_type arch_type);
   int sync_purge_index_file(Archive_type arch_type);

@@ -522,6 +522,7 @@ mkdir -p debug
            -DWITH_AUTHENTICATION_LDAP=0 \
            -DWITH_AUTHENTICATION_OCI=0 \
            -DWITH_COMPONENT_KEYRING_OCI=0 \
+           -DWITH_CLONE=1 \
            -DWITH_CURL=0 \
            -DWITH_KEYRING_HASHICORP=0 \
            -DWITH_KEYRING_OCI=0 \
@@ -575,6 +576,7 @@ mkdir -p release
            -DWITH_AUTHENTICATION_OCI=0 \
            -DWITH_COMPONENT_KEYRING_OCI=0 \
            -DWITH_CURL=0 \
+           -DWITH_CLONE=1 \
            -DWITH_KEYRING_HASHICORP=0 \
            -DWITH_KEYRING_OCI=0 \
 %endif # ssl_default

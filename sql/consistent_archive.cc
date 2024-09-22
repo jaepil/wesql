@@ -122,6 +122,8 @@ static void exec_binlog_error_action_abort(THD *thd, const char *err_string);
 static time_t calculate_auto_purge_lower_time_bound();
 static int convert_str_to_datetime(const char *str, ulong &my_time);
 static size_t convert_datetime_to_str(char *str, time_t ts);
+static const char *convert_archive_progress_to_str(
+    Consistent_snapshot_archive_progress archive_progress);
 /**
  * @brief Creates a consistent archive object and starts the consistent snapshot
  * archive thread.
@@ -343,6 +345,7 @@ Consistent_archive::Consistent_archive()
       m_consensus_term(0),
       m_innodb_tar_compression_mode(CONSISTENT_SNAPSHOT_NO_TAR),
       m_se_tar_compression_mode(CONSISTENT_SNAPSHOT_NO_TAR),
+      m_atomic_archive_progress(STAGE_NONE),
       m_mysql_clone_index_file(),
       m_crash_safe_mysql_clone_index_file(),
       m_purge_mysql_clone_index_file(),
@@ -382,6 +385,14 @@ Consistent_archive::Consistent_archive()
   m_consistent_snapshot_local_time[0] = '\0';
   m_consistent_snapshot_index_file_name[0] = '\0';
   m_crash_safe_consistent_snapshot_index_file_name[0] = '\0';
+
+  m_consistent_snapshot_archive_start_ts = 0;
+  m_consistent_snapshot_archive_end_ts = 0;
+  m_innodb_clone_duration = 0;
+  m_innodb_archive_duration = 0;
+  m_se_backup_duration = 0;
+  m_se_archive_duration = 0;
+  m_wait_binlog_archive_duration = 0;
 }
 
 void Consistent_archive::init_pthread_object() {
@@ -753,13 +764,23 @@ void Consistent_archive::run() {
     }
     mysql_mutex_unlock(&m_consistent_index_lock);
 
+    m_atomic_archive_progress.store(STAGE_NONE, std::memory_order_release);
     memset(m_consistent_snapshot_local_time, 0,
            sizeof(m_consistent_snapshot_local_time));
     memset(m_binlog_file, 0, sizeof(m_binlog_file));
     memset(m_mysql_binlog_file, 0, sizeof(m_mysql_binlog_file));
+    memset(m_mysql_clone_name, 0, sizeof(m_mysql_clone_name));
+    memset(m_se_backup_name, 0, sizeof(m_se_backup_name));
     m_mysql_binlog_pos = 0;
     m_consensus_index = 0;
     m_se_snapshot_id = 0;
+    m_consistent_snapshot_archive_start_ts = 0;
+    m_consistent_snapshot_archive_end_ts = 0;
+    m_innodb_clone_duration = 0;
+    m_innodb_archive_duration = 0;
+    m_se_backup_duration = 0;
+    m_se_archive_duration = 0;
+    m_wait_binlog_archive_duration = 0;
 
     // If the thread is killed, again archive last consistent snapshot, before
     // exit.
@@ -795,7 +816,9 @@ void Consistent_archive::run() {
       }
     }
 
-    archive_consistent_snapshot();
+    if (archive_consistent_snapshot()) {
+      m_atomic_archive_progress.store(STAGE_NONE, std::memory_order_release);
+    }
     // Wait for the next archive period.
     std::chrono::seconds timeout =
         std::chrono::seconds{opt_consistent_snapshot_archive_period};
@@ -891,6 +914,8 @@ bool Consistent_archive::archive_consistent_snapshot() {
   THD *thd = m_thd;
   bool ret = false;
   std::string err_msg;
+  int64 previous_time = 0;
+  int64 current_time = 0;
 
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
          "archive consistent snapshot.");
@@ -898,16 +923,24 @@ bool Consistent_archive::archive_consistent_snapshot() {
     Acquire shared backup lock to block concurrent backup. Acquire exclusive
     backup lock to block any concurrent DDL.
   */
+  m_consistent_snapshot_archive_start_ts = time(nullptr);
+  m_atomic_archive_progress.store(STAGE_ACQUIRE_BACKUP_LOCK,
+                                  std::memory_order_release);
   if ((ret = acquire_exclusive_backup_lock(
            thd, thd->variables.lock_wait_timeout, false))) {
     // MDL subsystem has to set an error in Diagnostics Area
     assert(thd->is_error());
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            thd->get_stmt_da()->message_text());
+    ret = true;
     goto err;
   }
+
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, "acquire backup lock.");
+  current_time = time(nullptr);
   // consisten archive smartengine wals and metas.
+  m_atomic_archive_progress.store(STAGE_SMARTENGINE_SNAPSHOT,
+                                  std::memory_order_release);
   if ((ret = archive_smartengine())) {
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "release backup lock.");
@@ -915,6 +948,10 @@ bool Consistent_archive::archive_consistent_snapshot() {
     ret = true;
     goto err;
   }
+  previous_time = current_time;
+  current_time = time(nullptr);
+  m_se_backup_duration = current_time - previous_time;
+
   err_msg.assign("smartengine backup binlog position ");
   err_msg.append(m_mysql_binlog_file);
   err_msg.append(":");
@@ -940,6 +977,8 @@ bool Consistent_archive::archive_consistent_snapshot() {
   }
 
   // consistent archive mysql innodb
+  m_atomic_archive_progress.store(STAGE_INNODB_CLONE,
+                                  std::memory_order_release);
   if ((ret = achive_mysql_innodb())) {
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "release backup lock.");
@@ -947,31 +986,64 @@ bool Consistent_archive::archive_consistent_snapshot() {
     ret = true;
     goto err;
   }
+  previous_time = current_time;
+  current_time = time(nullptr);
+  m_innodb_clone_duration = current_time - previous_time;
 
   // Release shared backup lock
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, "release backup lock.");
+  m_atomic_archive_progress.store(STAGE_RELEASE_BACKUP_LOCK,
+                                  std::memory_order_release);
   release_backup_lock(thd);
 
-  // persistent binlog.
+  // wait binlog persistent.
+  m_atomic_archive_progress.store(STAGE_WAIT_BINLOG_ARCHIVE,
+                                  std::memory_order_release);
   if (archive_consistent_snapshot_binlog() == 1) {
     ret = true;
     goto err;
   }
+  previous_time = current_time;
+  current_time = time(nullptr);
+  m_wait_binlog_archive_duration = current_time - previous_time;
 
-  // persistent consistent snapshot data.
-  if (archive_consistent_snapshot_data() == 1) {
+  // persistent innodb clone data
+  m_atomic_archive_progress.store(STAGE_INNODB_SNAPSHOT_ARCHIVE,
+                                  std::memory_order_release);
+  if (archive_innodb_data()) {
     ret = true;
     goto err;
   }
+  previous_time = current_time;
+  current_time = time(nullptr);
+  m_innodb_archive_duration = current_time - previous_time;
+
+  // persistent smartengine snapshot data
+  m_atomic_archive_progress.store(STAGE_SMARTENGINE_SNAPSHOT_ARCHIVE,
+                                  std::memory_order_release);
+  if (archive_smartengine_wals_and_metas()) {
+    ret = true;
+    goto err;
+  }
+  previous_time = current_time;
+  current_time = time(nullptr);
+  m_se_archive_duration = current_time - previous_time;
 
   // write consistent snapshot index entry.
+  m_atomic_archive_progress.store(STAGE_WRITE_CONSISTENT_SNAPSHOT_INDEX,
+                                  std::memory_order_release);
   if ((ret = write_consistent_snapshot_file())) {
+    ret = true;
     goto err;
   }
 
   strmake(m_mysql_binlog_file_previous_snapshot, m_mysql_binlog_file,
           sizeof(m_mysql_binlog_file_previous_snapshot) - 1);
   m_mysql_binlog_pos_previous_snapshot = m_mysql_binlog_pos;
+
+  // Consistent snapshot persistent end.
+  m_consistent_snapshot_archive_end_ts = time(nullptr);
+  m_atomic_archive_progress.store(STAGE_END, std::memory_order_release);
 
   err_msg.assign("archive consistent snapshot end: ");
   err_msg.append(m_consistent_snapshot_local_time);
@@ -996,21 +1068,6 @@ err:
   thd->m_digest = nullptr;
   thd->free_items();
   return ret;
-}
-
-int Consistent_archive::archive_consistent_snapshot_data() {
-  DBUG_TRACE;
-  DBUG_PRINT("info", ("archive_consistent_snapshot_data"));
-  DBUG_EXECUTE_IF("fault_injection_persistent_snapshot_data", { return 1; });
-  // persistent innodb clone data
-  if (archive_innodb_data()) {
-    return 1;
-  }
-  // persistent smartengine snapshot data
-  if (archive_smartengine_wals_and_metas()) {
-    return 1;
-  }
-  return 0;
 }
 
 int Consistent_archive::archive_consistent_snapshot_binlog() {
@@ -1783,6 +1840,38 @@ bool Consistent_archive::write_consistent_snapshot_file() {
   return false;
 err:
   return true;
+}
+
+int Consistent_archive::show_consistent_snapshot_task_info(
+    Consistent_snapshot_task_info &task_info) {
+  DBUG_TRACE;
+  Consistent_snapshot_archive_progress archive_progress =
+      m_atomic_archive_progress.load(std::memory_order_acquire);
+  strmake(task_info.archive_progress,
+          convert_archive_progress_to_str(archive_progress),
+          sizeof(task_info.archive_progress) - 1);
+  convert_datetime_to_str(task_info.consistent_snapshot_archive_start_ts,
+                          m_consistent_snapshot_archive_start_ts);
+  convert_datetime_to_str(task_info.consistent_snapshot_archive_end_ts,
+                          m_consistent_snapshot_archive_end_ts);
+  task_info.consensus_term = m_consensus_term;
+  strmake(task_info.mysql_clone_name, m_mysql_clone_name,
+          sizeof(task_info.mysql_clone_name) - 1);
+  task_info.innodb_clone_duration = m_innodb_clone_duration;
+  task_info.innodb_archive_duration = m_innodb_archive_duration;
+  strmake(task_info.se_backup_name, m_se_backup_name,
+          sizeof(task_info.se_backup_name) - 1);
+  task_info.se_snapshot_id = m_se_snapshot_id;
+  task_info.se_backup_duration = m_se_backup_duration;
+  task_info.se_archive_duration = m_se_archive_duration;
+  strmake(task_info.binlog_file, m_binlog_file,
+          sizeof(task_info.binlog_file) - 1);
+  strmake(task_info.mysql_binlog_file, m_mysql_binlog_file,
+          sizeof(task_info.mysql_binlog_file) - 1);
+  task_info.mysql_binlog_pos = m_mysql_binlog_pos;
+  task_info.consensus_index = m_consensus_index;
+  task_info.wait_binlog_archive_duration = m_wait_binlog_archive_duration;
+  return 0;
 }
 
 /**
@@ -3583,4 +3672,45 @@ static size_t convert_datetime_to_str(char *str, time_t ts) {
                  res->tm_year + 1900, res->tm_mon + 1, res->tm_mday,
                  res->tm_hour, res->tm_min, res->tm_sec);
   return len;
+}
+
+static const char *convert_archive_progress_to_str(
+    Consistent_snapshot_archive_progress archive_progress) {
+  const char *ret = nullptr;
+  switch (archive_progress) {
+    case STAGE_NONE:
+      ret = "NONE";
+      break;
+    case STAGE_ACQUIRE_BACKUP_LOCK:
+      ret = "ACQURIE_BACKUP_LOCK";
+      break;
+    case STAGE_INNODB_CLONE:
+      ret = "INNODB SNAPSHOT";
+      break;
+    case STAGE_INNODB_SNAPSHOT_ARCHIVE:
+      ret = "INNODB_SNAPSHOT_ARCHIVE";
+      break;
+    case STAGE_RELEASE_BACKUP_LOCK:
+      ret = "RELEASE_BACKUP_LOCK";
+      break;
+    case STAGE_SMARTENGINE_SNAPSHOT:
+      ret = "SMARTENGINE_SNAPSHOT";
+      break;
+    case STAGE_SMARTENGINE_SNAPSHOT_ARCHIVE:
+      ret = "SMARTENGINE_SNAPSHOT_ARCHIVE";
+      break;
+    case STAGE_WAIT_BINLOG_ARCHIVE:
+      ret = "WAIT_BINLOG_ARCHIVE";
+      break;
+    case STAGE_WRITE_CONSISTENT_SNAPSHOT_INDEX:
+      ret = "WRITE_CONSISTENT_SNAPSHOT_INDEX";
+      break;
+    case STAGE_END:
+      ret = "END";
+      break;
+    default:
+      ret = "NONE";
+      break;
+  }
+  return ret;
 }

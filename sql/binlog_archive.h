@@ -134,7 +134,7 @@ class Binlog_archive {
     binlog_objstore = objstore;
   }
   inline objstore::ObjectStore *get_objstore() { return binlog_objstore; }
-  int get_binlog_last_consensus_index(uint64_t &consensus_index,
+  int show_binlog_archive_task_info(uint64_t &consensus_index,
                                       uint64_t &consensus_term,
                                       std::string &mysql_binlog,
                                       my_off_t &mysql_binlog_pos,
