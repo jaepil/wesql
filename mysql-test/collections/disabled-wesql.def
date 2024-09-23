@@ -158,6 +158,7 @@ main.log_components_config                       : BUG#000 consensus log cause u
 main.wl14965                                     : BUG#42 core
 main.binlog_partial_json_warnings                : BUG#02 binlog=stmt
 main.locking_service                             : BUG#02 lock wait unmatched
+main.mysqlbinlog_raw_mode                        : BUG#00 mysqlbinlog raw mode
 
 binlog.binlog_reencrypt_logs                     : BUG#02 encrypt binlog
 binlog.binlog_rotate_binlog_master_key_errors    : BUG#02 encrypt binlog

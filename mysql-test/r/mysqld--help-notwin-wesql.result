@@ -101,6 +101,8 @@ The following options may be given as the first argument:
  socket creation.
  --binlog-archive    Indicate if binlog archive enable.
  (Defaults to on; use --skip-binlog-archive to disable.)
+ --binlog-archive-dir=name 
+ The location path for binlog archive
  --binlog-archive-expire-auto-purge 
  Controls whether the server shall automatically purge
  persistent binary log files or not. If this variable is
@@ -111,8 +113,8 @@ The following options may be given as the first argument:
  If non-zero, persistent binlog will be purged after
  binlog_archive_expire_seconds seconds. If zero, all
  binlog will be retained.
- --binlog-archive-interval=# 
- binlog persist to object store at the given interval
+ --binlog-archive-period=# 
+ binlog persist to object store at the given period
  --binlog-archive-slice-max-size=# 
  Binary log events will be persistent archived
  automatically when the size exceeds this value.
@@ -291,6 +293,38 @@ The following options may be given as the first argument:
  proxy user mapping should be done according to GRANT
  PROXY privilege definition.
  -r, --chroot=name   Chroot mysqld daemon during startup.
+ --clone[=name]      Enable or disable clone plugin. Possible values are ON,
+ OFF, FORCE (don't start if the plugin fails to load).
+ --clone-autotune-concurrency 
+ If concurrency is automatically tuned
+ (Defaults to on; use --skip-clone-autotune-concurrency to disable.)
+ --clone-block-ddl   If clone should block concurrent DDL
+ --clone-buffer-size=# 
+ buffer size used by clone for data transfer
+ --clone-ddl-timeout=# 
+ Time in seconds to wait for DDL lock
+ --clone-delay-after-data-drop=# 
+ Time in seconds to wait after removing data.
+ --clone-donor-timeout-after-network-failure=# 
+ Time in minutes up to which donor allows recipient to
+ re-connect and restart cloning after network failure.
+ --clone-enable-compression 
+ If compression is done at network
+ --clone-max-concurrency=# 
+ Maximum number of concurrent threads for clone
+ --clone-max-data-bandwidth=# 
+ Maximum File data bandwidth for clone in MiB/sec
+ --clone-max-network-bandwidth=# 
+ Maximum network bandwidth for clone in MiB/sec
+ --clone-ssl-ca[=name] 
+ SSL path name for Certificate Authority (CA) file
+ --clone-ssl-cert[=name] 
+ SSL path name of the public key certificate file
+ --clone-ssl-key[=name] 
+ SSL path name of the SSL private key file
+ --clone-valid-donor-list[=name] 
+ List of valid donor addresses allowed to clone from
+ HOST1:PORT1,HOST2:PORT2,...
  --cluster-objectstore-id=name 
  The identifier for data directory in object store. To
  ensure data consistency by accessing the object using the
@@ -311,169 +345,11 @@ The following options may be given as the first argument:
  memory counter
  --connection-memory-limit=# 
  Maximum amount of memory connection can consume
- --raft-replication[=name] 
- Enable or disable raft_replication plugin. Possible
- values are ON, OFF, FORCE (don't start if the plugin
- fails to load).
- --raft-replication-allow-no-valid-entry 
- allow consensus log without any valid entry
- --raft-replication-appliedindex-force-delay=# 
- force set a smaller appliedindex
- --raft-replication-archive-log-bin-index=name 
- File that holds the names for archived binary log files.
- --raft-replication-archive-recovery 
- archive recovery from the backup
- --raft-replication-archive-recovery-stop-datetime=name 
- Stop recovery the archive binlog at first event having a
- datetime equal or posterior to the argument; the argument
- must be a date and time in the local time zone, in any
- format accepted by the MySQL server for DATETIME and
- TIMESTAMP types, for example: 2004-12-25 11:25:56 (you
- should probably use quotes for your shell to set it
- properly).
- --raft-replication-auto-leader-transfer 
- whether to enable auto leader transfer in consensus layer
- (Defaults to on; use --skip-raft-replication-auto-leader-transfer to disable.)
- --raft-replication-auto-leader-transfer-check-seconds=# 
- the interval between a leader check its health for a
- transfer
- --raft-replication-auto-reset-match-index 
- enable auto reset match index when consensus follower has
- fewer logs
- (Defaults to on; use --skip-raft-replication-auto-reset-match-index to disable.)
- --raft-replication-check-commit-index-interval=# 
- check interval for slave calling checkCommitIndex
- --raft-replication-checksum 
- Checksum when consensus receive log. Disabled by default.
- --raft-replication-cluster-id=# 
- consensus cluster id
- --raft-replication-cluster-info=name 
- Consensus cluster nodes ip-port information
- --raft-replication-configure-change-timeout=# 
- Consensus configure change timeout (ms). Default 1 min
- --raft-replication-current-term=# 
- Consensus cluster nodes current term  information
- --raft-replication-disable-election 
- Disable consensus election and stepdown. Disabled by
- default.
- --raft-replication-disable-fifo-cache 
- disable consensus fifo cache (run with weak consensus
- mode)
- --raft-replication-dynamic-easyindex 
- Enable dynamic easy addr cidx. Enabled by default.
- (Defaults to on; use --skip-raft-replication-dynamic-easyindex to disable.)
- --raft-replication-election-timeout=# 
- Consensus election timeout
- --raft-replication-flow-control=name 
- consensus flow control (<-1: no log send, -1: only send
- log during heartbeat, 0: no flow control, >0: [TODO] flow
- control).
- --raft-replication-force-change-meta 
- Consensus cluster force to change meta
- --raft-replication-force-recover-index=# 
- Consensus cluster restore from leader set apply index
- point
- --raft-replication-force-reset-meta 
- Consensus cluster force to reset meta
- --raft-replication-force-single-mode 
- Consensus cluster force to use single mode
- --raft-replication-force-sync-epoch-diff=# 
- consensus forceSync epoch diff
- --raft-replication-heartbeat-thread-cnt=# 
- Number of consensus heartbeat thread
- --raft-replication-io-thread-cnt=# 
- Number of consensus io thread
- --raft-replication-large-batch-ratio=# 
- Large batch ratio of consensus server send at once
- --raft-replication-large-event-split-size=# 
- split size for large event, dangerous to change this
- variable
- --raft-replication-large-trx 
- consensus large trx or not
- (Defaults to on; use --skip-raft-replication-large-trx to disable.)
- --raft-replication-learner-heartbeat 
- enable send heartbeat to learner
- (Defaults to on; use --skip-raft-replication-learner-heartbeat to disable.)
- --raft-replication-learner-node 
- Consensus cluster learner node type
- --raft-replication-learner-pipelining 
- enable pipelining send msg to learner
- --raft-replication-learner-timeout=# 
- Consensus learner connection timeout
- --raft-replication-log-cache-size=# 
- Max cached logs size
- --raft-replication-log-level=name 
- consensus log level
- --raft-replication-log-type-node 
- Consensus cluster log type instance
- --raft-replication-max-delay-index=# 
- Max index delay for pipeline log delivery
- --raft-replication-max-log-size=# 
- Max one log size. (default: 20M)
- --raft-replication-max-packet-size=# 
- Max package size the consensus server send at once
- --raft-replication-min-delay-index=# 
- Min index delay for pipeline log delivery
- --raft-replication-mts-recover-use-index 
- Consensus cluster use idex to recover mts
- --raft-replication-new-follower-threshold=# 
- Max delay index to allow a learner becomes a follower
- --raft-replication-optimistic-heartbeat 
- whether to use optimistic heartbeat in consensus layer
- --raft-replication-pipelining-timeout=# 
- the timeout the consensus server cache the log
- (milliseconds)
- --raft-replication-prefetch-cache-size=# 
- Max cached logs size
-<<<<<<< HEAD
- --raft-replication-prefetch-wakeup-ratio=# 
-=======
- --consensus-replication-prefetch-wakeup-ratio=# 
->>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
- prefetch wakeup ratio 
- --raft-replication-prefetch-window-size=# 
- prefetch window size
- --raft-replication-purged-gtid=name 
- Consensus cluster set the purged gtid
-<<<<<<< HEAD
- --raft-replication-recover-backup 
- recover from the backup created with xtrabackup or
- snapshot
- --raft-replication-recover-new-cluster 
- recover new cluster from the snapshot of cloud storage or
- the backup created with xtrabackup
- --raft-replication-reset-prefetch-cache 
-=======
- --consensus-replication-recover-backup 
- recover from the backup created with xtrabackup or
- snapshot
- --consensus-replication-recover-new-cluster 
- recover new cluster from the snapshot of cloud storage or
- the backup created with xtrabackup
- --consensus-replication-reset-prefetch-cache 
->>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
- reset consensus prefetch_cache
- --raft-replication-send-timeout=# 
- Consensus send packet timeout
- --raft-replication-start-index=# 
- Consensus cluster start valid index
- --raft-replication-sync-follower-meta-interva=# 
- Interval of leader sync follower's meta for learner
- source
-<<<<<<< HEAD
- --raft-replication-with-cache-log 
-=======
- --consensus-replication-with-cache-log 
->>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
- set server to replicate with cache log
- --raft-replication-worker-thread-cnt=# 
- Number of consensus worker thread
  --consistent-snapshot-archive 
  Indicate if consistent snapshot archive enable.
  (Defaults to on; use --skip-consistent-snapshot-archive to disable.)
  --consistent-snapshot-archive-dir=name 
- The location path for consistent snapshot archive or
- binlog archive
+ The location path for consistent snapshot archive
  --consistent-snapshot-archive-period=# 
  A consistent snapshot is created to archive at the given
  interval
@@ -699,9 +575,38 @@ The following options may be given as the first argument:
  --init-slave=name   This option is deprecated. Use init_replica instead.
  -I, --initialize    Create the default database and exit. Create a super user
  with a random expired password and store it into the log.
+ --initialize-cluster-objectstore-id=name 
+ The identifier for data directory of source cluster in
+ object store. If initialize_from_objectstore is true, it
+ must not be empty.
+ --initialize-from-objectstore 
+ Initialzie instance using binlog and consistent snapshot
+ from object store.
  --initialize-insecure 
  Create the default database and exit. Create a super user
  with empty password.
+ --initialize-objectstore-bucket=name 
+ The object store bucket to store record as the source of
+ data during instance initialization. If
+ initialize_from_objectstore is true, it must not be
+ empty.
+ --initialize-objectstore-endpoint=name 
+ The endpoint of object store as the source of data during
+ instance initialization. If initialize_from_objectstore
+ is true, user can specify the endpoint of object store.
+ Ususally it's need to provide on non-AWS environment.
+ --initialize-objectstore-provider=name 
+ The provider of object store as the source of data during
+ instance.If initialize_from_objectstore is true, it must
+ not be empty.
+ --initialize-objectstore-region=name 
+ The region of object store as the source of data during
+ instance initialization.If initialize_from_objectstore is
+ true, it must not be empty.
+ --initialize-objectstore-use-https 
+ If initialize_from_objectstore is true, whether using
+ https to connect to objstore or not as the source of data
+ during instance initialization
  --interactive-timeout=# 
  The number of seconds the server waits for activity on an
  interactive connection before closing it
@@ -1325,6 +1230,145 @@ The following options may be given as the first argument:
  Allocation block size for query parsing and execution
  --query-prealloc-size=# 
  Persistent buffer for query parsing and execution
+ --raft-replication[=name] 
+ Enable or disable raft_replication plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --raft-replication-allow-no-valid-entry 
+ allow consensus log without any valid entry
+ --raft-replication-appliedindex-force-delay=# 
+ force set a smaller appliedindex
+ --raft-replication-archive-log-bin-index=name 
+ File that holds the names for archived binary log files.
+ --raft-replication-archive-recovery 
+ archive recovery from the backup
+ --raft-replication-archive-recovery-stop-datetime=name 
+ Stop recovery the archive binlog at first event having a
+ datetime equal or posterior to the argument; the argument
+ must be a date and time in the local time zone, in any
+ format accepted by the MySQL server for DATETIME and
+ TIMESTAMP types, for example: 2004-12-25 11:25:56 (you
+ should probably use quotes for your shell to set it
+ properly).
+ --raft-replication-auto-leader-transfer 
+ whether to enable auto leader transfer in consensus layer
+ (Defaults to on; use --skip-raft-replication-auto-leader-transfer to disable.)
+ --raft-replication-auto-leader-transfer-check-seconds=# 
+ the interval between a leader check its health for a
+ transfer
+ --raft-replication-auto-reset-match-index 
+ enable auto reset match index when consensus follower has
+ fewer logs
+ (Defaults to on; use --skip-raft-replication-auto-reset-match-index to disable.)
+ --raft-replication-check-commit-index-interval=# 
+ check interval for slave calling checkCommitIndex
+ --raft-replication-checksum 
+ Checksum when consensus receive log. Disabled by default.
+ --raft-replication-cluster-id=# 
+ consensus cluster id
+ --raft-replication-cluster-info=name 
+ Consensus cluster nodes ip-port information
+ --raft-replication-configure-change-timeout=# 
+ Consensus configure change timeout (ms). Default 1 min
+ --raft-replication-current-term=# 
+ Consensus cluster nodes current term  information
+ --raft-replication-disable-election 
+ Disable consensus election and stepdown. Disabled by
+ default.
+ --raft-replication-disable-fifo-cache 
+ disable consensus fifo cache (run with weak consensus
+ mode)
+ --raft-replication-dynamic-easyindex 
+ Enable dynamic easy addr cidx. Enabled by default.
+ (Defaults to on; use --skip-raft-replication-dynamic-easyindex to disable.)
+ --raft-replication-election-timeout=# 
+ Consensus election timeout
+ --raft-replication-flow-control=name 
+ consensus flow control (<-1: no log send, -1: only send
+ log during heartbeat, 0: no flow control, >0: [TODO] flow
+ control).
+ --raft-replication-force-change-meta 
+ Consensus cluster force to change meta
+ --raft-replication-force-recover-index=# 
+ Consensus cluster restore from leader set apply index
+ point
+ --raft-replication-force-reset-meta 
+ Consensus cluster force to reset meta
+ --raft-replication-force-single-mode 
+ Consensus cluster force to use single mode
+ --raft-replication-force-sync-epoch-diff=# 
+ consensus forceSync epoch diff
+ --raft-replication-heartbeat-thread-cnt=# 
+ Number of consensus heartbeat thread
+ --raft-replication-io-thread-cnt=# 
+ Number of consensus io thread
+ --raft-replication-large-batch-ratio=# 
+ Large batch ratio of consensus server send at once
+ --raft-replication-large-event-split-size=# 
+ split size for large event, dangerous to change this
+ variable
+ --raft-replication-large-trx 
+ consensus large trx or not
+ (Defaults to on; use --skip-raft-replication-large-trx to disable.)
+ --raft-replication-learner-heartbeat 
+ enable send heartbeat to learner
+ (Defaults to on; use --skip-raft-replication-learner-heartbeat to disable.)
+ --raft-replication-learner-node 
+ Consensus cluster learner node type
+ --raft-replication-learner-pipelining 
+ enable pipelining send msg to learner
+ --raft-replication-learner-timeout=# 
+ Consensus learner connection timeout
+ --raft-replication-log-cache-size=# 
+ Max cached logs size
+ --raft-replication-log-level=name 
+ consensus log level
+ --raft-replication-log-type-node 
+ Consensus cluster log type instance
+ --raft-replication-max-delay-index=# 
+ Max index delay for pipeline log delivery
+ --raft-replication-max-log-size=# 
+ Max one log size. (default: 20M)
+ --raft-replication-max-packet-size=# 
+ Max package size the consensus server send at once
+ --raft-replication-min-delay-index=# 
+ Min index delay for pipeline log delivery
+ --raft-replication-mts-recover-use-index 
+ Consensus cluster use idex to recover mts
+ --raft-replication-new-follower-threshold=# 
+ Max delay index to allow a learner becomes a follower
+ --raft-replication-optimistic-heartbeat 
+ whether to use optimistic heartbeat in consensus layer
+ --raft-replication-pipelining-timeout=# 
+ the timeout the consensus server cache the log
+ (milliseconds)
+ --raft-replication-prefetch-cache-size=# 
+ Max cached logs size
+ --raft-replication-prefetch-wakeup-ratio=# 
+ prefetch wakeup ratio 
+ --raft-replication-prefetch-window-size=# 
+ prefetch window size
+ --raft-replication-purged-gtid=name 
+ Consensus cluster set the purged gtid
+ --raft-replication-recover-backup 
+ recover from the backup created with xtrabackup or
+ snapshot
+ --raft-replication-recover-new-cluster 
+ recover new cluster from the snapshot of cloud storage or
+ the backup created with xtrabackup
+ --raft-replication-reset-prefetch-cache 
+ reset consensus prefetch_cache
+ --raft-replication-send-timeout=# 
+ Consensus send packet timeout
+ --raft-replication-start-index=# 
+ Consensus cluster start valid index
+ --raft-replication-sync-follower-meta-interva=# 
+ Interval of leader sync follower's meta for learner
+ source
+ --raft-replication-with-cache-log 
+ set server to replicate with cache log
+ --raft-replication-worker-thread-cnt=# 
+ Number of consensus worker thread
  --range-alloc-block-size=# 
  Allocation block size for storing ranges during
  optimization
@@ -1347,10 +1391,6 @@ The following options may be given as the first argument:
  --read-rnd-buffer-size=# 
  When reading rows in sorted order after a sort, the rows
  are read through this buffer to avoid a disk seeks
- --recovery-cluster-objectstore-id=name 
- The identifier for data directory of source cluster in
- object store. If recovery_from_objectstore is true, it
- must not be empty.
  --recovery-consistent-snapshot-only 
  Indicate whether to recover only consistent snapshot
  without binlog archive recovery.
@@ -1363,28 +1403,7 @@ The following options may be given as the first argument:
  --recovery-from-objectstore 
  Recovery binlog and consistent snapshot from object
  store.
- --recovery-objectstore-bucket=name 
- The object store bucket to store record as the source of
- recovery during instance initialization. If
- recovery_from_objectstore is true,
- recovery_objectstore_bucket must not be empty.
- --recovery-objectstore-endpoint=name 
- The endpoint of object store as the source of recovery
- during instance initialization. If need, user can specify
- the endpoint of object store. Ususally it's need to
- provide on non-AWS environment.
- --recovery-objectstore-provider=name 
- The provider of object store as the source of recovery
- during instance.If recovery_from_objectstore is true,
- recovery_objectstore_provider must not be empty.
- --recovery-objectstore-region=name 
- The region of object store as the source of recovery
- during instance initialization.If
- recovery_from_objectstore is true,
- recovery_objectstore_region must not be empty.
- --recovery-objectstore-use-https 
- Whether using https to connect to object store or not as
- the source of recovery during instance initialization
+ (Defaults to on; use --skip-recovery-from-objectstore to disable.)
  --regexp-stack-limit=# 
  Stack size limit for regular expressions matches
  --regexp-time-limit=# 
@@ -1624,6 +1643,7 @@ The following options may be given as the first argument:
  of replication partners
  --server-id-bits=#  Set number of significant bits in server-id
  --serverless        Enable the serverless
+ (Defaults to on; use --skip-serverless to disable.)
  --session-track-gtids=name 
  Controls the amount of global transaction ids to be
  included in the response packet sent by the
@@ -1943,6 +1963,8 @@ The following options may be given as the first argument:
  Enable or disable SMARTENGINE_PERF_CONTEXT_GLOBAL plugin.
  Possible values are ON, OFF, FORCE (don't start if the
  plugin fails to load).
+ --smartengine-persistent-cache-dir=name 
+ DBOptions::persistent_cache_diror SE
  --smartengine-persistent-cache-size=# 
  DBOptions::persistent_cache_size for SE
  --smartengine-purge-invalid-subtable-bg 
@@ -2238,9 +2260,10 @@ back-log 151
 big-tables FALSE
 bind-address *
 binlog-archive TRUE
+binlog-archive-dir (No default value)
 binlog-archive-expire-auto-purge TRUE
-binlog-archive-expire-seconds 0
-binlog-archive-interval 3
+binlog-archive-expire-seconds 2592000
+binlog-archive-period 3
 binlog-archive-slice-max-size 4194304
 binlog-archive-using-consensus-index TRUE
 binlog-cache-size 32768
@@ -2278,6 +2301,21 @@ character-set-server utf8mb4
 character-sets-dir MYSQL_CHARSETSDIR/
 check-proxy-users FALSE
 chroot (No default value)
+clone ON
+clone-autotune-concurrency TRUE
+clone-block-ddl FALSE
+clone-buffer-size 4194304
+clone-ddl-timeout 300
+clone-delay-after-data-drop 0
+clone-donor-timeout-after-network-failure 5
+clone-enable-compression FALSE
+clone-max-concurrency 16
+clone-max-data-bandwidth 0
+clone-max-network-bandwidth 0
+clone-ssl-ca (No default value)
+clone-ssl-cert (No default value)
+clone-ssl-key (No default value)
+clone-valid-donor-list (No default value)
 cluster-objectstore-id wesql_serverless_data
 collation-server utf8mb4_0900_ai_ci
 completion-type NO_CHAIN
@@ -2285,131 +2323,15 @@ concurrent-insert AUTO
 connect-timeout 10
 connection-memory-chunk-size 8192
 connection-memory-limit 18446744073709551615
-<<<<<<< HEAD
-raft-replication ON
-raft-replication-allow-no-valid-entry FALSE
-raft-replication-appliedindex-force-delay 0
-raft-replication-archive-log-bin-index 
-raft-replication-archive-recovery FALSE
-raft-replication-archive-recovery-stop-datetime 
-raft-replication-auto-leader-transfer TRUE
-raft-replication-auto-leader-transfer-check-seconds 60
-raft-replication-auto-reset-match-index TRUE
-raft-replication-check-commit-index-interval 1000
-raft-replication-checksum FALSE
-raft-replication-cluster-id 0
-raft-replication-cluster-info 
-raft-replication-configure-change-timeout 60000
-raft-replication-current-term 0
-raft-replication-disable-election FALSE
-raft-replication-disable-fifo-cache FALSE
-raft-replication-dynamic-easyindex TRUE
-raft-replication-election-timeout 5000
-raft-replication-flow-control 
-raft-replication-force-change-meta FALSE
-raft-replication-force-recover-index 0
-raft-replication-force-reset-meta FALSE
-raft-replication-force-single-mode FALSE
-raft-replication-force-sync-epoch-diff 0
-raft-replication-heartbeat-thread-cnt 0
-raft-replication-io-thread-cnt 4
-raft-replication-large-batch-ratio 50
-raft-replication-large-event-split-size 2097152
-raft-replication-large-trx TRUE
-raft-replication-learner-heartbeat TRUE
-raft-replication-learner-node FALSE
-raft-replication-learner-pipelining FALSE
-raft-replication-learner-timeout 0
-raft-replication-log-cache-size 67108864
-raft-replication-log-level LOG_ERROR
-raft-replication-log-type-node FALSE
-raft-replication-max-delay-index 50000
-raft-replication-max-log-size 20971520
-raft-replication-max-packet-size 131072
-raft-replication-min-delay-index 5000
-raft-replication-mts-recover-use-index FALSE
-raft-replication-new-follower-threshold 10000
-raft-replication-optimistic-heartbeat FALSE
-raft-replication-pipelining-timeout 1
-raft-replication-prefetch-cache-size 67108864
-raft-replication-prefetch-wakeup-ratio 2
-raft-replication-prefetch-window-size 10
-raft-replication-purged-gtid 
-raft-replication-recover-backup FALSE
-raft-replication-recover-new-cluster FALSE
-raft-replication-reset-prefetch-cache FALSE
-raft-replication-send-timeout 0
-raft-replication-start-index 1
-raft-replication-sync-follower-meta-interva 1
-raft-replication-with-cache-log FALSE
-raft-replication-worker-thread-cnt 4
 consistent-snapshot-archive TRUE
 consistent-snapshot-archive-dir (No default value)
 consistent-snapshot-archive-period 600
 consistent-snapshot-expire-auto-purge TRUE
 consistent-snapshot-expire-seconds 0
-consistent-snapshot-innodb-tar-mode TAR
+consistent-snapshot-innodb-tar-mode OFF
 consistent-snapshot-persistent-on-objectstore TRUE
 consistent-snapshot-smartengine-backup-checkpoint FALSE
-consistent-snapshot-smartengine-tar-mode TAR
-=======
-consensus-replication ON
-consensus-replication-allow-no-valid-entry FALSE
-consensus-replication-appliedindex-force-delay 0
-consensus-replication-archive-log-bin-index 
-consensus-replication-archive-recovery FALSE
-consensus-replication-archive-recovery-stop-datetime 
-consensus-replication-auto-leader-transfer TRUE
-consensus-replication-auto-leader-transfer-check-seconds 60
-consensus-replication-auto-reset-match-index TRUE
-consensus-replication-check-commit-index-interval 1000
-consensus-replication-checksum FALSE
-consensus-replication-cluster-id 0
-consensus-replication-cluster-info 
-consensus-replication-configure-change-timeout 60000
-consensus-replication-current-term 0
-consensus-replication-disable-election FALSE
-consensus-replication-disable-fifo-cache FALSE
-consensus-replication-dynamic-easyindex TRUE
-consensus-replication-election-timeout 5000
-consensus-replication-flow-control 
-consensus-replication-force-change-meta FALSE
-consensus-replication-force-recover-index 0
-consensus-replication-force-reset-meta FALSE
-consensus-replication-force-single-mode FALSE
-consensus-replication-force-sync-epoch-diff 0
-consensus-replication-heartbeat-thread-cnt 0
-consensus-replication-io-thread-cnt 4
-consensus-replication-large-batch-ratio 50
-consensus-replication-large-event-split-size 2097152
-consensus-replication-large-trx TRUE
-consensus-replication-learner-heartbeat TRUE
-consensus-replication-learner-node FALSE
-consensus-replication-learner-pipelining FALSE
-consensus-replication-learner-timeout 0
-consensus-replication-log-cache-size 67108864
-consensus-replication-log-level LOG_ERROR
-consensus-replication-log-type-node FALSE
-consensus-replication-max-delay-index 50000
-consensus-replication-max-log-size 20971520
-consensus-replication-max-packet-size 131072
-consensus-replication-min-delay-index 5000
-consensus-replication-new-follower-threshold 10000
-consensus-replication-optimistic-heartbeat FALSE
-consensus-replication-pipelining-timeout 1
-consensus-replication-prefetch-cache-size 67108864
-consensus-replication-prefetch-wakeup-ratio 2
-consensus-replication-prefetch-window-size 10
-consensus-replication-purged-gtid 
-consensus-replication-recover-backup FALSE
-consensus-replication-recover-new-cluster FALSE
-consensus-replication-reset-prefetch-cache FALSE
-consensus-replication-send-timeout 0
-consensus-replication-start-index 1
-consensus-replication-sync-follower-meta-interva 1
-consensus-replication-with-cache-log FALSE
-consensus-replication-worker-thread-cnt 4
->>>>>>> e18a07e1973 (chore: fix temporary disabled mtr case)
+consistent-snapshot-smartengine-tar-mode OFF
 console FALSE
 create-admin-listener-thread FALSE
 cte-max-recursion-depth 1000
@@ -2462,7 +2384,14 @@ init-file (No default value)
 init-replica 
 init-slave 
 initialize TRUE
+initialize-cluster-objectstore-id wesql_serverless_data
+initialize-from-objectstore FALSE
 initialize-insecure TRUE
+initialize-objectstore-bucket objbucket
+initialize-objectstore-endpoint (No default value)
+initialize-objectstore-provider local
+initialize-objectstore-region local_objstore_region
+initialize-objectstore-use-https FALSE
 interactive-timeout 28800
 internal-tmp-mem-storage-engine TempTable
 join-buffer-size 262144
@@ -2650,21 +2579,72 @@ profiling-history-size 15
 protocol-compression-algorithms zlib,zstd,uncompressed
 query-alloc-block-size 8192
 query-prealloc-size 8192
+raft-replication ON
+raft-replication-allow-no-valid-entry FALSE
+raft-replication-appliedindex-force-delay 0
+raft-replication-archive-log-bin-index 
+raft-replication-archive-recovery FALSE
+raft-replication-archive-recovery-stop-datetime 
+raft-replication-auto-leader-transfer TRUE
+raft-replication-auto-leader-transfer-check-seconds 60
+raft-replication-auto-reset-match-index TRUE
+raft-replication-check-commit-index-interval 1000
+raft-replication-checksum FALSE
+raft-replication-cluster-id 0
+raft-replication-cluster-info 
+raft-replication-configure-change-timeout 60000
+raft-replication-current-term 0
+raft-replication-disable-election FALSE
+raft-replication-disable-fifo-cache FALSE
+raft-replication-dynamic-easyindex TRUE
+raft-replication-election-timeout 5000
+raft-replication-flow-control 
+raft-replication-force-change-meta FALSE
+raft-replication-force-recover-index 0
+raft-replication-force-reset-meta FALSE
+raft-replication-force-single-mode FALSE
+raft-replication-force-sync-epoch-diff 0
+raft-replication-heartbeat-thread-cnt 0
+raft-replication-io-thread-cnt 4
+raft-replication-large-batch-ratio 50
+raft-replication-large-event-split-size 2097152
+raft-replication-large-trx TRUE
+raft-replication-learner-heartbeat TRUE
+raft-replication-learner-node FALSE
+raft-replication-learner-pipelining FALSE
+raft-replication-learner-timeout 0
+raft-replication-log-cache-size 67108864
+raft-replication-log-level LOG_ERROR
+raft-replication-log-type-node FALSE
+raft-replication-max-delay-index 50000
+raft-replication-max-log-size 20971520
+raft-replication-max-packet-size 131072
+raft-replication-min-delay-index 5000
+raft-replication-mts-recover-use-index FALSE
+raft-replication-new-follower-threshold 10000
+raft-replication-optimistic-heartbeat FALSE
+raft-replication-pipelining-timeout 1
+raft-replication-prefetch-cache-size 67108864
+raft-replication-prefetch-wakeup-ratio 2
+raft-replication-prefetch-window-size 10
+raft-replication-purged-gtid 
+raft-replication-recover-backup FALSE
+raft-replication-recover-new-cluster FALSE
+raft-replication-reset-prefetch-cache FALSE
+raft-replication-send-timeout 0
+raft-replication-start-index 1
+raft-replication-sync-follower-meta-interva 1
+raft-replication-with-cache-log FALSE
+raft-replication-worker-thread-cnt 4
 range-alloc-block-size 4096
 range-optimizer-max-mem-size 8388608
 read-buffer-size 131072
 read-only FALSE
 read-rnd-buffer-size 262144
-recovery-cluster-objectstore-id wesql_serverless_data
 recovery-consistent-snapshot-only FALSE
 recovery-consistent-snapshot-timestamp (No default value)
 recovery-consistent-snapshot-tmpdir recovery_tmp
-recovery-from-objectstore FALSE
-recovery-objectstore-bucket objectstore_bucket
-recovery-objectstore-endpoint (No default value)
-recovery-objectstore-provider local
-recovery-objectstore-region local_objectstore_region
-recovery-objectstore-use-https FALSE
+recovery-from-objectstore TRUE
 regexp-stack-limit 8000000
 regexp-time-limit 32
 relay-log relaylog
@@ -2708,7 +2688,7 @@ select-into-disk-sync FALSE
 select-into-disk-sync-delay 0
 server-id 1
 server-id-bits 32
-serverless FALSE
+serverless TRUE
 session-track-gtids OFF
 session-track-schema TRUE
 session-track-state-change FALSE
@@ -2818,6 +2798,7 @@ smartengine-parallel-wal-recovery FALSE
 smartengine-pause-background-work FALSE
 smartengine-perf-context ON
 smartengine-perf-context-global ON
+smartengine-persistent-cache-dir 
 smartengine-persistent-cache-size 0
 smartengine-purge-invalid-subtable-bg TRUE
 smartengine-query-trace ON

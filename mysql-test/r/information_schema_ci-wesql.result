@@ -118,7 +118,8 @@ WESQL_CLUSTER_LOCAL
 WESQL_CLUSTER_PREFETCH_CHANNEL
 columns_priv
 component
-concurrency_control
+consensus_applier_info
+consensus_applier_worker
 consensus_info
 db
 default_roles
