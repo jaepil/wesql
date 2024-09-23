@@ -58,6 +58,7 @@ int EasyNet::init(void* ptr) {
   clientHandler_.process = EasyNet::reciveProcess;
   clientHandler_.on_connect = EasyNet::onConnected;
   clientHandler_.on_disconnect = EasyNet::onDisconnected;
+  clientHandler_.on_close = EasyNet::onClosed;
   clientHandler_.cleanup = EasyNet::onClientCleanup;
   clientHandler_.get_packet_id = EasyNet::getPacketId;
   clientHandler_.user_data = (void*)workPool_;
@@ -120,27 +121,38 @@ NetAddressPtr EasyNet::recreateConnectionIfNecessary(const std::string& addr,
 
   easy_addr_t oldEasyAddr =
       std::dynamic_pointer_cast<EasyNetAddress>(oldAddr)->getAddr();
-  ;
   easy_addr_t easyAddr;
 
   easyAddr = easy_inet_str_to_addr(addr.c_str(), 0);
+  if (easyAddr.port == 0) {
+    easy_error_log("failed to reconnect %s, because IP address is invalid.",
+                   addr.c_str());
+    return oldAddr;
+  }
   easyAddr.cidx = oldEasyAddr.cidx;
 
   if (memcmp(&easyAddr, &oldEasyAddr, sizeof(easy_addr_t)) != 0) {
     char buf[32];
 
     easy_warn_log(
-        "EasyNet::disable server %s because IP address %s has changed\n",
+        "disconnect server %s because IP address %s has changed\n",
         addr.c_str(), easy_inet_addr_to_str(&oldEasyAddr, buf, 32));
     easy_connection_disconnect(eio_, oldEasyAddr);
 
+    if (getConnData(easyAddr, false) != nullptr) {
+      easy_error_log(
+          "failed to reconnect %s/%s, because the old connection is not "
+          "destroyed.",
+          addr.c_str(), easy_inet_addr_to_str(&easyAddr, buf, 32));
+      return oldAddr;
+    }
+
     if (server != nullptr) {
-      delConnData(oldEasyAddr);
       setConnData(easyAddr, server);
     }
 
     easy_warn_log(
-        "EasyNet::reconnect server %s after IP address changed to %s\n",
+        "reconnect server %s after IP address changed to %s\n",
         addr.c_str(), easy_inet_addr_to_str(&easyAddr, buf, 32));
     int ret = easy_connection_connect(eio_, easyAddr, &clientHandler_, timeout,
                                       NULL, EASY_CONNECT_AUTOCONN);
@@ -173,6 +185,15 @@ NetAddressPtr EasyNet::createConnection(const std::string& addr,
   easyAddr = easy_inet_str_to_addr(addr.c_str(), 0);
   easyAddr.cidx = index;
 
+  if (getConnData(easyAddr, false) != nullptr) {
+    char buffer[32];
+    easy_error_log(
+        "failed to reconnect %s/%s, because the old connection is not "
+        "destroyed.",
+        addr.c_str(), easy_inet_addr_to_str(&easyAddr, buffer, 32));
+    return nullptr;
+  }
+
   if (server != nullptr) setConnData(easyAddr, server);
 
   int ret = easy_connection_connect(eio_, easyAddr, &clientHandler_, timeout,
@@ -181,10 +202,11 @@ NetAddressPtr EasyNet::createConnection(const std::string& addr,
   // if (easy_connection_connect(eio_, easyAddr, &clientHandler_, timeout, NULL,
   // 0) != EASY_OK)
   {
+    char buffer[32];
     easy_error_log(
-        "failed to reconnect %s by invoking easy_connection_connect, error "
+        "failed to reconnect %s/%s by invoking easy_connection_connect, error "
         "code: %d",
-        addr.c_str(), ret);
+        addr.c_str(), easy_inet_addr_to_str(&easyAddr, buffer, 32), ret);
     delConnData(easyAddr);
     easyAddr.port = 0;
     return nullptr;
@@ -275,7 +297,13 @@ NetServerRef EasyNet::getConnDataAndSetFail(easy_connection_t* c, bool isFail) {
   std::lock_guard<std::mutex> lg(lock_);
   auto s = getConnData(addr, true);
   auto server = std::dynamic_pointer_cast<RemoteServer>(s);
-  if (server == nullptr) return s;
+  if (server == nullptr) {
+    easy_error_log(
+        "EasyNet::getConnDataAndSetFail the server %s for connection %s is "
+        "nullptr",
+        isFail ? "onDisconnected" : "onConnected", easy_connection_str(c));
+    return s;
+  }
   if (isFail) {
     if (!server->netError.load()) {
       if (server->c == c || server->c == nullptr)
@@ -570,6 +598,20 @@ int EasyNet::onDisconnected(easy_connection_t* c) {
     // occur when the address is allocated to another RemoteServer, for example
     // when a follower is downgraded to a learner.
   }
+  return 0;
+}
+
+int EasyNet::onClosed(easy_connection_t* c) {
+  auto srv = (Service*)(c->handler->user_data2);
+  auto addr = c->addr;
+
+  if (srv == NULL) return 0;
+
+  std::shared_ptr<Net> net = srv->getNet();
+  std::shared_ptr<EasyNet> easyNet = std::dynamic_pointer_cast<EasyNet>(net);
+
+  if (srv != NULL) easyNet->delConnData(addr);
+
   return 0;
 }
 

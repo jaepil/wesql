@@ -113,6 +113,7 @@ class EasyNet : public Net {
   static int paxosEncode(easy_request_t* r, void* data);
   static int onConnected(easy_connection_t* c);
   static int onDisconnected(easy_connection_t* c);
+  static int onClosed(easy_connection_t* c);
   static int onClientCleanup(easy_request_t* r, void* apacket);
   static uint64_t getPacketId(easy_connection_t* c, void* data);
 

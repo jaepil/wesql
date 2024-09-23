@@ -138,6 +138,9 @@ message PaxosMsg
     APPEND = 1;
   }
   optional MsgErrorType msgError = 30;
+
+  //For auto leader transfer, RequestVote/Heartbeat/AppendEntries Responce
+  optional bool logType = 31;
 };
 
 message TestMsg1

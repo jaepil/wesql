@@ -223,6 +223,7 @@ class RemoteServer : public Server {
   bool voted;
   bool isLeader;
   bool isLearner;
+  bool logType;
   NetAddressPtr addr;
   std::shared_ptr<Service> srv;
   bool hasMatched;

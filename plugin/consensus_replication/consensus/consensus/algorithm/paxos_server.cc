@@ -403,8 +403,8 @@ void RemoteServer::sendMsgFuncInternal(bool lockless, bool force, void* ptr,
                                               getConnTimeout());
     if (addr == nullptr || !addr->isValid()) {
       easy_error_log(
-          "failed to connect server %ld, now this server is disconnected, try "
-          "to reconnect.\n",
+          "failed to connect server %ld, now this server address is invalid, "
+          "try to reconnect.\n",
           serverId);
     }
     return;

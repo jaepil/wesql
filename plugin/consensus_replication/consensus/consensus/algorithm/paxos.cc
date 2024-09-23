@@ -1555,6 +1555,7 @@ int Paxos::onRequestVote(PaxosMsg* msg, PaxosMsg* rsp) {
   std::lock_guard<std::mutex> lg(lock_);
   if (shutdown_.load()) return PaxosErrorCode::PE_SHUTDOWN;
   rsp->set_serverid(localServer_->serverId);
+  rsp->set_logtype(localServer_->logType);
 
   // Note: a learner can vote in elections when a candidate thinks it is a
   // follower. This is necessary in the situation in which a learner has been
@@ -1802,6 +1803,8 @@ int Paxos::onRequestVoteResponce(PaxosMsg* msg) {
 
   server->setLastAckEpoch(currentEpoch_);
 
+  if (msg->has_logtype()) server->logType = msg->logtype();
+
   if (msg->term() > currentTerm_) {
     easy_log(
         "Server %d : New Term in onRequestVoteResponce !! server %d 's "
@@ -2006,6 +2009,7 @@ bool Paxos::onHeartbeatOptimistically_(PaxosMsg* msg, PaxosMsg* rsp) {
   // if `msg->serverid()` does not match local server id, leader will fail to
   // process this responce
   rsp->set_serverid(msg->serverid());
+  rsp->set_logtype(localServer_->logType);
   rsp->set_issuccess(false);
   rsp->set_ignorecheck(true);
   rsp->set_term(currentTerm);
@@ -2045,6 +2049,7 @@ int Paxos::onAppendLog(PaxosMsg* msg, PaxosMsg* rsp) {
     rsp->set_msgid(msg->msgid());
     rsp->set_msgtype(AppendLogResponce);
     rsp->set_serverid(msg->serverid());
+    rsp->set_logtype(localServer_->logType);
     rsp->set_issuccess(false);
     rsp->set_lastlogindex(lastLogIndex);
     rsp->set_ignorecheck(true);
@@ -2056,6 +2061,7 @@ int Paxos::onAppendLog(PaxosMsg* msg, PaxosMsg* rsp) {
   rsp->set_msgid(msg->msgid());
   rsp->set_msgtype(AppendLogResponce);
   rsp->set_serverid(msg->serverid());
+  rsp->set_logtype(localServer_->logType);
   /* when add node and the node does not complete the initialization */
   if (NULL == localServer_) {
     int i = 0;
@@ -2530,6 +2536,8 @@ int Paxos::onAppendLogResponce(PaxosMsg* msg) {
         localServer_->serverId, msg->msgid(), msg->serverid());
     return -2;
   }
+
+  if (msg->has_logtype()) server->logType = msg->logtype();
 
   if (state_ == FOLLOWER &&
       (server->learnerSource != localServer_->serverId || !server->isLearner)) {
@@ -3740,7 +3748,7 @@ uint64_t Paxos::leaderTransferIfNecessary_(uint64_t epoch) {
     std::shared_ptr<RemoteServer> server =
         std::dynamic_pointer_cast<RemoteServer>(e);
     if (server->electionWeight >= localServer_->electionWeight &&
-        server->getLastAckEpoch() >= epoch) {
+        !server->logType && server->getLastAckEpoch() >= epoch) {
       run = true;
       choices.push_back(server->serverId);
     }
