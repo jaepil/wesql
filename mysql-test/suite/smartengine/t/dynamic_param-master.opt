@@ -1,1 +1,0 @@
---smartengine_flush_log_at_trx_commit=1 --smartengine_max_background_compactions=4 --smartengine_max_background_flushes=2

@@ -1,9 +1,0 @@
---source suite/smartengine/include/have_smartengine.inc
-
-# 
-# REPAIR TABLE statements
-#
-
---source repair_table.inc
-
---source suite/smartengine/include/check_smartengine_log_error.inc

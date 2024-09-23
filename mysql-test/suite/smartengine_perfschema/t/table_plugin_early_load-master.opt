@@ -1,3 +1,0 @@
-$PFS_EXAMPLE_PLUGIN_EMPLOYEE_OPT
---early_plugin_load=$PFS_EXAMPLE_PLUGIN_EMPLOYEE
---default_storage_engine=smartengine

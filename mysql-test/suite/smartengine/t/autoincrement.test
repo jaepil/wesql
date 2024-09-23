@@ -1,4 +1,0 @@
---source suite/smartengine/include/have_smartengine.inc
-
---echo # The test checks AUTO_INCREMENT capabilities that are not supported by smartengine-SE.
---source suite/smartengine/include/check_smartengine_log_error.inc

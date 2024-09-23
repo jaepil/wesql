@@ -1,2 +1,0 @@
---loose-performance-schema-instrument='statement/%=OFF'
---default_storage_engine=smartengine

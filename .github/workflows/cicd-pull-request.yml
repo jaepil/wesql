@@ -3,84 +3,34 @@ name: CICD-PULL-REQUEST
 on:
   pull_request:
 
-env:
-  GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
 jobs:
-  enable-runner:
-    uses: wesql/wesql-cd/.github/workflows/enable-gke-runner.yml@main
-    with:
-      GITHUB_REPO: "${{ github.repository }}"
-      RUNNER_LABEL: "gke-oracle8-amd-runner"
-    secrets: inherit
-
-  build-test:
-    needs: [ enable-runner ]
-    name: make install mtr
-    runs-on: [self-hosted, gke-oracle8-amd-runner ]
+  build-and-unit-test:
+    name: build-and-unit-test
+    runs-on: ubuntu-latest
     steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.11.0
+      - name: Consensus library checkout code
+        uses: actions/checkout@v3
+      - name: Install prerequisites
+        run: |
+          sudo apt update
+          sudo apt install -y cmake \
+                              libssl-dev \
+                              libgflags-dev \
+                              libsnappy-dev
+          sudo ln -s /usr/bin/cmake /usr/bin/cmake3
+          sudo ln -s /usr/bin/ctest /usr/bin/ctest3
+      - name: make
+        run: |
+          mkdir bu
+          cd bu
+          cmake3 -B ./ -D WITH_DEBUG=ON -D BUILD_WITH_SSL=system -D OPENSSL_VERSION_MAJOR=3  -D BUILD_WITH_PROTOBUF=bundled -D WITH_TEST=ON -D WITH_FAIL_POINT=ON -D WITH_EXAMPLES=ON -D WITH_INSTALL=ON ..
+          make -j$(echo "4 * $(nproc)" | bc)
+      - name: make unit-test
+        run: |
+          cd bu
+          make -j$(echo "4 * $(nproc)" | bc) unit-test
+      - name: Upload LastTest.log
+        uses: actions/upload-artifact@v2
         with:
-          all_but_latest: true
-          access_token: ${{ env.GITHUB_TOKEN }}
-
-      - uses: actions/checkout@v3
-      - name: cmake
-        run: |
-          sudo yum install -y perl-core
-          sudo perl -MCPAN -e 'install IO::Pty'
-          sudo perl -MCPAN -e 'install IO::Tty'
-          sudo cpan Expect
-          cp /home/mysql/boost_1_77_0.tar.bz2 ${{ github.workspace }}/extra
-          sudo mkdir -pv /u01
-          sudo chown -R mysql:mysql /u01
-          sudo chown -R mysql:mysql ./
-          sudo yum install python3-devel python3-pip mysql-devel
-          sudo pip3 install mysqlclient
-          sudo ln -sfn /usr/bin/python3 /usr/bin/python
-          mkdir -pv bu
-          cd bu
-          cmake3 ../ -B ./ \
-            -DCMAKE_INSTALL_PREFIX="/u01/mysql" \
-            -DWITH_SSL="system" \
-            -DCMAKE_BUILD_TYPE="Debug" \
-            -DWITH_WESQL_TEST=1   \
-            -DDOWNLOAD_BOOST=1 \
-            -DWITH_BOOST="../extra/"
-
-      - name: make install
-        run: |
-          cd bu
-          make -j$(echo "$(nproc)") && make install
-
-      - name: run mtr on normal file
-        run: |
-          cd bu
-          cd mysql-test
-          ./mysql-test-run.pl --suite=consensus_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
-          ./mysql-test-run.pl --suite=smartengine,smartengine_consistent_snapshot  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests
-
-      - name: view logs of mtr on normal file
-        if: ${{ failure() }}
-        run: |
-          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
-              echo "logfile:"$logfile
-              cat $logfile
-          done
-
-      - name: run mtr on serverless
-        run: |
-          cd bu
-          cd mysql-test
-          CUR_DIR=`pwd`
-          ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
-              --initialize="--serverless=true" --initialize="--plugin-load-add=mysql_clone.so"
-
-      - name: view logs of mtr objstore
-        if: ${{ failure() }}
-        run: |
-          for logfile in $( ls bu/mysql-test/var/log/*/*.log ); do
-              echo "logfile:"$logfile
-              cat $logfile
-          done
+          name: LastTest.log
+          path: bu/consensus/unittest/Testing/Temporary/LastTest.log

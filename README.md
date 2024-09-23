@@ -1,45 +1,43 @@
-<div align="center">
-  <h1>WeSQL Server</h1>
-</div>
+# Introduction
 
-WeSQL server is a MySQL 8.0 branch that has added a high-compression transaction storage engine called smartengine.WeSQL server is a free, fully compatible and open source drop-in replacement for MySQL 8.0.
+ApeCloud Consensus Library is an open-source C++ library implementing the Raft consensus algorithm. And it is forked from [Alibaba X-Paxos](https://github.com/polardb/polardbx-engine/tree/main/extra/IS). The original goal of this library is to provide a high-performance and easy-to-use implementation of the Raft algorithm for [ApeCloud MySQL Server](https://github.com/apecloud/wesql-server). And this library can also be used in other systems easily.
 
-SmartEngine adopts the LSM-tree architecture, and its key features include:
-- ***Transaction Support***:As a transactional storage engine, smartengine provides full transaction support, ensuring data consistency and reliability. It supports transaction commit, rollback, and concurrent control.
-- ***Low Storage Cost***: SmartEngine effectively reduces storage space usage through technologies such as tightly packed storage formats, high compression algorithms, layered storage, and automatic space fragmentation cleanup.
 
-<h1>Quick start</h1>
+# Building
 
-You can install the wesql server by compiling the source code, following the same method as the official MySQL 8.0.The compilation steps in an AWS EC2 environment are [here](./storage/smartengine/core/doc/compile_on_ec2.md)
+Pre-requisites:
 
-The wesql server is fully compatible with the usage methods of MySQL 8.0. As a storage engine plugin for MySQL, smartengine is used in the same way as other storage engines, such as InnoDB.For example, create a smartengine table: 
+* git
+* cmake(> 3.13)
+* gcc(>7) 
 
-```SQL
-CREATE TABLE my_table (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255),
-    age INT
-) ENGINE=SMARTENGINE;
+The following commands work in RHEL/CentOS. Haven't tried in other operation systems. 
+
+```shell
+sudo yum install openssl-devel
+
+# needed by rocksdb, for unittests
+sudo yum install gflags-devel snappy-devel
+
+git clone git@github.com:apecloud/consensus-library.git -b develop
+
+cd consensus-library
+ 
+mkdir bu && cd bu
+
+# debug mode(-D WITH_DEBUG=ON), complie and run the unittest(-D WITH_TEST=ON)
+# Fail Point is enabled (-D WITH_FAIL_POINT=ON), complie examples(-D WITH_EXAMPLES=ON)
+cmake3 -B ./ -D WITH_DEBUG=ON -D BUILD_WITH_PROTOBUF=bundled -D WITH_TEST=ON -D WITH_FAIL_POINT=ON -D WITH_EXAMPLES=ON -D WITH_INSTALL=ON ..
+
+make -j$(echo "4 * $(nproc)" | bc)
+
+# unittest
+make -j$(echo "4 * $(nproc)" | bc) unit-test
+
+# examples, see how to sun in example dir
+make -j$(echo "4 * $(nproc)" | bc) consensus_example
 ```
 
-<h1>Document</h1>
+# How to use
 
-* [Usage Limits](./storage/smartengine/core/doc/usage_limits.md)
-* [Parameter Template](./storage/smartengine/core/doc/parameter_template.md)
-* [Cost-Effectiveness Comparison](./storage/smartengine/core/doc/cost_effectiveness_comparison.md)
-
-<h1>Running Tests</h1>
-There are numberous MTR cases related to smartengine.You can execute them using the following command:
-
-```
-nohup sh autotest_smartengine.sh &
-```
-The execution results are saved in the smartengine.mtrresult.origin and smartengine.mtrresult.retry files.
-
-
-<h1>Contributing</h1>
-We welcome contributions to WeSQL server! If you have any ideas, bug reports, or feature requests, please feel free to open an issue or submit a pull request.
-
-<h1>Licensing</h1>
-WeSQL server is dedicated to keeping open source open.For this project, we are using version 2 of the GNU General Public License(GPLv2).
-
+see examples in [examples](consensus/example/) and [unittest](consensus/unittest/).

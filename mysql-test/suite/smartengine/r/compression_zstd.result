@@ -1,2 +1,0 @@
-create table t (id int primary key) ENGINE = SMARTENGINE;
-drop table t;

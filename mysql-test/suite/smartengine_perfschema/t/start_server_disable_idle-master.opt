@@ -1,2 +1,0 @@
---loose-performance-schema-instrument='idle=OFF'
---default_storage_engine=smartengine
