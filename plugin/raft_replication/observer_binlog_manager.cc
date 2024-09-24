@@ -165,10 +165,17 @@ static int consensus_binlog_manager_before_flush(Binlog_manager_param *param) {
   /* If the plugin is not running, return failed. */
   if (!plugin_is_consensus_replication_running()) return 1;
 
-  /* The logger node is not allowed to write to consensus log. */
-  if (opt_cluster_log_type_instance) return 1;
-
   THD *thd = param->thd;
+
+  /* The logger node is not allowed to write to consensus log. */
+  if (opt_cluster_log_type_instance) {
+    thd->mark_transaction_to_rollback(true);
+    thd->commit_error = THD::CE_COMMIT_ERROR;
+    my_error(ER_BINLOG_LOGGING_IMPOSSIBLE, MYF(0),
+             "Consensus Logger disabled write binlog");
+    return 1;
+  }
+
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
   if (thd->consensus_context.consensus_term == 0)
