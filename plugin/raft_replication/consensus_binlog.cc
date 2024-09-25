@@ -1836,7 +1836,7 @@ static int append_one_log_entry(ConsensusLogEntry &log,
     /* Recalcute the checksum because the log_end_pos is changed */
     uint32 checksum;
     if (!error && opt_consensus_checksum) {
-      if (!calc_consensus_crc(consensus_log_manager.get_log_cache(),
+      if (calc_consensus_crc(consensus_log_manager.get_log_cache(),
                               checksum)) {
         LogPluginErr(
             ERROR_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR,
