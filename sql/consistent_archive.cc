@@ -926,7 +926,8 @@ bool Consistent_archive::archive_consistent_snapshot() {
   m_consistent_snapshot_archive_start_ts = time(nullptr);
   m_atomic_archive_progress.store(STAGE_ACQUIRE_BACKUP_LOCK,
                                   std::memory_order_release);
-  if ((ret = acquire_exclusive_backup_lock(
+  if (DBUG_EVALUATE_IF("fault_injection_acquire_backup_lock", 1, 0) ||
+      (ret = acquire_exclusive_backup_lock(
            thd, thd->variables.lock_wait_timeout, false))) {
     // MDL subsystem has to set an error in Diagnostics Area
     assert(thd->is_error());
@@ -961,7 +962,7 @@ bool Consistent_archive::archive_consistent_snapshot() {
   err_msg.append(":");
   err_msg.append(std::to_string(m_mysql_binlog_pos_previous_snapshot));
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-  if (!DBUG_EVALUATE_IF("force_consistent_snapshot_persistent", 1, 0)) {
+  if (DBUG_EVALUATE_IF("force_consistent_snapshot_persistent", 0, 1)) {
     // Check whether binlog had changed.
     if (compare_log_name(m_mysql_binlog_file_previous_snapshot,
                          m_mysql_binlog_file) == 0 &&
@@ -1073,7 +1074,7 @@ err:
 int Consistent_archive::archive_consistent_snapshot_binlog() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("archive_consistent_snapshot_binlog"));
-  DBUG_EXECUTE_IF("fault_injection_persistent_snapshot_binlog", { return 1; });
+  DBUG_EXECUTE_IF("fault_injection_wait_persistent_binlog", { return 1; });
   THD *thd = m_thd;
   int ret = 0;
   std::string err_msg;
@@ -1139,7 +1140,7 @@ int Consistent_archive::archive_consistent_snapshot_binlog() {
     // wait archive binlog complete.
     // And update mysql binlog filename to the archived binlog filename.
     if (m_consensus_index > 0) {
-      errval = binlog_archive_wait_for_update(thd, m_mysql_binlog_file,
+      errval = binlog_archive_wait_for_archive(thd, m_mysql_binlog_file,
                                               m_binlog_file, m_mysql_binlog_pos,
                                               m_consensus_index);
     } else {
@@ -1151,7 +1152,7 @@ int Consistent_archive::archive_consistent_snapshot_binlog() {
            err_msg.c_str());
     // wait archive binlog complete.
     // And update mysql binlog filename to the archived binlog filename.
-    errval = binlog_archive_wait_for_update(
+    errval = binlog_archive_wait_for_archive(
         thd, m_mysql_binlog_file, m_binlog_file, m_mysql_binlog_pos, 0);
 #endif
     if (errval != 0) {
@@ -1210,7 +1211,7 @@ int Consistent_archive::archive_consistent_snapshot_cleanup(bool failed) {
 bool Consistent_archive::achive_mysql_innodb() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("achive_mysql_innodb"));
-  DBUG_EXECUTE_IF("fault_injection_innodb_clone", { return true; });
+  DBUG_EXECUTE_IF("fault_injection_innodb_archive", { return true; });
   THD *thd = m_thd;
   plugin_ref plugin{};
   std::string err_msg;
@@ -1299,7 +1300,7 @@ bool Consistent_archive::achive_mysql_innodb() {
 int Consistent_archive::archive_innodb_data() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("archive_innodb_data"));
-  DBUG_EXECUTE_IF("fault_injection_persistent_innodb_data", { return 1; });
+  DBUG_EXECUTE_IF("fault_injection_persistent_innodb_snapshot", { return 1; });
   std::string err_msg;
   int err = 0;
 
@@ -1361,7 +1362,9 @@ int Consistent_archive::archive_innodb_data() {
     // remove local innodb_archive_000001/ dir
     remove_file(m_mysql_innodb_clone_dir);
 
-    if (!ss.is_succ()) {
+    if (DBUG_EVALUATE_IF("fault_injection_put_innodb_snapshot_to_objstore", 1,
+                         0) ||
+        !ss.is_succ()) {
       err_msg.append(" error=");
       err_msg.append(ss.error_message());
       LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
@@ -1386,7 +1389,9 @@ int Consistent_archive::archive_innodb_data() {
     objstore::Status ss = snapshot_objstore->put_objects_from_dir(
         clone_name, std::string_view(opt_objstore_bucket), clone_keyid);
     remove_file(clone_name);
-    if (!ss.is_succ()) {
+    if (DBUG_EVALUATE_IF("fault_injection_put_innodb_snapshot_to_objstore", 1,
+                         0) ||
+        !ss.is_succ()) {
       err_msg.append(" error=");
       err_msg.append(ss.error_message());
       LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
@@ -1432,7 +1437,7 @@ int Consistent_archive::archive_innodb_data() {
 bool Consistent_archive::archive_smartengine() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("archive_smartengine"));
-  DBUG_EXECUTE_IF("fault_injection_smartengine_hotbackup", { return true; });
+  DBUG_EXECUTE_IF("fault_injection_smartengine_archive", { return true; });
   THD *thd = m_thd;
   uint64_t backup_snapshot_id = 0;
   std::string binlog_file;
@@ -1650,7 +1655,9 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
           std::string_view(opt_objstore_bucket), se_keyid,
           std::string_view(ds_source));
 
-      if (!ss.is_succ()) {
+      if (DBUG_EVALUATE_IF(
+              "fault_injection_put_smartengine_snapshot_to_objstore", 1, 0) ||
+          !ss.is_succ()) {
         err_msg.assign(
             "persistent smartengine backup file to object store failed: ");
         err_msg.append("key=");
@@ -1755,7 +1762,9 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
     remove_file(m_se_snapshot_dir);
     strmake(m_se_backup_keyid, se_keyid.c_str(), sizeof(m_se_backup_keyid) - 1);
 
-    if (!ss.is_succ()) {
+    if (DBUG_EVALUATE_IF("fault_injection_put_smartengine_snapshot_to_objstore",
+                         1, 0) ||
+        !ss.is_succ()) {
       err_msg.assign(
           "persistent smartengine backup package to object store failed: ");
       err_msg.append("key=");
@@ -1801,7 +1810,7 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
 bool Consistent_archive::write_consistent_snapshot_file() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("write_consistent_snapshot_file"));
-  DBUG_EXECUTE_IF("fault_injection_persistent_consistent_snapshot_file",
+  DBUG_EXECUTE_IF("fault_injection_persistent_consistent_snapshot_index",
                   { return true; });
   std::string snapshot_info;
   time_t current_time = time(nullptr);
@@ -3616,7 +3625,7 @@ static bool file_has_suffix(const std::string &sfx, const std::string &path) {
 }
 
 static time_t calculate_auto_purge_lower_time_bound() {
-  if (DBUG_EVALUATE_IF("retain_consistent_snapshot_always", true, false)) {
+  if (DBUG_EVALUATE_IF("reserve_all_consistent_snapshots", true, false)) {
     return static_cast<time_t>(std::numeric_limits<time_t>::min());
   }
 

@@ -112,11 +112,11 @@ class Binlog_archive {
   int archive_event(File_reader &reader, uchar *event_ptr, uint32 event_len,
                     const char *log_file, my_off_t log_pos);
   int flush_events();
-  int stop_waiting_for_archive(const char *log_file_name,
+  int binlog_stop_waiting_for_archive(const char *log_file_name,
                                char *persistent_log_file_name, my_off_t log_pos,
                                uint64_t consensus_index);
-  int wait_for_update();
-  void signal_update();
+  int wait_for_archive();
+  void signal_archive();
   int terminate_binlog_archive_thread();
   void lock_binlog_index() { mysql_mutex_lock(&m_index_lock); }
   void unlock_binlog_index() { mysql_mutex_unlock(&m_index_lock); }
@@ -218,7 +218,7 @@ class Binlog_archive {
                                       std::string &slice_name,
                                       const my_off_t pos, const uint64_t term);
   int stop_waiting_for_mysql_binlog_update(my_off_t log_pos);
-  bool binlog_is_archived(const char *log_file_name_arg,
+  int binlog_is_archived(const char *log_file_name_arg,
                           char *persistent_log_file_name, my_off_t log_pos,
                           uint64_t consensus_index);
   int merge_slice_to_binlog_file(const char *log_name,
@@ -295,7 +295,7 @@ class Binlog_archive {
 
 extern int start_binlog_archive();
 extern void stop_binlog_archive();
-extern int binlog_archive_wait_for_update(THD *thd, const char *log_file_name,
+extern int binlog_archive_wait_for_archive(THD *thd, const char *log_file_name,
                                           char *persistent_log_file_name,
                                           my_off_t log_pos,
                                           uint64_t consensus_index);
