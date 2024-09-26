@@ -36,7 +36,7 @@ static std::string PrintContents(WriteBatch* b) {
   Options options;
   options.memtable_factory = factory;
   ImmutableCFOptions ioptions(options);
-  WriteBufferManager wb(options.db_write_buffer_size);
+  WriteBufferManager wb(options.db_total_write_buffer_size);
   MemTable* mem = new MemTable(cmp, ioptions, MutableCFOptions(options), &wb,
                                kMaxSequenceNumber);
   mem->Ref();

@@ -682,7 +682,7 @@ bool Consistent_recovery::recovery_smartengine() {
   };
 
   System_variable_tracker sv =
-      System_variable_tracker::make_tracker("SMARTENGINE_DATADIR");
+      System_variable_tracker::make_tracker("SMARTENGINE_DATA_DIR");
   mysql_mutex_lock(&LOCK_plugin);
   if (sv.access_system_variable(nullptr, f)) {
     mysql_mutex_unlock(&LOCK_plugin);
@@ -781,7 +781,7 @@ bool Consistent_recovery::recovery_smartengine() {
       remove_file(se_file_name);
       return true;
     }
-    // cp -r /u01/mysql_archive/se_backup000034 SMARTENGINE_DATADIR
+    // cp -r /u01/mysql_archive/se_backup000034 SMARTENGINE_DATA_DIR
     // scan the se backup dir and copy the files and sub dir to smartengine data
     // dir
     err_msg.assign("copy smartengine file: ");

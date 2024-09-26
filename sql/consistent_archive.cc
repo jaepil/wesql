@@ -658,13 +658,13 @@ void Consistent_archive::run() {
 
   // get smartengine temp backup dir name.
   {
-    // select @@SMARTENGINE_DATADIR
+    // select @@SMARTENGINE_DATA_DIR
     String se_data_dir_tmp, *se_data_dir = nullptr;
     System_variable_tracker se_datadir_var_tracker =
-        System_variable_tracker::make_tracker("SMARTENGINE_DATADIR");
+        System_variable_tracker::make_tracker("SMARTENGINE_DATA_DIR");
     if (se_datadir_var_tracker.access_system_variable(m_thd)) {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_THREAD_LOG,
-             "get smartengine parameter SMARTENGINE_DATADIR failed.");
+             "get smartengine parameter SMARTENGINE_DATA_DIR failed.");
       goto error;
     }
     Item_func_get_system_var *item =
@@ -673,7 +673,7 @@ void Consistent_archive::run() {
     se_data_dir = item->val_str(&se_data_dir_tmp);
     if (se_data_dir == nullptr) {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_THREAD_LOG,
-             "get smartengine parameter SMARTENGINE_DATADIR failed.");
+             "get smartengine parameter SMARTENGINE_DATA_DIR failed.");
       goto error;
     }
 

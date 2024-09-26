@@ -208,7 +208,7 @@ int ha_smartengine::create(const char *const name,
   if (create_info->data_file_name) {
     // DATA DIRECTORY is used to create tables under a specific location
     // outside the MySQL data directory. SE doesn't support this.
-    // The `se_datadir` setting should be used to configure se data
+    // The `se_data_dir` setting should be used to configure se data
     // directory.
     DBUG_RETURN(HA_ERR_SE_TABLE_DATA_DIRECTORY_NOT_SUPPORTED);
   }

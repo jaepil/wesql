@@ -133,12 +133,12 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   opt.compression = args.compression;
   opt.create_if_missing = true;
   opt.env = Env::Default();
-  int db_write_buffer_size = 64 * 1024 * 1024;
-  opt.db_write_buffer_size = db_write_buffer_size;
-  int write_buffer_size = db_write_buffer_size;
+  int db_total_write_buffer_size = 64 * 1024 * 1024;
+  opt.db_total_write_buffer_size = db_total_write_buffer_size;
+  int write_buffer_size = db_total_write_buffer_size;
   opt.write_buffer_size = write_buffer_size;
 
-  int file_size = db_write_buffer_size * 1024;
+  int file_size = db_total_write_buffer_size * 1024;
   opt.target_file_size_base = file_size;
 
   opt.compaction_type = 1; // should be 1 here

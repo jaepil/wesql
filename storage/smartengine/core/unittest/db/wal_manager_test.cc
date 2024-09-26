@@ -41,7 +41,7 @@ class WalManagerTest : public testing::Test {
         dbname_(test::TmpDir() + "/wal_manager_test"),
         db_options_(),
         table_cache_(NewLRUCache(50000, 16)),
-        write_buffer_manager_(db_options_.db_write_buffer_size),
+        write_buffer_manager_(db_options_.db_total_write_buffer_size),
         current_log_number_(0) {
     DestroyDB(dbname_, Options());
   }

@@ -33,7 +33,7 @@ namespace smartengine
 
 mysql_mutex_t se_sysvars_mutex;
 
-char *se_datadir = nullptr;
+char *se_data_dir = nullptr;
 
 char *se_wal_dir = nullptr;
 
@@ -859,16 +859,17 @@ static void se_set_master_thread_compaction_enabled(THD *thd,
 }
 
 static MYSQL_SYSVAR_STR(
-    datadir, se_datadir,
+    data_dir, se_data_dir,
     PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
     "SE data directory",
     nullptr, nullptr,
-    "./.smartengine");
+    "smartengine");
 
 static MYSQL_SYSVAR_STR(
     wal_dir, se_wal_dir, PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "DBOptions::wal_dir for SE",
-    nullptr, nullptr, se_db_options.wal_dir.c_str());
+    nullptr, nullptr,
+    "smartengine");
 
 static MYSQL_SYSVAR_ULONG(
     block_size,
@@ -882,7 +883,7 @@ static MYSQL_SYSVAR_STR(
     compression_per_level, se_cf_compression_per_level,
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "CFOptions::compression_per_level for SE",
-    nullptr, nullptr, "kNoCompression");
+    nullptr, nullptr, "kNoCompression:kZSTD:kZSTD");
 
 static MYSQL_SYSVAR_STR(
     compression_options, se_cf_compression_opts,
@@ -939,7 +940,7 @@ static MYSQL_SYSVAR_ULONG(
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "DBOptions::batch_group_slot_array_size for SE",
     nullptr, nullptr,
-    8, 1, LONG_MAX, 0);
+    5, 1, LONG_MAX, 0);
 
 static MYSQL_SYSVAR_ULONG(
     batch_group_max_group_size,
@@ -947,7 +948,7 @@ static MYSQL_SYSVAR_ULONG(
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "DBOptions::batch_group_max_group_size for SE",
     nullptr, nullptr,
-    8, 1, LONG_MAX, 0);
+    15, 1, LONG_MAX, 0);
 
 static MYSQL_SYSVAR_ULONG(
     batch_group_max_leader_wait_time_us,
@@ -971,7 +972,7 @@ static MYSQL_SYSVAR_LONGLONG(
     PLUGIN_VAR_RQCMDARG,
     "row_cache size for SE",
     nullptr, se_set_row_cache_size,
-    0, 0, LLONG_MAX, 0);
+    0, 0, INT64_MAX, 0);
 
 static MYSQL_SYSVAR_LONGLONG(
     block_cache_size,
@@ -979,7 +980,7 @@ static MYSQL_SYSVAR_LONGLONG(
     PLUGIN_VAR_RQCMDARG,
     "block_cache size for SE",
     nullptr, se_set_block_cache_size,
-    512 * 1024 * 1024, 1024, LLONG_MAX, 1024);
+    128 * 1024 * 1024, 0, INT64_MAX, 1024);
 
 static MYSQL_SYSVAR_ULONG(
     table_cache_size,
@@ -998,12 +999,12 @@ static MYSQL_SYSVAR_INT(
     se_db_options.table_cache_numshardbits, 1, 15, 0);
 
 static MYSQL_SYSVAR_ULONG(
-    write_buffer_size,
+    memtable_size,
     se_default_cf_options.write_buffer_size,
     PLUGIN_VAR_RQCMDARG,
     "CFOptions::write_buffer_size for SE",
     nullptr, se_set_write_buffer_size,
-    256 * 1024 * 1024, 4096, ULONG_MAX, 0);
+    128 * 1024 * 1024, 4096, INT64_MAX, 0);
 
 static MYSQL_SYSVAR_ULONG(
     db_write_buffer_size,
@@ -1014,7 +1015,7 @@ static MYSQL_SYSVAR_ULONG(
     100L << 30, 0L, LONG_MAX, 0);
 
 static MYSQL_SYSVAR_ULONG(
-    db_total_write_buffer_size,
+    total_memtable_size,
     se_db_options.db_total_write_buffer_size,
     PLUGIN_VAR_RQCMDARG,
     "DBOptions::db_total_write_buffer_size for SE",
@@ -1035,7 +1036,7 @@ static MYSQL_SYSVAR_INT(
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "CFOptions::min_write_buffer_number_to_merge for SE",
     nullptr, nullptr,
-    2, 0, INT_MAX, 0);
+    1, 0, INT_MAX, 0);
 
 static MYSQL_THDVAR_BOOL(
     write_disable_wal, PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
@@ -1048,12 +1049,12 @@ static MYSQL_THDVAR_BOOL(
     nullptr, nullptr, FALSE);
 
 static MYSQL_SYSVAR_ULONG(
-    max_total_wal_size,
+    total_wal_size,
     se_db_options.max_total_wal_size,
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "DBOptions::max_total_wal_size for SE",
     nullptr, nullptr,
-    100L << 30, 8L << 20, LONG_MAX, 0);
+    128 * 1024 * 1024, 8 * 1024 * 1024, INT64_MAX, 0);
 
 static MYSQL_SYSVAR_UINT(
     wal_recovery_mode,
@@ -1165,12 +1166,12 @@ static MYSQL_SYSVAR_INT(
     700000, 1, 1<<30, 0);
 
 static MYSQL_SYSVAR_INT(
-    max_background_flushes,
+    flush_threads,
     se_db_options.max_background_flushes,
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "DBOptions::max_background_flushes for SE",
     nullptr, nullptr,
-    se_db_options.max_background_flushes, 1, 64, 0);
+    1, 1, 1024, 0);
 
 static MYSQL_SYSVAR_INT(
     base_background_compactions,
@@ -1181,12 +1182,12 @@ static MYSQL_SYSVAR_INT(
     se_db_options.base_background_compactions, -1, 64, 0);
 
 static MYSQL_SYSVAR_INT(
-    max_background_compactions,
+    compaction_threads,
     se_db_options.max_background_compactions,
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "DBOptions::max_background_compactions for SE",
     nullptr, nullptr,
-    se_db_options.max_background_compactions, 1, 64, 0);
+    1, 1, 1024, 0);
 
 static MYSQL_SYSVAR_BOOL(
     disable_auto_compactions,
@@ -1202,7 +1203,7 @@ static MYSQL_SYSVAR_INT(
     PLUGIN_VAR_RQCMDARG,
     "CFOptions::compaction_delete_percent for SE",
     nullptr, se_set_compaction_delete_percent,
-    70, 0L, 100, 0);
+    50, 0L, 100, 0);
 
 static MYSQL_SYSVAR_BOOL(
     level_compaction_dynamic_level_bytes,
@@ -1225,7 +1226,7 @@ static MYSQL_SYSVAR_INT(
     PLUGIN_VAR_RQCMDARG,
     "CFOptions::level0_layer_num_compaction_trigger for SE",
     nullptr, se_set_level0_layer_num_compaction_trigger,
-    8, -1, INT_MAX, 0);
+    2, -1, INT_MAX, 0);
 
 static MYSQL_SYSVAR_INT(
     level1_extents_major_compaction_trigger,
@@ -1534,7 +1535,7 @@ ulong se_thd_parallel_read_threads(THD *thd)
 }
 
 static SYS_VAR *se_system_vars_internal[] = {
-    MYSQL_SYSVAR(datadir),
+    MYSQL_SYSVAR(data_dir),
     MYSQL_SYSVAR(wal_dir),
     MYSQL_SYSVAR(block_size),
     MYSQL_SYSVAR(compression_per_level),
@@ -1554,14 +1555,14 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(block_cache_size),
     MYSQL_SYSVAR(table_cache_size),
     MYSQL_SYSVAR(table_cache_numshardbits),
-    MYSQL_SYSVAR(write_buffer_size),
-    MYSQL_SYSVAR(db_write_buffer_size),
-    MYSQL_SYSVAR(db_total_write_buffer_size),
+    MYSQL_SYSVAR(memtable_size),
+    //MYSQL_SYSVAR(db_write_buffer_size),
+    MYSQL_SYSVAR(total_memtable_size),
     MYSQL_SYSVAR(max_write_buffer_number_to_maintain),
     MYSQL_SYSVAR(min_write_buffer_number_to_merge),
     MYSQL_SYSVAR(write_disable_wal),
     MYSQL_SYSVAR(unsafe_for_binlog),
-    MYSQL_SYSVAR(max_total_wal_size),
+    MYSQL_SYSVAR(total_wal_size),
     MYSQL_SYSVAR(wal_recovery_mode),
     MYSQL_SYSVAR(parallel_wal_recovery),
     MYSQL_SYSVAR(parallel_recovery_thread_num),
@@ -1576,9 +1577,9 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(flush_delete_percent),
     MYSQL_SYSVAR(flush_delete_percent_trigger),
     MYSQL_SYSVAR(flush_delete_record_trigger),
-    MYSQL_SYSVAR(max_background_flushes),
-    MYSQL_SYSVAR(base_background_compactions),
-    MYSQL_SYSVAR(max_background_compactions),
+    MYSQL_SYSVAR(flush_threads),
+    //MYSQL_SYSVAR(base_background_compactions),
+    MYSQL_SYSVAR(compaction_threads),
     MYSQL_SYSVAR(disable_auto_compactions),
     MYSQL_SYSVAR(compaction_delete_percent),
     MYSQL_SYSVAR(level_compaction_dynamic_level_bytes),

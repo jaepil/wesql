@@ -102,9 +102,9 @@ struct TestArgs {
     options_->table_factory.reset(NewExtentBasedTableFactory(table_options_));
     options_->disable_auto_compactions = true;
     options_->env = util::Env::Default();
-    int db_write_buffer_size = 64 * 1024 * 1024;
-    options_->db_write_buffer_size = db_write_buffer_size;
-    int write_buffer_size = db_write_buffer_size;
+    int db_total_write_buffer_size = 64 * 1024 * 1024;
+    options_->db_total_write_buffer_size = db_total_write_buffer_size;
+    int write_buffer_size = db_total_write_buffer_size;
     options_->write_buffer_size = write_buffer_size;
 
     if (options_->db_paths.size() == 0) {

@@ -159,14 +159,14 @@ static int se_init_func(void *const p)
   } else {
     // Write SE log to a file
     std::ostringstream oss;
-    oss << se_datadir << "/Log";
+    oss << se_data_dir << "/Log";
     log_init_ret = smartengine::logger::Logger::get_log().init(oss.str().c_str(),
                                                       log_level,
                                                       256 * 1024 * 1024);
   }
   if (0 != log_init_ret) {
     sql_print_information("Failed to initialize SE logger at handler level,"
-                          " DB:Open will init it with %s/Log", se_datadir);
+                          " DB:Open will init it with %s/Log", se_data_dir);
   }
 
   se_db_options.wal_dir = se_wal_dir;
@@ -282,7 +282,7 @@ static int se_init_func(void *const p)
 
   common::Status status = util::TransactionDB::Open(main_opts,
                                                     tx_db_options,
-                                                    se_datadir,
+                                                    se_data_dir,
                                                     &cf_handles,
                                                     &se_db);
 

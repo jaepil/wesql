@@ -35,7 +35,7 @@ const uint64_t DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_SWITCH_LIMIT = 32 * 10
 
 extern mysql_mutex_t se_sysvars_mutex;
 
-extern char *se_datadir;
+extern char *se_data_dir;
 
 extern char *se_wal_dir;
 

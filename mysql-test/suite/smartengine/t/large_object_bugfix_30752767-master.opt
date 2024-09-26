@@ -1,2 +1,2 @@
 --max_allowed_packet=500M
---smartengine_max_total_wal_size=10M
+--smartengine_total_wal_size=10M

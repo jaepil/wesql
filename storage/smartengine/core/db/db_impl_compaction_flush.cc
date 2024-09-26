@@ -723,7 +723,7 @@ int DBImpl::bg_dumps_allowed() const {
 
 int DBImpl::BGCompactionsAllowed() const {
   mutex_.AssertHeld();
-  return mutable_db_options_.base_background_compactions;
+  return mutable_db_options_.max_background_compactions;
 }
 
 size_t DBImpl::compaction_job_size() {

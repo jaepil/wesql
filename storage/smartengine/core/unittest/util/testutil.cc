@@ -221,7 +221,7 @@ void RandomInitDBOptions(DBOptions* db_opt, Random* rnd) {
   db_opt->table_cache_numshardbits = rnd->Uniform(100);
 
   // size_t options
-  db_opt->db_write_buffer_size = rnd->Uniform(10000);
+  db_opt->db_total_write_buffer_size = rnd->Uniform(10000);
 
   // std::string options
   db_opt->wal_dir = "path/to/wal_dir";

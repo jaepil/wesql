@@ -8,12 +8,12 @@ create table t0 (id int, data  char(20), primary key(id));
 # smartengine_flush_log_at_trx_commit=2, sync every second.
 #
 
-#set global smartengine_max_background_flushes=5;
-#set global smartengine_max_background_compactions=10;
+#set global smartengine_flush_threads=5;
+#set global smartengine_compaction_threads=10;
 set global smartengine_flush_log_at_trx_commit=2;
 
-show variables like 'smartengine_max_background_flushes';
-show variables like 'smartengine_max_background_compactions';
+show variables like 'smartengine_flush_threads';
+show variables like 'smartengine_compaction_threads';
 show variables like 'smartengine_flush_log_at_trx_commit';
 select sleep(2);
 
@@ -27,12 +27,12 @@ select sleep(2);
 # smartengine_flush_log_at_trx_commit=1, sync when commit.
 #
 
-#set global smartengine_max_background_flushes=3;
-#set global smartengine_max_background_compactions=7;
+#set global smartengine_flush_threads=3;
+#set global smartengine_compaction_threads=7;
 set global smartengine_flush_log_at_trx_commit=1;
 
-show variables like 'smartengine_max_background_flushes';
-show variables like 'smartengine_max_background_compactions';
+show variables like 'smartengine_flush_threads';
+show variables like 'smartengine_compaction_threads';
 show variables like 'smartengine_flush_log_at_trx_commit';
 insert into t0 values(0, '123456');
 
@@ -46,12 +46,12 @@ insert into t0 values(0, '123456');
 # smartengine_flush_log_at_trx_commit=0, don't sync.
 #
 
-#set global smartengine_max_background_flushes=2;
-#set global smartengine_max_background_compactions=5;
+#set global smartengine_flush_threads=2;
+#set global smartengine_compaction_threads=5;
 set global smartengine_flush_log_at_trx_commit=0;
 
-show variables like 'smartengine_max_background_flushes';
-show variables like 'smartengine_max_background_compactions';
+show variables like 'smartengine_flush_threads';
+show variables like 'smartengine_compaction_threads';
 show variables like 'smartengine_flush_log_at_trx_commit';
 insert into t0 values(1, '123456');
 

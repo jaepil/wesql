@@ -19,7 +19,7 @@ EOF
 mkdir $ddir;
 
 # Launch mysqld with non-standard smartengine_datadir
-exec $MYSQLD_BOOTSTRAP_CMD --datadir=$ddir --smartengine_datadir=$rdb_ddir --default-storage-engine=SMARTENGINE --default-tmp-storage-engine=MyISAM --smartengine < $sql_file;
+exec $MYSQLD_BOOTSTRAP_CMD --datadir=$ddir --smartengine_data_dir=$rdb_ddir --default-storage-engine=SMARTENGINE --default-tmp-storage-engine=MyISAM --smartengine < $sql_file;
 
 #not used MANIFEST
 --echo Check for the number of MANIFEST files

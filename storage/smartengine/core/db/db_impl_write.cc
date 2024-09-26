@@ -1521,8 +1521,8 @@ size_t DBImpl::GetWalPreallocateBlockSize(uint64_t write_buffer_size) const {
   if (mutable_db_options_.max_total_wal_size > 0) {
     bsize = std::min<size_t>(bsize, mutable_db_options_.max_total_wal_size);
   }
-  if (immutable_db_options_.db_write_buffer_size > 0) {
-    bsize = std::min<size_t>(bsize, immutable_db_options_.db_write_buffer_size);
+  if (immutable_db_options_.db_total_write_buffer_size > 0) {
+    bsize = std::min<size_t>(bsize, immutable_db_options_.db_total_write_buffer_size);
   }
   if (immutable_db_options_.write_buffer_manager &&
       immutable_db_options_.write_buffer_manager->enabled()) {

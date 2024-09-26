@@ -46,9 +46,11 @@ Options SanitizeOptions(const std::string& dbname, const Options& src) {
 
 DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src) {
   DBOptions result(src);
+  // TODO (Zhao Dongsheng) : The 'db_write_buffer_size' has been deprecated, and only
+  // 'db_total_write_buffer_size' is retained. 
   if (!result.write_buffer_manager) {
     result.write_buffer_manager.reset(new WriteBufferManager(
-        result.db_write_buffer_size, result.db_total_write_buffer_size));
+        result.db_total_write_buffer_size, result.db_total_write_buffer_size));
   }
   if (result.base_background_compactions == -1) {
     result.base_background_compactions = result.max_background_compactions;

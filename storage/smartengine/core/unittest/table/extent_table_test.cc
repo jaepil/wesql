@@ -331,7 +331,7 @@ class ExtentTableConstructor : public Constructor {
         test_name_(test_name),
         env_(Env::Default()),
         table_cache_(NewLRUCache(50000, 16)),
-        write_buffer_manager_(db_options_.db_write_buffer_size),
+        write_buffer_manager_(db_options_.db_total_write_buffer_size),
         versions_(dbname_, &db_options_, soptions_, table_cache_.get(),
                   &write_buffer_manager_, &write_controller_) {
     Status status = env_->GetTestDirectory(&dbname_);
@@ -745,7 +745,7 @@ class HarnessTest : public testing::Test {
   HarnessTest()
       : ioptions_(options_),
         constructor_(nullptr),
-        write_buffer_(options_.db_write_buffer_size) {}
+        write_buffer_(options_.db_total_write_buffer_size) {}
 
   void Init(const TestArgs& args) {
     delete constructor_;
@@ -2405,7 +2405,7 @@ TEST_F(MemTableTest, Simple) {
   Options options;
   options.memtable_factory = table_factory;
   ImmutableCFOptions ioptions(options);
-  WriteBufferManager wb(options.db_write_buffer_size);
+  WriteBufferManager wb(options.db_total_write_buffer_size);
   MemTable* memtable = new MemTable(cmp, ioptions, MutableCFOptions(options),
                                     &wb, kMaxSequenceNumber);
   memtable->Ref();

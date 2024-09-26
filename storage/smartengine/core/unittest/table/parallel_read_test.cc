@@ -89,9 +89,9 @@ void build_default_options(const TestArgs &args, common::Options &opt) {
   opt.table_factory.reset(NewExtentBasedTableFactory(table_options));
   opt.disable_auto_compactions = true;
   opt.env = Env::Default();
-  int db_write_buffer_size = 64 * 1024 * 1024;
-  opt.db_write_buffer_size = db_write_buffer_size;
-  int write_buffer_size = db_write_buffer_size;
+  int db_total_write_buffer_size = 64 * 1024 * 1024;
+  opt.db_total_write_buffer_size = db_total_write_buffer_size;
+  int write_buffer_size = db_total_write_buffer_size;
   opt.write_buffer_size = write_buffer_size;
 
   std::string db_path_ = test::TmpDir() + "/parallel_read_test";
@@ -330,7 +330,7 @@ void ParallelReadTest::init(const TestArgs args) {
   storage_manager_ = subtable_->get_storage_manager();
 
   wb_ = ALLOC_OBJECT(WriteBufferManager, alloc_,
-                     context_->db_options_.db_write_buffer_size);
+                     context_->db_options_.db_total_write_buffer_size);
 
   // create column family
   db_impl_ = MOD_NEW_OBJECT(memory::ModId::kDBImpl, DBImpl, context_->db_options_, dbname_);

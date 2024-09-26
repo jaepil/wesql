@@ -40,7 +40,7 @@ class ExtentSpaceManagerTest : public testing::Test {
       : env_(Env::Default()),
         dbname_("./unittest_tmp/"),
         table_cache_(NewLRUCache(50000, 16)),
-        write_buffer_manager_(db_options_.db_write_buffer_size),
+        write_buffer_manager_(db_options_.db_total_write_buffer_size),
         next_file_number_(2) {
     options.db_paths.emplace_back(dbname_, 0);
     spacemanager = new ExtentSpaceManager(options, next_file_number_);
