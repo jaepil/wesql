@@ -67,9 +67,15 @@ class ObjectExtentSpace : public ExtentSpace {
  private:
   void update_last_alloc_ts() { last_alloc_ts_ = env_->NowMicros(); }
 
+  int find_available_extent_offset(int32_t &extent_offset);
+
   std::string make_extent_key(const int32_t extent_offset_id) const;
 
- private:
+  friend class ExtentSpaceTest_find_extent_offset_Test;
+
+  static constexpr size_t EXTENT_OFFSET_LARGEST_VAL = INT32_MAX;
+
+private:
   bool is_inited_;
   util::Env *env_;
   const util::EnvOptions &env_options_;
@@ -81,11 +87,9 @@ class ObjectExtentSpace : public ExtentSpace {
   int64_t used_extent_count_;
   // TODO(cnut): maintain the used extent count
   int64_t free_extent_count_;
-  uint64_t last_alloc_ts_;  // timestamp of last allocate extent
-  int32_t g_next_allocated_id_;
-  // use int32_t as the id in the extent space, this introduce a 4PB limitation of
-  // the max capacity in the extent space of one table.
-  std::unordered_set<int32_t> inused_extent_set_;
+  uint64_t last_alloc_ts_; // timestamp of last allocate extent
+  std::set<int32_t> inused_extent_set_;
+  int32_t last_allocated_extent_offset_;
 };
 
 }  // namespace storage
