@@ -12,6 +12,7 @@
 PSI_mutex_key key_mutex_ConsensusLog_index;
 PSI_mutex_key key_mutex_ConsensusLog_term_lock;
 PSI_mutex_key key_mutex_ConsensusLog_apply_thread_lock;
+PSI_mutex_key key_mutex_ConsensusLog_commit_advance_lock;
 PSI_mutex_key key_mutex_Consensus_stage_change;
 PSI_mutex_key key_fifo_cache_cleaner;
 
@@ -20,14 +21,17 @@ PSI_rwlock_key key_rwlock_plugin_stop;
 PSI_rwlock_key key_rwlock_ConsensusLog_status_lock;
 PSI_rwlock_key key_rwlock_ConsensusLog_commit_lock;
 PSI_rwlock_key key_rwlock_ConsensusLog_truncate_lock;
+PSI_rwlock_key key_rwlock_ConsensusLog_rotate_lock;
 PSI_rwlock_key key_rwlock_ConsensusLog_log_cache_lock;
 PSI_rwlock_key key_rwlock_ConsensusLog_prefetch_channels_hash;
 
 PSI_cond_key key_COND_ConsensusLog_catchup;
 PSI_cond_key key_COND_Consensus_state_change;
+PSI_cond_key key_COND_ConsensusLog_commit_advance;
 PSI_cond_key key_COND_prefetch_reuqest;
 
 PSI_thread_key key_thread_consensus_stage_change;
+PSI_thread_key key_thread_consensus_commit_advance;
 PSI_thread_key key_thread_prefetch;
 PSI_thread_key key_thread_cleaner;
 
@@ -46,6 +50,9 @@ static PSI_mutex_info all_consensus_replication_psi_mutex_keys[] = {
     {&key_mutex_ConsensusLog_apply_thread_lock,
      "ConsensusLogManager::LOCK_consensuslog_apply_thread_lock", 0, 0,
      PSI_DOCUMENT_ME},
+    {&key_mutex_ConsensusLog_commit_advance_lock,
+     "ConsensusLogManager::LOCK_consensuslog_commit_advance_lock", 0, 0,
+     PSI_DOCUMENT_ME},
     {&key_mutex_Consensus_stage_change,
      "ConsensusLogManager::LOCK_consnesus_state_change", 0, 0, PSI_DOCUMENT_ME},
 };
@@ -53,6 +60,9 @@ static PSI_mutex_info all_consensus_replication_psi_mutex_keys[] = {
 static PSI_cond_info all_consensus_replication_psi_condition_keys[] = {
     {&key_COND_ConsensusLog_catchup,
      "ConsensusLogManager::cond_consensuslog_catchup", 0, 0, PSI_DOCUMENT_ME},
+    {&key_COND_ConsensusLog_commit_advance,
+     "ConsensusLogManager::cond_consensuslog_commit_advance", 0, 0,
+     PSI_DOCUMENT_ME},
     {&key_COND_Consensus_state_change,
      "ConsensusLogManager::cond_consensus_state_change", 0, 0, PSI_DOCUMENT_ME},
     {&key_COND_prefetch_reuqest,
@@ -62,11 +72,12 @@ static PSI_cond_info all_consensus_replication_psi_condition_keys[] = {
 static PSI_thread_info all_consensus_replication_psi_thread_keys[] = {
     {&key_thread_consensus_stage_change, "consensus_stage_change",
      "cons_stg_change", PSI_FLAG_SINGLETON, 0, PSI_DOCUMENT_ME},
+    {&key_thread_consensus_commit_advance, "consensus_commit_advance",
+     "cons_stg_change", PSI_FLAG_SINGLETON, 0, PSI_DOCUMENT_ME},
     {&key_thread_prefetch, "run_prefetch", "prefetch", PSI_FLAG_SINGLETON, 0,
      PSI_DOCUMENT_ME},
     {&key_thread_cleaner, "fifo_cleaner", "fifo_cleaner", PSI_FLAG_SINGLETON, 0,
-     PSI_DOCUMENT_ME}
-};
+     PSI_DOCUMENT_ME}};
 
 static PSI_rwlock_info all_consensus_replication_psi_rwlock_keys[] = {
     {&key_rwlock_plugin_running, "rwlock_plugin_running", PSI_FLAG_SINGLETON, 0,
@@ -81,6 +92,9 @@ static PSI_rwlock_info all_consensus_replication_psi_rwlock_keys[] = {
      PSI_DOCUMENT_ME},
     {&key_rwlock_ConsensusLog_truncate_lock,
      "ConsensusLogManager::LOCK_consensuslog_truncate", PSI_FLAG_SINGLETON, 0,
+     PSI_DOCUMENT_ME},
+    {&key_rwlock_ConsensusLog_rotate_lock,
+     "ConsensusLogManager::LOCK_consensuslog_rotate", PSI_FLAG_SINGLETON, 0,
      PSI_DOCUMENT_ME},
     {&key_rwlock_ConsensusLog_log_cache_lock,
      "ConsensusLogManager::LOCK_consensuslog_cache", PSI_FLAG_SINGLETON, 0,

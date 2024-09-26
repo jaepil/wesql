@@ -120,6 +120,13 @@ uint64 rpl_consensus_wait_commit_index_update(uint64 log_index, uint64 term) {
   return consensus_ptr->waitCommitIndexUpdate(log_index - 1, term);
 }
 
+uint64 rpl_consensus_timed_wait_commit_index_update(uint64 log_index,
+                                                    uint64 term,
+                                                    uint64 timeout) {
+  return consensus_ptr->timedWaitCommitIndexUpdate(log_index - 1, term,
+                                                   timeout);
+}
+
 void rpl_consensus_set_last_noncommit_dep_index(uint64 log_index) {
   alisql_server->setLastNonCommitDepIndex(log_index);
 }

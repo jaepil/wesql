@@ -91,8 +91,16 @@ int ConsensusLogManager::init(uint64 max_fifo_cache_size_arg,
   cache_log = new IO_CACHE_binlog_cache_storage();
   if (!cache_log) return 1;
 
+  mysql_mutex_init(key_mutex_ConsensusLog_commit_advance_lock,
+                   &LOCK_consensuslog_commit_advance, MY_MUTEX_INIT_FAST);
+
   mysql_rwlock_init(key_rwlock_ConsensusLog_truncate_lock,
                     &LOCK_consensuslog_truncate);
+  mysql_rwlock_init(key_rwlock_ConsensusLog_rotate_lock,
+                    &LOCK_consensuslog_truncate);
+
+  mysql_cond_init(key_COND_ConsensusLog_commit_advance,
+                    &COND_consensuslog_commit_advance);
 
   if (cache_log->open(mysql_tmpdir, LOG_PREFIX, binlog_cache_size,
                       max_binlog_cache_size))
@@ -136,13 +144,21 @@ int ConsensusLogManager::write_log_entry(ConsensusLogEntry &log,
                                          uint64 *consensus_index,
                                          bool with_check) {
   int error = 0;
+  bool changed_in_large_trx = true;
   DBUG_TRACE;
 
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
+  uint64 last_log_term = get_last_log_term();
   Relay_log_info *rli_info = consensus_state_process.get_relay_log_info();
 
-  enable_rotate = !(log.flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+  if (!in_large_trx)
+    changed_in_large_trx =
+        (log.flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+
+  if (with_check || changed_in_large_trx)
+    mysql_rwlock_wrlock(&LOCK_consensuslog_rotate);
+
   if (consensus_state_process.get_status() ==
       Consensus_Log_System_Status::BINLOG_WORKING) {
     if ((error = consensus_append_log_entry(
@@ -152,8 +168,8 @@ int ConsensusLogManager::write_log_entry(ConsensusLogEntry &log,
     }
     if (*consensus_index == 0) goto end;
   } else {
-    bool do_rotate = false;
     Master_info *mi = rli_info->mi;
+    bool enable_rotate = false;
 
     mysql_mutex_lock(&mi->data_lock);
     if ((error = consensus_append_log_entry(&rli_info->relay_log, log,
@@ -167,14 +183,16 @@ int ConsensusLogManager::write_log_entry(ConsensusLogEntry &log,
       goto end;
     }
 
+    enable_rotate =
+        !with_check && !(log.flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
     if (enable_rotate) {
       mysql_mutex_lock(rli_info->relay_log.get_log_lock());
-      error = rli_info->relay_log.rotate(false, &do_rotate);
+      error = rli_info->relay_log.rotate(false, &enable_rotate);
       mysql_mutex_unlock(rli_info->relay_log.get_log_lock());
 
       if (error) LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_ROTATE_ERROR);
 
-      if (!error && do_rotate) {
+      if (!error && enable_rotate) {
         bool use_new_created_thd = false;
         if (current_thd == nullptr) {
           use_new_created_thd = true;
@@ -189,7 +207,21 @@ int ConsensusLogManager::write_log_entry(ConsensusLogEntry &log,
     }
     mysql_mutex_unlock(&mi->data_lock);
   }
+
+  in_large_trx = (log.flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+
 end:
+  if (!error && *consensus_index > 0) {
+    if (with_check || last_log_term != log.term) {
+      set_local_system_log_if_greater(with_check ? *consensus_index : 0,
+                                      last_log_term != log.term);
+    }
+    if (last_log_term != log.term) set_last_log_term(log.term);
+  }
+
+  if (with_check || changed_in_large_trx)
+    mysql_rwlock_unlock(&LOCK_consensuslog_rotate);
+
   mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
   return error;
 }
@@ -197,25 +229,33 @@ end:
 int ConsensusLogManager::write_log_entries(std::vector<ConsensusLogEntry> &logs,
                                            uint64 *max_index) {
   int error = 0;
+  bool changed_in_large_trx = false;
+  bool enable_rotate = false;
   bool do_rotate = false;
   DBUG_TRACE;
 
   // only follower will call this function
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
 
+  uint64 last_log_term = get_last_log_term();
   Relay_log_info *rli_info = consensus_state_process.get_relay_log_info();
   MYSQL_BIN_LOG *log = consensus_state_process.get_consensus_log();
 
-  enable_rotate =
-      !(logs.back().flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+  if (!in_large_trx)
+    changed_in_large_trx =
+        (logs.back().flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+
+  if (changed_in_large_trx) mysql_rwlock_wrlock(&LOCK_consensuslog_rotate);
+
   if ((error = consensus_append_multi_log_entries(log, logs, max_index,
                                                   rli_info))) {
     goto end;
   }
 
-  if (consensus_state_process.get_status() !=
-          Consensus_Log_System_Status::BINLOG_WORKING &&
-      enable_rotate) {
+  enable_rotate = consensus_state_process.get_status() !=
+                      Consensus_Log_System_Status::BINLOG_WORKING &&
+                  !(logs.back().flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+  if (enable_rotate) {
     Master_info *mi = rli_info->mi;
     mysql_mutex_lock(&mi->data_lock);
 
@@ -240,7 +280,17 @@ int ConsensusLogManager::write_log_entries(std::vector<ConsensusLogEntry> &logs,
 
     mysql_mutex_unlock(&mi->data_lock);
   }
+
+  in_large_trx = (logs.back().flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+
 end:
+  if (changed_in_large_trx) mysql_rwlock_unlock(&LOCK_consensuslog_rotate);
+
+  if (!error && *max_index > 0 && last_log_term != logs.back().term) {
+    set_local_system_log_if_greater(0, true);
+    set_last_log_term(logs.back().term);
+  }
+
   mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
   return error;
 }
@@ -427,6 +477,7 @@ int ConsensusLogManager::truncate_log(uint64 consensus_index) {
   if (!error) {
     set_sync_index(consensus_index - 1);
     set_current_index(consensus_index);
+    truncate_local_system_log_if_lesser(consensus_index - 1);
     log_file_index->truncate_after(file_name);
     log_file_index->truncate_pos_map_of_file(start_index, consensus_index);
     fifo_cache_manager->trunc_log_from_cache(consensus_index);
@@ -549,20 +600,6 @@ uint64 ConsensusLogManager::get_exist_log_length() {
     return 0;
 }
 
-// #endif
-
-uint64 ConsensusLogManager::get_cache_index() { return cache_index; }
-
-void ConsensusLogManager::set_cache_index(uint64 cache_index_arg) {
-  cache_index = cache_index_arg;
-}
-
-uint64 ConsensusLogManager::get_sync_index() { return sync_index; }
-
-void ConsensusLogManager::set_sync_index(uint64 sync_index_arg) {
-  sync_index = sync_index_arg;
-}
-
 void ConsensusLogManager::set_sync_index_if_greater(uint64 sync_index_arg) {
   for (;;) {
     uint64 old = sync_index.load();
@@ -571,6 +608,190 @@ void ConsensusLogManager::set_sync_index_if_greater(uint64 sync_index_arg) {
          sync_index.compare_exchange_weak(old, sync_index_arg)))
       break;
   }
+}
+
+bool ConsensusLogManager::advance_commit_index_if_greater(uint64 arg,
+                                                          bool force) {
+  bool ret = false;
+
+  mysql_mutex_lock(&LOCK_consensuslog_commit_advance);
+
+  if ((force && arg > 0 && arg >= commit_index) || arg > commit_index) {
+    ret = true;
+    commit_index = arg;
+
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_COMMIT_INDEX_ADVANCED,
+                 commit_index.load(), local_system_log_index);
+  }
+
+  if (has_pending_local_system_log && commit_index >= local_system_log_index) {
+    has_pending_local_system_log = false;
+  }
+
+
+  mysql_mutex_unlock(&LOCK_consensuslog_commit_advance);
+
+  return ret;
+}
+
+// if local_sytem_log_index_arg > 0, exclusive Lock_consensus_rotate_lock must
+// be held  before calling this funcation
+bool ConsensusLogManager::set_local_system_log_if_greater(
+    uint64 local_sytem_log_index_arg, bool force_singal) {
+  bool ret = false;
+
+  mysql_mutex_lock(&LOCK_consensuslog_commit_advance);
+
+  if (local_sytem_log_index_arg > local_system_log_index)
+    local_system_log_index = local_sytem_log_index_arg;
+
+  if (local_sytem_log_index_arg > commit_index)
+    has_pending_local_system_log = true;
+
+  if (has_pending_local_system_log || force_singal)
+    mysql_cond_broadcast(&COND_consensuslog_commit_advance);
+
+  if (local_sytem_log_index_arg > 0) {
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOCAL_SYSTEM_LOG_WRITTED,
+                 local_system_log_index, commit_index.load());
+  }
+
+  mysql_mutex_unlock(&LOCK_consensuslog_commit_advance);
+
+
+  return ret;
+}
+
+void ConsensusLogManager::truncate_local_system_log_if_lesser(
+    uint64 truncate_index_arg) {
+  mysql_mutex_lock(&LOCK_consensuslog_commit_advance);
+  if (truncate_index_arg < local_system_log_index)
+    local_system_log_index = truncate_index_arg;
+  mysql_mutex_unlock(&LOCK_consensuslog_commit_advance);
+}
+
+bool ConsensusLogManager::wait_for_uncommitted_local_system_log(uint64 timetout) {
+  if (has_pending_local_system_log) return true;
+
+  mysql_mutex_lock(&LOCK_consensuslog_commit_advance);
+  if (!has_pending_local_system_log) {
+    struct timespec abstime;
+    set_timespec_nsec(&abstime, timetout * 1000 * 1000); // 200ms
+    mysql_cond_timedwait(&COND_consensuslog_commit_advance,
+                         &LOCK_consensuslog_commit_advance, &abstime);
+  }
+  mysql_mutex_unlock(&LOCK_consensuslog_commit_advance);
+
+  return has_pending_local_system_log;
+}
+
+
+int ConsensusLogManager::try_advance_commit_position(uint64 timeout) {
+  uint64 index = 0;
+  uint64 commit_index = 0;
+  uint64 term = 0;
+  char log_name[FN_REFLEN];
+  my_off_t pos = 0;
+
+  DBUG_TRACE;
+
+  if (!opt_cluster_log_type_instance && rpl_consensus_is_leader() &&
+      !wait_for_uncommitted_local_system_log(timeout)) {
+    return 0;
+  }
+
+  term = rpl_consensus_get_term();
+  commit_index = get_commit_index();
+  index = rpl_consensus_get_commit_index();
+  if (index <= commit_index) {
+    index = rpl_consensus_timed_wait_commit_index_update(term, commit_index + 1,
+                                                         timeout);
+    if (index <= commit_index) return 0;
+  }
+
+  mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
+  MYSQL_BIN_LOG *log = consensus_state_process.get_binlog();
+
+  if (consensus_get_log_end_position(get_log_file_index(), index, log_name,
+                                     &pos)) {
+    mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
+    return 0;
+  }
+
+  mysql_mutex_lock(log->get_log_lock());
+  if (advance_commit_index_if_greater(index, false)) {
+    log->switch_and_seek_log(log_name, pos, true);
+  }
+  mysql_mutex_unlock(log->get_log_lock());
+
+  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
+
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_COMMIT_POSITION_ADVANCED,
+               log_name, pos, term, index);
+
+  return 0;
+}
+
+static void *run_consensus_commit_position_advance(void *arg) {
+  THD *thd = nullptr;
+  DBUG_TRACE;
+  thd = new THD;
+  thd->set_new_thread_id();
+
+  if (my_thread_init()) return nullptr;
+
+  thd->thread_stack = (char *)&thd;
+  thd->store_globals();
+
+  std::atomic<bool> *is_running = reinterpret_cast<std::atomic<bool> *>(arg);
+
+  mysql_mutex_lock(&LOCK_server_started);
+  while (!mysqld_server_started && (*is_running))
+    mysql_cond_wait(&COND_server_started, &LOCK_server_started);
+  mysql_mutex_unlock(&LOCK_server_started);
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STARTED);
+
+  while (*is_running && !rpl_consensus_is_shutdown()) {
+    consensus_log_manager.try_advance_commit_position(200);
+  }
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STOPPED,
+               rpl_consensus_is_shutdown() ? "consensus service was shutdown"
+                                           : "be killed");
+
+  thd->release_resources();
+  delete thd;
+  my_thread_end();
+  return nullptr;
+}
+
+int ConsensusLogManager::start_consensus_commit_advance_thread() {
+  DBUG_TRACE;
+  consensus_commit_advance_is_running = true;
+  if (mysql_thread_create(key_thread_consensus_commit_advance,
+                          &consensus_commit_advance_thread_handler, nullptr,
+                          run_consensus_commit_position_advance,
+                          (void *)&consensus_commit_advance_is_running)) {
+    consensus_commit_advance_is_running = false;
+    LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_CREATE_THRERD_ERROR,
+                 "run_consensus_commit_position_advance");
+    abort();
+  }
+  return 0;
+}
+
+int ConsensusLogManager::stop_consensus_commit_advance_thread() {
+  DBUG_TRACE;
+  if (inited && consensus_commit_advance_is_running) {
+    consensus_commit_advance_is_running = false;
+    mysql_mutex_lock(&LOCK_consensuslog_commit_advance);
+    mysql_cond_broadcast(&COND_consensuslog_commit_advance);
+    mysql_cond_broadcast(&COND_server_started);
+    mysql_mutex_unlock(&LOCK_consensuslog_commit_advance);
+    my_thread_join(&consensus_commit_advance_thread_handler, nullptr);
+  }
+  return 0;
 }
 
 int ConsensusLogManager::cleanup() {
@@ -582,6 +803,9 @@ int ConsensusLogManager::cleanup() {
     cache_log->close();
 
     mysql_rwlock_destroy(&LOCK_consensuslog_truncate);
+    mysql_rwlock_destroy(&LOCK_consensuslog_rotate);
+    mysql_mutex_destroy(&LOCK_consensuslog_commit_advance);
+    mysql_cond_destroy(&COND_consensuslog_commit_advance);
 
     delete fifo_cache_manager;
     delete prefetch_manager;

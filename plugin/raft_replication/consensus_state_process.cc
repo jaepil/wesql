@@ -108,7 +108,8 @@ int ConsensusStateProcess::wait_leader_degraded(uint64 term, uint64 index) {
   // rollback transactions not reached before_commit
   acquire_transaction_control_services();
 
-  if (!opt_cluster_log_type_instance) {
+  if (status == Consensus_Log_System_Status::BINLOG_WORKING &&
+      !opt_cluster_log_type_instance) {
     // Persist start apply index into consensus_info before killing all threads
     // and waiting all transactions finished. The transactions before it will be
     // committed. And the transactions after it will be rollbacked firstly and
@@ -124,8 +125,6 @@ int ConsensusStateProcess::wait_leader_degraded(uint64 term, uint64 index) {
     current_state_degrade_term = term;
   }
 
-  assert(this->status == Consensus_Log_System_Status::BINLOG_WORKING);
-
   DBUG_EXECUTE_IF("signal_before_downgrade_init_rli", {
     const char act[] = "now wait_for signal_downgrade_init_rli";
     assert(!debug_sync_set_action(current_thd, STRING_WITH_LEN(act)));
@@ -135,32 +134,38 @@ int ConsensusStateProcess::wait_leader_degraded(uint64 term, uint64 index) {
   rli_info->mi->channel_wrlock();
   mysql_rwlock_wrlock(&LOCK_consensuslog_status);
 
-  // Wait all active trx commit
-  mysql_rwlock_wrlock(&LOCK_consensuslog_commit);
-  mysql_rwlock_unlock(&LOCK_consensuslog_commit);
+  if (status == Consensus_Log_System_Status::BINLOG_WORKING) {
+    // Wait all active trx commit
+    mysql_rwlock_wrlock(&LOCK_consensuslog_commit);
+    mysql_rwlock_unlock(&LOCK_consensuslog_commit);
 
-  // make sure that the transactions are committed in engines
-  ha_flush_logs();
+    // make sure that the transactions are committed in engines
+    ha_flush_logs();
 
-  // open relay log system
-  mysql_mutex_lock(&rli_info->mi->data_lock);
-  mysql_mutex_lock(&rli_info->data_lock);
-  rli_info->cli_init_info();
-  mysql_mutex_unlock(&rli_info->data_lock);
-  mysql_mutex_unlock(&rli_info->mi->data_lock);
+    // open relay log system
+    mysql_mutex_lock(&rli_info->mi->data_lock);
+    mysql_mutex_lock(&rli_info->data_lock);
+    rli_info->cli_init_info();
+    mysql_mutex_unlock(&rli_info->data_lock);
+    mysql_mutex_unlock(&rli_info->mi->data_lock);
+  }
 
   // record new term
   current_term = term;
-  this->status = Consensus_Log_System_Status::RELAY_LOG_WORKING;
 
-  DBUG_EXECUTE_IF("signal_after_downgrade_init_rli", {
-    const char act[] = "now signal after_downgrade_init_rli";
-    assert(!debug_sync_set_action(current_thd, STRING_WITH_LEN(act)));
-  });
+  if (status == Consensus_Log_System_Status::BINLOG_WORKING) {
+    this->status = Consensus_Log_System_Status::RELAY_LOG_WORKING;
+
+    DBUG_EXECUTE_IF("signal_after_downgrade_init_rli", {
+      const char act[] = "now signal after_downgrade_init_rli";
+      assert(!debug_sync_set_action(current_thd, STRING_WITH_LEN(act)));
+    });
+  }
 
   consensus_applier.set_stop_term(UINT64_MAX);
 
-  if (!opt_cluster_log_type_instance) {
+  if (!opt_cluster_log_type_instance &&
+      status == Consensus_Log_System_Status::BINLOG_WORKING) {
     // Save executed_gtids to tables and reset rli_info->gtid_set.
     if (gtid_state->save_gtids_of_last_binlog_into_table() ||
         (index < consensus_log_manager.get_sync_index()
@@ -172,7 +177,9 @@ int ConsensusStateProcess::wait_leader_degraded(uint64 term, uint64 index) {
       goto end;
     }
     current_state_degrade_term = 0;
+  }
 
+  if (!opt_cluster_log_type_instance) {
     error = start_consensus_apply_threads(rli_info->mi);
   }
 
@@ -192,6 +199,7 @@ end:
 int ConsensusStateProcess::wait_follower_upgraded(uint64 term, uint64 index) {
   int error = 0;
   Consensus_info *consensus_info;
+  mysql_mutex_t *log_lock;
   DBUG_TRACE;
 
   LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_STATE_FOLLOWER_UPGRADE, "started",
@@ -216,12 +224,16 @@ int ConsensusStateProcess::wait_follower_upgraded(uint64 term, uint64 index) {
   // prefetch stop, and release LOCK_consensuslog_status
   consensus_log_manager.get_prefetch_manager()->disable_all_prefetch_channels();
 
-  // kill all binlog dump thd
-  binlog_dump_thread_kill();
-
   channel_map.rdlock();
   rli_info->mi->channel_wrlock();
   mysql_rwlock_wrlock(&LOCK_consensuslog_status);
+
+  if (rpl_consensus_log_get_term() != term) {
+    mysql_rwlock_unlock(&LOCK_consensuslog_status);
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_STATE_CHANGE_IGNORED, term, index,
+                 "term changed");
+    goto end;
+  }
 
   // Ensure all GTIDs to persist on disk.
   ha_flush_logs();
@@ -230,7 +242,7 @@ int ConsensusStateProcess::wait_follower_upgraded(uint64 term, uint64 index) {
   rli_info->end_info();
   mysql_mutex_unlock(&rli_info->data_lock);
 
-  mysql_mutex_t *log_lock = binlog->get_log_lock();
+  log_lock = binlog->get_log_lock();
   mysql_mutex_lock(log_lock);
   binlog->lock_index();
 
@@ -691,7 +703,10 @@ int ConsensusStateProcess::recovery_applier_status() {
 
     if (!opt_cluster_log_type_instance) {
       mysql_mutex_lock(binlog->get_log_lock());
-      binlog->switch_and_seek_log(log_name, log_pos, true);
+      if (consensus_log_manager.advance_commit_index_if_greater(next_index - 1,
+                                                                false)) {
+        binlog->switch_and_seek_log(log_name, log_pos, true);
+      }
       mysql_mutex_unlock(binlog->get_log_lock());
     }
 

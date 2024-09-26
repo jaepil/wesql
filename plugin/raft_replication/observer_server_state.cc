@@ -24,6 +24,7 @@
 
 #include "consensus_applier.h"
 #include "consensus_binlog.h"
+#include "consensus_log_manager.h"
 #include "consensus_meta.h"
 #include "consensus_state_process.h"
 #include "observer_server_state.h"
@@ -76,6 +77,9 @@ int consensus_replication_after_recovery(Server_state_param *) {
     /* Start consensus service */
     if (consensus_state_process.init_service()) return -1;
 
+    if (consensus_log_manager.start_consensus_commit_advance_thread())
+      return -1;
+
     /* Start consensus apply threads */
     if (!opt_cluster_log_type_instance && start_consensus_replica()) return -1;
 
@@ -119,6 +123,8 @@ int consensus_replication_after_server_shutdown(Server_state_param *) {
   if (!plugin_is_consensus_replication_running()) return 1;
 
   if (!opt_initialize) {
+    /* Stop consensus commit advance */
+    consensus_log_manager.stop_consensus_commit_advance_thread();
     /* Stop consensus state change */
     consensus_state_process.stop_consensus_state_change_thread();
     /* Stop consensus relica */

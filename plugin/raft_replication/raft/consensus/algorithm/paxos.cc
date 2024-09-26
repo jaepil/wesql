@@ -3064,6 +3064,27 @@ uint64_t Paxos::waitCommitIndexUpdate(uint64_t baseIndex, uint64_t term) {
              : commitIndex_;
 }
 
+
+uint64_t Paxos::timedWaitCommitIndexUpdate(uint64_t baseIndex, uint64_t term, uint64_t timeout) {
+  std::unique_lock<std::mutex> ul(lock_);
+  auto timeout_time =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
+
+  if (shutdown_.load()) return 0;
+  if (term != 0 && currentTerm_ != term) return 0;
+  if (commitIndex_ <= baseIndex && (term == 0 || currentTerm_ == term) &&
+      !shutdown_.load() &&
+      (state_ != LEADER || !consensusAsync_.load() ||
+       localServer_->lastSyncedIndex.load() <= baseIndex))
+    cond_.wait_until(ul, timeout_time);
+
+  if (term != 0 && currentTerm_ != term) return 0;
+
+  return (state_ == LEADER && consensusAsync_.load())
+             ? localServer_->lastSyncedIndex.load()
+             : commitIndex_;
+}
+
 uint64_t Paxos::checkCommitIndex(uint64_t baseIndex, uint64_t term) {
   uint64_t ret = 0;
   /* should call the blocking interface (waitCommitIndexUpdate)

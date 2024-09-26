@@ -360,6 +360,8 @@ class Paxos : public Consensus {
   /* ALL */
   virtual int onRequestVote(PaxosMsg* msg, PaxosMsg* rsp) override;
   virtual uint64_t waitCommitIndexUpdate(uint64_t baseIndex, uint64_t term = 0);
+  virtual uint64_t timedWaitCommitIndexUpdate(uint64_t baseIndex, uint64_t term,
+                                              uint64_t timeout);
   virtual uint64_t checkCommitIndex(
       uint64_t baseIndex,
       uint64_t term = 0); /* A lock-free interface for follower */

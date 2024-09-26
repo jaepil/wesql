@@ -2145,10 +2145,10 @@ int rotate_consensus_log(THD *thd, bool force_rotate) {
   mysql_rwlock_rdlock(consensus_state_process.get_consensuslog_status_lock());
   MYSQL_BIN_LOG *binlog = consensus_state_process.get_consensus_log();
 
-  /* do not rotate in middle of a large trx */
-  if (consensus_state_process.get_status() !=
-          Consensus_Log_System_Status::BINLOG_WORKING &&
-      !consensus_log_manager.get_enable_rotate()) {
+  mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_rotate_lock());
+  if (!consensus_log_manager.get_enable_rotate()) {
+    /* In middle of a large trx or having uncommitted local system log */
+    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_rotate_lock());
     mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
     LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_LOG_ROTATE_IN_TRX_ERROR);
     my_error(ER_CONSENSUS_FOLLOWER_NOT_ALLOWED, MYF(0));
@@ -2158,6 +2158,7 @@ int rotate_consensus_log(THD *thd, bool force_rotate) {
 
   error = binlog->rotate_and_purge(thd, force_rotate);
 
+  mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_rotate_lock());
   mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
 
 err:

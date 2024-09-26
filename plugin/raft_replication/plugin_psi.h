@@ -36,6 +36,7 @@ void register_all_consensus_replication_psi_keys();
 extern PSI_mutex_key key_mutex_ConsensusLog_index;
 extern PSI_mutex_key key_mutex_ConsensusLog_term_lock;
 extern PSI_mutex_key key_mutex_ConsensusLog_apply_thread_lock;
+extern PSI_mutex_key key_mutex_ConsensusLog_commit_advance_lock;
 extern PSI_mutex_key key_mutex_Consensus_stage_change;
 
 extern PSI_mutex_key key_fifo_cache_cleaner;
@@ -45,14 +46,17 @@ extern PSI_rwlock_key key_rwlock_plugin_stop;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_status_lock;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_commit_lock;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_truncate_lock;
+extern PSI_rwlock_key key_rwlock_ConsensusLog_rotate_lock;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_log_cache_lock;
 extern PSI_rwlock_key key_rwlock_ConsensusLog_prefetch_channels_hash;
 
 extern PSI_cond_key key_COND_ConsensusLog_catchup;
+extern PSI_cond_key key_COND_ConsensusLog_commit_advance;
 extern PSI_cond_key key_COND_Consensus_state_change;
 extern PSI_cond_key key_COND_prefetch_reuqest;
 
 extern PSI_thread_key key_thread_consensus_stage_change;
+extern PSI_thread_key key_thread_consensus_commit_advance;
 extern PSI_thread_key key_thread_prefetch;
 extern PSI_thread_key key_thread_cleaner;
 

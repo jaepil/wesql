@@ -60,10 +60,17 @@ void ConsensusApplier::wait_replay_log_finished() {
 
 void ConsensusApplier::wait_apply_threads_stop() {
   DBUG_TRACE;
-  while (consensus_state_process.get_relay_log_info()->slave_running &&
+
+  Relay_log_info *rli = consensus_state_process.get_relay_log_info();
+
+  mysql_mutex_lock(&rli->run_lock);
+  while (rli->slave_running &&
          consensus_state_process.is_state_change_running()) {
-    my_sleep(200);
+    struct timespec abstime;
+    set_timespec(&abstime, 1);
+    mysql_cond_timedwait(&rli->stop_cond, &rli->run_lock, &abstime);
   }
+  mysql_mutex_unlock(&rli->run_lock);
 }
 
 int ConsensusApplier::cleanup() {
@@ -177,30 +184,6 @@ int start_consensus_apply_threads(Master_info *mi) {
   return error;
 }
 
-/*
-  Release slave threads at time of executing shutdown.
-*/
-void stop_consensus_apply_threads() {
-  DBUG_TRACE;
-
-  Master_info *mi = nullptr;
-
-  channel_map.wrlock();
-  mysql_rwlock_wrlock(consensus_state_process.get_consensuslog_status_lock());
-
-  if (consensus_state_process.get_relay_log_info())
-    mi = consensus_state_process.get_relay_log_info()->mi;
-
-  if (mi) {
-    mi->channel_wrlock();
-    terminate_slave_threads(mi, SLAVE_SQL, rpl_stop_replica_timeout);
-    mi->channel_unlock();
-  }
-
-  mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
-  channel_map.unlock();
-}
-
 int check_exec_consensus_log_end_condition(Relay_log_info *rli) {
   DBUG_TRACE;
 
@@ -290,14 +273,16 @@ void update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
             ->start_new_group();
       }
     }
-  } else if (!ev->is_control_event() ||
-             ev->get_type_code() == binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
+  } else if (ev->get_type_code() == binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
     /* The Previous_gtids_event serves as the event marking the end of the
      * binlog file header, allowing to advance to this point. */
     MYSQL_BIN_LOG *binlog = consensus_state_process.get_binlog();
     mysql_mutex_lock(binlog->get_log_lock());
-    binlog->switch_and_seek_log(rli->get_event_relay_log_name(),
-                                ev->future_event_relay_log_pos, true);
+    if (consensus_log_manager.advance_commit_index_if_greater(
+            consensus_applier.get_real_apply_index(), true)) {
+      binlog->switch_and_seek_log(rli->get_event_relay_log_name(),
+                                  ev->future_event_relay_log_pos, true);
+    }
     mysql_mutex_unlock(binlog->get_log_lock());
   }
 }
@@ -308,6 +293,7 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
   uint64 recover_status = 0;
   uint64 start_apply_index = 0;
   uint64 rli_appliedindex = 0;
+  uint64 next_index = 0;
   my_off_t log_pos = 0;
   char log_name[FN_REFLEN];
   uint64 first_index;
@@ -330,7 +316,7 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
         start_apply_index > applier_info->get_consensus_apply_index()
             ? start_apply_index
             : applier_info->get_consensus_apply_index();
-    uint64 next_index =
+    next_index =
         start_index < first_index
             ? first_index
             : consensus_log_manager.get_next_trx_index(start_index, false);
@@ -348,7 +334,7 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
     applier_info->flush_info(true);
   } else {
     uint64 start_index = applier_info->get_consensus_apply_index();
-    uint64 next_index =
+    next_index =
         start_index < first_index
             ? first_index
             : consensus_log_manager.get_next_trx_index(start_index, false);
@@ -383,7 +369,9 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
 
   MYSQL_BIN_LOG *binlog = consensus_state_process.get_binlog();
   mysql_mutex_lock(binlog->get_log_lock());
-  binlog->switch_and_seek_log(log_name, log_pos, true);
+  if (consensus_log_manager.advance_commit_index_if_greater(next_index - 1, false)) {
+    binlog->switch_and_seek_log(log_name, log_pos, true);
+  }
   mysql_mutex_unlock(binlog->get_log_lock());
 
   return 0;

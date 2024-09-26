@@ -91,6 +91,10 @@ let $wait_timeout= 600;
 
 # --source include/show_binary_logs.inc
 
+let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO, INFORMATION_SCHEMA.WESQL_CLUSTER_LOCAL where LAST_RAFT_INDEX = COMMIT_INDEX;
+let $wait_timeout= 600;
+--source include/wait_condition_or_abort.inc
+
 --echo # Wait persistent binlog finish on mysqld2 as new leader.
 let $wait_condition= SELECT count(distinct Log_name) >= 9 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX;
 let $wait_timeout= 600;

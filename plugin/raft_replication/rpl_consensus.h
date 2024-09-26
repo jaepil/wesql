@@ -103,6 +103,9 @@ extern void rpl_consensus_write_log_done_internal(uint64 log_index,
 
 extern uint64 rpl_consensus_wait_commit_index_update(uint64 log_index,
                                                      uint64 term);
+extern uint64 rpl_consensus_timed_wait_commit_index_update(uint64 log_index,
+                                                           uint64 term,
+                                                           uint64 timeout);
 extern void rpl_consensus_set_last_noncommit_dep_index(uint64 log_index);
 
 extern uint rpl_consensus_get_cluster_global_info(

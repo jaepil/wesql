@@ -214,7 +214,7 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
     bool ha_recover, bool has_ha_recover_end, uint64 ha_recover_end_index,
     bool log_recover_only) {
   bool pos_set_by_previous = false;
-  bool enable_rotate = true;
+  bool in_large_trx = false;
   bool ha_recover_end = false;
   uint64 start_index = 0;
   DBUG_TRACE;
@@ -281,8 +281,8 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
       if (this->begin_consensus && this->end_pos > this->start_pos &&
           this->end_pos - this->start_pos == this->current_length &&
           !(this->current_flag & Consensus_log_event_flag::FLAG_BLOB)) {
-        enable_rotate =
-            !(this->current_flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
+        in_large_trx =
+            (this->current_flag & Consensus_log_event_flag::FLAG_LARGE_TRX);
         this->begin_consensus = false;
       }
     }
@@ -345,7 +345,7 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
   consensus_log_manager.set_cache_index(this->valid_index);
   consensus_log_manager.set_sync_index(this->valid_index);
   consensus_log_manager.set_current_index(this->valid_index + 1);
-  consensus_log_manager.set_enable_rotate(enable_rotate);
+  consensus_log_manager.set_in_large_trx(in_large_trx);
   consensus_log_manager.set_event_timestamp(this->current_ev_ts);
 
   LogPluginErr(

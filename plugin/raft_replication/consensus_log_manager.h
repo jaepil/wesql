@@ -65,7 +65,12 @@ class ConsensusLogManager {
         current_index(0),
         cache_index(0),
         sync_index(0),
-        enable_rotate(true),
+        last_log_term(0),
+        local_system_log_index(0),
+        has_pending_local_system_log(false),
+        commit_index(0),
+        in_large_trx(false),
+        consensus_commit_advance_is_running(false),
         event_tv_sec(0) {}
   ~ConsensusLogManager() {}
 
@@ -90,15 +95,15 @@ class ConsensusLogManager {
     return &LOCK_consensuslog_truncate;
   }
   uint64 get_current_index() { return current_index; }
-  uint64 get_cache_index();
-  uint64 get_sync_index();
+  uint64 get_cache_index() { return cache_index; }
+  uint64 get_sync_index() { return sync_index; }
   uint64 get_final_sync_index();
   void set_current_index(uint64 current_index_arg) {
     current_index = current_index_arg;
   }
   void incr_current_index() { current_index++; }
-  void set_cache_index(uint64 cache_index_arg);
-  void set_sync_index(uint64 sync_index_arg);
+  void set_cache_index(uint64 arg) { cache_index = arg; }
+  void set_sync_index(uint64 arg) { sync_index = arg; }
   void set_sync_index_if_greater(uint64 sync_index_arg);
 
   bool get_start_without_log() { return start_without_log; }
@@ -106,8 +111,21 @@ class ConsensusLogManager {
     start_without_log = start_without_log_arg;
   }
 
-  bool get_enable_rotate() { return enable_rotate; }
-  void set_enable_rotate(bool arg) { enable_rotate = arg; }
+  uint64 get_last_log_term() { return last_log_term; }
+  void set_last_log_term(uint64 arg) { last_log_term = arg; }
+
+  // consensus commit index
+  uint64 get_commit_index() { return commit_index; }
+  bool advance_commit_index_if_greater(uint64 arg, bool force);
+  void set_in_large_trx(bool arg) { in_large_trx = arg; }
+  int try_advance_commit_position(uint64 timeout);
+
+  mysql_rwlock_t *get_consensuslog_rotate_lock() {
+    return &LOCK_consensuslog_rotate;
+  }
+  bool get_enable_rotate() {
+    return !has_pending_local_system_log && !in_large_trx;
+  }
 
   // for log operation
   int write_log_entry(ConsensusLogEntry &log, uint64 *consensus_index,
@@ -133,6 +151,15 @@ class ConsensusLogManager {
   void set_event_timestamp(uint32 t) { event_tv_sec.store(t); }
   uint32 get_event_timestamp() { return event_tv_sec.load(); }
 
+  int start_consensus_commit_advance_thread();
+  int stop_consensus_commit_advance_thread();
+
+ private:
+  bool set_local_system_log_if_greater(uint64 local_sytem_log_index_arg,
+                                       bool force_signal);
+  void truncate_local_system_log_if_lesser(uint64 truncate_index_arg);
+  bool wait_for_uncommitted_local_system_log(uint64 timetout);
+
  private:
   bool inited;
   bool first_event_in_file;
@@ -146,10 +173,24 @@ class ConsensusLogManager {
   ConsensusLogIndex *log_file_index;              // consensus log file index
 
   mysql_rwlock_t LOCK_consensuslog_truncate;
-  std::atomic<uint64> current_index;  // last log index in the log system
+  std::atomic<uint64> current_index;  // current log index in the log system
   std::atomic<uint64> cache_index;    // last cache log entry
-  std::atomic<uint64> sync_index;     // last log entry
-  std::atomic<bool> enable_rotate;    // do not rotate if in middle of large trx
+  std::atomic<uint64> sync_index;     // last log entry has been synced
+
+  std::atomic<uint64> last_log_term;   // last log term, don't decrease if truncated
+
+  mysql_rwlock_t LOCK_consensuslog_rotate;
+  uint64 local_system_log_index;  // last local system log
+                                  // index write by raft protocal
+  std::atomic<bool>
+      has_pending_local_system_log;  // do not rotate if local system log is
+                                     // uncommitted, such as configchange.
+  std::atomic<uint64> commit_index;  // last commit index advanced
+  std::atomic<bool> in_large_trx;    // do not rotate if in middle of large trx
+  std::atomic<bool> consensus_commit_advance_is_running;
+  my_thread_handle consensus_commit_advance_thread_handler;
+  mysql_cond_t COND_consensuslog_commit_advance;
+  mysql_mutex_t LOCK_consensuslog_commit_advance;
 
   std::atomic<uint32>
       event_tv_sec;  // last log event timestamp received from leader

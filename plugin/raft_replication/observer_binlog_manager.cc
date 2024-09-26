@@ -406,8 +406,6 @@ static int consensus_binlog_manager_before_rotate(Binlog_manager_param *param,
                                                   bool &do_rotate) {
   DBUG_TRACE;
 
-  do_rotate = true;
-
   if (opt_initialize) return 0;
 
   /* If the plugin is not running, return failed. */
@@ -421,6 +419,18 @@ static int consensus_binlog_manager_before_rotate(Binlog_manager_param *param,
   if (consensus_state_process.get_status() !=
       Consensus_Log_System_Status::BINLOG_WORKING) {
     do_rotate = false;
+  }
+
+  /* Check consensus log rotate status */
+  if (do_rotate){
+    mysql_rwlock_rdlock(consensus_log_manager.get_consensuslog_rotate_lock());
+    if (!consensus_log_manager.get_enable_rotate()) {
+      do_rotate = false;
+      mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_rotate_lock());
+    }
+  }
+
+  if (!do_rotate) {
     mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
   } else {
     thd->consensus_context.status_locked = true;
@@ -440,6 +450,7 @@ static int consensus_binlog_manager_after_rotate(Binlog_manager_param *param) {
   THD *thd = param->thd;
 
   if (thd->consensus_context.status_locked) {
+    mysql_rwlock_unlock(consensus_log_manager.get_consensuslog_rotate_lock());
     mysql_rwlock_unlock(consensus_state_process.get_consensuslog_status_lock());
     thd->consensus_context.status_locked = false;
   }
