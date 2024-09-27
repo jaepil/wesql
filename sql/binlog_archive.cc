@@ -2018,9 +2018,8 @@ int Binlog_archive::move_crash_safe_index_file_to_index_file() {
                         mysql_file_seek(fd, 0L, MY_SEEK_END, MYF(0)), false,
                         MYF(MY_WME | MY_WAIT_IF_FULL),
                         key_file_binlog_index_cache)) {
-    if (fd >= 0) {
-      mysql_file_close(fd, MYF(0));
-    }
+    if (my_b_inited(&m_index_file)) end_io_cache(&m_index_file);
+    if (fd >= 0) mysql_file_close(fd, MYF(0));
     error = 1;
     goto err;
   }

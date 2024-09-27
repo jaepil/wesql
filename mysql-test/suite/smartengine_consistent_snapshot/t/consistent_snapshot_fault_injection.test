@@ -1,0 +1,87 @@
+#
+# Test for consistent snapshot from object store
+#
+--echo # Wait for at least 1 snapshots to be generated 
+let $wait_condition= SELECT count(*) >=1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+--source include/wait_condition_or_abort.inc
+
+CREATE DATABASE db1;
+CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1);
+INSERT INTO t1 values(2);
+INSERT INTO t1 values(3);
+INSERT INTO t1 values(4);
+SELECT * FROM t1;
+
+--echo # Wait for at least 2 snapshots to be generated 
+let $wait_condition= SELECT count(*) >=2 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+--source include/wait_condition_or_abort.inc
+
+--let $error_log=$MYSQLTEST_VARDIR/tmp/consistent_snapshot_fault_injection.err
+
+--echo # fault_injection_put_innodb_index_to_objstore
+set global debug = '+d,fault_injection_put_innodb_index_to_objstore';
+INSERT INTO t1 SELECT * FROM t1;
+sleep 3;
+--let $grep_file=$error_log
+--let $grep_pattern=innodb_archive.index upload to object store failed in move_crash_safe_index_file_to_index_file
+--let $grep_output=boolean
+--source include/grep_pattern.inc
+set global debug = '-d,fault_injection_put_innodb_index_to_objstore';
+
+--echo # fault_injection_delete_innodb_index_file
+set global debug = '+d,fault_injection_delete_innodb_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+sleep 3;
+--let $grep_pattern=innodb_archive.index delete failed in move_crash_safe_index_file_to_index_file
+--let $grep_output=boolean
+--source include/grep_pattern.inc
+set global debug = '-d,fault_injection_delete_innodb_index_file';
+
+--echo # fault_injection_reopen_innodb_index_file
+set global debug = '+d,fault_injection_reopen_innodb_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+sleep 3;
+--let $grep_pattern=innodb_archive.index open failed in move_crash_safe_index_file_to_index_file
+--let $grep_output=boolean
+--source include/grep_pattern.inc
+set global debug = '-d,fault_injection_reopen_innodb_index_file';
+
+--echo # Wait for at least 2 snapshots to be generated 
+let $wait_condition= SELECT count(*) >=3 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+--source include/wait_condition_or_abort.inc
+
+--echo # fault_injection_put_se_index_to_objstore
+set global debug = '+d,fault_injection_put_se_index_to_objstore';
+INSERT INTO t1 SELECT * FROM t1;
+sleep 3;
+--let $grep_pattern=se_archive.index upload to object store failed in move_crash_safe_index_file_to_index_file
+--let $grep_output=boolean
+--source include/grep_pattern.inc
+set global debug = '-d,fault_injection_put_se_index_to_objstore';
+
+--echo # fault_injection_delete_se_index_file
+set global debug = '+d,fault_injection_delete_se_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+sleep 3;
+--let $grep_pattern=se_archive.index delete failed in move_crash_safe_index_file_to_index_file
+--let $grep_output=boolean
+--source include/grep_pattern.inc
+set global debug = '-d,fault_injection_delete_se_index_file';
+
+--echo # fault_injection_reopen_se_index_file
+set global debug = '+d,fault_injection_reopen_se_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+sleep 3;
+--let $grep_pattern=se_archive.index open failed in move_crash_safe_index_file_to_index_file
+--let $grep_output=boolean
+--source include/grep_pattern.inc
+set global debug = '-d,fault_injection_reopen_se_index_file';
+
+--echo # Wait for at least 2 snapshots to be generated 
+let $wait_condition= SELECT count(*) >=4 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+--source include/wait_condition_or_abort.inc
+
+--echo # Cleanup
+DROP TABLE t1;
+DROP DATABASE db1;

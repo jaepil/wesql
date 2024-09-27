@@ -118,7 +118,6 @@ static bool remove_file(const std::string &file);
 static bool copy_file(IO_CACHE *from, IO_CACHE *to, my_off_t offset);
 static bool file_has_suffix(const std::string &sfx, const std::string &path);
 static int compare_log_name(const char *log_1, const char *log_2);
-static void exec_binlog_error_action_abort(THD *thd, const char *err_string);
 static time_t calculate_auto_purge_lower_time_bound();
 static int convert_str_to_datetime(const char *str, ulong &my_time);
 static size_t convert_datetime_to_str(char *str, time_t ts);
@@ -131,6 +130,7 @@ static const char *convert_archive_progress_to_str(
  */
 int start_consistent_archive() {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("start_consistent_archive"));
 
   if (!opt_consistent_snapshot_archive || !opt_serverless) {
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
@@ -298,6 +298,7 @@ int start_consistent_archive() {
  */
 void stop_consistent_archive() {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("stop_consistent_archive"));
 
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
          "stop consistent archive ...");
@@ -454,6 +455,8 @@ mysql_mutex_t *Consistent_archive::get_consistent_archive_lock() {
  */
 int Consistent_archive::terminate_consistent_archive_thread() {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("terminate_consistent_archive_thread"));
+
   mysql_mutex_lock(&m_run_lock);
   abort_archive = true;
   mysql_cond_broadcast(&m_run_cond);
@@ -483,12 +486,11 @@ void Consistent_archive::set_thread_context() {
 }
 
 static bool is_number(const char *str, uint64_t *res, bool allow_wildcards) {
-  int flag;
-  const char *start;
   DBUG_TRACE;
+  DBUG_PRINT("info", ("is_number"));
+  int flag = 0;
+  const char *start = str;
 
-  flag = 0;
-  start = str;
   while (*str++ == ' ')
     ;
   if (*--str == '-' || *str == '+') str++;
@@ -510,7 +512,9 @@ static bool is_number(const char *str, uint64_t *res, bool allow_wildcards) {
 
 // init new mysql archive dir name
 int Consistent_archive::generate_innodb_new_name() {
-  LOG_INFO log_info;
+  DBUG_TRACE;
+  DBUG_PRINT("info", ("generate_innodb_new_name"));
+  LOG_INFO log_info{};
   int error = 0;
   uint64_t number = 0;
   bool need_lock = false;
@@ -564,7 +568,9 @@ err:
 }
 
 int Consistent_archive::generate_se_new_name() {
-  LOG_INFO log_info;
+  DBUG_TRACE;
+  DBUG_PRINT("info", ("generate_se_new_name"));
+  LOG_INFO log_info{};
   int error = 1;
   uint64_t number = 0;
   bool need_lock = false;
@@ -739,6 +745,7 @@ void Consistent_archive::run() {
     // Every time a consistent snapshot is archived, reopens the index file.
     // Ensure that the local index files are consistent with the object store.
     mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
+    close_index_file(ARCHIVE_MYSQL_INNODB);
     if (open_index_file(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
                         CONSISTENT_INNODB_ARCHIVE_INDEX_FILE,
                         ARCHIVE_MYSQL_INNODB)) {
@@ -748,6 +755,7 @@ void Consistent_archive::run() {
     mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
 
     mysql_mutex_lock(&m_se_backup_index_lock);
+    close_index_file(ARCHIVE_SE);
     if (open_index_file(CONSISTENT_SE_ARCHIVE_INDEX_FILE,
                         CONSISTENT_SE_ARCHIVE_INDEX_FILE, ARCHIVE_SE)) {
       mysql_mutex_unlock(&m_se_backup_index_lock);
@@ -756,6 +764,7 @@ void Consistent_archive::run() {
     mysql_mutex_unlock(&m_se_backup_index_lock);
 
     mysql_mutex_lock(&m_consistent_index_lock);
+    close_index_file(ARCHIVE_SNAPSHOT_FILE);
     if (open_index_file(CONSISTENT_SNAPSHOT_INDEX_FILE,
                         CONSISTENT_SNAPSHOT_INDEX_FILE,
                         ARCHIVE_SNAPSHOT_FILE)) {
@@ -878,6 +887,7 @@ error:
 int Consistent_archive::wait_for_consistent_archive(
     const std::chrono::seconds &timeout, bool &abort) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("wait_for_consistent_archive"));
   int error = 0;
   struct timespec ts;
   set_timespec(&ts, timeout.count());
@@ -897,6 +907,7 @@ int Consistent_archive::wait_for_consistent_archive(
  */
 void Consistent_archive::signal_consistent_archive() {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("signal_consistent_archive"));
   mysql_mutex_lock(&m_run_lock);
   mysql_cond_broadcast(&m_run_cond);
   mysql_mutex_unlock(&m_run_lock);
@@ -1140,9 +1151,9 @@ int Consistent_archive::archive_consistent_snapshot_binlog() {
     // wait archive binlog complete.
     // And update mysql binlog filename to the archived binlog filename.
     if (m_consensus_index > 0) {
-      errval = binlog_archive_wait_for_archive(thd, m_mysql_binlog_file,
-                                              m_binlog_file, m_mysql_binlog_pos,
-                                              m_consensus_index);
+      errval = binlog_archive_wait_for_archive(
+          thd, m_mysql_binlog_file, m_binlog_file, m_mysql_binlog_pos,
+          m_consensus_index);
     } else {
       // no binlog.
       m_binlog_file[0] = '\0';
@@ -1182,6 +1193,8 @@ err:
 
 int Consistent_archive::archive_consistent_snapshot_cleanup(bool failed) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("archive_consistent_snapshot_cleanup"));
+  DBUG_EXECUTE_IF("fault_injection_consistent_snapshot_cleanup", { return 1; });
   THD *thd = m_thd;
   plugin_ref plugin;
   remove_file(m_mysql_innodb_clone_dir);
@@ -1410,24 +1423,24 @@ int Consistent_archive::archive_innodb_data() {
   // If subsequent errors, recover local index file by run()->while reopen
   // index.If an error occurs during add_line_to_index, a garbage file
   // innodb_archive.000000.tar will exist on the object store.
+  err_msg.assign("persistent update innodb_archhive.index ");
+  err_msg.append(m_mysql_clone_keyid);
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
-         "persistent update innodb_archhive.index begin.");
+         err_msg.c_str());
   mysql_mutex_lock(&m_mysql_innodb_clone_index_lock);
   if (DBUG_EVALUATE_IF("fault_injection_persistent_innodb_archive_index", 1,
                        0) ||
       add_line_to_index(m_mysql_clone_keyid, ARCHIVE_MYSQL_INNODB)) {
     mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
-    err_msg.assign("persistent update ");
-    err_msg.append(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE);
-    err_msg.append(" failed: ");
-    err_msg.append(m_mysql_clone_keyid);
+    err_msg.append(" failed");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
            err_msg.c_str());
     return 1;
   }
   mysql_mutex_unlock(&m_mysql_innodb_clone_index_lock);
+  err_msg.append(" end");
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
-         "persistent update innodb_archhive.index end.");
+         err_msg.c_str());
   return 0;
 }
 /**
@@ -1509,6 +1522,7 @@ bool Consistent_archive::archive_smartengine() {
  */
 bool Consistent_archive::release_se_snapshot(uint64_t backup_snapshot_id) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("release_se_snapshot"));
   THD *thd = m_thd;
   plugin_ref plugin;
   std::string err_msg;
@@ -1782,22 +1796,24 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
   }
   // add smartengine backup name to se_backup.index,
   // And upload se_backup.index to s3.
+  err_msg.assign("persistent update se_archive.index ");
+  err_msg.append(m_se_backup_keyid);
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
-         "persistent update se_archive.index begin.");
+         err_msg.c_str());
   mysql_mutex_lock(&m_se_backup_index_lock);
-  if (DBUG_EVALUATE_IF("fault_injection_persistent_smartengine_copy_index_file",
-                       1, 0) ||
+  if (DBUG_EVALUATE_IF("fault_injection_persistent_smartengine_index_file", 1,
+                       0) ||
       add_line_to_index((const char *)m_se_backup_keyid, ARCHIVE_SE)) {
     mysql_mutex_unlock(&m_se_backup_index_lock);
-    err_msg.assign("persistent update se_archive.index failed: ");
-    err_msg.append(CONSISTENT_SE_ARCHIVE_INDEX_FILE);
+    err_msg.append(" failed");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
            err_msg.c_str());
     return true;
   }
   mysql_mutex_unlock(&m_se_backup_index_lock);
+  err_msg.append(" end");
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
-         "persistent update se_archive.index end.");
+         err_msg.c_str());
   return false;
 }
 
@@ -1835,11 +1851,12 @@ bool Consistent_archive::write_consistent_snapshot_file() {
   err_msg.append(CONSISTENT_SNAPSHOT_INDEX_FILE);
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
   mysql_mutex_lock(&m_consistent_index_lock);
-  if (add_line_to_index((const char *)snapshot_info.c_str(),
+  if (DBUG_EVALUATE_IF("fault_injection_persistent_consistent_index_file", 1,
+                       0) ||
+      add_line_to_index((const char *)snapshot_info.c_str(),
                         ARCHIVE_SNAPSHOT_FILE)) {
     mysql_mutex_unlock(&m_consistent_index_lock);
-    err_msg.assign("persistent update index failed: ");
-    err_msg.append(CONSISTENT_SNAPSHOT_INDEX_FILE);
+    err_msg.assign("persistent update consistent_snapshot.index failed");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     goto err;
   }
@@ -2003,26 +2020,44 @@ int Consistent_archive::close_crash_safe_index_file(Archive_type arch_type) {
 /**
   Move crash safe index file to index file.
 
+  First, upload it to the object store, then update the local index file.
+  If the upload fails, update index will also fail. If the
+  upload succeeds but the local update index fails, it will result in
+  inconsistency between the local and object store indexes. Therefore,
+  forcibly close the index file to allow the consistent snapshot archive
+  thread to download the index from the object store again and reopen it.
+
   @param need_lock_index If true, LOCK_index will be acquired;
   otherwise it should already be held.
 
   @retval 0 ok
-  @retval -1 error
+  @retval 1 error
 */
 int Consistent_archive::move_crash_safe_index_file_to_index_file(
     Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("move_crash_safe_index_file_to_index_file"));
   int error = 0;
   File fd = -1;
   int failure_trials = MYSQL_BIN_LOG::MAX_RETRIES_FOR_DELETE_RENAME_FAILURE;
   bool file_rename_status = false, file_delete_status = false;
   THD *thd = m_thd;
-
+  std::string err_msg{};
   char *crash_safe_index_file_name;
   IO_CACHE *index_file;
   char *index_file_name;
   PSI_file_key *index_file_key;
   PSI_file_key *index_file_cache_key;
+  std::string index_keyid;
+  bool fault_injection_put_se_index = false,
+       fault_injection_put_innodb_index = false,
+       fault_injection_put_consistent_index = false;
+  bool fault_injection_delete_innodb_index = false,
+       fault_injection_delete_se_index = false,
+       fault_injection_delete_consistent_index = false;
+  bool fault_injection_reopen_innodb_index = false,
+       fault_injection_reopen_se_index = false,
+       fault_injection_reopen_consistent_index = false;
 
   if (arch_type == ARCHIVE_MYSQL_INNODB) {
     crash_safe_index_file_name = m_crash_safe_mysql_clone_index_file_name;
@@ -2030,12 +2065,30 @@ int Consistent_archive::move_crash_safe_index_file_to_index_file(
     index_file_name = m_mysql_clone_index_file_name;
     index_file_key = &PSI_consistent_archive_mysql_log_index_key;
     index_file_cache_key = &PSI_consistent_archive_mysql_log_index_cache_key;
+    index_keyid.assign(m_archive_dir);
+    index_keyid.append(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE);
+    DBUG_EXECUTE_IF("fault_injection_put_innodb_index_to_objstore",
+                    { fault_injection_put_innodb_index = true; });
+    DBUG_EXECUTE_IF("fault_injection_delete_innodb_index_file",
+                    { fault_injection_delete_innodb_index = true; });
+    DBUG_EXECUTE_IF("fault_injection_reopen_innodb_index_file",
+                    { fault_injection_reopen_innodb_index = true; });
+    err_msg.assign("innodb_archive.index");
   } else if (arch_type == ARCHIVE_SE) {
     crash_safe_index_file_name = m_crash_safe_se_backup_index_file_name;
     index_file = &m_se_backup_index_file;
     index_file_name = m_se_backup_index_file_name;
     index_file_key = &PSI_consistent_archive_se_log_index_key;
     index_file_cache_key = &PSI_consistent_archive_se_log_index_cache_key;
+    index_keyid.assign(m_archive_dir);
+    index_keyid.append(CONSISTENT_SE_ARCHIVE_INDEX_FILE);
+    DBUG_EXECUTE_IF("fault_injection_put_se_index_to_objstore",
+                    { fault_injection_put_se_index = true; });
+    DBUG_EXECUTE_IF("fault_injection_delete_se_index_file",
+                    { fault_injection_delete_se_index = true; });
+    DBUG_EXECUTE_IF("fault_injection_reopen_se_index_file",
+                    { fault_injection_reopen_se_index = true; });
+    err_msg.assign("se_archive.index");
   } else {
     assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file_name =
@@ -2044,37 +2097,58 @@ int Consistent_archive::move_crash_safe_index_file_to_index_file(
     index_file_name = m_consistent_snapshot_index_file_name;
     index_file_key = &PSI_consistent_snapshot_file_key;
     index_file_cache_key = &PSI_consistent_snapshot_file_cache_key;
+    index_keyid.assign(m_archive_dir);
+    index_keyid.append(CONSISTENT_SNAPSHOT_INDEX_FILE);
+    DBUG_EXECUTE_IF("fault_injection_put_consistent_index_to_objstore",
+                    { fault_injection_put_consistent_index = true; });
+    DBUG_EXECUTE_IF("fault_injection_delete_consistent_index_file",
+                    { fault_injection_delete_consistent_index = true; });
+    DBUG_EXECUTE_IF("fault_injection_reopen_consistent_index_file",
+                    { fault_injection_reopen_consistent_index = true; });
+    err_msg.assign("consistent_snapshot.index");
   }
 
-  /*
-  if (need_lock_index)
-    mysql_mutex_lock(&LOCK_index);
-  else
-    mysql_mutex_assert_owner(&LOCK_index);
-  */
+  // 1. upload local crash index file to object store
+  // TODO: objectstore API will retry n times.
+  objstore::Status ss = snapshot_objstore->put_object_from_file(
+      std::string_view(opt_objstore_bucket), index_keyid,
+      crash_safe_index_file_name);
+  if (fault_injection_put_innodb_index || fault_injection_put_se_index ||
+      fault_injection_put_consistent_index || !ss.is_succ()) {
+    err_msg.append(
+        " upload to object store failed in "
+        "move_crash_safe_index_file_to_index_file keyid=");
+    err_msg.append(index_keyid);
+    err_msg.append(" error=");
+    err_msg.append(ss.error_message());
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    error = 1;
+    /*
+      Delete Crash safe file index file here and recover the binlog.index
+      from persistent binlog.index.
+     */
+    mysql_file_delete(*index_file_key, crash_safe_index_file_name, MYF(0));
+    goto err;
+  }
 
+  // 2. close local index file.
   if (my_b_inited(index_file)) {
     end_io_cache(index_file);
     if (mysql_file_close(index_file->file, MYF(0)) < 0) {
-      error = -1;
+      error = 1;
       /*
-        Delete Crash safe index file here and recover the binlog.index
-        state(index_file io_cache) from old binlog.index content.
+        Delete Crash safe file index file here and recover the binlog.index
+        from persistent binlog.index.
        */
       mysql_file_delete(*index_file_key, crash_safe_index_file_name, MYF(0));
-
-      goto recoverable_err;
+      goto err;
     }
 
-    /*
-      Sometimes an outsider can lock index files for temporary viewing
-      purpose. For eg: MEB locks binlog.index/relaylog.index to view
-      the content of the file. During that small period of time, deletion
-      of the file is not possible on some platforms(Eg: Windows)
-      Server should retry the delete operation for few times instead of
-      panicking immediately.
-    */
     while ((file_delete_status == false) && (failure_trials > 0)) {
+      if (fault_injection_delete_innodb_index ||
+          fault_injection_delete_se_index ||
+          fault_injection_delete_consistent_index)
+        break;
       file_delete_status =
           !(mysql_file_delete(*index_file_key, index_file_name, MYF(MY_WME)));
       --failure_trials;
@@ -2086,26 +2160,20 @@ int Consistent_archive::move_crash_safe_index_file_to_index_file(
     }
 
     if (!file_delete_status) {
-      error = -1;
+      err_msg.append(
+          " delete failed in move_crash_safe_index_file_to_index_file");
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+      error = 1;
       /*
         Delete Crash safe file index file here and recover the binlog.index
-        state(m_mysql_clone_index_file io_cache) from old binlog.index
-        content.
+        from persistent binlog.index.
        */
       mysql_file_delete(*index_file_key, crash_safe_index_file_name, MYF(0));
-
-      goto recoverable_err;
+      goto err;
     }
   }
 
-  /*
-    Sometimes an outsider can lock index files for temporary viewing
-    purpose. For eg: MEB locks binlog.index/relaylog.index to view
-    the content of the file. During that small period of time, rename
-    of the file is not possible on some platforms(Eg: Windows)
-    Server should retry the rename operation for few times instead of
-    panicking immediately.
-  */
+  // 3. update local index file.
   failure_trials = MYSQL_BIN_LOG::MAX_RETRIES_FOR_DELETE_RENAME_FAILURE;
   while ((file_rename_status == false) && (failure_trials > 0)) {
     file_rename_status =
@@ -2118,93 +2186,40 @@ int Consistent_archive::move_crash_safe_index_file_to_index_file(
     }
   }
   if (!file_rename_status) {
-    error = -1;
-    goto fatal_err;
+    mysql_file_delete(*index_file_key, crash_safe_index_file_name, MYF(0));
+    error = 1;
+    goto err;
   }
 
-recoverable_err:
-  if ((fd = mysql_file_open(*index_file_key, index_file_name, O_RDWR | O_CREAT,
+  // 4. reopen local index file.
+  if ((fault_injection_reopen_innodb_index || fault_injection_reopen_se_index ||
+       fault_injection_reopen_consistent_index) ||
+      (fd = mysql_file_open(*index_file_key, index_file_name, O_RDWR | O_CREAT,
                             MYF(MY_WME))) < 0 ||
       mysql_file_sync(fd, MYF(MY_WME)) ||
       init_io_cache_ext(index_file, fd, IO_SIZE, READ_CACHE,
                         mysql_file_seek(fd, 0L, MY_SEEK_END, MYF(0)), false,
                         MYF(MY_WME | MY_WAIT_IF_FULL), *index_file_cache_key)) {
-    goto fatal_err;
+    err_msg.append(" open failed in move_crash_safe_index_file_to_index_file");
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+    error = 1;
+    // Close local index file and recover the binlog.index
+    // from persistent binlog.index.
+    if (my_b_inited(index_file)) end_io_cache(index_file);
+    if (fd >= 0) mysql_file_close(fd, MYF(0));
+    goto err;
   }
 
-  // if (need_lock_index) mysql_mutex_unlock(&LOCK_index);
+err:
   return error;
-
-fatal_err:
-  /*
-    This situation is very very rare to happen (unless there is some serious
-    memory related issues like OOM) and should be treated as fatal error.
-    Hence it is better to bring down the server without respecting
-    'binlog_error_action' value here.
-  */
-  if (binlog_error_action == ABORT_SERVER) {
-    exec_binlog_error_action_abort(
-        m_thd,
-        "MySQL server failed to update the "
-        "archive binlog.index file's content properly. "
-        "It might not be in sync with available "
-        "binlogs and the binlog.index file state is in "
-        "unrecoverable state. Aborting the server.");
-  } else {
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INDEX_LOG,
-           "MySQL server failed to update the archive binlog.index file's "
-           "content properly. It might not be in sync with available binlogs "
-           "and "
-           "the binlog.index file state is in unrecoverable state.");
-  }
-  return error;
-}
-
-/**
-  When a fatal error occurs due to which binary logging becomes impossible and
-  the user specified binlog_error_action= ABORT_SERVER the following function
-  is invoked. This function pushes the appropriate error message to client and
-  logs the same to server error log and then aborts the server.
-
-  @param err_string          Error string which specifies the exact error
-                             message from the caller.
-*/
-static void exec_binlog_error_action_abort(THD *thd, const char *err_string) {
-  /*
-    When the code enters here it means that there was an error at higher layer
-    and my_error function could have been invoked to let the client know what
-    went wrong during the execution.
-
-    But these errors will not let the client know that the server is going to
-    abort. Even if we add an additional my_error function call at this point
-    client will be able to see only the first error message that was set
-    during the very first invocation of my_error function call.
-
-    The advantage of having multiple my_error function calls are visible when
-    the server is up and running and user issues SHOW WARNINGS or SHOW ERROR
-    calls. In this special scenario server will be immediately aborted and
-    user will not be able execute the above SHOW commands.
-
-    Hence we clear the previous errors and push one critical error message to
-    clients.
-   */
-  if (thd) {
-    if (thd->is_error()) thd->clear_error();
-    /*
-      Send error to both client and to the server error log.
-    */
-    my_error(ER_CONSISTENT_SNAPSHOT_LOG, MYF(ME_FATALERROR), err_string);
-  }
-
-  LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_string);
-  flush_error_log_messages();
-
-  my_abort();
 }
 
 /**
   Append log file name to index file.
-
+  First persist the archive object, then persist the index file.
+  If the archive object is successfully persisted but the index file persistence
+  fails, the snapshot is considered a failure, and the already persisted object
+  is treated as garbage and purged.
   - To make crash safe, we copy all the content of index file
   to crash safe index file firstly and then append the log
   file name to the crash safe index file. Finally move the
@@ -2218,95 +2233,74 @@ static void exec_binlog_error_action_abort(THD *thd, const char *err_string) {
 int Consistent_archive::add_line_to_index(const char *log_name,
                                           Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("add_line_to_index"));
   IO_CACHE *crash_safe_index_file;
   std::string crash_safe_index_file_name;
-  IO_CACHE *index_file;
+  IO_CACHE *index_file = nullptr;
   std::string index_file_name;
-  std::string index_keyid;
-  objstore::Status ss;
-  std::string err_msg;
+  std::string err_msg{};
 
   if (arch_type == ARCHIVE_MYSQL_INNODB) {
-    DBUG_EXECUTE_IF("fail_to_write_innodb_archive_to_persistent_innodb_index",
-                    { return LOG_INFO_IO; });
     crash_safe_index_file = &m_crash_safe_mysql_clone_index_file;
     crash_safe_index_file_name.assign(m_crash_safe_mysql_clone_index_file_name);
     index_file = &m_mysql_clone_index_file;
     index_file_name.assign(m_mysql_clone_index_file_name);
-    index_keyid.assign(m_archive_dir);
-    index_keyid.append(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE);
   } else if (arch_type == ARCHIVE_SE) {
-    DBUG_EXECUTE_IF(
-        "fail_to_write_smartengine_archive_to_persistent_smartengine_index",
-        { return LOG_INFO_IO; });
     crash_safe_index_file = &m_crash_safe_se_backup_index_file;
     crash_safe_index_file_name.assign(m_crash_safe_se_backup_index_file_name);
     index_file = &m_se_backup_index_file;
     index_file_name.assign(m_se_backup_index_file_name);
-    index_keyid.assign(m_archive_dir);
-    index_keyid.append(CONSISTENT_SE_ARCHIVE_INDEX_FILE);
   } else {
     assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
-    DBUG_EXECUTE_IF(
-        "fail_to_write_snapshot_to_persistent_consistent_snapshot_index",
-        { return LOG_INFO_IO; });
     crash_safe_index_file = &m_crash_safe_consistent_snapshot_index_file;
     crash_safe_index_file_name.assign(
         m_crash_safe_consistent_snapshot_index_file_name);
     index_file = &m_consistent_snapshot_index_file;
     index_file_name.assign(m_consistent_snapshot_index_file_name);
-    index_keyid.assign(m_archive_dir);
-    index_keyid.append(CONSISTENT_SNAPSHOT_INDEX_FILE);
   }
 
-  err_msg.assign("index ");
+  err_msg.assign(" add index entry ");
+  err_msg.append(log_name);
+  err_msg.append(" to ");
   err_msg.append(index_file_name);
   if (!my_b_inited(index_file)) {
-    err_msg.append(" not opened");
+    err_msg.append(" ,local index file not opened");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-    return LOG_INFO_IO;
+    goto err;
   }
 
   if (open_crash_safe_index_file(arch_type)) {
+    err_msg.append(" open_crash_safe_index_file failed");
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     goto err;
   }
 
   if (copy_file(index_file, crash_safe_index_file, 0)) {
+    err_msg.append(" copy_file failed");
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     goto err;
   }
 
-  err_msg.append("write ");
-  err_msg.append(log_name);
   if (my_b_write(crash_safe_index_file, (const uchar *)log_name,
                  strlen(log_name)) ||
       my_b_write(crash_safe_index_file, pointer_cast<const uchar *>("\n"), 1) ||
       flush_io_cache(crash_safe_index_file) ||
       mysql_file_sync(crash_safe_index_file->file, MYF(MY_WME))) {
-    err_msg.append(" failed");
+    err_msg.append(" my_b_write failed");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     goto err;
   }
 
   if (close_crash_safe_index_file(arch_type)) {
+    err_msg.append(" close_crash_safe_index_file failed");
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     goto err;
   }
 
+  // If failed, recover the index file from object store
+  // when restart the next consistent snapshot from run()->while{}.
   if (move_crash_safe_index_file_to_index_file(arch_type)) {
-    goto err;
-  }
-
-  // If upload to objstore failed, return to run()->while{}.
-  // Will recover the index file from object store, when open_index_file.
-  err_msg.append(" upload to objec store ");
-  err_msg.append("key=");
-  err_msg.append(index_keyid);
-  err_msg.append(" file=");
-  err_msg.append(index_file_name);
-  ss = snapshot_objstore->put_object_from_file(
-      std::string_view(opt_objstore_bucket), index_keyid, index_file_name);
-  if (!ss.is_succ()) {
-    err_msg.append(" error=");
-    err_msg.append(ss.error_message());
+    err_msg.append(" move_crash_safe_index_file_to_index_file failed");
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     goto err;
   }
@@ -2323,6 +2317,7 @@ bool Consistent_archive::open_index_file(const char *index_file_name_arg,
                                          Archive_type arch_type,
                                          bool need_lock) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("open_index_file"));
   bool error = false;
   File index_file_nr = -1;
   char *crash_safe_index_file_name;
@@ -2331,6 +2326,7 @@ bool Consistent_archive::open_index_file(const char *index_file_name_arg,
   PSI_file_key *index_file_key;
   PSI_file_key *index_file_cache_key;
   mysql_mutex_t *index_lock;
+  std::string err_msg{};
 
   if (arch_type == ARCHIVE_MYSQL_INNODB) {
     crash_safe_index_file_name = m_crash_safe_mysql_clone_index_file_name;
@@ -2438,12 +2434,10 @@ bool Consistent_archive::open_index_file(const char *index_file_name_arg,
     goto end;
   }
 
-  {
-    std::string err_msg;
-    err_msg.assign("open index file ");
-    err_msg.append(index_file_name);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-  }
+  err_msg.assign("open index file ");
+  err_msg.append(index_file_name);
+  LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+
 end:
   if (need_lock) {
     mysql_mutex_unlock(index_lock);
@@ -2478,6 +2472,7 @@ IO_CACHE *Consistent_archive::get_mysql_clone_index_file() {
 
 void Consistent_archive::close_index_file(Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("close_index_file"));
   IO_CACHE *index_file;
   char *index_file_name;
 
@@ -2509,6 +2504,7 @@ void Consistent_archive::close_index_file(Archive_type arch_type) {
 
 static int compare_log_name(const char *log_1, const char *log_2) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("compare_log_name"));
   const char *log_1_basename = log_1 + dirname_length(log_1);
   const char *log_2_basename = log_2 + dirname_length(log_2);
 
@@ -2529,6 +2525,7 @@ static int compare_log_name(const char *log_1, const char *log_2) {
  */
 static int compare_log_name_without_ext(const char *log_1, const char *log_2) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("compare_log_name_without_ext"));
   std::string log_1_basename{log_1};
   std::string log_2_basename{log_2};
   // Get rid of last '/'
@@ -2578,6 +2575,7 @@ int Consistent_archive::find_line_from_index(LOG_INFO *linfo,
                                              const char *match_name,
                                              Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("find_line_from_index"));
   int error = 0;
   char *fname = linfo->log_file_name;
   IO_CACHE *index_file;
@@ -2663,6 +2661,7 @@ int Consistent_archive::find_line_from_index(LOG_INFO *linfo,
 int Consistent_archive::find_next_line_from_index(LOG_INFO *linfo,
                                                   Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("find_next_line_from_index"));
   int error = 0;
   size_t length;
   char *fname = linfo->log_file_name;
@@ -3100,13 +3099,24 @@ int Consistent_archive::purge_archive_garbage(const char *dirty_end_archive,
         err_msg.append(object.key);
         LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG,
                err_msg.c_str());
-        objstore::Status ss;
-        if (object.key.back() == FN_LIBCHAR) {
-          ss = snapshot_objstore->delete_directory(
-              std::string_view(opt_objstore_bucket), object.key);
+        objstore::Status ss{};
+        if (DBUG_EVALUATE_IF("fault_injection_delete_garbage_smartengine_"
+                             "snapshot_from_objstore",
+                             1, 0) ||
+            DBUG_EVALUATE_IF(
+                "fault_injection_delete_garbage_innodb_snapshot_from_objstore",
+                1, 0)) {
+          ss.set_error_code(objstore::Errors::SE_IO_ERROR);
+          ss.set_error_msg(
+              "fault injection delete garbage snapshot from objstore");
         } else {
-          ss = snapshot_objstore->delete_object(
-              std::string_view(opt_objstore_bucket), object.key);
+          if (object.key.back() == FN_LIBCHAR) {
+            ss = snapshot_objstore->delete_directory(
+                std::string_view(opt_objstore_bucket), object.key);
+          } else {
+            ss = snapshot_objstore->delete_object(
+                std::string_view(opt_objstore_bucket), object.key);
+          }
         }
         if (!ss.is_succ()) {
           err_msg.append(" error=");
@@ -3146,6 +3156,7 @@ int Consistent_archive::set_purge_index_file_name(const char *base_file_name,
 int Consistent_archive::open_purge_index_file(bool destroy,
                                               Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("open_purge_index_file"));
   int error = 0;
   File file = -1;
   char *index_file_name;
@@ -3207,6 +3218,7 @@ int Consistent_archive::close_purge_index_file(Archive_type arch_type) {
 
 int Consistent_archive::sync_purge_index_file(Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("sync_purge_index_file"));
   int error = 0;
   IO_CACHE *index_file;
 
@@ -3229,8 +3241,9 @@ int Consistent_archive::sync_purge_index_file(Archive_type arch_type) {
 
 int Consistent_archive::register_purge_index_entry(const char *entry,
                                                    Archive_type arch_type) {
-  int error = 0;
   DBUG_TRACE;
+  DBUG_PRINT("info", ("register_purge_index_entry"));
+  int error = 0;
   IO_CACHE *index_file;
 
   if (arch_type == ARCHIVE_MYSQL_INNODB) {
@@ -3257,6 +3270,7 @@ int Consistent_archive::register_purge_index_entry(const char *entry,
  */
 int Consistent_archive::purge_index_entry(Archive_type arch_type) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("purge_index_entry"));
   int error = 0;
   LOG_INFO log_info;
   LOG_INFO check_log_info;
@@ -3306,13 +3320,22 @@ int Consistent_archive::purge_index_entry(Archive_type arch_type) {
     err_msg.append(archive_keyid);
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG,
            err_msg.c_str());
-    objstore::Status ss;
-    if (archive_keyid.back() == FN_LIBCHAR) {
-      ss = snapshot_objstore->delete_directory(
-          std::string_view(opt_objstore_bucket), archive_keyid);
+    objstore::Status ss{};
+    if (DBUG_EVALUATE_IF(
+            "fault_injection_delete_smartengine_snapshot_from_objstore", 1,
+            0) ||
+        DBUG_EVALUATE_IF("fault_injection_delete_innodb_snapshot_from_objstore",
+                         1, 0)) {
+      ss.set_error_code(objstore::Errors::SE_IO_ERROR);
+      ss.set_error_msg("fault injection delete snapshot from objestore");
     } else {
-      ss = snapshot_objstore->delete_object(
-          std::string_view(opt_objstore_bucket), archive_keyid);
+      if (archive_keyid.back() == FN_LIBCHAR) {
+        ss = snapshot_objstore->delete_directory(
+            std::string_view(opt_objstore_bucket), archive_keyid);
+      } else {
+        ss = snapshot_objstore->delete_object(
+            std::string_view(opt_objstore_bucket), archive_keyid);
+      }
     }
     if (!ss.is_succ()) {
       // If not exists, ignore it.
@@ -3337,37 +3360,36 @@ err:
 
 /**
  * @brief Remove line entry from index file.
- *
+ * Remove the snapshot by first removing the index, then deleting the archive
+ * object. As long as the index is successfully deleted, the purge is considered
+ * successful. If the archive object deletion fails, it will be treated as
+ * garbage and purged in the next attempt.
  * @param log_info
  * @return int
  */
 int Consistent_archive::remove_line_from_index(LOG_INFO *log_info,
                                                Archive_type arch_type) {
   DBUG_TRACE;
-  IO_CACHE *crash_safe_index_file;
-  IO_CACHE *index_file;
+  DBUG_PRINT("info", ("remove_line_from_index"));
+  DBUG_EXECUTE_IF("fault_injection_remove_line_from_index", { return 1; });
+  IO_CACHE *crash_safe_index_file = nullptr;
+  IO_CACHE *index_file = nullptr;
   std::string index_file_name;
-  std::string index_keyid;
+  std::string err_msg{};
 
   if (arch_type == ARCHIVE_MYSQL_INNODB) {
     crash_safe_index_file = &m_crash_safe_mysql_clone_index_file;
     index_file = &m_mysql_clone_index_file;
     index_file_name.assign(m_mysql_clone_index_file_name);
-    index_keyid.assign(m_archive_dir);
-    index_keyid.append(CONSISTENT_INNODB_ARCHIVE_INDEX_FILE);
   } else if (arch_type == ARCHIVE_SE) {
     crash_safe_index_file = &m_crash_safe_se_backup_index_file;
     index_file = &m_se_backup_index_file;
     index_file_name.assign(m_se_backup_index_file_name);
-    index_keyid.assign(m_archive_dir);
-    index_keyid.append(CONSISTENT_SE_ARCHIVE_INDEX_FILE);
   } else {
     assert(arch_type == ARCHIVE_SNAPSHOT_FILE);
     crash_safe_index_file = &m_crash_safe_consistent_snapshot_index_file;
     index_file = &m_consistent_snapshot_index_file;
     index_file_name.assign(m_consistent_snapshot_index_file_name);
-    index_keyid.assign(m_archive_dir);
-    index_keyid.append(CONSISTENT_SNAPSHOT_INDEX_FILE);
   }
 
   if (!my_b_inited(index_file)) {
@@ -3393,37 +3415,13 @@ int Consistent_archive::remove_line_from_index(LOG_INFO *log_info,
     goto err;
   }
 
-  // First, update the local index file, then upload it to the object store.
-  // If the local update fails, this purge of binlogs will also fail. If the
-  // local update succeeds but the upload fails, it will result in
-  // inconsistency between the local and object store indexes. Therefore,
-  // forcibly close the index file to allow the archive thread to download the
-  // index from the object store again and reopen it.
   if (move_crash_safe_index_file_to_index_file(arch_type)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "failed to move_crash_safe_index_file_to_index_file in "
            "remove_line_from_index.");
     goto err;
   }
-  {
-    // refresh index to object store
-    objstore::Status ss = snapshot_objstore->put_object_from_file(
-        std::string_view(opt_objstore_bucket), index_keyid, index_file_name);
-    if (!ss.is_succ()) {
-      std::string err_msg;
-      err_msg.assign(
-          "Failed to upload index file to object store in "
-          "remove_line_from_index: ");
-      err_msg.append(index_keyid);
-      err_msg.append(" error=");
-      err_msg.append(ss.error_message());
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-      // forcibly close the index file to allow the archive thread to download
-      // the index from the object store again and reopen it.
-      close_index_file(arch_type);
-      goto err;
-    }
-  }
+
   return 0;
 
 err:
@@ -3433,6 +3431,7 @@ err:
 int Consistent_archive::show_innodb_persistent_files(
     std::vector<objstore::ObjectMeta> &objects) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("show_innodb_persistent_files"));
   int error = 0;
   if (snapshot_objstore != nullptr) {
     bool finished = false;
@@ -3512,6 +3511,7 @@ int Consistent_archive::show_se_persistent_files(
 int Consistent_archive::show_se_backup_snapshot(
     THD *thd, std::vector<uint64_t> &backup_ids) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("show_se_backup_snapshot"));
   plugin_ref plugin;
 
   plugin = my_plugin_lock_by_name(nullptr, {STRING_WITH_LEN("smartengine")},
@@ -3537,6 +3537,7 @@ int Consistent_archive::show_se_backup_snapshot(
  */
 static bool remove_file(const std::string &file) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("remove_file"));
   uint i = 0;
   MY_DIR *dir = nullptr;
   MY_STAT stat_area;
@@ -3599,6 +3600,7 @@ static bool remove_file(const std::string &file) {
 */
 static bool copy_file(IO_CACHE *from, IO_CACHE *to, my_off_t offset) {
   DBUG_TRACE;
+  DBUG_PRINT("info", ("copy_file"));
   int bytes_read;
   uchar io_buf[IO_SIZE * 2];
 
@@ -3625,6 +3627,8 @@ static bool file_has_suffix(const std::string &sfx, const std::string &path) {
 }
 
 static time_t calculate_auto_purge_lower_time_bound() {
+  DBUG_TRACE;
+  DBUG_PRINT("info", ("calculate_auto_purge_lower_time_bound"));
   if (DBUG_EVALUATE_IF("reserve_all_consistent_snapshots", true, false)) {
     return static_cast<time_t>(std::numeric_limits<time_t>::min());
   }

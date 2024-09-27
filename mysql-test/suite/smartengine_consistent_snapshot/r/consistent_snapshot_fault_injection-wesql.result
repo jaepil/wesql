@@ -1,0 +1,49 @@
+# Wait for at least 1 snapshots to be generated 
+CREATE DATABASE db1;
+CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1);
+INSERT INTO t1 values(2);
+INSERT INTO t1 values(3);
+INSERT INTO t1 values(4);
+SELECT * FROM t1;
+c1
+1
+2
+3
+4
+# Wait for at least 2 snapshots to be generated 
+# fault_injection_put_innodb_index_to_objstore
+set global debug = '+d,fault_injection_put_innodb_index_to_objstore';
+INSERT INTO t1 SELECT * FROM t1;
+Pattern found.
+set global debug = '-d,fault_injection_put_innodb_index_to_objstore';
+# fault_injection_delete_innodb_index_file
+set global debug = '+d,fault_injection_delete_innodb_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+Pattern found.
+set global debug = '-d,fault_injection_delete_innodb_index_file';
+# fault_injection_reopen_innodb_index_file
+set global debug = '+d,fault_injection_reopen_innodb_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+Pattern found.
+set global debug = '-d,fault_injection_reopen_innodb_index_file';
+# Wait for at least 2 snapshots to be generated 
+# fault_injection_put_se_index_to_objstore
+set global debug = '+d,fault_injection_put_se_index_to_objstore';
+INSERT INTO t1 SELECT * FROM t1;
+Pattern found.
+set global debug = '-d,fault_injection_put_se_index_to_objstore';
+# fault_injection_delete_se_index_file
+set global debug = '+d,fault_injection_delete_se_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+Pattern found.
+set global debug = '-d,fault_injection_delete_se_index_file';
+# fault_injection_reopen_se_index_file
+set global debug = '+d,fault_injection_reopen_se_index_file';
+INSERT INTO t1 SELECT * FROM t1;
+Pattern found.
+set global debug = '-d,fault_injection_reopen_se_index_file';
+# Wait for at least 2 snapshots to be generated 
+# Cleanup
+DROP TABLE t1;
+DROP DATABASE db1;
