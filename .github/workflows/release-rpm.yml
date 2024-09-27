@@ -177,18 +177,24 @@ jobs:
 
   remove-runner:
     runs-on: ubuntu-latest
-    needs: [ release-rpm, release-arm-rpm ]
+    needs: [ release-rpm ]
     if: ${{ always() }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Delete self runner
         uses: './.github/actions/delete-runner'
         with:
           github-token: ${{ env.GITHUB_TOKEN }}
           runner-name: ${{ needs.release-rpm.outputs.runner-name }}
 
+  remove-arm-runner:
+    runs-on: ubuntu-latest
+    needs: [ release-arm-rpm ]
+    if: ${{ always() }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Delete self runner
         uses: './.github/actions/delete-runner'
         with:

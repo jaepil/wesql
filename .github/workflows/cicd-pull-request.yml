@@ -6,6 +6,10 @@ on:
 env:
   GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   enable-runner:
     uses: ./.github/workflows/enable-self-runner.yml
@@ -14,24 +18,14 @@ jobs:
       RUNNER_LABEL: "eks-oracle8-amd-runner"
     secrets: inherit
 
-  build-test:
+  mtr-serverless:
     needs: [ enable-runner ]
     outputs:
       runner-name: ${{ steps.get_runner_name.outputs.runner-name }}
-    name: make install mtr
+    name: mtr serverless
     runs-on: [self-hosted, eks-oracle8-amd-runner ]
-    strategy:
-      fail-fast: false
-      matrix:
-        mtr: [ 'serverless', 'normal-file' ]
     steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.11.0
-        with:
-          all_but_latest: true
-          access_token: ${{ env.GITHUB_TOKEN }}
-
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: cmake
         run: |
           sudo yum install -y perl-core
@@ -62,7 +56,6 @@ jobs:
           make -j$(echo "$(nproc)") && make install
 
       - name: run mtr on serverless
-        if: ${{ matrix.mtr == 'serverless' }}
         run: |
           cd bu
           cd mysql-test
@@ -79,23 +72,7 @@ jobs:
               --skip-test-list=collections/disabled-smartengine-serverless.def
 
       - name: view logs of mtr serverless
-        if: ${{ failure() && matrix.mtr == 'serverless' }}
-        run: |
-          for logfile in $( ls bu/mysql-test/var/*/log/*.err ); do
-              echo "logfile:"$logfile
-              cat $logfile
-          done
-
-      - name: run mtr on normal file
-        if: ${{ matrix.mtr == 'normal-file' }}
-        run: |
-          cd bu
-          cd mysql-test
-          ./mysql-test-run.pl --suite=raft_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests --initialize="--serverless=false"
-          ./mysql-test-run.pl --suite=smartengine --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests --initialize="--serverless=false"
-
-      - name: view logs of mtr on normal file
-        if: ${{ failure() && matrix.mtr == 'normal-file' }}
+        if: ${{ failure() }}
         run: |
           for logfile in $( ls bu/mysql-test/var/*/log/*.err ); do
               echo "logfile:"$logfile
@@ -108,9 +85,67 @@ jobs:
         run: |
           echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
 
-  remove-runner:
+  mtr-normal-file:
+    needs: [ enable-runner ]
+    outputs:
+      runner-name: ${{ steps.get_runner_name.outputs.runner-name }}
+    name: mtr normal-file
+    runs-on: [self-hosted, eks-oracle8-amd-runner ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: cmake
+        run: |
+          sudo yum install -y perl-core
+          sudo perl -MCPAN -e 'install IO::Pty'
+          sudo perl -MCPAN -e 'install IO::Tty'
+          sudo cpan Expect
+          cp /home/mysql/boost_1_77_0.tar.bz2 ${{ github.workspace }}/extra
+          sudo mkdir -pv /u01
+          sudo chown -R mysql:mysql /u01
+          sudo chown -R mysql:mysql ./
+          sudo yum install python3-devel python3-pip mysql-devel
+          sudo pip3 install mysqlclient
+          sudo ln -sfn /usr/bin/python3 /usr/bin/python
+          mkdir -pv bu
+          cd bu
+          cmake3 ../ -B ./ \
+            -DCMAKE_INSTALL_PREFIX="/u01/mysql" \
+            -DWITH_SSL="system" \
+            -DCMAKE_BUILD_TYPE="Debug" \
+            -DWITH_WESQL_TEST=1   \
+            -DWITH_CLONE=1 \
+            -DDOWNLOAD_BOOST=1 \
+            -DWITH_BOOST="../extra/"
+
+      - name: make install
+        run: |
+          cd bu
+          make -j$(echo "$(nproc)") && make install
+
+      - name: run mtr on normal file
+        run: |
+          cd bu
+          cd mysql-test
+          ./mysql-test-run.pl --suite=raft_replication  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests --initialize="--serverless=false"
+          ./mysql-test-run.pl --suite=smartengine --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests --initialize="--serverless=false"
+
+      - name: view logs of mtr on normal file
+        if: ${{ failure() }}
+        run: |
+          for logfile in $( ls bu/mysql-test/var/*/log/*.err ); do
+              echo "logfile:"$logfile
+              cat $logfile
+          done
+
+      - name: get self runner name
+        id: get_runner_name
+        if: ${{ always() }}
+        run: |
+          echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
+
+  remove-serverless-runner:
     runs-on: ubuntu-latest
-    needs: [ build-test ]
+    needs: [ mtr-serverless ]
     if: ${{ always() }}
     steps:
       - name: Checkout
@@ -119,10 +154,23 @@ jobs:
         uses: './.github/actions/delete-runner'
         with:
           github-token: ${{ env.GITHUB_TOKEN }}
-          runner-name: ${{ needs.build-test.outputs.runner-name }}
+          runner-name: ${{ needs.mtr-serverless.outputs.runner-name }}
+
+  remove-normal-file-runner:
+    runs-on: ubuntu-latest
+    needs: [ mtr-normal-file ]
+    if: ${{ always() }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Delete self runner
+        uses: './.github/actions/delete-runner'
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          runner-name: ${{ needs.mtr-normal-file.outputs.runner-name }}
 
   disable-runner:
-    needs: [ build-test ]
+    needs: [ mtr-serverless, mtr-normal-file ]
     if: ${{ always() }}
     uses: ./.github/workflows/enable-self-runner.yml
     with:
