@@ -138,9 +138,9 @@ public:
     }
     return ss;
   }
-  objstore::Status put_object(const std::string &key, const std::string &data)
+  objstore::Status put_object(const std::string &key, const std::string &data, bool forbid_overwrite = false)
   {
-    objstore::Status ss = obj_store_->put_object(bucket_, key, data);
+    objstore::Status ss = obj_store_->put_object(bucket_, key, data, forbid_overwrite);
     if (!ss.is_succ()) {
       std::cout << "put object:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
@@ -244,10 +244,11 @@ protected:
 
 INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
-                        testing::Values(
+                        testing::Values( // clang-format off
                             // "aws"
                             // "aliyun"
-                            "local"));
+                            "local"
+                            )); // clang-format on
 
 TEST_P(ObjstoreTest, reinitObjStoreApi)
 {
@@ -759,6 +760,23 @@ TEST_P(ObjstoreTest, deleteDir)
   ss = delete_directory(dir2);
   ASSERT_TRUE(ss.is_succ());
   ss = delete_directory(dir3);
+  ASSERT_TRUE(ss.is_succ());
+}
+
+TEST_P(ObjstoreTest, forbidOverwrite)
+{
+  std::string key = "forbid_overwrite_key";
+
+  objstore::Status ss = put_object(key, "data1");
+  ASSERT_TRUE(ss.is_succ());
+
+  ss = put_object(key, "data2", true);
+  ASSERT_FALSE(ss.is_succ());
+  ASSERT_EQ(ss.error_code(), objstore::Errors::SE_OBJECT_FORBID_OVERWRITE);
+  std::cout << "err code:" << ss.error_code() << ", cloud err code:" << ss.cloud_provider_err_code()
+            << ", err msg:" << ss.error_message() << std::endl;
+
+  ss = delete_object(key);
   ASSERT_TRUE(ss.is_succ());
 }
 

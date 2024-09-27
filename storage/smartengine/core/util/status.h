@@ -126,6 +126,10 @@ class Status {
     return Status(kNotSupported, msg);
   }
 
+  static Status NotInited(const Slice &msg, const Slice &msg2 = Slice()) { return Status(kNotInit, msg, msg2); }
+
+  static Status NotInited(SubCode msg = kNone) { return Status(kNotInit, msg); }
+
   static Status InvalidArgument(const Slice &msg, const Slice &msg2 = Slice()) {
     return Status(kInvalidArgument, msg, msg2);
   }
@@ -211,6 +215,9 @@ class Status {
 
   // Returns true iff the status indicates a NotSupported error.
   bool IsNotSupported() const { return code() == kNotSupported; }
+
+  // Returns true iff the status indicates a NotInited error.
+  bool IsNotInited() const { return code() == kNotInit; }
 
   // Returns true iff the status indicates an InvalidArgument error.
   bool IsInvalidArgument() const { return code() == kInvalidArgument; }

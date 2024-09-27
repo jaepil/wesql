@@ -41,7 +41,8 @@ class LocalObjectStore : public ObjectStore {
                             const std::string_view &output_file_path) override;
 
   Status put_object(const std::string_view &bucket, const std::string_view &key,
-                    const std::string_view &data) override;
+                    const std::string_view &data,
+                    bool forbid_overwrite) override;
   Status get_object(const std::string_view &bucket, const std::string_view &key,
                     std::string &input) override;
   Status get_object(const std::string_view &bucket, const std::string_view &key,

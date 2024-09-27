@@ -217,10 +217,12 @@ int VersionSet::recover_extent_space_manager()
     int64_t backup_snapshot_count = backup_snapshots.get_backup_snapshot_count();
     BackupSnapshotId prev_backup_id = 0;
     BackupSnapshotId backup_id = 0;
+    uint64_t auto_increment_id = 0;
     MetaSnapshotSet *backup_snapshot = nullptr;
     db::Snapshot *sn = nullptr;
 
-    while (SUCCED(ret) && backup_snapshots.get_next_backup_snapshot(prev_backup_id, backup_id, backup_snapshot)) {
+    while (SUCCED(ret) &&
+           backup_snapshots.get_next_backup_snapshot(prev_backup_id, backup_id, auto_increment_id, backup_snapshot)) {
       for (auto iter = backup_snapshot->begin(); SUCCED(ret) && iter != backup_snapshot->end(); ++iter) {
         if (IS_NULL(sn = *iter)) {
           ret = Status::kCorruption;
@@ -541,6 +543,7 @@ int VersionSet::write_backup_snapshots(util::WritableFile &checkpoint_writer, Ch
   int ret = Status::kOk;
   BackupSnapshotId prev_backup_id = 0;
   BackupSnapshotId backup_id = 0;
+  uint64_t auto_increment_id = 0;
   MetaSnapshotSet *backup_snapshot = nullptr;
   const int64_t buf_size = DEFAULT_BUFFER_SIZE;
   int64_t size = 0;
@@ -559,7 +562,8 @@ int VersionSet::write_backup_snapshots(util::WritableFile &checkpoint_writer, Ch
     header.backup_snapshots_count_ = backup_snapshots_count;
 
     size_t backup_snapshot_idx = 0;
-    while (SUCCED(ret) && backup_snapshots->get_next_backup_snapshot(prev_backup_id, backup_id, backup_snapshot)) {
+    while (SUCCED(ret) &&
+           backup_snapshots->get_next_backup_snapshot(prev_backup_id, backup_id, auto_increment_id, backup_snapshot)) {
       int64_t offset = 0;
 
       if (FAILED(reserve_checkpoint_block_header(buf, buf_size, offset, block_header))) {
@@ -568,6 +572,7 @@ int VersionSet::write_backup_snapshots(util::WritableFile &checkpoint_writer, Ch
         BackupSnapshotInfo &b_sn_info = header.backup_snapshot_info_[backup_snapshot_idx];
 
         b_sn_info.backup_id_ = backup_id;
+        b_sn_info.auto_increment_id_ = auto_increment_id;
         b_sn_info.meta_snapshot_count_ = backup_snapshot->size();
         b_sn_info.meta_snapshot_meta_block_offset_ = checkpoint_writer.GetFileSize();
         for (const auto *sn : *backup_snapshot) {
@@ -834,6 +839,7 @@ int VersionSet::load_backup_snapshots(util::RandomAccessFile &checkpoint_reader,
   while (SUCCED(ret) && backup_snapshot_index < backup_snapshot_count) {
     BackupSnapshotInfo &backup_snapshot_info = header.backup_snapshot_info_[backup_snapshot_index];
     const int64_t backup_id = backup_snapshot_info.backup_id_;
+    const int64_t auto_increment_id = backup_snapshot_info.auto_increment_id_;
     const int64_t meta_block_count = backup_snapshot_info.meta_snapshot_meta_block_count_;
     const int64_t meta_snapshot_count = backup_snapshot_info.meta_snapshot_count_;
     int64_t offset = backup_snapshot_info.meta_snapshot_meta_block_offset_;
@@ -882,7 +888,7 @@ int VersionSet::load_backup_snapshots(util::RandomAccessFile &checkpoint_reader,
       ret = Status::kCorruption;
       SE_LOG(WARN, "invalid meta snapshot count", K(ret), K(backup_snapshot.size()), K(meta_snapshot_count));
     }
-    if (SUCCED(ret) && IS_FALSE(backup_snapshots->add_backup_snapshot(backup_id, backup_snapshot))) {
+    if (SUCCED(ret) && IS_FALSE(backup_snapshots->add_backup_snapshot(backup_id, auto_increment_id, backup_snapshot))) {
       ret = Status::kErrorUnexpected;
       SE_LOG(WARN, "backup snapshot id already exist", K(ret), K(backup_id));
     }
@@ -1150,7 +1156,7 @@ int VersionSet::reserve_checkpoint_block_header(char *buf,
 
 int VersionSet::replay_accquire_snapshot_log(const char *log_data, int64_t log_length) {
   int ret = Status::kOk;
-  AccquireBackupSnapshotLogEntry log_entry(0);
+  AccquireBackupSnapshotLogEntry log_entry(0, 0);
   int64_t pos = 0;
 
   if (IS_NULL(log_data) || log_length <= 0) {
@@ -1161,6 +1167,7 @@ int VersionSet::replay_accquire_snapshot_log(const char *log_data, int64_t log_l
   } else {
     MetaSnapshotSet meta_snapshots;
     BackupSnapshotId backup_id = log_entry.backup_id_;
+    uint64_t auto_increment_id = log_entry.auto_increment_id_;
     assert(backup_id > 0);
 
     // TODO(ljc): maybe we need a verfication mechanism to check the backup snapshot is valid
@@ -1168,7 +1175,7 @@ int VersionSet::replay_accquire_snapshot_log(const char *log_data, int64_t log_l
       SE_LOG(WARN, "fail to create backup snapshot", K(ret));
     } else {
       db::BackupSnapshotMap &backup_snapshots = BackupSnapshotImpl::get_instance()->get_backup_snapshot_map();
-      if (IS_FALSE(backup_snapshots.add_backup_snapshot(backup_id, meta_snapshots))) {
+      if (IS_FALSE(backup_snapshots.add_backup_snapshot(backup_id, auto_increment_id, meta_snapshots))) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, backup snapshot already exist", K(ret), K(backup_id));
       } else {

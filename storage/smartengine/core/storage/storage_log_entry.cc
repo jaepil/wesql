@@ -147,16 +147,16 @@ DEFINE_COMPACTIPLE_SERIALIZATION(ModifyExtentMetaLogEntry, extent_meta_)
 
 DEFINE_TO_STRING(ModifyExtentMetaLogEntry, KV_(extent_meta))
 
-AccquireBackupSnapshotLogEntry::AccquireBackupSnapshotLogEntry(BackupSnapshotId backup_id)
-    : backup_id_(backup_id)
+AccquireBackupSnapshotLogEntry::AccquireBackupSnapshotLogEntry(BackupSnapshotId backup_id, uint64_t auto_increment_id)
+    : backup_id_(backup_id), auto_increment_id_(auto_increment_id)
 {
 }
 AccquireBackupSnapshotLogEntry::~AccquireBackupSnapshotLogEntry()
 {
 }
-DEFINE_COMPACTIPLE_SERIALIZATION(AccquireBackupSnapshotLogEntry, backup_id_)
+DEFINE_COMPACTIPLE_SERIALIZATION(AccquireBackupSnapshotLogEntry, backup_id_, auto_increment_id_)
 
-DEFINE_TO_STRING(AccquireBackupSnapshotLogEntry, KV_(backup_id))
+DEFINE_TO_STRING(AccquireBackupSnapshotLogEntry, KV_(backup_id), KV_(auto_increment_id))
 
 ReleaseBackupSnapshotLogEntry::ReleaseBackupSnapshotLogEntry(BackupSnapshotId backup_id)
     : backup_id_(backup_id)

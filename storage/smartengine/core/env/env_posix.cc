@@ -615,8 +615,7 @@ class PosixEnv : public Env
   virtual common::Status GetObjectStore(
       objstore::ObjectStore*& object_store) override {
     object_store = obj_store_;
-    return object_store != nullptr ? common::Status::OK()
-                                   : common::Status::NotSupported();
+    return object_store != nullptr ? common::Status::OK() : common::Status::NotInited();
   }
 
   virtual std::string& GetObjectStoreBucket() override {

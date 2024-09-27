@@ -507,11 +507,25 @@ int ObjectIOExtent::fill_aio_info(AIOHandle *aio_handle, int64_t offset, int64_t
 int ObjectIOExtent::write_object(const char *data, int64_t data_size)
 {
   int ret = Status::kOk;
+  // bool forbid_overwrite = true;
+  bool forbid_overwrite = false;
   ::objstore::Status object_status;
   std::string object_id = prefix_ + std::to_string(assemble_objid_by_fdfn(extent_id_.file_number, extent_id_.offset));
 
-  object_status = object_store_->put_object(bucket_, object_id, std::string_view(data, data_size));
+  object_status = object_store_->put_object(bucket_, object_id, std::string_view(data, data_size), forbid_overwrite);
   if (UNLIKELY(!object_status.is_succ())) {
+    // if (object_status.error_code() == ::objstore::Errors::SE_OBJECT_FORBID_OVERWRITE) {
+    //   // there is maybe another wesql data node is writting an object with the same extent id.
+    //   // at now, we just abort and let the user to shutdown one wesql data node.
+    //   SE_LOG(FATAL,
+    //          "failed to write object, an object with the same key existed, forbid overwritting extent!",
+    //          K(ret),
+    //          KE(object_status.error_code()),
+    //          K(std::string(object_status.error_message())),
+    //          K(extent_id_),
+    //          K(object_id));
+    //   abort();
+    // }
     ret = Status::kObjStoreError;
     SE_LOG(WARN, "io error, failed to put obj", K(ret), KE((object_status.error_code())), K(std::string(object_status.error_message())),
         K_(extent_id), K_(bucket), K(object_id), K(data_size), K_(bucket));

@@ -391,9 +391,10 @@ int BackupSnapshotImpl::list_backup_snapshots(std::vector<BackupSnapshotId> &bac
   int ret = Status::kOk;
   BackupSnapshotId prev_backup_id = 0;
   BackupSnapshotId backup_id = 0;
+  uint64_t auto_increment_id = 0;
   MetaSnapshotSet *backup_snapshot = nullptr;
 
-  while (backup_snapshot_map_.get_next_backup_snapshot(prev_backup_id, backup_id, backup_snapshot)) {
+  while (backup_snapshot_map_.get_next_backup_snapshot(prev_backup_id, backup_id, auto_increment_id, backup_snapshot)) {
     backup_ids.push_back(backup_id);
     prev_backup_id = backup_id;
   }

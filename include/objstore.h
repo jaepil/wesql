@@ -24,6 +24,9 @@
 #include <memory>
 
 namespace objstore {
+extern const char *backup_snapshot_releasing;
+extern const char *backup_snapshot_recovering;
+extern const char *backup_snapshot_status_prefix;
 
 // interfaces to manipulate object like aws S3.
 // this interfaces will shield the differences between different object storages
@@ -44,6 +47,12 @@ enum Errors {
   SE_NO_SUCH_UPLOAD,
   SE_OBJECT_ALREADY_IN_ACTIVE_TIER,
   SE_OBJECT_NOT_IN_ACTIVE_TIER,
+
+  // when forbid overwrite option is true, and the object already exists
+  SE_OBJECT_FORBID_OVERWRITE,
+
+  // when we detected multiple data node may be running.
+  SE_MULTI_DATA_NODE_DETECTED,
 
   // object store common errors
   SE_ACCESS_DENIED,
@@ -140,7 +149,8 @@ class ObjectStore {
 
   virtual Status put_object(const std::string_view &bucket,
                             const std::string_view &key,
-                            const std::string_view &data) = 0;
+                            const std::string_view &data,
+                            bool forbid_overwrite = false) = 0;
   virtual Status get_object(const std::string_view &bucket,
                             const std::string_view &key, std::string &body) = 0;
   virtual Status get_object(const std::string_view &bucket,
@@ -171,7 +181,6 @@ class ObjectStore {
 
   virtual std::string_view get_provider() const = 0;
 
- private:
   virtual Status delete_objects(const std::string_view &bucket,
                                 const std::vector<std::string_view> &object_keys) = 0;
 };
@@ -190,11 +199,44 @@ ObjectStore *create_object_store_for_test(const std::string_view &provider,
                                           const std::string_view bucket_dir,
                                           std::string &err_msg);
 
+int init_object_store(const std::string_view &provider,
+                      const std::string_view &region,
+                      const std::string_view &bucket_dir, std::string &err_msg,
+                      ObjectStore *&objstore);
+
+void cleanup_object_store(ObjectStore *&objstore);
+
 int ensure_object_store_lock(const std::string_view &provider,
                              const std::string_view &region,
                              const std::string_view &bucket_dir,
                              const std::string_view &data_uuid,
                              const bool should_exist, std::string &err_msg);
+
+int tryBackupRecoveringLock(uint64_t auto_increment_id, ObjectStore *objstore,
+                            const std::string_view bucket_dir,
+                            std::string &err_msg);
+
+int tryBackupReleasingLock(uint64_t auto_increment_id, ObjectStore *objstore,
+                           const std::string_view bucket_dir,
+                           std::string &err_msg);
+
+int updateBackupStautsLockFile(uint64_t auto_increment_id,
+                               ObjectStore *objstore,
+                               const std::string_view bucket_dir,
+                               const std::string_view expected_status,
+                               const std::string_view new_status,
+                               std::string &err_msg);
+
+int removeBackupStatusLockFile(uint64_t auto_increment_id,
+                               ObjectStore *objstore,
+                               const std::string_view bucket_dir,
+                               const std::string_view expected_status,
+                               std::string &err_msg);
+
+int removeObsoletedBackupStatusLockFiles(ObjectStore *objstore,
+                                         const std::string_view bucket_dir,
+                                         uint64_t auto_increment_id_in_use,
+                                         std::string &err_msg);
 
 void destroy_object_store(ObjectStore *obj_store);
 

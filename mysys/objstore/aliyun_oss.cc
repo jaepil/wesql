@@ -26,15 +26,15 @@ namespace {
 
 Errors aliyun_oss_error_to_se_error(const AlibabaCloud::OSS::OssError &error) {
   static std::unordered_map<std::string, AliyunOSSErrorCode> errorMap = {
-    {"AccessDenied", AliyunOSSErrorCode::AccessDenied},
-    {"NoSuchBucket", AliyunOSSErrorCode::NoSuchBucket},
-    {"NoSuchKey", AliyunOSSErrorCode::NoSuchKey},
-    {"BucketAlreadyExists", AliyunOSSErrorCode::BucketAlreadyExists},
-    {"SymlinkTargetNotExist", AliyunOSSErrorCode::SymlinkTargetNotExist},
-    {"InvalidObjectState", AliyunOSSErrorCode::InvalidObjectState},
-    {"InvalidArgument", AliyunOSSErrorCode::InvalidArgument},
-    {"TooManyBuckets", AliyunOSSErrorCode::TooManyBuckets}
-  };
+      {"AccessDenied", AliyunOSSErrorCode::AccessDenied},
+      {"NoSuchBucket", AliyunOSSErrorCode::NoSuchBucket},
+      {"NoSuchKey", AliyunOSSErrorCode::NoSuchKey},
+      {"BucketAlreadyExists", AliyunOSSErrorCode::BucketAlreadyExists},
+      {"SymlinkTargetNotExist", AliyunOSSErrorCode::SymlinkTargetNotExist},
+      {"InvalidObjectState", AliyunOSSErrorCode::InvalidObjectState},
+      {"InvalidArgument", AliyunOSSErrorCode::InvalidArgument},
+      {"TooManyBuckets", AliyunOSSErrorCode::TooManyBuckets},
+      {"FileAlreadyExists", AliyunOSSErrorCode::FileAlreadyExists}};
   if (errorMap.find(error.Code()) != errorMap.end()) {
     switch (errorMap.at(error.Code())) {
       case AliyunOSSErrorCode::AccessDenied:
@@ -53,6 +53,8 @@ Errors aliyun_oss_error_to_se_error(const AlibabaCloud::OSS::OssError &error) {
         return Errors::SE_OBJSTORE_INVALID_ARGUMENT;
       case AliyunOSSErrorCode::TooManyBuckets:
         return Errors::SE_TOO_MANY_BUCKETS;
+      case AliyunOSSErrorCode::FileAlreadyExists:
+        return Errors::SE_OBJECT_FORBID_OVERWRITE;
       default:
         return Errors::CLOUD_PROVIDER_UNRECOVERABLE_ERROR;
     }
@@ -131,12 +133,18 @@ Status AliyunOssObjectStore::get_object_to_file(
 
 Status AliyunOssObjectStore::put_object(const std::string_view &bucket,
                                         const std::string_view &key,
-                                        const std::string_view &data) {
+                                        const std::string_view &data,
+                                        bool forbid_overwrite) {
   std::shared_ptr<std::iostream> content = std::make_shared<std::stringstream>(std::string(data));
   if (content == nullptr) {
     return Status(SE_IO_ERROR, 0, "failed to allocate memory for put object.");
   }
-  AlibabaCloud::OSS::PutObjectRequest request((std::string(bucket)), (std::string(key)), content);
+  AlibabaCloud::OSS::ObjectMetaData meta;
+  if (forbid_overwrite) {
+    meta.addHeader("x-oss-forbid-overwrite", "true");
+  }
+  AlibabaCloud::OSS::PutObjectRequest request(
+      (std::string(bucket)), (std::string(key)), content, meta);
   auto outcome = oss_client_.PutObject(request);
   if (!outcome.isSuccess()) {
     Errors err_type = aliyun_oss_error_to_se_error(outcome.error());

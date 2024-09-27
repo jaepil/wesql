@@ -16,6 +16,7 @@
 
 #include "storage/storage_logger.h"
 #include "backup/hotbackup.h"
+#include "backup/hotbackup_impl.h"
 #include "db/log_reader.h"
 #include "db/version_set.h"
 #include "logger/log_module.h"
@@ -939,6 +940,32 @@ int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
       checkpoint_name = CheckpointFileName(db_name_, log_file_number);
     }
     log_file_number_ = log_file_number - 1;
+  }
+
+  if (SUCCED(ret) && env_->IsObjectStoreInited()) {
+    objstore::ObjectStore *objstore = nullptr;
+    std::string_view objstore_bucket = env_->GetObjectStoreBucket();
+    if (FAILED(env_->GetObjectStore(objstore).code())) {
+      SE_LOG(WARN, "fail to get object store", K(ret));
+    } else {
+      std::string err_msg;
+      BackupSnapshotMap *backup_snapshots = &BackupSnapshotImpl::get_instance()->get_backup_snapshot_map();
+      uint64_t auto_increment_id_for_recover = backup_snapshots->get_max_auto_increment_id() + 1;
+      if (FAILED(
+              objstore::tryBackupRecoveringLock(auto_increment_id_for_recover, objstore, objstore_bucket, err_msg))) {
+        SE_LOG(WARN, "fail to try backup recovering lock", K(ret), K(err_msg));
+        if (objstore::Errors::SE_MULTI_DATA_NODE_DETECTED == ret) {
+          abort();
+        }
+      } else if (FAILED(objstore::removeObsoletedBackupStatusLockFiles(objstore,
+                                                                       objstore_bucket,
+                                                                       auto_increment_id_for_recover,
+                                                                       err_msg))) {
+        SE_LOG(WARN, "fail to remove obsoleted backup status lock files", K(ret), K(err_msg));
+      } else {
+        backup_snapshots->save_auto_increment_id_for_recover(auto_increment_id_for_recover);
+      }
+    }
   }
 
   SE_LOG(INFO, "success to replay after checkpoint", K_(log_file_number));

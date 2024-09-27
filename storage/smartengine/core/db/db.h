@@ -194,15 +194,26 @@ class DB;
 class BackupSnapshotMap
 {
 public:
-  constexpr static int kMaxBackupSnapshotNum = 60000;
+  constexpr static int kMaxBackupSnapshotNum = 40000;
+
+  BackupSnapshotMap() : in_use_(false), max_auto_increment_id_(0), auto_increment_id_for_recover_(0) {}
 
   bool find_backup_snapshot(BackupSnapshotId backup_id);
 
   bool get_next_backup_snapshot(BackupSnapshotId prev_backup_id,
                                 BackupSnapshotId &backup_id,
+                                uint64_t &auto_increment_id,
                                 MetaSnapshotSet *&meta_snapshots);
 
-  bool add_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &meta_snapshots);
+  uint64_t get_auto_increment_id(BackupSnapshotId backup_id);
+
+  uint64_t get_max_auto_increment_id();
+
+  void save_auto_increment_id_for_recover(uint64_t auto_increment_id);
+
+  uint64_t get_auto_increment_id_for_recover();
+
+  bool add_backup_snapshot(BackupSnapshotId backup_id, uint64_t auto_increment_id, MetaSnapshotSet &meta_snapshots);
 
   bool remove_backup_snapshot(BackupSnapshotId backup_id, MetaSnapshotSet &to_clean, bool &existed);
 
@@ -225,6 +236,9 @@ private:
   std::mutex mutex_;
   bool in_use_; // used by checkpoint at now
   std::map<BackupSnapshotId, MetaSnapshotSet> backup_snapshots_;
+  std::map<BackupSnapshotId, uint64_t> auto_increment_ids_;
+  uint64_t max_auto_increment_id_;         // the max auto increment id of all backup snapshots created.
+  uint64_t auto_increment_id_for_recover_; // the auto increment id of the backup snapshot used for start recovery
   std::vector<BackupSnapshotId> pending_release_backups_;
 };
 

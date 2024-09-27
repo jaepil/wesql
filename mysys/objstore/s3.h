@@ -45,7 +45,8 @@ class S3ObjectStore : public ObjectStore {
                             const std::string_view &output_file_path) override;
 
   Status put_object(const std::string_view &bucket, const std::string_view &key,
-                    const std::string_view &data) override;
+                    const std::string_view &data,
+                    bool forbid_overwrite = false) override;
   Status get_object(const std::string_view &bucket, const std::string_view &key,
                     std::string &input) override;
   Status get_object(const std::string_view &bucket, const std::string_view &key,
@@ -78,11 +79,13 @@ class S3ObjectStore : public ObjectStore {
   Status delete_object(const std::string_view &bucket,
                        const std::string_view &key) override;
 
+  Status delete_objects(
+      const std::string_view &bucket,
+      const std::vector<std::string_view> &object_keys) override;
+
   std::string_view get_provider() const override { return provider_; }
 
  private:
-  Status delete_objects(const std::string_view &bucket,
-                        const std::vector<std::string_view> &object_keys) override;
   static constexpr std::string_view provider_{"aws"};
   static constexpr int kDeleteObjsNumEach = 1000;
   std::string region_;

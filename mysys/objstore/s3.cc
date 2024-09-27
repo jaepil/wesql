@@ -46,6 +46,10 @@ Errors aws_error_to_objstore_error(const Aws::S3::S3Error &aws_error) {
     // as an unrecoverable error of cloud provider.
     return Errors::CLOUD_PROVIDER_ERROR_RETRY_LIMIT_EXCEEDED;
   }
+  if (aws_error.GetResponseCode() ==
+      Aws::Http::HttpResponseCode::PRECONDITION_FAILED) {
+    return Errors::SE_OBJECT_FORBID_OVERWRITE;
+  }
   int aws_error_code = static_cast<int>(aws_error.GetErrorType());
   switch (aws_error_code) {
     case static_cast<int>(Aws::S3::S3Errors::ACCESS_DENIED):
@@ -66,6 +70,8 @@ Errors aws_error_to_objstore_error(const Aws::S3::S3Error &aws_error) {
       return Errors::SE_OBJECT_ALREADY_IN_ACTIVE_TIER;
     case static_cast<int>(Aws::S3::S3Errors::OBJECT_NOT_IN_ACTIVE_TIER):
       return Errors::SE_OBJECT_NOT_IN_ACTIVE_TIER;
+    case static_cast<int>(Aws::S3::S3Errors::UNKNOWN):
+      return Errors::CLOUD_PROVIDER_UNRECOVERABLE_ERROR;
     default:
       // if the error is not-retryable and not a S3 specific error, it's an
       // error of cloud provider, we treat it as an unrecoverable error.
@@ -205,8 +211,8 @@ Status S3ObjectStore::get_object_to_file(
 
 Status S3ObjectStore::put_object(const std::string_view &bucket,
                                  const std::string_view &key,
-                                 const std::string_view &data) {
-
+                                 const std::string_view &data,
+                                 bool forbid_overwrite) {
   Aws::S3::Model::PutObjectRequest request;
   Aws::String full_key;
   if (bucket_dir_.empty()) {
@@ -216,6 +222,9 @@ Status S3ObjectStore::put_object(const std::string_view &bucket,
   }
   request.SetKey(full_key);
   request.SetBucket(Aws::String(bucket));
+  if (forbid_overwrite) {
+    request.SetAdditionalCustomHeaderValue("If-None-Match", "*");
+  }
 
   const std::shared_ptr<Aws::IOStream> data_stream =
       Aws::MakeShared<Aws::StringStream>("SStreamAllocationTag");

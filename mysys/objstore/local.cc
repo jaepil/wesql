@@ -140,7 +140,8 @@ Status LocalObjectStore::get_object_to_file(
 
 Status LocalObjectStore::put_object(const std::string_view &bucket,
                                     const std::string_view &key,
-                                    const std::string_view &data) {
+                                    const std::string_view &data,
+                                    bool forbid_overwrite) {
   const std::lock_guard<std::mutex> _(mutex_);
 
   if (!is_valid_key(key)) {
@@ -148,6 +149,21 @@ Status LocalObjectStore::put_object(const std::string_view &bucket,
   }
 
   std::string key_path = generate_path(bucket, key);
+
+  // NOTICE:
+  // when forbid_overwrite is true, we need to check whether the key exists
+  // before write. if it exists, we return error.
+  //
+  // for local mode, there isn't a atomic operation to check and write, so we
+  // just do check and write in two steps. since local mode is only used for
+  // test, so it's ok.
+  //
+  // c++ 23 provide std::ios::noreplace flag for std::ofstream, which can
+  // simplify this logic later if we support it.
+  if (forbid_overwrite && fs::exists(key_path)) {
+    return Status(Errors::SE_OBJECT_FORBID_OVERWRITE, EEXIST, "file exists");
+  }
+
   if (key_path.back() == '/') {
     if (data.size() != 0) {
       return Status(Errors::SE_INVALID, EINVAL,

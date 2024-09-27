@@ -174,8 +174,9 @@ struct AccquireBackupSnapshotLogEntry : public ManifestLogEntry
   static const int64_t ACQUIRE_SNAPSHOT_LOG_ENTRY_VERSION = 1;
 
   uint64_t backup_id_;
+  uint64_t auto_increment_id_;
 
-  AccquireBackupSnapshotLogEntry(BackupSnapshotId backup_id);
+  AccquireBackupSnapshotLogEntry(BackupSnapshotId backup_id, uint64_t auto_increment_id);
   virtual ~AccquireBackupSnapshotLogEntry() override;
   DECLARE_COMPACTIPLE_SERIALIZATION_OVERRIDE(ACQUIRE_SNAPSHOT_LOG_ENTRY_VERSION)
   DECLARE_TO_STRING()

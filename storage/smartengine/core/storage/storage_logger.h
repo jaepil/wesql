@@ -79,12 +79,13 @@ struct CheckpointBlockHeader
 
 struct BackupSnapshotInfo {
   int64_t backup_id_{0};
+  int64_t auto_increment_id_{0};
   int64_t meta_snapshot_count_{0};
   int64_t meta_snapshot_meta_block_count_{0};
   int64_t meta_snapshot_meta_block_offset_{0};
 };
 
-constexpr size_t kMaxBackupSnapshotReservedNum = 65000;
+constexpr size_t kMaxBackupSnapshotReservedNum = 50000;
 
 static_assert(db::BackupSnapshotMap::kMaxBackupSnapshotNum <= kMaxBackupSnapshotReservedNum);
 
