@@ -69,7 +69,7 @@
 #include "util/defer.h"
 #include "util/file_reader_writer.h"
 #include "util/file_util.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"
 #include "write_batch/write_batch_internal.h"
@@ -555,7 +555,6 @@ DBImpl::DBImpl(const DBOptions &options, const std::string &dbname)
       has_unpersisted_data_(false),
       unable_to_flush_oldest_log_(false),
       env_options_(BuildDBOptions(immutable_db_options_, mutable_db_options_)),
-      wal_manager_(immutable_db_options_, env_options_),
       bg_work_paused_(0),
       bg_compaction_paused_(0),
       refitting_level_(false),
@@ -2047,16 +2046,6 @@ void DBImpl::GetApproximateSizes(ColumnFamilyHandle* column_family,
   ReturnAndCleanupSuperVersion(cfd, sv);
 }
 
-Status DBImpl::GetUpdatesSince(
-    SequenceNumber seq, unique_ptr<TransactionLogIterator>* iter,
-    const TransactionLogIterator::ReadOptions& read_options) {
-  QUERY_COUNT(CountPoint::GET_UPDATES_SINCE_CALLS);
-  if (seq > versions_->LastSequence()) {
-    return Status::NotFound("Requested sequence not yet written in the db");
-  }
-  return wal_manager_.GetUpdatesSince(seq, iter, read_options, versions_.get());
-}
-
 Status DestroyDB(const std::string& dbname, const Options& options) {
   const ImmutableDBOptions soptions(SanitizeOptions(dbname, options));
   Env* env = soptions.env;
@@ -2066,19 +2055,17 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
   env->GetChildren(dbname, &filenames);
 
   FileLock* lock;
-  const std::string lockname = LockFileName(dbname);
+  const std::string lockname = FileNameUtil::lock_file_path(dbname);
   Status result = env->LockFile(lockname, &lock);
   if (result.ok()) {
-    uint64_t number;
-    FileType type;
+    int64_t number = 0;
+    FileType type = util::kInvalidFileType;
     for (size_t i = 0; i < filenames.size(); i++) {
-      if (ParseFileName(filenames[i], &number, &type) &&
-          type != kDBLockFile) {  // Lock file will be deleted at end
+      if (Status::kOk == FileNameUtil::parse_file_name(filenames[i], number, type) &&
+          type != kLockFile) {  // Lock file will be deleted at end
         Status del;
         std::string path_to_delete = dbname + "/" + filenames[i];
-        if (type == kMetaDatabase) {
-          del = DestroyDB(path_to_delete, options);
-        } else if (type == kTableFile) {
+        if (kDataFile == type) {
           del = DeleteSSTFile(&soptions, path_to_delete, 0);
         } else {
           del = env->DeleteFile(path_to_delete);
@@ -2096,8 +2083,8 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
       const auto& db_path = options.db_paths[path_id];
       env->GetChildren(db_path.path, &filenames);
       for (size_t i = 0; i < filenames.size(); i++) {
-        if (ParseFileName(filenames[i], &number, &type) &&
-            type == kTableFile) {  // Lock file will be deleted at end
+        if (Status::kOk == FileNameUtil::parse_file_name(filenames[i], number, type) &&
+            kDataFile == type) {  // Lock file will be deleted at end
           std::string table_path = db_path.path + "/" + filenames[i];
           Status del = DeleteSSTFile(&soptions, table_path,
                                      static_cast<uint32_t>(path_id));
@@ -2109,36 +2096,19 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
     }
 
     std::vector<std::string> walDirFiles;
-    std::string archivedir = ArchivalDirectory(dbname);
     if (dbname != soptions.wal_dir) {
       env->GetChildren(soptions.wal_dir, &walDirFiles);
-      archivedir = ArchivalDirectory(soptions.wal_dir);
     }
 
     // Delete log files in the WAL dir
     for (const auto& file : walDirFiles) {
-      if (ParseFileName(file, &number, &type) && type == kLogFile) {
+      if (Status::kOk == FileNameUtil::parse_file_name(file, number, type) && kWalFile == type) {
         Status del = env->DeleteFile(soptions.wal_dir + "/" + file);
         if (result.ok() && !del.ok()) {
           result = del;
         }
       }
     }
-
-    std::vector<std::string> archiveFiles;
-    env->GetChildren(archivedir, &archiveFiles);
-    // Delete archival files.
-    for (size_t i = 0; i < archiveFiles.size(); ++i) {
-      if (ParseFileName(archiveFiles[i], &number, &type) && type == kLogFile) {
-        Status del = env->DeleteFile(archivedir + "/" + archiveFiles[i]);
-        if (result.ok() && !del.ok()) {
-          result = del;
-        }
-      }
-    }
-
-    // ignore case where no archival directory is present
-    env->DeleteDir(archivedir);
 
     env->UnlockFile(lock);  // Ignore error since state is already gone
     env->DeleteFile(lockname);

@@ -45,20 +45,20 @@ TEST_F(RecoverNoSpaceTest, FailInRecover) {
   Put(1, "k2", std::string(10000, 'y'));  // Trigger flush
   std::string current_file_before;
   Status s =
-  ReadFileToString(options.env, CurrentFileName(db_name()), &current_file_before);
+  ReadFileToString(options.env, FileNameUtil::current_file_path(db_name()), &current_file_before);
   SyncPoint::GetInstance()->EnableProcessing();
   // io error
   ASSERT_EQ(TryReopenWithColumnFamilies({"default", "tb"}, CurrentOptions()).code(), Status::kOk);
   std::string current_file_after;
   s =
-  ReadFileToString(options.env, CurrentFileName(db_name()), &current_file_after); 
+  ReadFileToString(options.env, FileNameUtil::current_file_path(db_name()), &current_file_after); 
   // current not change
   ASSERT_EQ(current_file_before, current_file_after);
   fprintf(stdout, "%s%s", current_file_before.c_str(), current_file_after.c_str());
   SyncPoint::GetInstance()->DisableProcessing();
   ASSERT_OK(TryReopenWithColumnFamilies({"default", "tb"}, CurrentOptions()));
   s =
-  ReadFileToString(options.env, CurrentFileName(db_name()), &current_file_after); 
+  ReadFileToString(options.env, FileNameUtil::current_file_path(db_name()), &current_file_after); 
   fprintf(stdout, "%s", current_file_after.c_str());
 }
 

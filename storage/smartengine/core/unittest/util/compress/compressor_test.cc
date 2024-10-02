@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <ctime>
 #include "options/options.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
 #include "util/compress/compressor.h"

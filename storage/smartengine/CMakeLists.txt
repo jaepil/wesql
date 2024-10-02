@@ -172,7 +172,6 @@ SET(SE_SOURCES
   core/db/snapshot_impl.cc
   core/db/table_cache.cc
   core/db/version_set.cc
-  core/db/wal_manager.cc
   core/db/batch_group.cc
   core/db/pipline_queue_manager.cc
   core/env/env.cc
@@ -270,7 +269,7 @@ SET(SE_SOURCES
   core/util/file_reader_writer.cc
   core/util/concurrent_direct_file_writer.cc
   core/util/file_util.cc
-  core/util/filename.cc
+  core/util/file_name.cc
   core/util/hash.cc
   core/util/murmurhash.cc
   core/util/random.cc
@@ -293,7 +292,6 @@ SET(SE_SOURCES
   core/transactions/transaction_db_impl.cc
   core/transactions/transaction_db_mutex_impl.cc
   core/transactions/transaction_impl.cc
-  core/transactions/transaction_log_impl.cc
   core/transactions/transaction_lock_mgr.cc
   core/transactions/transaction_util.cc
   core/write_batch/write_batch.cc

@@ -43,7 +43,7 @@
 #include "table/sst_file_writer_collectors.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/random.h"
 #include "util/string_util.h"
 #include "util/sync_point.h"

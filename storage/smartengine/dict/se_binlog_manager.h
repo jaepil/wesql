@@ -25,6 +25,11 @@ namespace smartengine
 {
 class SeDictionaryManager;
 
+namespace db
+{
+class WriteBatchBase;
+} // namespace db
+
 /*
   Writing binlog information into se at commit(),
   and retrieving binlog information at crash recovery.

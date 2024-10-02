@@ -35,7 +35,7 @@
 #include "table/extent_table_factory.h"
 #include "table/merging_iterator.h"
 #include "table/extent_writer.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/sync_point.h"
 
 namespace smartengine {

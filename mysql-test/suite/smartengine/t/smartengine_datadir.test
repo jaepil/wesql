@@ -23,7 +23,7 @@ exec $MYSQLD_BOOTSTRAP_CMD --datadir=$ddir --smartengine_data_dir=$rdb_ddir --de
 
 #not used MANIFEST
 --echo Check for the number of MANIFEST files
---exec ls $rdb_ddir/MANIFEST-0000* | wc -l;
+--exec ls $rdb_ddir/*.manifest | wc -l;
 
 # Clean up
 exec rm -rf $ddir;

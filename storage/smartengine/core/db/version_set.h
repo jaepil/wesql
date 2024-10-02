@@ -137,7 +137,7 @@ public:
       } else if (min_log_num > static_cast<uint64_t>(cfd->get_recovery_point().log_file_number_)
           && !cfd->IsDropped()) {
         // It's safe to ignore dropped column families here:
-        // cfd->IsDropped() becomes true after the drop is persisted in MANIFEST.
+        // cfd->IsDropped() becomes true after the drop is persisted in manifest.
         min_log_num = static_cast<uint64_t>(cfd->get_recovery_point().log_file_number_);
       }
     }

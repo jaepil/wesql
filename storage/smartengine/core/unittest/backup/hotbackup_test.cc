@@ -55,7 +55,7 @@ public:
   void copy_extents(const std::string &backup_tmp_dir_path,
                     const std::string &extent_ids_file,
                     const std::string &extent_file);
-  uint64_t last_sst_file_num_ = 0;
+  int64_t last_sst_file_num_ = 0;
   std::string backup_tmp_dir_path_;
   std::string backup_tmp_dir_path2_;
   std::string backup_tmp_dir_path3_;
@@ -66,9 +66,9 @@ struct RestFileChecker
   RestFileChecker(const uint64_t last_sst_file_num) : last_sst_file_num_(last_sst_file_num) {}
   inline bool operator()(const util::FileType &type, const uint64_t &file_num)
   {
-    return (type == util::kTableFile && (file_num > last_sst_file_num_ || last_sst_file_num_ == 0)) ||
-           (type == util::kLogFile) || (type == util::kManifestFile) || (type == util::kCheckpointFile) ||
-           (type == kCurrentFile);
+    return (util::kDataFile == type && (file_num > last_sst_file_num_ || last_sst_file_num_ == 0)) ||
+           (util::kWalFile == type) || (util::kManifestFile == type) || (util::kCheckpointFile == type) ||
+           (util::kCurrentFile == type);
   }
   uint64_t last_sst_file_num_;
 };
@@ -99,7 +99,7 @@ void HotbackupTest::replay_sst_files(const std::string &backup_dir,
     // write to sst file
     auto iter = fds_map.find(extent_id.file_number);
     if (fds_map.end() == iter) {
-      fname = MakeTableFileName(backup_dir, extent_id.file_number);
+      fname = FileNameUtil::data_file_path(backup_dir, extent_id.file_number);
       do {
         fd = open(fname.c_str(), O_WRONLY, 0644);
       } while (fd < 0 && errno == EINTR);
@@ -145,7 +145,7 @@ void HotbackupTest::copy_extents(const std::string &backup_tmp_dir_path,
     ExtentId extent_id(*reinterpret_cast<const int64_t*>(result.data()));
     auto iter = fds_map.find(extent_id.file_number);
     if (fds_map.end() == iter) {
-      fname = MakeTableFileName(backup_tmp_dir_path, extent_id.file_number);
+      fname = FileNameUtil::data_file_path(backup_tmp_dir_path, extent_id.file_number);
       do {
         fd = open(fname.c_str(), O_RDONLY, 0644);
       } while (fd < 0 && errno == EINTR);
@@ -175,11 +175,11 @@ void HotbackupTest::save_old_current_file()
   std::vector<std::string> all_files;
   CurrentFileChecker file_checker;
   ASSERT_OK(db_->GetEnv()->GetChildren(dbname_, &all_files));
-  uint64_t file_num = 0;
-  util::FileType type;
+  int64_t file_num = 0;
+  util::FileType type = kInvalidFileType;
   char cmd[1024];
   for (auto &file : all_files) {
-    if (ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) {
+    if (Status::kOk == FileNameUtil::parse_file_name(file, file_num, type) && file_checker(type, file_num)) {
       std::string file_path = dbname_ + "/" + file;
       snprintf(cmd, 1024, "cp %s %s", file_path.c_str(), (file_path + ".old").c_str());
       SE_LOG(INFO, "save current file to CURRENT.old", K(cmd));
@@ -193,12 +193,12 @@ void HotbackupTest::copy_old_current_file(std::string backup_path)
   std::vector<std::string> all_files;
   CurrentFileChecker file_checker;
   ASSERT_OK(db_->GetEnv()->GetChildren(dbname_, &all_files));
-  uint64_t file_num = 0;
-  util::FileType type;
+  int64_t file_num = 0;
+  util::FileType type = kInvalidFileType;
   char cmd[1024];
   ASSERT_OK(db_->GetEnv()->CreateDirIfMissing(backup_path));
   for (auto &file : all_files) {
-    if (ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) {
+    if (Status::kOk == FileNameUtil::parse_file_name(file, file_num, type) && file_checker(type, file_num)) {
       std::string file_path = dbname_ + "/" + file;
       snprintf(cmd, 1024, "cp %s %s", (file_path + ".old").c_str(), backup_path.c_str());
       SE_LOG(INFO, "copy old current file to backup dir", K(cmd));
@@ -215,12 +215,12 @@ void HotbackupTest::copy_sst_files(std::string backup_path)
   std::vector<std::string> all_files;
   SSTFileChecker file_checker;
   ASSERT_OK(db_->GetEnv()->GetChildren(dbname_, &all_files));
-  uint64_t file_num = 0;
-  util::FileType type;
+  int64_t file_num = 0;
+  util::FileType type = kInvalidFileType;
   char cmd[1024];
   ASSERT_OK(db_->GetEnv()->CreateDir(backup_path));
   for (auto &file : all_files) {
-    if (ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) {
+    if (Status::kOk == FileNameUtil::parse_file_name(file, file_num, type) && file_checker(type, file_num)) {
       std::string file_path = dbname_ + "/" + file;
       snprintf(cmd, 1024, "cp %s %s", file_path.c_str(), backup_path.c_str());
       SE_LOG(INFO, "copy sst file", K(cmd));
@@ -236,11 +236,11 @@ void HotbackupTest::copy_rest_files(const std::string &backup_tmp_dir_path, std:
   std::vector<std::string> all_files;
   RestFileChecker file_checker(last_sst_file_num_);
   ASSERT_OK(db_->GetEnv()->GetChildren(backup_tmp_dir_path, &all_files));
-  uint64_t file_num = 0;
-  util::FileType type;
+  int64_t file_num = 0;
+  util::FileType type = kInvalidFileType;
   char cmd[1024];
   for (auto &file : all_files) {
-    if ((ParseFileName(file, &file_num, &type) && file_checker(type, file_num)) 
+    if ((Status::kOk == FileNameUtil::parse_file_name(file, file_num, type) && file_checker(type, file_num)) 
         || file == "extent_ids.inc" || file == "extent.inc") {
       std::string file_path = backup_tmp_dir_path + "/" + file;
       snprintf(cmd, 1024, "cp %s %s", file_path.c_str(), backup_path.c_str());
@@ -886,7 +886,8 @@ TEST_F(HotbackupTest, delete_manifest_before_acquire)
   ASSERT_OK(Put(1, "e", "ee"));
   ASSERT_OK(Put(1, "f", "ff"));
   // delete manifest file before acquire
-  ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
+  //ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
+  ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/5.manifest"));
   ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   ASSERT_EQ(Status::kNotFound, backup_snapshot->record_incremental_extent_ids(db_));
 
@@ -1002,7 +1003,8 @@ TEST_F(HotbackupTest, delete_manifest_after_accquire) {
   ASSERT_OK(Put(1, "h", "hh"));
   ASSERT_EQ(Status::kOk, backup_snapshot->accquire_backup_snapshot(db_, &backup_id, binlog_pos));
   // delete manifest file after acquire
-  ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
+  //ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/MANIFEST-000005"));
+  ASSERT_OK(db_->GetEnv()->DeleteFile(dbname_ + "/5.manifest"));
   ASSERT_EQ(Status::kOk, backup_snapshot->record_incremental_extent_ids(db_));
   copy_extents(backup_tmp_dir_path_, backup_tmp_dir_path_ + BACKUP_EXTENT_IDS_FILE,
                backup_tmp_dir_path_ + BACKUP_EXTENTS_FILE);

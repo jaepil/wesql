@@ -234,13 +234,6 @@ class StackableDB : public db::DB {
     return db_->SetDBOptions(new_options);
   }
 
-  virtual common::Status GetUpdatesSince(
-      common::SequenceNumber seq_number,
-      unique_ptr<db::TransactionLogIterator>* iter,
-      const db::TransactionLogIterator::ReadOptions& read_options) override {
-    return db_->GetUpdatesSince(seq_number, iter, read_options);
-  }
-
   virtual ColumnFamilyHandle* DefaultColumnFamily() const override {
     return db_->DefaultColumnFamily();
   }

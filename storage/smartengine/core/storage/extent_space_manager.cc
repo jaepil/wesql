@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-#include "util/filename.h"
-#include "util/increment_number_allocator.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
 #include "storage/storage_meta_struct.h"
+#include "util/file_name.h"
+#include "util/increment_number_allocator.h"
 #include "util/sync_point.h"
 
 
@@ -725,8 +725,8 @@ int ExtentSpaceManager::get_data_file_numbers(const std::string &dir_path,
   int ret = Status::kOk;
   std::string file_name;
   std::vector<std::string> data_file_names;
-  uint64_t file_number;
-  util::FileType file_type;
+  int64_t file_number = 0;
+  util::FileType file_type = util::kInvalidFileType;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -736,7 +736,8 @@ int ExtentSpaceManager::get_data_file_numbers(const std::string &dir_path,
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < data_file_names.size(); ++i) {
       file_name = data_file_names.at(i);
-      if (ParseFileName(file_name, &file_number, &file_type) && util::kTableFile == file_type) {
+      // Ignore the file that we can't recognize it.
+      if ((Status::kOk == FileNameUtil::parse_file_name(file_name, file_number, file_type)) && util::kDataFile == file_type) {
         data_file_numbers.push_back(file_number);
         SE_LOG(INFO, "find data file", K(file_number), K(file_name));
       } else {
@@ -752,7 +753,7 @@ int ExtentSpaceManager::open_data_files(const std::string &dir_path, const std::
 {
   int ret = Status::kOk;
   std::string file_name;
-  int64_t file_number;
+  int64_t file_number = 0;
   DataFile *data_file = nullptr;
   TableSpace *table_space = nullptr;
 
@@ -762,7 +763,7 @@ int ExtentSpaceManager::open_data_files(const std::string &dir_path, const std::
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < data_file_numbers.size(); ++i) {
       file_number = data_file_numbers.at(i);
-      file_name = util::MakeTableFileName(dir_path, file_number);
+      file_name = util::FileNameUtil::data_file_path(dir_path, file_number);
       if (IS_NULL(data_file = MOD_NEW_OBJECT(ModId::kExtentSpaceMgr,
                                              DataFile,
                                              env_,

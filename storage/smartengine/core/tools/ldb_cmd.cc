@@ -33,7 +33,7 @@
 #include "table/table.h"
 #include "tools/ldb_cmd_impl.h"
 #include "util/coding.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/file_reader_writer.h"
 #include "util/string_util.h"
 #include "storage/extent_space_manager.h"
@@ -1534,15 +1534,15 @@ void DumpWalFile(std::string wal_file, bool print_header, bool print_values,
     }
   } else {
     StdErrReporter reporter;
-    uint64_t log_number;
-    FileType type;
+    int64_t log_number = 0;
+    FileType type = util::kInvalidFileType;
 
     // we need the log number, but ParseFilename expects dbname/NNN.log.
     std::string sanitized = wal_file;
     size_t lastslash = sanitized.rfind('/');
     if (lastslash != std::string::npos)
       sanitized = sanitized.substr(lastslash + 1);
-    if (!ParseFileName(sanitized, &log_number, &type)) {
+    if (Status::kOk != FileNameUtil::parse_file_name(sanitized, log_number, type)) {
       // bogus input, carry on as best we can
       log_number = 0;
     }

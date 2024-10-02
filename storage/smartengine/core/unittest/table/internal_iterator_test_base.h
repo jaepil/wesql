@@ -297,9 +297,9 @@ void InternalIteratorTestBase::init(const TestArgs &args)
                                      context_->idb_options_,
                                      version_set_,
                                      1 * 1024 * 1024 * 1024);
-  uint64_t file_number = 1;
+  int64_t file_number = 1;
   common::Status s;
-  std::string manifest_filename = util::ManifestFileName(dbname_, file_number);
+  std::string manifest_filename = util::FileNameUtil::manifest_file_path(dbname_, file_number);
   util::WritableFile *descriptor_file = nullptr;
   util::EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(context_->env_options_);
   s = NewWritableFile(env_, manifest_filename, descriptor_file, opt_env_opts);

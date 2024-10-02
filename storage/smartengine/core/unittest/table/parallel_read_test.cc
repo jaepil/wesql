@@ -296,9 +296,8 @@ void ParallelReadTest::init(const TestArgs args) {
   ExtentSpaceManager::get_instance().create_table_space(0);
   WriteExtentJobScheduler::get_instance().start(env_, 1);
 
-  uint64_t file_number = 1;
-  std::string manifest_filename =
-      util::ManifestFileName(dbname_, file_number);
+  int64_t file_number = 1;
+  std::string manifest_filename = util::FileNameUtil::manifest_file_path(dbname_, file_number);
   WritableFile *descriptor_file = nullptr;
   EnvOptions opt_env_opts =
       env_->OptimizeForManifestWrite(context_->env_options_);

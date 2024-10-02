@@ -220,10 +220,10 @@ int DBImpl::prepare_recovery(const ColumnFamilyOptions &cf_options)
                                          immutable_db_options_.persistent_cache_dir).code())) {
     SE_LOG(INFO, "fail to set directories", K(ret), K_(dbname),
         "wal_dir", immutable_db_options_.wal_dir, "persist_cache_dir", immutable_db_options_.persistent_cache_dir);
-  } else if (FAILED(env_->LockFile(LockFileName(dbname_), &db_lock_).code())) {
+  } else if (FAILED(env_->LockFile(FileNameUtil::lock_file_path(dbname_), &db_lock_).code())) {
     SE_LOG(INFO, "fail to lock file", K(ret), K_(dbname));
   } else {
-    if (FAILED(env_->FileExists(CurrentFileName(dbname_)).code())) {
+    if (FAILED(env_->FileExists(FileNameUtil::current_file_path(dbname_)).code())) {
       if (Status::kNotFound != ret) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, when check current file exist or not", K(ret), K_(dbname));
@@ -235,19 +235,6 @@ int DBImpl::prepare_recovery(const ColumnFamilyOptions &cf_options)
         }
         const uint64_t t3 = env_->NowMicros();
         recovery_debug_info_.prepare_external_write_ckpt = t3 - t2;
-      }
-    }
-
-    if (SUCCED(ret)) {
-      if (FAILED(env_->FileExists(IdentityFileName(dbname_)).code())) {
-        if (Status::kNotFound != ret) {
-          SE_LOG(WARN, "unexpected error, when check identity file exist", K(ret));
-        } else {
-          //overwite ret as disign
-          if (FAILED(SetIdentityFile(env_, dbname_).code())) {
-            SE_LOG(WARN, "fail to set identity file", K(ret), K_(dbname));
-          }
-        }
       }
     }
 
@@ -642,14 +629,15 @@ int DBImpl::collect_sorted_wal_file_number(std::vector<uint64_t> &log_file_numbe
 {
   int ret = Status::kOk;
   std::vector<std::string> file_names;
-  uint64_t file_number = 0;
-  FileType file_type;
+  int64_t file_number = 0;
+  FileType file_type = util::kInvalidFileType;
 
   if (FAILED(env_->GetChildren(immutable_db_options_.wal_dir, &file_names).code())) {
     SE_LOG(WARN, "fail to get files in wal dir", K(ret), "wal_dir", immutable_db_options_.wal_dir);
   } else {
     for (uint32_t i = 0; SUCCED(ret) && i < file_names.size(); ++i) {
-      if (ParseFileName(file_names[i], &file_number, &file_type) && kLogFile == file_type) {
+      // Ignore the file that we can't recognize it.
+      if ((Status::kOk == FileNameUtil::parse_file_name(file_names[i], file_number, file_type)) && kWalFile == file_type) {
         log_file_numbers.push_back(file_number);
       }
     }
@@ -699,7 +687,7 @@ int DBImpl::parallel_replay_one_wal_file(uint64_t file_number,
                                          uint64_t *submit_time) {
   assert(WALRecoveryMode::kPointInTimeRecovery != immutable_db_options_.wal_recovery_mode);
   int ret = Status::kOk;
-  std::string file_name = LogFileName(immutable_db_options_.wal_dir, file_number);
+  std::string file_name = FileNameUtil::wal_file_path(immutable_db_options_.wal_dir, file_number);
   SE_LOG(INFO, "begin to read the wal file", K(file_name), "aio_read", immutable_db_options_.enable_aio_wal_reader);
   SequentialFile *file = nullptr;
   EnvOptions tmp_options = env_options_;
@@ -793,7 +781,7 @@ int DBImpl::replay_one_wal_file(uint64_t file_number,
 {
   int ret = Status::kOk;
   Status status;
-  std::string file_name = LogFileName(immutable_db_options_.wal_dir, file_number);
+  std::string file_name = FileNameUtil::wal_file_path(immutable_db_options_.wal_dir, file_number);
   std::string scratch;
   Slice record;
   WriteBatch batch;
@@ -1281,7 +1269,7 @@ int DBImpl::update_wal_writer(bool force)
     DBOptions curr_db_options = BuildDBOptions(immutable_db_options_, mutable_db_options_);
     EnvOptions opt_env_options = env_->OptimizeForLogWrite(env_options_, curr_db_options);
     uint64_t new_log_file_number = versions_->NewFileNumber();
-    std::string new_log_file_name = LogFileName(immutable_db_options_.wal_dir, new_log_file_number);
+    std::string new_log_file_name = FileNameUtil::wal_file_path(immutable_db_options_.wal_dir, new_log_file_number);
 
     if (FAILED(NewWritableFile(env_, new_log_file_name, log_file, opt_env_options).code())) {
       SE_LOG(WARN, "fail to create new log file", K(ret), K(new_log_file_name));

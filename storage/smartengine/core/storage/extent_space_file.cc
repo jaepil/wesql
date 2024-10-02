@@ -16,7 +16,7 @@
 
 #include "storage/extent_space_file.h"
 
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/increment_number_allocator.h"
 
 namespace smartengine
@@ -449,7 +449,7 @@ int FileExtentSpace::create_data_file()
     ret = Status::kNotInit;
     SE_LOG(WARN, "FileExtentSpace should been inited first", K(ret));
   } else {
-    std::string data_file_path = util::MakeTableFileName(extent_space_path_, file_number);
+    std::string data_file_path = util::FileNameUtil::data_file_path(extent_space_path_, file_number);
     CreateDataFileArgs data_file_args(table_space_id_, extent_space_type_, file_number, data_file_path);
     if (IS_NULL(data_file = MOD_NEW_OBJECT(memory::ModId::kExtentSpaceMgr, DataFile, env_, env_options_))) {
       ret = Status::kMemoryLimit;

@@ -71,7 +71,7 @@ int main() {
 #include "db/db.h"
 #include "options/options.h"
 #include "port/port.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 
 using GFLAGS::ParseCommandLineFlags;
 using GFLAGS::RegisterFlagValidator;

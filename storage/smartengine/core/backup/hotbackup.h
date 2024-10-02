@@ -55,9 +55,9 @@ public:
   virtual int set_backup_status(const char *status);
   // Do a manual checkpoint and flush memtable
   virtual int do_checkpoint(db::DB *db, const char *backup_tmp_dir_path = nullptr);
-  // Acquire an backup snapshot and hard-link/copy MANIFEST files
+  // Acquire an backup snapshot and hard-link/copy manifest files
   virtual int accquire_backup_snapshot(db::DB *db, BackupSnapshotId *backup_id, db::BinlogPosition &binlog_pos);
-  // Parse incremental MANIFEST files and record the modified extent ids
+  // Parse incremental manifest files and record the modified extent ids
   virtual int record_incremental_extent_ids(db::DB *db);
   // Release an old backup snapshot
   virtual int release_old_backup_snapshot(db::DB *db, BackupSnapshotId backup_id);

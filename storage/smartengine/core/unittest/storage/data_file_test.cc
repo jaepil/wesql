@@ -17,7 +17,7 @@
 #include "storage/data_file.h"
 #include <cstdio>
 #include <cstdlib>
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
 
@@ -46,7 +46,7 @@ public:
   {
     args.table_space_id_ = table_space_id;
     args.extent_space_type_ = FILE_EXTENT_SPACE;
-    args.data_file_path_ = util::MakeTableFileName(test_dir, file_number);
+    args.data_file_path_ = util::FileNameUtil::data_file_path(test_dir, file_number);
     args.file_number_ = file_number;
   }
 

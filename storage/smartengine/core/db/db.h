@@ -27,7 +27,6 @@
 #include "options/options.h"
 #include "schema/table_schema.h"
 #include "table/iterator.h"
-#include "transactions/transaction_log.h"
 
 #ifdef _WIN32
 // Windows API macro interference
@@ -817,19 +816,6 @@ class DB {
   // information schema
   virtual std::list<storage::CompactionJobStatsInfo*> &get_compaction_history(std::mutex **mu,
           storage::CompactionJobStatsInfo **sum) = 0;
-  // Sets iter to an iterator that is positioned at a write-batch containing
-  // seq_number. If the sequence number is non existent, it returns an iterator
-  // at the first available seq_no after the requested seq_no
-  // Returns common::Status::OK if iterator is valid
-  // Must set WAL_ttl_seconds or WAL_size_limit_MB to large values to
-  // use this api, else the WAL files will get
-  // cleared aggressively and the iterator might keep getting invalid before
-  // an update is read.
-  virtual common::Status GetUpdatesSince(
-      common::SequenceNumber seq_number,
-      unique_ptr<TransactionLogIterator>* iter,
-      const TransactionLogIterator::ReadOptions& read_options =
-          TransactionLogIterator::ReadOptions()) = 0;
 
   /*
    * for bulkload

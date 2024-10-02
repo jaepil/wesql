@@ -87,7 +87,7 @@ struct EnvOptions {
   // means that file size won't change as part of preallocation.
   // If false, preallocation will also change the file size. This option will
   // improve the performance in workloads where you sync the data on every
-  // write. By default, we set it to true for MANIFEST writes and false for
+  // write. By default, we set it to true for manifest writes and false for
   // WAL writes
   bool fallocate_with_keep_size = true;
 

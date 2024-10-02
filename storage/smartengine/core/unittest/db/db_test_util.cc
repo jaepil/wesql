@@ -9,7 +9,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "db/db_test_util.h"
+#include "db_test_util.h"
 #include "storage/storage_logger.h"
 #include "table/table.h"
 
@@ -450,7 +450,7 @@ common::Status DBTestBase::open_create_default_subtable(const common::Options& o
 bool DBTestBase::IsDirectIOSupported() {
   util::EnvOptions env_options;
   env_options.use_direct_writes = true;
-  std::string tmp = TempFileName(dbname_, 999);
+  std::string tmp = FileNameUtil::temp_file_path(dbname_, 999);
   Status s;
   {
 //    unique_ptr<WritableFile> file;
@@ -724,10 +724,10 @@ void DBTestBase::GetSstFiles(std::string path,
 
   files->erase(std::remove_if(files->begin(), files->end(),
                               [](std::string name) {
-                                uint64_t number;
+                                int64_t number;
                                 FileType type;
-                                return !(ParseFileName(name, &number, &type) &&
-                                         type == kTableFile);
+                                return !(Status::kOk == FileNameUtil::parse_file_name(name, number, type) &&
+                                         kDataFile == type);
                               }),
                files->end());
 }
@@ -844,10 +844,10 @@ std::unordered_map<std::string, uint64_t> DBTestBase::GetAllSSTFiles(
   std::vector<std::string> files;
   env_->GetChildren(dbname_, &files);
   for (auto& file_name : files) {
-    uint64_t number;
-    FileType type;
+    int64_t number = 0;
+    FileType type = util::kInvalidFileType;
     std::string file_path = dbname_ + "/" + file_name;
-    if (ParseFileName(file_name, &number, &type) && type == kTableFile) {
+    if (Status::kOk == FileNameUtil::parse_file_name(file_name, number, type) && kDataFile == type) {
       uint64_t file_size = 0;
       env_->GetFileSize(file_path, &file_size);
       res[file_path] = file_size;
@@ -864,11 +864,11 @@ std::vector<std::uint64_t> DBTestBase::ListTableFiles(Env* env,
   std::vector<std::string> files;
   std::vector<uint64_t> file_numbers;
   env->GetChildren(path, &files);
-  uint64_t number;
-  FileType type;
+  int64_t number = 0;
+  FileType type = util::kInvalidFileType;
   for (size_t i = 0; i < files.size(); ++i) {
-    if (ParseFileName(files[i], &number, &type)) {
-      if (type == kTableFile) {
+    if (Status::kOk == FileNameUtil::parse_file_name(files[i], number, type)) {
+      if (kDataFile == type) {
         file_numbers.push_back(number);
       }
     }

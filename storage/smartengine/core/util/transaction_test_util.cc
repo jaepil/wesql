@@ -21,11 +21,13 @@
 #include "transactions/optimistic_transaction_db.h"
 #include "util/random.h"
 #include "util/string_util.h"
+#include "write_batch/write_batch.h"
 
-using namespace smartengine::db;
-using namespace smartengine::common;
 
-namespace smartengine {
+namespace smartengine
+{
+using namespace common;
+using namespace db;
 namespace util {
 
 RandomTransactionInserter::RandomTransactionInserter(

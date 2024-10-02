@@ -296,8 +296,8 @@ int BackupSnapshotImpl::accquire_backup_snapshot(DB *db, BackupSnapshotId *backu
       TEST_SYNC_POINT_CALLBACK("BackupSnapshotImpl::acquire_snapshot::after_create_backup_snapshot", db);
 #endif
       binlog_pos = last_binlog_pos_;
-      std::string last_manifest_file_dest = ManifestFileName(backup_tmp_dir_path_, last_manifest_file_num_);
-      std::string last_manifest_file_src = ManifestFileName(db->GetName(), last_manifest_file_num_);
+      std::string last_manifest_file_dest = FileNameUtil::manifest_file_path(backup_tmp_dir_path_, last_manifest_file_num_);
+      std::string last_manifest_file_src = FileNameUtil::manifest_file_path(db->GetName(), last_manifest_file_num_);
       DataDirFileChecker data_file_checker(first_manifest_file_num_, last_manifest_file_num_);
       WalDirFileChecker wal_file_checker(last_wal_file_num_);
       if (FAILED(link_files(db, (CurrentFileChecker *)nullptr, &data_file_checker, &wal_file_checker))) {
@@ -307,11 +307,11 @@ int BackupSnapshotImpl::accquire_backup_snapshot(DB *db, BackupSnapshotId *backu
                                  last_manifest_file_dest,
                                  last_manifest_file_size_, // clang-format off
                                  false).code())) { // clang-format on
-        // copy last MANIFEST file
+        // copy last manifest file
         SE_LOG(WARN, "Failed to copy last manifest file", K(ret));
       } else {
         SE_LOG(INFO,
-               "Success to copy last MANIFEST file and acquire snapshots",
+               "Success to copy last manifest file and acquire snapshots",
                K(last_manifest_file_dest),
                K(last_manifest_file_num_),
                K(last_manifest_file_size_),

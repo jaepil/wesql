@@ -69,30 +69,30 @@ struct ReplicationThread {
   volatile size_t no_read;
 };
 
-static void ReplicationThreadBody(void* arg) {
-  ReplicationThread* t = reinterpret_cast<ReplicationThread*>(arg);
-  DB* db = t->db;
-  unique_ptr<TransactionLogIterator> iter;
-  SequenceNumber currentSeqNum = 1;
-  while (!t->stop.load(std::memory_order_acquire)) {
-    iter.reset();
-    Status s;
-    while (!db->GetUpdatesSince(currentSeqNum, &iter).ok()) {
-      if (t->stop.load(std::memory_order_acquire)) {
-        return;
-      }
-    }
-    fprintf(stderr, "Refreshing iterator\n");
-    for (; iter->Valid(); iter->Next(), t->no_read++, currentSeqNum++) {
-      BatchResult res = iter->GetBatch();
-      if (res.sequence != currentSeqNum) {
-        fprintf(stderr, "Missed a seq no. b/w %ld and %ld\n",
-                (long)currentSeqNum, (long)res.sequence);
-        exit(1);
-      }
-    }
-  }
-}
+//static void ReplicationThreadBody(void* arg) {
+//  ReplicationThread* t = reinterpret_cast<ReplicationThread*>(arg);
+//  DB* db = t->db;
+//  unique_ptr<TransactionLogIterator> iter;
+//  SequenceNumber currentSeqNum = 1;
+//  while (!t->stop.load(std::memory_order_acquire)) {
+//    iter.reset();
+//    Status s;
+//    while (!db->GetUpdatesSince(currentSeqNum, &iter).ok()) {
+//      if (t->stop.load(std::memory_order_acquire)) {
+//        return;
+//      }
+//    }
+//    fprintf(stderr, "Refreshing iterator\n");
+//    for (; iter->Valid(); iter->Next(), t->no_read++, currentSeqNum++) {
+//      BatchResult res = iter->GetBatch();
+//      if (res.sequence != currentSeqNum) {
+//        fprintf(stderr, "Missed a seq no. b/w %ld and %ld\n",
+//                (long)currentSeqNum, (long)res.sequence);
+//        exit(1);
+//      }
+//    }
+//  }
+//}
 
 DEFINE_uint64(num_inserts, 1000,
               "the num of inserts the first thread should"
@@ -129,7 +129,7 @@ int main(int argc, const char** argv) {
   replThread.no_read = 0;
   replThread.stop.store(false, std::memory_order_release);
 
-  env->StartThread(ReplicationThreadBody, &replThread);
+  //env->StartThread(ReplicationThreadBody, &replThread);
   while (replThread.no_read < FLAGS_num_inserts)
     ;
   replThread.stop.store(true, std::memory_order_release);

@@ -23,7 +23,7 @@
 #include "storage/extent_space_file.h"
 #include "storage/extent_space_obj.h"
 #include "storage/storage_common.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/testharness.h"
 
 static const std::string test_dir = smartengine::util::test::TmpDir() + "/extent_space_test";

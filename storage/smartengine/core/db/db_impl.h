@@ -29,7 +29,6 @@
 #include "db/log_writer.h"
 #include "db/pipline_queue_manager.h"
 #include "db/snapshot_impl.h"
-#include "db/wal_manager.h"
 #include "env/env.h"
 #include "memtable/memtable_list.h"
 #include "memtable/memtablerep.h"
@@ -39,11 +38,10 @@
 #include "storage/storage_manager.h"
 #include "storage/storage_common.h"
 #include "util/concurrent_hash_map.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/thread_local.h"
 #include "util/heap.h"
 #include "transactions/transaction.h"
-#include "transactions/transaction_log.h"
 
 namespace smartengine {
 namespace storage {
@@ -297,11 +295,6 @@ class DBImpl : public DB {
   {
     return storage::ExtentSpaceManager::get_instance().get_data_file_stats(data_file_stats);
   }
-
-  virtual common::Status GetUpdatesSince(
-      common::SequenceNumber seq_number,
-      unique_ptr<TransactionLogIterator> *iter,
-      const db::TransactionLogIterator::ReadOptions &read_options = TransactionLogIterator::ReadOptions()) override;
 
   VersionSet* get_version_set() { return versions_.get(); }
 
@@ -1449,8 +1442,6 @@ protected:
 
   // The options to access storage files
   const util::EnvOptions env_options_;
-
-  WalManager wal_manager_;
 
   // A value of > 0 temporarily disables scheduling of background work
   int bg_work_paused_;

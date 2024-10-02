@@ -33,7 +33,7 @@
 #include "table/scoped_arena_iterator.h"
 #include "transactions/transaction_db.h"
 #include "util/compression.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/mutexlock.h"
 #include "util/string_util.h"
 // SyncPoint is not supported in Released Windows Mode.

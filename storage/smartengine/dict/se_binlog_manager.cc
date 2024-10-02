@@ -20,6 +20,7 @@
 #include "dict/se_dict_manager.h"
 #include "dict/se_table.h"
 #include "handler/se_hton.h"
+#include "write_batch/write_batch.h"
 
 namespace smartengine {
 

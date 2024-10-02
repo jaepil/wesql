@@ -22,7 +22,7 @@
 #include "logger/log_module.h"
 #include "storage/extent_meta_manager.h"
 #include "util/file_reader_writer.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/string_util.h"
 
 namespace smartengine
@@ -871,8 +871,8 @@ int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
     SE_LOG(WARN, "fail to parse current file", K(ret));
   } else {
     log_file_number = log_file_number_;
-    manifest_name = ManifestFileName(db_name_, log_file_number);
-    checkpoint_name = CheckpointFileName(db_name_, log_file_number);
+    manifest_name = FileNameUtil::manifest_file_path(db_name_, log_file_number);
+    checkpoint_name = FileNameUtil::checkpoint_file_path(db_name_, log_file_number);
     //only when file exists, do actual thing, so we not set ret
     while (Status::kOk == ret) {
       if (Status::kOk == (env_->FileExists(manifest_name).code())) {
@@ -880,8 +880,8 @@ int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
       } else if (Status::kOk == (env_->FileExists(checkpoint_name).code())) {
         SE_LOG(INFO, "skip checkpoint file and replay next manifest file", K(checkpoint_name));
         log_file_number++;
-        manifest_name = ManifestFileName(db_name_, log_file_number);
-        checkpoint_name = CheckpointFileName(db_name_, log_file_number);
+        manifest_name = FileNameUtil::manifest_file_path(db_name_, log_file_number);
+        checkpoint_name = FileNameUtil::checkpoint_file_path(db_name_, log_file_number);
         continue;
       } else {
         break;
@@ -936,8 +936,8 @@ int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
       }
       destroy_log_reader(reader, &arena);
       ++log_file_number;
-      manifest_name = ManifestFileName(db_name_, log_file_number);
-      checkpoint_name = CheckpointFileName(db_name_, log_file_number);
+      manifest_name = FileNameUtil::manifest_file_path(db_name_, log_file_number);
+      checkpoint_name = FileNameUtil::checkpoint_file_path(db_name_, log_file_number);
     }
     log_file_number_ = log_file_number - 1;
   }
@@ -980,7 +980,7 @@ int StorageLogger::internal_write_checkpoint()
   WritableFile *checkpoint_writer = nullptr;
   int64_t checkpoint_file_number = log_file_number_++;
   int64_t manifest_file_number = log_file_number_++;
-  std::string checkpoint_path = CheckpointFileName(db_name_, checkpoint_file_number);
+  std::string checkpoint_path = FileNameUtil::checkpoint_file_path(db_name_, checkpoint_file_number);
   char buf[MAX_FILE_PATH_SIZE];
   EnvOptions opt_env_opts = env_options_;
   opt_env_opts.use_direct_writes = true;
@@ -1050,13 +1050,15 @@ int StorageLogger::write_current_file(int64_t checkpoint_file_number, int64_t ma
 {
   int ret = Status::kOk;
   char buf[MAX_FILE_PATH_SIZE];
-  std::string tmp_file = TempFileName(db_name_, manifest_file_number);
+  std::string tmp_file = FileNameUtil::temp_file_path(db_name_, manifest_file_number);
+  std::string checkpoint_name = FileNameUtil::checkpoint_file_name(checkpoint_file_number);
+  std::string manifest_name = FileNameUtil::manifest_file_name(manifest_file_number);
 
   if (0 >= (snprintf(buf,
                      MAX_FILE_PATH_SIZE,
-                     "CHECKPOINT-%ld:MANIFEST-%06ld:%ld\n",
-                     checkpoint_file_number,
-                     manifest_file_number,
+                     "%s:%s:%ld\n",
+                     checkpoint_name.c_str(),
+                     manifest_name.c_str(),
                      log_number_.load()))) {
     ret = Status::kCorruption;
     SE_LOG(WARN, "fail to write to buf", K(ret));
@@ -1064,6 +1066,8 @@ int StorageLogger::write_current_file(int64_t checkpoint_file_number, int64_t ma
     SE_LOG(WARN, "fail to write string to file", K(ret));
   } else if (FAILED(env_->RenameFile(tmp_file, db_name_ + "/CURRENT").code())) {
     SE_LOG(WARN, "fail to write current file", K(ret));
+  } else {
+    SE_LOG(INFO, "success to write current file", K(checkpoint_name), K(manifest_name), K_(log_number));
   }
   return ret;
 }
@@ -1076,7 +1080,7 @@ int StorageLogger::parse_current_file(std::string &checkpoint_name, std::string 
   checkpoint_name.clear();
   manifest_name.clear();
 
-  if (FAILED(ReadFileToString(env_, CurrentFileName(db_name_), &file_content).code())) {
+  if (FAILED(ReadFileToString(env_, FileNameUtil::current_file_path(db_name_), &file_content).code())) {
     SE_LOG(WARN, "fail to read manifest information", K(ret));
   } else if ('\n' != file_content.back()) {
     ret = Status::kCorruption;
@@ -1089,15 +1093,20 @@ int StorageLogger::parse_current_file(std::string &checkpoint_name, std::string 
     checkpoint_name = fields[0];
     manifest_name = fields[1];
 
+    Slice manifest_file_name_str(manifest_name);
     Slice log_number_str(fields[2]);
+    uint64_t log_file_number = 0;
     if (!ConsumeDecimalNumber(&log_number_str, &log_number)) {
       ret = Status::kCorruption;
       SE_LOG(WARN, "fail to parse log number", K(ret));
+    } else if (!ConsumeDecimalNumber(&manifest_file_name_str, &log_file_number)) {
+      ret = Status::kCorruption;
+      SE_LOG(WARN, "fail to parse log file number", K(ret), K(manifest_file_name_str));
     } else {
-      // remove the prefix str "MANIFEST-"
-      log_file_number_ = std::stoll(manifest_name.c_str() + 9);
+      log_file_number_ = log_file_number;
       log_number_.store(log_number);
-      SE_LOG(INFO, "parse current file", K(manifest_name), K(checkpoint_name), K(log_number));
+      SE_LOG(INFO, "parse current file", K(manifest_name), K(checkpoint_name), K(log_number),
+          K_(log_file_number), K(log_number_.load()));
     }
   }
   return ret;
@@ -1108,7 +1117,7 @@ int StorageLogger::manifest_file_in_current(std::string &manifest_name)
   int ret = Status::kOk;
   manifest_name.clear();
 
-  if (FAILED(ReadFileToString(env_, CurrentFileName(db_name_), &manifest_name).code())) {
+  if (FAILED(ReadFileToString(env_, FileNameUtil::current_file_path(db_name_), &manifest_name).code())) {
       SE_LOG(WARN, "fail to read manifest information", K(ret));
   }
 
@@ -1121,7 +1130,7 @@ int StorageLogger::create_log_writer(int64_t manifest_file_number, db::log::Writ
   WritableFile *manifest_file = nullptr;
   util::ConcurrentDirectFileWriter *file_writer;
   char *buf = nullptr;
-  std::string manifest_log_path = ManifestFileName(db_name_, manifest_file_number);
+  std::string manifest_log_path = FileNameUtil::manifest_file_path(db_name_, manifest_file_number);
   EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(env_options_);
 
   if (FAILED(NewWritableFile(env_, manifest_log_path, manifest_file, opt_env_opts).code())) {
@@ -1228,8 +1237,8 @@ int StorageLogger::get_commited_trans(std::unordered_set<int64_t> &commited_tran
   } else {
     log_file_number = log_file_number_;
     //change manifest_name from relative path to absolute path. a little ugly QAQ
-    manifest_name = ManifestFileName(db_name_, log_file_number);
-    checkpoint_name = CheckpointFileName(db_name_, log_file_number);
+    manifest_name = FileNameUtil::manifest_file_path(db_name_, log_file_number);
+    checkpoint_name = FileNameUtil::checkpoint_file_path(db_name_, log_file_number);
     //only when file exists, do actual thing, so we not set ret
     while (Status::kOk == ret) {
       if (Status::kOk == (env_->FileExists(manifest_name).code())) {
@@ -1237,8 +1246,8 @@ int StorageLogger::get_commited_trans(std::unordered_set<int64_t> &commited_tran
       } else if (Status::kOk == (env_->FileExists(checkpoint_name).code())) {
         SE_LOG(INFO, "skip checkpoint file and process next manifest file", K(checkpoint_name));
         log_file_number++;
-        manifest_name = ManifestFileName(db_name_, log_file_number);
-        checkpoint_name = CheckpointFileName(db_name_, log_file_number);
+        manifest_name = FileNameUtil::manifest_file_path(db_name_, log_file_number);
+        checkpoint_name = FileNameUtil::checkpoint_file_path(db_name_, log_file_number);
         continue;
       } else {
         SE_LOG(INFO,
@@ -1252,8 +1261,8 @@ int StorageLogger::get_commited_trans(std::unordered_set<int64_t> &commited_tran
         SE_LOG(WARN, "failed to get commited trans from file", K(ret), K(manifest_name));
       } else {
         ++log_file_number;
-        manifest_name = ManifestFileName(db_name_, log_file_number);
-        checkpoint_name = CheckpointFileName(db_name_, log_file_number);
+        manifest_name = FileNameUtil::manifest_file_path(db_name_, log_file_number);
+        checkpoint_name = FileNameUtil::checkpoint_file_path(db_name_, log_file_number);
       }
     }
   }
@@ -1270,7 +1279,7 @@ int StorageLogger::record_incremental_extent_ids(const std::string &backup_tmp_d
   std::vector<int64_t> manifest_file_nums;
   std::unordered_set<int64_t> commited_trans_ids;
 
-  SE_LOG(INFO, "Begin to read incremental MANIFEST files", K(ret));
+  SE_LOG(INFO, "Begin to read incremental manifest files", K(ret));
   if (!is_inited_) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "StorageLogger should been inited first", K(ret));
@@ -1288,7 +1297,7 @@ int StorageLogger::record_incremental_extent_ids(const std::string &backup_tmp_d
                                              last_manifest_file_size))) {
     SE_LOG(WARN, "Failed to read manifest for backup", K(ret));
   } else {
-    SE_LOG(INFO, "Success to read incremental MANIFEST files", K(ret));
+    SE_LOG(INFO, "Success to read incremental manifest files", K(ret));
   }
   return ret;
 }
@@ -1303,22 +1312,22 @@ int StorageLogger::check_manifest_for_backup(const std::string &backup_tmp_dir_p
     ret = Status::kNotInit;
     SE_LOG(WARN, "StorageLogger should been inited first", K(ret));
   } else {
-    // check all MANIFEST files exist and build hard links
+    // check all manifest files exist and build hard links
     manifest_file_nums.clear();
     int64_t log_file_num = 0;
     for (log_file_num = first_manifest_file_num; SUCCED(ret) && log_file_num <= last_manifest_file_num; log_file_num++) {
-      std::string manifest_path = ManifestFileName(backup_tmp_dir_path, log_file_num);
-      std::string checkpoint_path = CheckpointFileName(backup_tmp_dir_path, log_file_num);
+      std::string manifest_path = FileNameUtil::manifest_file_path(backup_tmp_dir_path, log_file_num);
+      std::string checkpoint_path = FileNameUtil::checkpoint_file_path(backup_tmp_dir_path, log_file_num);
       if (FAILED(env_->FileExists(manifest_path).code())) {
         // overwrite ret
         if (FAILED(env_->FileExists(checkpoint_path).code())) {
-          SE_LOG(ERROR, "MANIFEST file was deleted during backup", K(ret), K(manifest_path), K(checkpoint_path));
+          SE_LOG(ERROR, "manifest file was deleted during backup", K(ret), K(manifest_path), K(checkpoint_path));
         } else {
           SE_LOG(INFO, "There was a checkpoint during backup", K(ret), K(checkpoint_path));
         }
       } else {
         manifest_file_nums.push_back(log_file_num);
-        SE_LOG(INFO, "Found a MANIFEST file", K(ret), K(manifest_path));
+        SE_LOG(INFO, "Found a manifest file", K(ret), K(manifest_path));
       }
     }
   }
@@ -1337,9 +1346,9 @@ int StorageLogger::get_commited_trans_for_backup(const std::string &backup_tmp_d
     std::string manifest_name;
     commited_trans_ids.clear();
     for (size_t i = 0; SUCCED(ret) && i < manifest_file_nums.size(); i++) {
-      manifest_name = ManifestFileName(backup_tmp_dir_path, manifest_file_nums[i]);
+      manifest_name = FileNameUtil::manifest_file_path(backup_tmp_dir_path, manifest_file_nums[i]);
       if (FAILED(env_->FileExists(manifest_name).code())) {
-        SE_LOG(ERROR, "MANIFEST file not exist", K(ret), K(manifest_name));
+        SE_LOG(ERROR, "manifest file not exist", K(ret), K(manifest_name));
       } else if (FAILED(get_commited_trans_from_file(manifest_name, commited_trans_ids))) {
         SE_LOG(WARN, "failed to get commited trans from file", K(ret), K(manifest_name));
       }
@@ -1354,7 +1363,7 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
                                             const std::unordered_set<int64_t> &commited_trans_ids,
                                             const uint64_t last_manifest_file_size)
 {
-  // read all MANIFEST files and record all incremental extents' id
+  // read all manifest files and record all incremental extents' id
   int ret = Status::kOk;
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -1373,18 +1382,18 @@ int StorageLogger::read_manifest_for_backup(const std::string &backup_tmp_dir_pa
     //std::unordered_set<int64_t> extent_ids;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> extent_ids_map;
 
-    // parse MANIFEST files and record all modified extent ids
+    // parse manifest files and record all modified extent ids
     memory::ArenaAllocator arena(8 * 1024, memory::ModId::kStorageLogger);
     for (size_t i = 0; SUCCED(ret) && i < manifest_file_nums.size(); i++) {
-      // parse one MANIFEST file
-      std::string manifest_name = ManifestFileName(backup_tmp_dir_path, manifest_file_nums[i]);
+      // parse one manifest file
+      std::string manifest_name = FileNameUtil::manifest_file_path(backup_tmp_dir_path, manifest_file_nums[i]);
       if (FAILED(env_->FileExists(manifest_name).code())) {
-        SE_LOG(ERROR, "MANIFEST file not exist", K(ret), K(manifest_name));
+        SE_LOG(ERROR, "manifest file not exist", K(ret), K(manifest_name));
       } else if (FAILED(create_log_reader(manifest_name, log_reader, arena))) {
         SE_LOG(WARN, "fail to create log reader", K(ret));
       } else {
         while (SUCCED(ret) && log_reader->ReadRecord(&record, &scrath)) {
-          // parse one record in MANIFEST file
+          // parse one record in manifest file
           pos = 0;
           log_buf = const_cast<char *>(record.data());
           if (i == manifest_file_nums.size() - 1 && log_reader->LastRecordOffset() >= last_manifest_file_size) {

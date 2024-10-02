@@ -407,7 +407,6 @@ set(SOURCES
         db/snapshot_impl.cc
         db/table_cache.cc
         db/version_set.cc
-        db/wal_manager.cc
         db/batch_group.cc
         db/pipline_queue_manager.cc
         db/replay_task.cc
@@ -508,7 +507,7 @@ set(SOURCES
         util/file_reader_writer.cc
         util/concurrent_direct_file_writer.cc
         util/file_util.cc
-        util/filename.cc
+        util/file_name.cc
         util/hash.cc
         util/murmurhash.cc
         util/random.cc
@@ -543,7 +542,6 @@ set(SOURCES
         transactions/transaction_db_impl.cc
         transactions/transaction_db_mutex_impl.cc
         transactions/transaction_impl.cc
-        transactions/transaction_log_impl.cc
         transactions/transaction_lock_mgr.cc
         transactions/transaction_util.cc
         write_batch/write_batch.cc
@@ -674,6 +672,7 @@ set(TESTS
         #unittest/util/event_logger_test.cc
         unittest/util/file_reader_writer_test.cc
         unittest/util/filelock_test.cc
+        unittest/util/file_name_test.cc
         unittest/util/heap_test.cc
         unittest/util/rate_limiter_test.cc
         unittest/util/ring_buffer_test.cc
@@ -726,19 +725,16 @@ set(TESTS
         #db/external_sst_file_basic_test.cc
         #db/external_sst_file_test.cc
         #db/fault_injection_test.cc
-        unittest/db/filename_test.cc
         #db/flush_job_test.cc
         #db/listener_test.cc
         unittest/db/log_test.cc
         #db/manual_compaction_test.cc
         #db/memtable_list_test.cc
-        unittest/db/options_file_test.cc
         unittest/db/perf_context_test.cc
         #db/prefix_test.cc
         unittest/db/recover_no_space_test.cc
         #db/table_properties_collector_test.cc
         unittest/db/shrink_job_test.cc
-        unittest/db/wal_manager_test.cc
         #db/write_callback_test.cc
         #db/end_key_pushdown_test.cc
         unittest/db/parallel_recovery_test.cc

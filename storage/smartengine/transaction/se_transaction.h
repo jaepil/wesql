@@ -23,6 +23,7 @@
 #include <set>
 #include "sql_string.h"
 #include "transactions/transaction.h"
+#include "write_batch/write_batch.h"
 
 namespace smartengine
 {
@@ -31,6 +32,11 @@ class SeKeyDef;
 class SeTableDef;
 class SeTransListWalker;
 class SeTransaction;
+
+namespace db
+{
+class WriteBatchBase;
+}
 
 /*
   This is a helper class that is passed to SE to get notifications when

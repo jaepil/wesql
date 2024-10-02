@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 #include "logger/log_module.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 
 namespace smartengine {
 using namespace common;
@@ -26,8 +26,8 @@ namespace db {
 void DumpDBFileSummary(const ImmutableDBOptions& options,
                        const std::string& dbname) {
   auto* env = options.env;
-  uint64_t number = 0;
-  FileType type = kInfoLogFile;
+  int64_t number = 0;
+  FileType type = util::kInvalidFileType;
 
   std::vector<std::string> files;
   uint64_t file_num = 0;
@@ -46,28 +46,26 @@ void DumpDBFileSummary(const ImmutableDBOptions& options,
   }
   std::sort(files.begin(), files.end());
   for (std::string file : files) {
-    if (!ParseFileName(file, &number, &type)) {
+    // Ignore the file that we can't recognize it.
+    if (Status::kOk != FileNameUtil::parse_file_name(file, number, type)) {
       continue;
     }
     switch (type) {
       case kCurrentFile:
         __SE_LOG(INFO, "CURRENT file:  %s", file.c_str());
         break;
-      case kIdentityFile:
-        __SE_LOG(INFO, "IDENTITY file:  %s", file.c_str());
-        break;
       case kManifestFile:
         env->GetFileSize(dbname + "/" + file, &file_size);
-        __SE_LOG(INFO, "MANIFEST file:  %s size: %" PRIu64 " Bytes",
+        __SE_LOG(INFO, "manifest file:  %s size: %" PRIu64 " Bytes",
                       file.c_str(), file_size);
         break;
-      case kLogFile:
+      case kWalFile:
         env->GetFileSize(dbname + "/" + file, &file_size);
         char str[16];
         snprintf(str, sizeof(str), "%" PRIu64, file_size);
         wal_info.append(file).append(" size: ").append(str).append(" ; ");
         break;
-      case kTableFile:
+      case kDataFile:
         if (++file_num < 10) {
           file_info.append(file).append(" ");
         }
@@ -88,8 +86,8 @@ void DumpDBFileSummary(const ImmutableDBOptions& options,
       }
       std::sort(files.begin(), files.end());
       for (std::string file : files) {
-        if (ParseFileName(file, &number, &type)) {
-          if (type == kTableFile && ++file_num < 10) {
+        if (Status::kOk == FileNameUtil::parse_file_name(file, number, type)) {
+          if (kDataFile == type && ++file_num < 10) {
             file_info.append(file).append(" ");
           }
         }
@@ -111,8 +109,8 @@ void DumpDBFileSummary(const ImmutableDBOptions& options,
     }
     wal_info.clear();
     for (std::string file : files) {
-      if (ParseFileName(file, &number, &type)) {
-        if (type == kLogFile) {
+      if (Status::kOk == FileNameUtil::parse_file_name(file, number, type)) {
+        if (kWalFile == type) {
           env->GetFileSize(options.wal_dir + "/" + file, &file_size);
           char str[16];
           snprintf(str, sizeof(str), "%" PRIu64, file_size);

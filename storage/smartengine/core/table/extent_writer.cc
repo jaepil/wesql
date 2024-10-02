@@ -25,7 +25,7 @@
 #include "table/column_block_writer.h"
 #include "table/large_object.h"
 #include "util/crc32c.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 
 namespace smartengine
 {
@@ -166,7 +166,7 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     block_info_.set_probe_num(BloomFilter::DEFAULT_PROBE_NUM);
     block_info_.set_per_key_bits(BloomFilter::DEFAULT_PER_KEY_BITS);
     change_info_ = args.change_info_;
-    prefix_ = util::make_data_prefix(args.cluster_id_, table_schema_);
+    prefix_ = FileNameUtil::data_prefix(args.cluster_id_, table_schema_);
 
     is_inited_ = true;
   }

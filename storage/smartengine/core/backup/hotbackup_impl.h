@@ -18,7 +18,7 @@
 #include "backup/hotbackup.h"
 #include "db/db.h"
 #include "logger/log_module.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/se_constants.h"
 
 namespace smartengine
@@ -58,11 +58,11 @@ public:
   virtual int set_backup_status(const char *status) override;
   // Do a manual checkpoint and flush memtable
   virtual int do_checkpoint(db::DB *db, const char *backup_tmp_dir_path = nullptr) override;
-  // Acquire snapshots and hard-link/copy MANIFEST files
+  // Acquire snapshots and hard-link/copy manifest files
   virtual int accquire_backup_snapshot(db::DB *db,
                                        BackupSnapshotId *backup_id,
                                        db::BinlogPosition &binlog_pos) override;
-  // Parse incremental MANIFEST files and record the modified extent ids
+  // Parse incremental manifest files and record the modified extent ids
   virtual int record_incremental_extent_ids(db::DB *db) override;
   // Release an old backup snapshot
   virtual int release_old_backup_snapshot(db::DB *db, BackupSnapshotId backup_id) override;
@@ -108,9 +108,9 @@ private:
 
   const char *backup_status_;
 
-  // The written MANIFEST file after do checkpoint
+  // The written manifest file after do checkpoint
   int64_t first_manifest_file_num_;
-  // The written MANIFEST file used when acquiring snapshots
+  // The written manifest file used when acquiring snapshots
   int64_t last_manifest_file_num_;
   // The size of last_manifest_file
   uint64_t last_manifest_file_size_;
@@ -133,7 +133,7 @@ struct SSTFileChecker
 {
   inline bool operator()(const util::FileType type, const uint64_t file_num)
   {
-    return type == util::kTableFile;
+    return util::kDataFile == type;
   }
 };
 
@@ -152,12 +152,12 @@ struct DataDirFileChecker
   inline bool operator()(const util::FileType &type, const uint64_t &file_num)
   {
     // clang-format off
-    return (type == util::kTableFile)
+    return (util::kDataFile == type)
         // for the last manifest file, can't copy all contents here, but only copy specified size of the last manifest
         // file, which is matched with the size of the last manifest file when backup snapshot created, will process the
         // last manifest file later.
-        || (type == util::kManifestFile && file_num < last_manifest_file_num_ && file_num >= first_manifest_file_num_) 
-        || (type == util::kCheckpointFile && file_num <= last_manifest_file_num_);
+        || (util::kManifestFile == type && file_num < last_manifest_file_num_ && file_num >= first_manifest_file_num_) 
+        || (util::kCheckpointFile == type && file_num <= last_manifest_file_num_);
     // clang-format on
   }
   uint64_t first_manifest_file_num_;
@@ -170,7 +170,7 @@ struct WalDirFileChecker
   {}
   inline bool operator()(const util::FileType &type, const uint64_t &file_num)
   {
-    return (type == util::kLogFile && file_num < last_wal_file_num_);
+    return (util::kWalFile == type && file_num < last_wal_file_num_);
   }
   uint64_t last_wal_file_num_;
 };
@@ -218,13 +218,15 @@ int BackupSnapshotImpl::link_dir_files(db::DB *db, const std::string &dir_path,
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "db or file_checker is nullptr", K(ret), KP(db), KP(file_checker));
   } else {
-    uint64_t file_num = 0;
-    util::FileType type;
+    int64_t file_num = 0;
+    util::FileType type = kInvalidFileType;
     for (size_t i = 0; SUCCED(ret) && i < files.size(); i++) {
-      if (ParseFileName(files[i], &file_num, &type) && file_checker->operator()(type, file_num)) {
+      // Ignore the file if we can't recognize it.
+      if ((common::Status::kOk == FileNameUtil::parse_file_name(files[i], file_num, type)) &&
+          file_checker->operator()(type, file_num)) {
         std::string file_path = dir_path + "/" + files[i];
         std::string link_file_path = backup_tmp_dir_path_ + "/" + files[i];
-        if (common::Status::kOk == (ret = db->GetEnv()->FileExists(link_file_path).code())) {
+        if (SUCCED(db->GetEnv()->FileExists(link_file_path).code())) {
           // skip existing file
           SE_LOG(DEBUG, "File already exist", K(ret), K(file_path), K(link_file_path));
         } else if (ret != common::Status::kNotFound) {

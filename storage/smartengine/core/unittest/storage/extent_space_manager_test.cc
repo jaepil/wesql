@@ -162,7 +162,7 @@ TEST_F(ExtentSpaceTest, Header) {
   ASSERT_EQ(space->get_used_number(), 100);
 
   // clean up
-  std::string fname = MakeTableFileName("./unittest_tmp/", 3);
+  std::string fname = FileNameUtil::data_file_path("./unittest_tmp/", 3);
   ASSERT_EQ(unlink(fname.c_str()), 0);
 }
 
@@ -187,8 +187,7 @@ TEST_F(ExtentSpaceTest, OneThread) {
 
   // clean up
   Env::Default()->SleepForMicroseconds(50000);
-  std::string fname =
-      MakeTableFileName("./unittest_tmp/", 3);  // create by asynchrous thread
+  std::string fname = FileNameUtil::data_file_path("./unittest_tmp/", 3);  // create by asynchrous thread
   ASSERT_EQ(unlink(fname.c_str()), 0);
   test_private();
 }
@@ -227,8 +226,7 @@ TEST_F(ExtentSpaceTest, RunMany) {
   ASSERT_EQ(space->get_used_number(), 1);
 
   // clean up
-  std::string fname =
-      MakeTableFileName("./unittest_tmp/", 3);  // create by asynchrous thread
+  std::string fname = FileNameUtil::data_file_path("./unittest_tmp/", 3);  // create by asynchrous thread
   ASSERT_EQ(unlink(fname.c_str()), 0);
   delete[] args;
 }
@@ -264,10 +262,10 @@ TEST_F(ExtentSpaceManagerTest, CreateSpace) {
   ASSERT_EQ(spacemanager->allocate(write_extent_tmp), Status::OK());
   // ASSERT_EQ(spacemanager->get_free_list().size(), 1);
   // clean up
-  std::string fname = MakeTableFileName(
+  std::string fname = FileNameUtil::data_file_path(
       dbname_.c_str(), write_extent_tmp.get_extent_id().file_number);
   ASSERT_EQ(unlink(fname.c_str()), 0);
-  fname = MakeTableFileName(dbname_.c_str(), 4);
+  fname = FileNameUtil::data_file_path(dbname_.c_str(), 4);
   ASSERT_EQ(unlink(fname.c_str()), 0);
 }
 
@@ -314,10 +312,10 @@ TEST_F(ExtentSpaceManagerTest, sync_open) {
   spacemanager = nullptr;
   spacemanager = new ExtentSpaceManager(options, next_file_number_);
   ASSERT_TRUE(spacemanager != nullptr);
-  std::string fname = MakeTableFileName(dbname_.c_str(), 2);
+  std::string fname = FileNameUtil::data_file_path(dbname_.c_str(), 2);
   s = spacemanager->open_extent_space(fname, 2);
   ASSERT_TRUE(s.ok());
-  fname = MakeTableFileName(dbname_.c_str(), 3);
+  fname = FileNameUtil::data_file_path(dbname_.c_str(), 3);
   s = spacemanager->open_extent_space(fname, 3);
   ASSERT_TRUE(s.ok());
   ASSERT_EQ(spacemanager->get_full_list().size() +

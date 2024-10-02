@@ -44,7 +44,6 @@ LIB_SOURCES =                                                   \
   db/snapshot_impl.cc                                           \
   db/table_cache.cc                                             \
   db/version_set.cc                                             \
-  db/wal_manager.cc                                             \
   db/batch_group.cc                                             \
   db/pipline_queue_manager.cc                                   \
   env/env.cc                                                    \
@@ -142,7 +141,7 @@ LIB_SOURCES =                                                   \
   util/file_reader_writer.cc                                    \
   util/concurrent_direct_file_writer.cc                         \
   util/file_util.cc                                             \
-  util/filename.cc                                              \
+  util/file_name.cc                                              \
   util/hash.cc                                                  \
   util/murmurhash.cc                                            \
   util/random.cc                                                \
@@ -165,7 +164,6 @@ LIB_SOURCES =                                                   \
   transactions/transaction_db_impl.cc                           \
   transactions/transaction_db_mutex_impl.cc                     \
   transactions/transaction_impl.cc                              \
-  transactions/transaction_log_impl.cc                          \
   transactions/transaction_lock_mgr.cc                          \
   transactions/transaction_util.cc                              \
   write_batch/write_batch.cc                                    \
@@ -258,16 +256,13 @@ MAIN_SOURCES =                                                    \
   unittest/db/external_sst_file_basic_test.cc                           \
   unittest/db/external_sst_file_test.cc                                 \
   unittest/db/fault_injection_test.cc                                   \
-  unittest/db/filename_test.cc                                          \
   unittest/db/flush_job_test.cc                                         \
   unittest/db/log_test.cc                                               \
   unittest/db/manual_compaction_test.cc                                 \
   unittest/db/merge_test.cc                                             \
-  unittest/db/options_file_test.cc                                      \
   unittest/db/perf_context_test.cc                                      \
   unittest/db/prefix_test.cc                                            \
   unittest/db/shrink_job_test.cc                                        \
-  unittest/db/wal_manager_test.cc                                       \
   unittest/db/write_batch_test.cc                                       \
   unittest/db/write_callback_test.cc                                    \
   unittest/memtable/art_test.cc                                         \

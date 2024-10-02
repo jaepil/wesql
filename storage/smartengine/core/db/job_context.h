@@ -58,8 +58,8 @@ struct JobContext {
 
   SuperVersion* new_superversion;  // if nullptr no new superversion
 
-  uint64_t log_number;
-  uint64_t prev_log_number;
+  int64_t log_number = 0;
+  int64_t prev_log_number = 0;
 
   uint64_t prev_total_log_size = 0;
   size_t num_alive_log_files = 0;

@@ -307,7 +307,7 @@ bool CompareCandidateFile(const JobContext::CandidateFileInfo& first,
 void DBImpl::DeleteObsoleteFileImpl(Status file_deletion_status, int job_id,
                                     const std::string& fname, FileType type,
                                     uint64_t number, uint32_t path_id) {
-  se_assert(kTableFile != type);
+  se_assert(kDataFile != type);
   file_deletion_status = env_->DeleteFile(fname);
   if (file_deletion_status.ok()) {
     SE_LOG(INFO, "success to delete wal file", K(fname), K(number), K((int32_t)(type)), K(file_deletion_status.ToString()));
@@ -329,12 +329,10 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
   assert(state.HaveSomethingToDelete());
   auto candidate_files = state.full_scan_candidate_files;
   candidate_files.reserve(candidate_files.size() + state.log_delete_files.size());
-  // We may ignore the dbname when generating the file names.
-  const char* kDumbDbName = "";
 
   for (auto file_num : state.log_delete_files) {
     if (file_num > 0) {
-      candidate_files.emplace_back(LogFileName(kDumbDbName, file_num), 0);
+      candidate_files.emplace_back(FileNameUtil::wal_file_name(file_num), 0);
     }
   }
 
@@ -356,16 +354,16 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
   for (const auto& candidate_file : candidate_files) {
     std::string to_delete = candidate_file.file_name;
     uint32_t path_id = candidate_file.path_id;
-    uint64_t number;
-    FileType type;
+    int64_t number = 0;
+    FileType type = util::kInvalidFileType;
     // Ignore file if we cannot recognize it.
-    if (!ParseFileName(to_delete, &number, &type)) {
+    if (Status::kOk != FileNameUtil::parse_file_name(to_delete, number, type)) {
       continue;
     }
 
     bool keep = true;
     switch (type) {
-      case kLogFile:
+      case kWalFile:
         keep = ((number >= state.log_number) || (number == state.prev_log_number));
         break;
       case kManifestFile:
@@ -386,15 +384,12 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
         //
         // TODO(yhchiang): carefully modify the third condition to safely
         //                 remove the temp options files.
-        keep = (to_delete.find(kOptionsFileNamePrefix) != std::string::npos);
+        //keep = (to_delete.find(kOptionsFileNamePrefix) != std::string::npos);
+        keep = true;
         break;
       case kCurrentFile:
-      case kDBLockFile:
-      case kIdentityFile:
-      case kMetaDatabase:
-      case kOptionsFile:
-      case kBlobFile:
-      case kTableFile: // extent space file don't purge
+      case kLockFile:
+      case kDataFile: // extent space file don't purge
         keep = true;
         break;
       default:
@@ -405,13 +400,8 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
       continue;
     }
 
-    std::string fname;
-    if (type == kTableFile) {
-      fname = TableFileName(immutable_db_options_.db_paths, number, path_id);
-    } else {
-      fname = ((type == kLogFile) ? immutable_db_options_.wal_dir : dbname_) +
-              "/" + to_delete;
-    }
+    se_assert(kWalFile == type);
+    std::string fname = immutable_db_options_.wal_dir + "/" + to_delete;
 
     Status file_deletion_status;
     if (schedule_only) {
@@ -423,7 +413,6 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
     }
   }
 
-  wal_manager_.PurgeObsoleteWALFiles();
 }
 
 void DBImpl::DeleteObsoleteFiles() {

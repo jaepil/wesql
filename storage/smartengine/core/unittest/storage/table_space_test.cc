@@ -17,7 +17,7 @@
 #include "storage/table_space.h"
 #include <cstdio>
 #include <cstdlib>
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
 

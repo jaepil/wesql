@@ -20,7 +20,13 @@
 
 #include "dict/se_index.h"
 
-namespace smartengine {
+namespace smartengine
+{
+
+namespace db
+{
+class WriteBatchBase;
+} // namespace db
 
 /*
    SeDictionaryManager manages how MySQL on se stores its

@@ -23,7 +23,7 @@
 #include "db/db.h"
 #include "db/version_set.h"
 #include "env/mock_env.h"
-#include "util/filename.h"
+#include "util/file_name.h"
 #include "util/mutexlock.h"
 #include "util/random.h"
 
