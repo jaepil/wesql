@@ -16,10 +16,11 @@ bool opt_consensus_checksum = 0;
 bool opt_consensus_disable_election = 0;
 bool opt_consensus_dynamic_easyindex = 1;
 bool opt_consensus_easy_pool_size = 0;
-ulonglong opt_cluster_id;
+char *opt_cluster_id;
 bool opt_cluster_learner_node;
 bool opt_cluster_log_type_instance;
 char *opt_cluster_info;
+bool opt_cluster_info_on_objectstore;
 char *opt_cluster_purged_gtid;
 ulonglong opt_cluster_current_term;
 ulonglong opt_cluster_force_recover_index;
@@ -132,11 +133,10 @@ static MYSQL_SYSVAR_ULONGLONG(force_sync_epoch_diff,
                               fix_consensus_force_sync_epoch_diff, 0, 0,
                               10000000, 1);
 
-static MYSQL_SYSVAR_ULONGLONG(cluster_id, opt_cluster_id,
-                              PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY |
-                                  PLUGIN_VAR_NOPERSIST, /* optional var */
-                              "consensus cluster id", nullptr, nullptr, 0, 0,
-                              ULLONG_MAX, 1);
+static MYSQL_SYSVAR_STR(cluster_id, opt_cluster_id,
+                        PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC |
+                            PLUGIN_VAR_NOPERSIST | PLUGIN_VAR_READONLY,
+                        "consensus cluster id", nullptr, nullptr, "");
 
 static void fix_consensus_log_cache_size(MYSQL_THD, SYS_VAR *, void *,
                                          const void *save) {
@@ -571,6 +571,12 @@ static MYSQL_SYSVAR_STR(cluster_info, opt_cluster_info,
                         "Consensus cluster nodes ip-port information", nullptr,
                         nullptr, "");
 
+static MYSQL_SYSVAR_BOOL(
+    cluseter_info_on_objectstore, opt_cluster_info_on_objectstore,
+    PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_NOPERSIST | PLUGIN_VAR_READONLY,
+    "Use object store to store cluster info for consensus cluster", nullptr,
+    nullptr, true);
+
 static MYSQL_SYSVAR_STR(purged_gtid, opt_cluster_purged_gtid,
                         PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
                         "Consensus cluster set the purged gtid", nullptr,
@@ -704,6 +710,7 @@ SYS_VAR *consensus_replication_system_vars[] = {
     MYSQL_SYSVAR(learner_node),
     MYSQL_SYSVAR(log_type_node),
     MYSQL_SYSVAR(cluster_info),
+    MYSQL_SYSVAR(cluseter_info_on_objectstore),
     MYSQL_SYSVAR(purged_gtid),
     MYSQL_SYSVAR(current_term),
     MYSQL_SYSVAR(force_recover_index),

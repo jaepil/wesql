@@ -445,10 +445,8 @@ int ConsensusStateProcess::init_service() {
   uint64 mock_start_index =
       max(consensus_log_manager.get_log_file_index()->get_first_index(),
           (uint64)opt_consensus_start_index);
-  rpl_consensus_init(is_learner, mock_start_index, &consensus_log_manager,
-                     &consensus_meta, this);
-
-  return 0;
+  return rpl_consensus_init(is_learner, mock_start_index,
+                            &consensus_log_manager, &consensus_meta, this);
 }
 
 static uint64 get_applier_start_index() {

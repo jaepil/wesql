@@ -212,8 +212,6 @@ int BLConsensusLog::getMetaData(const std::string &key, uint64_t *value) {
   else if (key == "@keyScanIndex_@")
     *value =
         consensusMeta_->get_consensus_info()->get_cluster_recover_index();
-  else if (key == "@keyClusterId_@")
-    *value = consensusMeta_->get_consensus_info()->get_cluster_id();
   else
     assert(0);
   return 0;
@@ -222,11 +220,8 @@ int BLConsensusLog::getMetaData(const std::string &key, uint64_t *value) {
 int BLConsensusLog::getMetaData(const std::string &key, std::string &value) {
   if (consensusMeta_->get_consensus_info()->init_info())
     return 1;
-  if (key == "@keyMemberConfigure_@")
-    value = consensusMeta_->get_consensus_info()->get_cluster_info();
-  else if (key == "@keyLearnerConfigure_@")
-    value =
-        consensusMeta_->get_consensus_info()->get_cluster_learner_info();
+  else if (key == "@keyClusterId_@")
+    value = consensusMeta_->get_consensus_info()->get_cluster_id();
   else
     assert(0);
   return 0;
@@ -244,8 +239,6 @@ int BLConsensusLog::setMetaData(const std::string &key, const uint64_t value) {
   else if (key == "@keyScanIndex_@")
     consensusMeta_->get_consensus_info()->set_cluster_recover_index(
         value);
-  else if (key == "@keyClusterId_@")
-    consensusMeta_->get_consensus_info()->set_cluster_id(value);
   else
     assert(0);
 
@@ -258,10 +251,8 @@ int BLConsensusLog::setMetaData(const std::string &key, const uint64_t value) {
 
 int BLConsensusLog::setMetaData(const std::string &key,
                                 const std::string &value) {
-  if (key == "@keyMemberConfigure_@")
-    consensusMeta_->get_consensus_info()->set_cluster_info(value);
-  else if (key == "@keyLearnerConfigure_@")
-    consensusMeta_->get_consensus_info()->set_cluster_learner_info(value);
+  if (key == "@keyClusterId_@")
+    consensusMeta_->get_consensus_info()->set_cluster_id(value);
   else
     assert(0);
 
@@ -270,6 +261,21 @@ int BLConsensusLog::setMetaData(const std::string &key,
     return 1;
   }
   return 0;
+}
+
+int BLConsensusLog::getMembersConfigure(std::string &strMembers,
+                                        std::string &strLearners,
+                                        uint64_t &index) {
+  return consensusMeta_->get_cluster_info(strMembers, strLearners, index);
+}
+
+int BLConsensusLog::setMembersConfigure(bool setMembers,
+                                        const std::string &strMembers,
+                                        bool setLearners,
+                                        const std::string &strLearners,
+                                        const uint64_t index) {
+  return consensusMeta_->set_cluster_info(setMembers, strMembers, setLearners,
+                                          strLearners, index);
 }
 
 void BLConsensusLog::setTerm(uint64_t term) {

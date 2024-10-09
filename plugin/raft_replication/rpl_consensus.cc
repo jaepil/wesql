@@ -25,12 +25,13 @@ static void state_change_callback(alisql::Paxos::StateType state, uint64_t term,
   stateChangeCb(static_cast<StateType>(state), term, commitIndex);
 }
 
-void rpl_consensus_init(bool is_learner, uint64 mock_start_index,
-                        ConsensusLogManager *consensus_log_manager,
-                        ConsensusMeta *consensus_meta,
-                        ConsensusStateProcess *consensus_state_process) {
+int rpl_consensus_init(bool is_learner, uint64 mock_start_index,
+                       ConsensusLogManager *consensus_log_manager,
+                       ConsensusMeta *consensus_meta,
+                       ConsensusStateProcess *consensus_state_process) {
   std::string empty_str = "";
   std::vector<std::string> cluster_str_config;
+  int error = 0;
 
   consensus_log->init(mock_start_index, consensus_log_manager, consensus_meta,
                       consensus_state_process);
@@ -69,24 +70,30 @@ void rpl_consensus_init(bool is_learner, uint64 mock_start_index,
       opt_consensus_auto_leader_transfer_check_seconds);
   if (!is_learner) {
     // startup as normal node
-    consensus_ptr->init(
+    error = consensus_ptr->init(
         cluster_str_config, 0, nullptr, opt_consensus_io_thread_cnt,
         opt_consensus_worker_thread_cnt, alisql_server,
         opt_consensus_easy_pool_size, opt_consensus_heartbeat_thread_cnt);
   } else {
     // startup as learner node, config string arg pass empty
-    consensus_ptr->initAsLearner(
+    error = consensus_ptr->initAsLearner(
         empty_str, nullptr, opt_consensus_io_thread_cnt,
         opt_consensus_worker_thread_cnt, alisql_server,
         opt_consensus_easy_pool_size, opt_consensus_heartbeat_thread_cnt);
   }
-  consensus_ptr->initAutoPurgeLog(false, false, nullptr);  // disable autoPurge
-  consensus_ptr->setAsLogType(opt_cluster_log_type_instance);
 
-  if (opt_cluster_force_single_mode)  // use nuclear weapon
+  if (!error) {
+    consensus_ptr->initAutoPurgeLog(false, false,
+                                    nullptr);  // disable autoPurge
+    consensus_ptr->setAsLogType(opt_cluster_log_type_instance);
+  }
+
+  if (!error && opt_cluster_force_single_mode)  // use nuclear weapon
     consensus_ptr->forceSingleLeader();
 
-  rpl_consensus_inited = true;
+  if (!error) rpl_consensus_inited = true;
+
+  return error;
 }
 
 void rpl_consensus_set_ready() {
@@ -570,7 +577,7 @@ int rpl_consensus_configure_member(const std::string &addr, bool force_sync,
   return consensus_ptr->configureMember(addr, force_sync, election_weight);
 }
 
-int rpl_consensus_set_cluster_id(uint64 cluster_id) {
+int rpl_consensus_set_cluster_id(const std::string &cluster_id) {
   return consensus_ptr->setClusterId(cluster_id);
 }
 

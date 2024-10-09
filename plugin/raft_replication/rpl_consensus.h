@@ -75,10 +75,10 @@ typedef struct cluster_memebership_change {
 
 extern std::atomic<bool> rpl_consensus_inited;
 extern std::atomic<bool> rpl_consensus_ready;
-extern void rpl_consensus_init(bool is_learner, uint64 mock_start_index,
-                               ConsensusLogManager *consensus_log_manager,
-                               ConsensusMeta *consensus_meta,
-                               ConsensusStateProcess *consensus_state_process);
+extern int rpl_consensus_init(bool is_learner, uint64 mock_start_index,
+                              ConsensusLogManager *consensus_log_manager,
+                              ConsensusMeta *consensus_meta,
+                              ConsensusStateProcess *consensus_state_process);
 
 extern bool rpl_consensus_is_ready();
 extern void rpl_consensus_set_ready();
@@ -169,7 +169,7 @@ extern void rpl_consensus_set_auto_leader_transfer_check_seconds(
 extern uint64 rpl_consensus_get_easy_alloc_byte();
 
 extern int rpl_consensus_get_cluster_size();
-extern int rpl_consensus_set_cluster_id(uint64 cluster_id);
+extern int rpl_consensus_set_cluster_id(const std::string &cluster_id);
 extern int rpl_consensus_transfer_leader(const std::string &ip_port);
 extern int rpl_consensus_transfer_leader_by_id(uint64 target_id);
 extern int rpl_consensus_add_follower(std::string &addr);

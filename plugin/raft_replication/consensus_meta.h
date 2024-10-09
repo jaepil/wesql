@@ -2,6 +2,7 @@
 #define CONSENSUS_META_INCLUDE
 #include <atomic>
 
+#include "objstore.h"
 #include "sql/consensus/consensus_applier_info.h"
 #include "sql/consensus/consensus_info.h"
 
@@ -11,6 +12,10 @@ class ConsensusMeta {
       : inited(false),
         consensus_info(nullptr),
         consensus_applier_info(nullptr),
+        cluster_info_objstore_initied(false),
+        cluster_info_objstore(nullptr),
+        cluster_info_on_objstore_inited(false),
+        cluster_info_index(0),
         already_set_start_index(false),
         already_set_start_term(false) {}
   ~ConsensusMeta() {}
@@ -32,10 +37,23 @@ class ConsensusMeta {
   int set_start_apply_index_if_need(uint64 consensus_index);
   int set_start_apply_term_if_need(uint64 consensus_term);
 
+  int get_cluster_info(std::string &members_info, std::string &learners_info,
+                         uint64 &index);
+  int set_cluster_info(bool set_members, const std::string &members_info,
+                       bool set_learners, const std::string &learners_info,
+                       uint64 index);
+
  private:
   bool inited;
   Consensus_info *consensus_info;                  // consensus system info
   Consensus_applier_info *consensus_applier_info;  // consensus system info
+
+  bool cluster_info_objstore_initied;
+  objstore::ObjectStore *cluster_info_objstore;
+  bool cluster_info_on_objstore_inited;
+  std::string cluster_info_bucket;
+  std::string cluster_info_path;
+  uint64 cluster_info_index;
 
   // consensus_info
   std::atomic<bool> already_set_start_index;  // set at first downgrade, used to
@@ -44,6 +62,13 @@ class ConsensusMeta {
                                               // set correct start apply term
 
   int change_meta_if_needed();
+
+  int init_objstore_for_cluster_info();
+  int init_cluster_info_on_objstore();
+  int read_cluster_info_on_objstore(std::string &members_info,
+                                    std::string &learners_info, uint64 &index,
+                                    size_t &number_of_lines);
+  int store_cluster_info_on_objstore();
 };
 
 extern ConsensusMeta consensus_meta;

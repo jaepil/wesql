@@ -450,7 +450,7 @@ Sql_cmd *Consensus_proc_fix_cluster_id::evoke_cmd(
 bool Sql_cmd_consensus_proc_fix_cluster_id::pc_execute(THD *thd) {
   int res = 0;
   auto it = VisibleFields(*m_list).begin();
-  Item_int *ci = dynamic_cast<Item_int *>(*(it++));
+  Item_string *ci = dynamic_cast<Item_string *>(*(it++));
 
   if (!ci) {
     my_error(ER_NATIVE_PROC_PARAMETER_MISMATCH, MYF(0), 1,
@@ -458,9 +458,8 @@ bool Sql_cmd_consensus_proc_fix_cluster_id::pc_execute(THD *thd) {
     return true;
   }
 
-  uint64_t cluster_id = ci->val_uint();
+  std::string cluster_id(ci->val_str(nullptr)->ptr());
   res = rpl_consensus_set_cluster_id(cluster_id);
-  opt_cluster_id = cluster_id;
   LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
@@ -901,7 +900,7 @@ bool Sql_cmd_consensus_proc_activate_failpoint::pc_execute(THD *thd) {
              rpl_consensus_protocol_default_error());
     return true;
   }
-  LogPluginErr(INFORMATION_LEVEL, ER_COSENNSUS_FAILPOINT_ACTIVE,
+  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_FAILPOINT_ACTIVE,
                fail_point_name->val_str(nullptr)->ptr(), type, exec_count,
                input_type, probability);
 

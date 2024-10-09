@@ -1,12 +1,6 @@
-# Use default setting for mysqld processes
-!include include/default_mysqld.cnf
-!include include/default_client.cnf
+!include suite/smartengine_consistent_snapshot/my.cnf
 
 [mysqld]
-smartengine=                1
-default-storage-engine=     smartengine
-default-tmp-storage_engine= innodb
-serverless=                 true
 log-bin=                    master-bin
 log-bin=                    master-bin.index
 consistent_snapshot_archive_period=     1000

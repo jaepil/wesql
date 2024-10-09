@@ -77,6 +77,14 @@ class BLConsensusLog : public alisql::PaxosLog {
                           const uint64_t value) override;
   virtual int setMetaData(const std::string &key,
                           const std::string &value) override;
+  virtual int getMembersConfigure(std::string &strMembers,
+                                  std::string &strLearners,
+                                  uint64_t &index) override;
+  virtual int setMembersConfigure(bool setMembers,
+                                  const std::string& strMembers,
+                                  bool setLearners,
+                                  const std::string& strLearners,
+                                  const uint64_t index) override;
   virtual void setTerm(uint64_t term) override;
   virtual uint64_t getLength() override;
   virtual bool isStateMachineHealthy() override;

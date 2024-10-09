@@ -5,7 +5,7 @@
 #include "sql/sql_plugin_var.h"
 
 extern bool opt_old_show_timestamp;
-extern ulonglong opt_cluster_id;
+extern char *opt_cluster_id;
 extern bool opt_cluster_log_type_instance;
 extern ulonglong opt_consensus_log_cache_size;
 extern bool opt_consensus_disable_fifo_cache;
@@ -49,6 +49,7 @@ extern bool opt_cluster_force_change_meta;
 extern bool opt_cluster_force_reset_meta;
 extern bool opt_cluster_learner_node;
 extern char *opt_cluster_info;
+extern bool opt_cluster_info_on_objectstore;
 extern ulonglong opt_consensus_start_index;
 extern ulonglong opt_cluster_current_term;
 extern ulonglong opt_cluster_force_recover_index;

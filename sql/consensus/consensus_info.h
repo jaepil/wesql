@@ -47,7 +47,7 @@ class Consensus_info : public Rpl_info {
   uint64 get_current_term() { return current_term; }
   uint64 get_last_leader_term() { return last_leader_term; }
   uint64 get_start_apply_index() { return start_apply_index; }
-  uint64 get_cluster_id() { return cluster_id; }
+  std::string &get_cluster_id() { return cluster_id; }
   std::string &get_cluster_info() { return cluster_info; }
   std::string &get_cluster_learner_info() { return cluster_learner_info; }
   uint64 get_cluster_recover_index() { return cluster_recover_index; }
@@ -65,7 +65,9 @@ class Consensus_info : public Rpl_info {
   void set_start_apply_index(uint64 start_apply_index_arg) {
     start_apply_index = start_apply_index_arg;
   }
-  void set_cluster_id(uint64 cluster_id_arg) { cluster_id = cluster_id_arg; }
+  void set_cluster_id(const std::string &cluster_id_arg) {
+    cluster_id = cluster_id_arg;
+  }
   void set_cluster_info(const std::string &cluster_info_arg) {
     cluster_info = cluster_info_arg;
   }
@@ -105,7 +107,7 @@ class Consensus_info : public Rpl_info {
   std::atomic<uint64>
       start_apply_index;  // used by determine apply point, relay working set 0
                           // first leader downgrade set right value
-  uint64 cluster_id;      // used to identify cluster
+  std::string cluster_id;            // used to identify cluster
   std::string cluster_info;          // used to store consensus nodes info
   std::string cluster_learner_info;  // used to store learner nodes info
   uint64 cluster_recover_index;      // used to recover cluster config

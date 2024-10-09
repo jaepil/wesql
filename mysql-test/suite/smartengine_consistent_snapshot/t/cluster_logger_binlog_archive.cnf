@@ -1,43 +1,35 @@
 !include suite/raft_replication/my.cnf
+!include suite/smartengine_consistent_snapshot/my.cnf
 
 [mysqld.1]
-smartengine=                            1
-default-storage-engine=                 smartengine
-default-tmp-storage_engine=             innodb
-serverless=                             true
 consistent_snapshot_archive=            false
 log-bin=                                master-bin
 log-bin=                                master-bin.index
 binlog_archive_slice_max_size=          4096
 binlog_archive_expire_auto_purge=       false
 log-error-verbosity=                    3
+server_id_on_objectstore= 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 
 [mysqld.2]
 #!use-slave-opt
 raft-replication-log-type-node=ON
 raft_replication_auto_leader_transfer=ON
-smartengine=                        1
-default-storage-engine=             smartengine
-default-tmp-storage_engine=         innodb
 log-bin=                            logger1-bin
 log-bin=                            logger1-bin.index
-serverless=                         true
 table_on_objectstore =              false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false
 log-error-verbosity=                3
+server_id_on_objectstore= 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyy'
 
 [mysqld.3]
 #!use-slave-opt
 raft-replication-log-type-node=ON
 raft_replication_auto_leader_transfer=ON
-smartengine=                        1
-default-storage-engine=             smartengine
-default-tmp-storage_engine=         innodb
 log-bin=                            logger2-bin
 log-bin=                            logger2-bin.index
-serverless=                         true
 table_on_objectstore =              false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false
 log-error-verbosity=                3
+server_id_on_objectstore= 'zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz'

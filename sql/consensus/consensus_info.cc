@@ -62,7 +62,7 @@ Consensus_info::Consensus_info(
       recover_status(0),
       last_leader_term(0),
       start_apply_index(0),
-      cluster_id(0),
+      cluster_id(""),
       cluster_info(""),
       cluster_learner_info(""),
       cluster_recover_index(0) {
@@ -155,7 +155,7 @@ bool Consensus_info::read_info(Rpl_info_handler *from) {
   ulong temp_recover_status = 0;
   ulong temp_local_term = 0;
   ulong temp_start_apply_index = 0;
-  ulong temp_cluster_id = 0;
+  char temp_cluster_id[UUID_LENGTH + 1];
   char temp_cluster_info[CLUSTER_CONF_STR_LENGTH];
   char temp_cluster_learner_info[CLUSTER_CONF_STR_LENGTH];
   ulong temp_cluster_recover_index = 0;
@@ -171,9 +171,8 @@ bool Consensus_info::read_info(Rpl_info_handler *from) {
       !!from->get_info(&temp_recover_status, 0) ||
       !!from->get_info(&temp_local_term, 0) ||
       !!from->get_info(&temp_start_apply_index, 0) ||
-      !!from->get_info(&temp_cluster_id, 0) ||
-      !!from->get_info(temp_cluster_info, sizeof(temp_cluster_info),
-                       "") ||
+      !!from->get_info(temp_cluster_id, sizeof(temp_cluster_info), "") ||
+      !!from->get_info(temp_cluster_info, sizeof(temp_cluster_info), "") ||
       !!from->get_info(temp_cluster_learner_info,
                        sizeof(temp_cluster_learner_info), "") ||
       !!from->get_info(&temp_cluster_recover_index, 0))
@@ -184,7 +183,7 @@ bool Consensus_info::read_info(Rpl_info_handler *from) {
   recover_status = temp_recover_status;
   last_leader_term = temp_local_term;
   start_apply_index = temp_start_apply_index;
-  cluster_id = temp_cluster_id;
+  cluster_id = std::string(temp_cluster_id, strlen(temp_cluster_id));
   cluster_info = std::string(temp_cluster_info, strlen(temp_cluster_info));
   cluster_learner_info =
       std::string(temp_cluster_learner_info, strlen(temp_cluster_learner_info));
@@ -201,7 +200,7 @@ bool Consensus_info::write_info(Rpl_info_handler *to) {
       to->set_info((ulong)recover_status) ||
       to->set_info((ulong)last_leader_term) ||
       to->set_info((ulong)start_apply_index) ||
-      to->set_info((ulong)cluster_id) || to->set_info(cluster_info.c_str()) ||
+      to->set_info(cluster_id.c_str()) || to->set_info(cluster_info.c_str()) ||
       to->set_info(cluster_learner_info.c_str()) ||
       to->set_info((ulong)cluster_recover_index))
     return true;
