@@ -420,7 +420,7 @@ void RemoteServer::sendMsgFuncInternal(bool lockless, bool force, void* ptr,
     return;
   }
 
-  msg->set_clusterid(paxos->getClusterId());
+  msg->set_clusterid(paxos->getClusterId(false));
 
   /* Fill the each server part. */
   if (msg->msgtype() == Paxos::AppendLog)

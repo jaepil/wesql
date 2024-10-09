@@ -209,7 +209,7 @@ std::string StableConfiguration::configToString(std::vector<ServerRef>& servers,
   }
 
   if (i != 1) {
-    if (localAddr != "") {
+    if (localAddr != "" && localIndex > 0) {
       assert(localIndex != 0);
 
       ret[ret.size() - 1] = '@';
@@ -381,6 +381,21 @@ uint64_t StableConfiguration::getMaxWeightServerId(uint64_t baseEpoch,
   return ret;
 }
 
+int StableConfiguration::setMembersConfigure(bool set_members,
+                                             bool set_learners, Paxos* paxos,
+                                             uint64_t index, bool is_learner) {
+  if (paxos) {
+    return paxos->getLog()->setMembersConfigure(
+        set_members,
+        set_members
+            ? (is_learner ? membersToString()
+                          : membersToString(paxos->getLocalServer()->strAddr))
+            : std::string(""),
+        set_learners, set_learners ? learnersToString() : std::string(""),
+        index);
+  }
+}
+
 int StableConfiguration::addMember(const std::string& strAddr, Paxos* paxos) {
   std::string logBuf = "";
   for (auto& server : servers) {
@@ -421,11 +436,6 @@ int StableConfiguration::addMember(const std::string& strAddr, Paxos* paxos) {
       }
       while (learners.size() > 0 && learners[learners.size() - 1] == nullptr)
         learners.resize(learners.size() - 1);
-      paxos->getLog()->setMetaData(Paxos::keyLearnerConfigure,
-                                   learnersToString());
-      paxos->getLog()->setMetaData(
-          Paxos::keyMemberConfigure,
-          membersToString(paxos->getLocalServer()->strAddr));
       easy_log(
           "Server %d : StableConfiguration::addMember: success current "
           "servers(%s)\n",
@@ -454,10 +464,6 @@ int StableConfiguration::delMember(const std::string& strAddr, Paxos* paxos) {
         while (servers[servers.size() - 1] == nullptr)
           servers.resize(servers.size() - 1);
       }
-      if (paxos)
-        paxos->getLog()->setMetaData(
-            Paxos::keyMemberConfigure,
-            membersToString(paxos->getLocalServer()->strAddr));
       break;
     }
   }
@@ -477,10 +483,6 @@ int StableConfiguration::configureLearner(const uint64_t serverId,
 
   server->learnerSource = source;
 
-  if (paxos)
-    paxos->getLog()->setMetaData(Paxos::keyLearnerConfigure,
-                                 learnersToString());
-
   return 0;
 }
 
@@ -497,12 +499,6 @@ int StableConfiguration::configureMember(const uint64_t serverId,
   }
   server->forceSync = forceSync;
   server->electionWeight = electionWeight;
-
-  if (paxos)
-    paxos->getLog()->setMetaData(
-        Paxos::keyMemberConfigure,
-        membersToString(paxos->getLocalServer()->strAddr));
-
   return 0;
 }
 
@@ -553,7 +549,6 @@ void StableConfiguration::addLearners(const std::vector<std::string>& strConfig,
         ptrR->learnerSource == paxos->getLocalServer()->serverId)
       ptrR->beginLeadership((void*)1);
   }
-  paxos->getLog()->setMetaData(Paxos::keyLearnerConfigure, learnersToString());
 }
 
 void StableConfiguration::delLearners(const std::vector<std::string>& strConfig,
@@ -571,10 +566,6 @@ void StableConfiguration::delLearners(const std::vector<std::string>& strConfig,
 
   while (learners.size() > 0 && learners[learners.size() - 1] == nullptr)
     learners.resize(learners.size() - 1);
-
-  if (paxos)
-    paxos->getLog()->setMetaData(Paxos::keyLearnerConfigure,
-                                 learnersToString());
 }
 
 void StableConfiguration::delAllLearners() {
@@ -597,11 +588,6 @@ void StableConfiguration::delAllRemoteServer(const std::string& localStrAddr,
   }
 
   assert(serversNum.load() == 1);
-
-  if (paxos)
-    paxos->getLog()->setMetaData(
-        Paxos::keyMemberConfigure,
-        membersToString(paxos->getLocalServer()->strAddr));
 
   if (servers.size() > 0) {
     while (servers[servers.size() - 1] == nullptr)

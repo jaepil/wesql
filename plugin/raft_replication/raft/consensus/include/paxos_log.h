@@ -129,6 +129,16 @@ class PaxosLog {
     else
       return setMetaData(key, std::stoull(value));
   }
+
+  virtual int getMembersConfigure(std::string& strMembers,
+                                  std::string& strLearners,
+                                  uint64_t& index) = 0;
+  virtual int setMembersConfigure(bool setMembers,
+                                  const std::string& strMembers,
+                                  bool setLearners,
+                                  const std::string& strLearners,
+                                  const uint64_t index) = 0;
+
   virtual uint64_t append(
       const ::google::protobuf::RepeatedPtrField<LogEntry>& entries) = 0;
   virtual void setTerm(uint64_t term) {

@@ -71,8 +71,8 @@ class Consensus {
   virtual int onClusterIdNotMatch(PaxosMsg* msg) = 0;
   virtual int onMsgPreCheck(PaxosMsg* msg, PaxosMsg* rsp) = 0;
   virtual int onMsgPreCheckFailed(PaxosMsg* msg) = 0;
-  virtual uint64_t getClusterId() = 0;
-  virtual int setClusterId(uint64_t ci) = 0;
+  virtual std::string getClusterId(bool needLock = true) = 0;
+  virtual int setClusterId(const std::string& ci) = 0;
   virtual bool isShutdown() = 0;
 
  protected:

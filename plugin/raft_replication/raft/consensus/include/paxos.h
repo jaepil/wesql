@@ -365,8 +365,8 @@ class Paxos : public Consensus {
   virtual uint64_t checkCommitIndex(
       uint64_t baseIndex,
       uint64_t term = 0); /* A lock-free interface for follower */
-  virtual uint64_t getClusterId() override { return clusterId_.load(); }
-  virtual int setClusterId(uint64_t ci) override;
+  virtual std::string getClusterId(bool needLock = true) override;
+  virtual int setClusterId(const std::string& ci) override;
 
   int checkLeaderTransfer(uint64_t targetId, uint64_t term, uint64_t& logIndex,
                           uint64_t leftCnt);
@@ -708,7 +708,7 @@ class Paxos : public Consensus {
   std::shared_ptr<Service> srv_;
   std::shared_ptr<LocalServer> localServer_;
 
-  std::atomic<uint64_t> clusterId_;
+  std::string clusterId_;
   std::atomic<bool> shutdown_;
   uint64_t maxPacketSize_;
   const static uint64_t maxSystemPacketSize_;

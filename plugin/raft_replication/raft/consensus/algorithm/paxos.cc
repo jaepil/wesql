@@ -26,7 +26,7 @@ Paxos::Paxos(uint64_t electionTimeout, std::shared_ptr<PaxosLog> log,
              uint64_t purgeLogTimeout)
     : config_(new StableConfiguration()), /*TODO:*/
       log_(log),
-      clusterId_(0),
+      clusterId_(""),
       shutdown_(false),
       maxPacketSize_(1000000),
       maxDelayIndex_(10000),
@@ -242,9 +242,10 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
     const std::string& addr = *(val.addrs().begin());
     if (val.optype() == CCAddNode) {
       assert(val.addrs_size() == 1);
-      if (state_ != LEARNER)
+      if (state_ != LEARNER) {
         config_->addMember(addr, this);
-      else if (addr == localServer_->strAddr) {
+        config_->setMembersConfigure(true, false, this, logIndex);
+      } else if (addr == localServer_->strAddr) {
         /* learner change to follower */
         std::vector<std::string> strConfig;
         for (auto& it : val.allservers()) {
@@ -271,11 +272,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
         }
         config_->delAllLearners();
         config_->addLearners(strConfigL, this, true);
-
-        log_->setMetaData(Paxos::keyLearnerConfigure,
-                          config_->learnersToString());
-        log_->setMetaData(Paxos::keyMemberConfigure,
-                          config_->membersToString(localServer_->strAddr));
+        config_->setMembersConfigure(true, true, this, logIndex);
 
         /* Print Log */
         std::string logBuf;
@@ -296,6 +293,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
         std::vector<std::string> strConfig;
         strConfig.push_back(std::move(addr));
         config_->delLearners(strConfig, this);
+        config_->setMembersConfigure(false, true, this, logIndex);
       }
       if (ccMgr_.autoChangeAddr == addr) {
         ccMgr_.autoChangeAddr = "";
@@ -304,8 +302,10 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
       }
     } else if (val.optype() == CCDelNode) {
       if (state_ != LEARNER) {
-        if (addr != localServer_->strAddr)
+        if (addr != localServer_->strAddr) {
           config_->delMember(addr, this);
+          config_->setMembersConfigure(true, false, this, logIndex);
+        }
         else {
           /* This node is removed from the cluster, shutdown myself */
           easy_log(
@@ -324,6 +324,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
         if (addr != localServer_->strAddr) {
           config_->delMember(addr, this);
           config_->addLearners(strConfig, this);
+          config_->setMembersConfigure(true, true, this, logIndex);
           // if (state_ == LEADER)
           //  config_->forEachLearners(&Server::connect, (void *)NULL);
         } else {
@@ -334,10 +335,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
           std::dynamic_pointer_cast<StableConfiguration>(config_)
               ->installConfig(strConfig, 1, this, localServer);
           config_->addLearners(strConfig, this);
-          log_->setMetaData(Paxos::keyLearnerConfigure,
-                            config_->learnersToString());
-          log_->setMetaData(Paxos::keyMemberConfigure,
-                            config_->membersToString());
+          config_->setMembersConfigure(true, true, this, logIndex, true);
           /* We set the init serverId to 100 for tmp, this serverId will change
            * when we  */
           localServer_->serverId = 100;
@@ -350,6 +348,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
         }
       } else {
         config_->addLearners(strConfig, this);
+        config_->setMembersConfigure(false, true, this, logIndex);
       }
     } else if (val.optype() == CCConfigureNode) {
       mc.forceSync = val.forcesync();
@@ -365,6 +364,8 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
         } else {
           config_->configureMember(val.serverid(), val.forcesync(),
                                    val.electionweight(), this);
+
+          config_->setMembersConfigure(true, false, this, logIndex);
           if (val.serverid() == localServer_->serverId)
             electionTimer_->setRandWeight(val.electionweight());
         }
@@ -382,6 +383,8 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
         config_->addLearners(strLearners, this, true);
       }
       config_->addLearners(strConfig, this);
+      config_->setMembersConfigure(false, true, this, logIndex);
+
       /* The old learner will skip the connect call. */
       if (state_ == LEADER)
         config_->forEachLearners(&Server::connect, (void*)NULL);
@@ -393,6 +396,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
       std::vector<std::string> strConfig;
       for (auto& addr : val.addrs()) strConfig.push_back(std::move(addr));
       config_->delLearners(strConfig, this);
+      config_->setMembersConfigure(false, true, this, logIndex);
       /* autoChange case, wakeup addFollower if deleted */
       auto findret =
           std::find(strConfig.begin(), strConfig.end(), ccMgr_.autoChangeAddr);
@@ -420,6 +424,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
           server->stepDown(nullptr);
         }
         config_->configureLearner(val.serverid(), val.learnersource(), this);
+        config_->setMembersConfigure(false, true, this, logIndex);
         server->sendByAppliedIndex = val.applymode();
         /* We should also init learner if we're leader and learner source is 0.
          */
@@ -454,9 +459,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
             localServer_->serverId, strLearners.c_str(), strServers.c_str());
         config_->delAllLearners();
         config_->addLearners(strConfig, this, true);
-
-        log_->setMetaData(Paxos::keyLearnerConfigure,
-                          config_->learnersToString());
+        config_->setMembersConfigure(false, true, this, logIndex);
       } else {
         easy_log(
             "Server %d : SyncLearnerAll: local learner is match with leader "
@@ -1709,29 +1712,30 @@ int Paxos::onClusterIdNotMatch(PaxosMsg* msg) {
   // tested by case AddNode_wrong_cluster_id
   server->disconnect(nullptr);
   easy_error_log(
-      "Server %d : server %llu has different cluster id(%llu), local cluster "
-      "id(%llu). we should remove this server from the current "
+      "Server %d : server %llu has different cluster id(%s), local cluster "
+      "id(%s). we should remove this server from the current "
       "onfiguration!!\n",
-      localServer_->serverId, msg->serverid(), msg->newclusterid(),
-      clusterId_.load());
+      localServer_->serverId, msg->serverid(), msg->newclusterid().c_str(),
+      clusterId_.c_str());
 
   return 0;
 }
 
 int Paxos::onMsgPreCheck(PaxosMsg* msg, PaxosMsg* rsp) {
-  if (msg->clusterid() != clusterId_.load()) {
+  std::string clusterid = getClusterId();
+  if (msg->clusterid() != clusterid) {
     // tested by case AddNode_wrong_cluster_id
     easy_error_log(
-        "Server %d: Recieve a msg from cluster(%llu), current cluster(%llu), "
+        "Server %d: Recieve a msg from cluster(%s), current cluster(%s), "
         "msg type(%d), these nodes belong to different clusters.\n",
-        localServer_->serverId, msg->clusterid(), clusterId_.load(),
+        localServer_->serverId, msg->clusterid().c_str(), clusterid.c_str(),
         msg->msgtype());
     rsp->set_msgtype(Consensus::ClusterIdNotMatch);
     rsp->set_serverid(msg->serverid());
     rsp->set_term(msg->term());
     rsp->set_msgid(msg->msgid());
     rsp->set_clusterid(msg->clusterid());
-    rsp->set_newclusterid(clusterId_.load());
+    rsp->set_newclusterid(clusterid);
     return 1;
   } else if (msg->entries_size() && log_->entriesPreCheck(msg->entries())) {
     easy_error_log(
@@ -3000,10 +3004,7 @@ int Paxos::forceSingleLeader() {
 
     config_->delAllRemoteServer(localServer_->strAddr, this);
   }
-
-  log_->setMetaData(Paxos::keyLearnerConfigure, config_->learnersToString());
-  log_->setMetaData(Paxos::keyMemberConfigure,
-                    config_->membersToString(localServer_->strAddr));
+  config_->setMembersConfigure(true, true, this, log_->getLastLogIndex());
 
   srv_->sendAsyncEvent(&Paxos::requestVote, this, true);
 
@@ -3025,9 +3026,7 @@ int Paxos::forceSingleLearner() {
     config_->delAllLearners();
     config_->delAllRemoteServer(localServer_->strAddr, this);
   }
-
-  log_->setMetaData(Paxos::keyLearnerConfigure, config_->membersToString());
-  log_->setMetaData(Paxos::keyMemberConfigure, "");
+  config_->setMembersConfigure(true, true, this, log_->getLastLogIndex(), true);
 
   changeState_(LEARNER);
   electionTimer_->stop();
@@ -3416,8 +3415,9 @@ int Paxos::init(const std::vector<std::string>& strConfig /*start 0*/,
   bool needSetMeta = false;
   /* Init persistent variables */
   uint64_t itmp;
-  if (!log_->getMetaData(std::string(keyClusterId), &itmp)) {
-    clusterId_.store(itmp);
+  std::string stmp;
+  if (!log_->getMetaData(std::string(keyClusterId), stmp)) {
+    clusterId_ = stmp;
   }
 
   if (!log_->getMetaData(std::string(keyCurrentTerm), &itmp)) {
@@ -3428,12 +3428,13 @@ int Paxos::init(const std::vector<std::string>& strConfig /*start 0*/,
   if (!log_->getMetaData(std::string(keyVoteFor), &itmp)) votedFor_ = itmp;
 
   /* Init members and learners */
-  std::string config;
-  log_->getMetaData(std::string(keyMemberConfigure), config);
+  std::string memeber_config, learner_config;
+  uint64_t metaIndex;
+  log_->getMembersConfigure(memeber_config, learner_config, metaIndex);
 
   uint64_t metaCurrent = 0;
   std::vector<std::string> strMembers =
-      StableConfiguration::stringToVector(config, metaCurrent);
+      StableConfiguration::stringToVector(memeber_config, metaCurrent);
   // TODO check strConfig and strMembers is equal
 
   const std::vector<std::string>* pConfig = NULL;
@@ -3444,7 +3445,6 @@ int Paxos::init(const std::vector<std::string>& strConfig /*start 0*/,
           "Paxos::init: Can't find metaCurrent in MemberConfigure when init a "
           "follower node, there may have some error in meta, or this may be a "
           "learner!!");
-      assert(0);
       return -1;
     }
     pConfig = &strMembers;
@@ -3457,10 +3457,8 @@ int Paxos::init(const std::vector<std::string>& strConfig /*start 0*/,
     needSetMeta = true;
   }
 
-  config.clear();
-  log_->getMetaData(std::string(keyLearnerConfigure), config);
   std::vector<std::string> strLearners =
-      StableConfiguration::stringToVector(config, metaCurrent);
+      StableConfiguration::stringToVector(learner_config, metaCurrent);
 
   /* Search logs and init ccMgr if any configurechange has not been applied. */
   uint64_t startScanIndex = 0;
@@ -3519,12 +3517,22 @@ int Paxos::init(const std::vector<std::string>& strConfig /*start 0*/,
              heartbeatThreadCnt);
   std::string curConfig = (*pConfig)[index - 1];
   auto pos = curConfig.find(":");
+  if (pos == std::string::npos) {
+    easy_error_log("Invalid cluster info: %s.", curConfig.c_str());
+    return 1;
+  }
   host_ = curConfig.substr(0, pos);
-  port_ = std::stoull(curConfig.substr(pos + 1));
+  auto port = curConfig.substr(pos + 1);
+  if (host_.empty() || port.empty()) {
+    easy_error_log("Invalid cluster info: %s.", curConfig.c_str());
+    return 1;
+  }
+
+  port_ = std::stoull(port);
   int error = 0;
   if ((error = srv_->start(port_))) {
     easy_error_log("Fail to start libeasy service, error(%d).", error);
-    abort();
+    return 1;
   }
 
   electionTimer_ = std::make_shared<ThreadTimer>(
@@ -3550,11 +3558,7 @@ int Paxos::init(const std::vector<std::string>& strConfig /*start 0*/,
   config_->forEach(&Server::connect, (void*)NULL);
   config_->addLearners(strLearners, this, true);
 
-  if (needSetMeta) {
-    log_->setMetaData(Paxos::keyLearnerConfigure, config_->learnersToString());
-    log_->setMetaData(Paxos::keyMemberConfigure,
-                      config_->membersToString(localServer_->strAddr));
-  }
+  if (needSetMeta) config_->setMembersConfigure(true, true, this, 0);
 
   return 0;
 }
@@ -3569,8 +3573,9 @@ int Paxos::initAsLearner(std::string& strConfig, ClientService* cs,
   easy_log("Start init node as a learner.");
   /* Init persistent variables */
   uint64_t itmp;
-  if (!log_->getMetaData(std::string(keyClusterId), &itmp)) {
-    clusterId_.store(itmp);
+  std::string stmp;
+  if (!log_->getMetaData(std::string(keyClusterId), stmp)) {
+    clusterId_ = stmp;
   }
 
   if (!log_->getMetaData(std::string(keyCurrentTerm), &itmp)) {
@@ -3589,12 +3594,9 @@ int Paxos::initAsLearner(std::string& strConfig, ClientService* cs,
      *   keyMemberConfigure: "<local ip:port>"
      *   keyLearnerConfigure: "all learners in the cluster"
      **/
-    log_->getMetaData(std::string(keyMemberConfigure), config);
     uint64_t metaCurrent;
-    strMember = config;
-
-    config.clear();
-    log_->getMetaData(std::string(keyLearnerConfigure), config);
+    uint64_t metaIndex;
+    log_->getMembersConfigure(strMember, config, metaIndex);
     strLearners = StableConfiguration::stringToVector(config, metaCurrent);
   } else {
     strMember = strConfig;
@@ -3621,12 +3623,22 @@ int Paxos::initAsLearner(std::string& strConfig, ClientService* cs,
 
   const std::string& curConfig = strMember;
   auto pos = curConfig.find(":");
+  if (pos == std::string::npos) {
+    easy_error_log("Invalid cluster learner info: %s.", curConfig.c_str());
+    return 1;
+  }
   host_ = curConfig.substr(0, pos);
-  port_ = std::stoull(curConfig.substr(pos + 1));
+  auto port = curConfig.substr(pos + 1);
+  if (host_.empty() || port.empty()) {
+    easy_error_log("Invalid cluster learner info: %s.", curConfig.c_str());
+    return 1;
+  }
+
+  port_ = std::stoull(port);
   int error = 0;
   if ((error = srv_->start(port_))) {
     easy_error_log("Fail to start libeasy service, error(%d).", error);
-    abort();
+    return 1;
   }
 
   /* Init Configuration */
@@ -3661,7 +3673,7 @@ int Paxos::initAsLearner(std::string& strConfig, ClientService* cs,
         LogEntry entry;
         if (log_->getEntry(i, entry, false)) {
           easy_error_log("Fail to get log on startup, index %llu", i);
-          exit(1);
+          return 1;
         }
         if (entry.optype() == kConfigureChange) {
           if (ccMgr_.prepared == 0) {
@@ -3689,10 +3701,8 @@ int Paxos::initAsLearner(std::string& strConfig, ClientService* cs,
     }
   }
 
-  if (needSetMeta) {
-    log_->setMetaData(Paxos::keyLearnerConfigure, config_->learnersToString());
-    log_->setMetaData(Paxos::keyMemberConfigure, config_->membersToString());
-  }
+  if (needSetMeta) config_->setMembersConfigure(true, true, this, 0, true);
+
   return 0;
 }
 
@@ -4147,10 +4157,19 @@ int Paxos::resetMsgCompressOption() {
                               "");
 }
 
-int Paxos::setClusterId(uint64_t ci) {
+int Paxos::setClusterId(const std::string& ci) {
   int ret = log_->setMetaData(std::string(keyClusterId), ci);
-  if (ret == 0) clusterId_.store(ci);
+  std::unique_lock<std::mutex> ul(lock_);
+  if (ret == 0) clusterId_ = ci;
   return ret;
+}
+
+std::string Paxos::getClusterId(bool needLock) {
+  std::string cluster_id;
+  if (needLock) lock_.lock();
+  cluster_id = clusterId_;
+  if (needLock) lock_.unlock();
+  return cluster_id;
 }
 
 void Paxos::setLearnerConnTimeout(uint64_t t) {

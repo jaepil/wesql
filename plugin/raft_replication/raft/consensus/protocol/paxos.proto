@@ -67,7 +67,7 @@ message PaxosMsg
 {
   //public members
   optional uint64 configId = 1;
-  required uint64 clusterId = 2;
+  required bytes clusterId = 2;
   required uint64 serverId = 3;
   required int32 msgType = 4;
   required uint64 term = 5;
@@ -111,7 +111,7 @@ message PaxosMsg
   optional uint64 appliedIndex = 23;
 
   //ClusterIdNotMatch
-  optional uint64 newClusterId = 24;
+  optional bytes newClusterId = 24;
 
   //Cluster info
   repeated ClusterInfoEntry ciEntries = 25;

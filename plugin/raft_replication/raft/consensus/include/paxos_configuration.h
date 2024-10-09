@@ -81,6 +81,10 @@ class Configuration {
   virtual std::string membersToString() = 0;
   virtual std::string learnersToString() = 0;
 
+  virtual int setMembersConfigure(bool set_members, bool set_learners,
+                                  Paxos* paxos, uint64_t index,
+                                  bool is_learner = false) = 0;
+
   /* append log flow control */
   virtual void reset_flow_control() = 0;
   virtual void set_flow_control(uint64_t serverId, int64_t fc) = 0;
@@ -168,6 +172,11 @@ class StableConfiguration : public Configuration {
   virtual std::string learnersToString() override {
     return StableConfiguration::configToString(learners, std::string(""));
   }
+
+  virtual int setMembersConfigure(bool set_members, bool set_learners,
+                                  Paxos* paxos, uint64_t index,
+                                  bool is_learner = false);
+
   static void initServerFromString(ServerRef server, std::string str,
                                    bool isLearner = false);
   static void initServerDefault(ServerRef server);
