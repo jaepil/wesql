@@ -5,6 +5,8 @@ on:
 
 env:
   GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -155,6 +157,8 @@ jobs:
 #        with:
 #          github-token: ${{ env.GITHUB_TOKEN }}
 #          runner-name: ${{ needs.mtr-serverless.outputs.runner-name }}
+#          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+#          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 #
 #  remove-normal-file-runner:
 #    runs-on: ubuntu-latest
@@ -168,6 +172,8 @@ jobs:
 #        with:
 #          github-token: ${{ env.GITHUB_TOKEN }}
 #          runner-name: ${{ needs.mtr-normal-file.outputs.runner-name }}
+#          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+#          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 #
 #  disable-runner:
 #    needs: [ mtr-serverless, mtr-normal-file ]

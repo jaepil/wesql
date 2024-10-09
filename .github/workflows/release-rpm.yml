@@ -42,6 +42,8 @@ env:
   SERVER_NAME: "wesql_rpm_build"
   BUILD_PATH: "/home/mysql/code/mysql-server"
   BOOST_NAME: "boost_1_77_0.tar.bz2"
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 
 jobs:
@@ -187,6 +189,8 @@ jobs:
         with:
           github-token: ${{ env.GITHUB_TOKEN }}
           runner-name: ${{ needs.release-rpm.outputs.runner-name }}
+          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 
   remove-arm-runner:
     runs-on: ubuntu-latest
@@ -200,6 +204,8 @@ jobs:
         with:
           github-token: ${{ env.GITHUB_TOKEN }}
           runner-name: ${{ needs.release-arm-rpm.outputs.runner-name }}
+          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 
   disable-runner:
     needs: [ release-rpm, release-arm-rpm  ]
