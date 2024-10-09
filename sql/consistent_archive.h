@@ -135,6 +135,7 @@ class Consistent_archive {
     snapshot_objstore = objstore;
   }
   inline objstore::ObjectStore *get_objstore() { return snapshot_objstore; }
+  void signal_consistent_archive();
 
  private:
   pthread_t m_thread;
@@ -169,7 +170,6 @@ class Consistent_archive {
   int archive_consistent_snapshot_cleanup(bool failed);
   int wait_for_consistent_archive(const std::chrono::seconds &timeout,
                                   bool &abort);
-  void signal_consistent_archive();
   // index file for every archive type.
   bool open_index_file(const char *index_file_name_arg, const char *log_name,
                        Archive_type arch_type, bool need_lock = false);

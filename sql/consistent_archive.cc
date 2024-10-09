@@ -832,6 +832,11 @@ void Consistent_archive::run() {
     std::chrono::seconds timeout =
         std::chrono::seconds{opt_consistent_snapshot_archive_period};
     ret = wait_for_consistent_archive(timeout, abort);
+    if(ret == 0) {
+      // The current thread has been forcibly awakened.
+      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_THREAD_LOG,
+             "forcefully wake up the consistent snapshot thread.");
+    }
     assert(ret == 0 || is_timeout(ret));
 
     // Every time a consistent snapshot is archived, reopens the index file.

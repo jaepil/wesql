@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#include "sql/consistent_snapshot_command.h"
+#include "sql/consistent_snapshot_purge_command.h"
 
 #include "m_string.h"
 #include "my_dbug.h"
@@ -21,19 +21,19 @@
 #include "sql/consistent_archive.h"
 #include "sql/sql_class.h"
 
-bool Consistent_archive_command::init() {
+bool Consistent_archive_purge_command::init() {
   DBUG_TRACE;
 
   Udf_data udf(m_udf_name, STRING_RESULT,
-               Consistent_archive_command::consistent_archive_purge,
-               Consistent_archive_command::consistent_archive_purge_init,
-               Consistent_archive_command::consistent_archive_purge_deinit);
+               Consistent_archive_purge_command::consistent_archive_purge,
+               Consistent_archive_purge_command::consistent_archive_purge_init,
+               Consistent_archive_purge_command::consistent_archive_purge_deinit);
 
   m_initialized = !register_udf(udf);
   return !m_initialized;
 }
 
-bool Consistent_archive_command::deinit() {
+bool Consistent_archive_purge_command::deinit() {
   DBUG_TRACE;
 
   if (m_initialized && !unregister_udf(m_udf_name)) {
@@ -43,7 +43,7 @@ bool Consistent_archive_command::deinit() {
   return m_initialized;
 }
 
-char *Consistent_archive_command::consistent_archive_purge(
+char *Consistent_archive_purge_command::consistent_archive_purge(
     UDF_INIT *, UDF_ARGS *args, char *result, unsigned long *length,
     unsigned char *, unsigned char *error) {
   DBUG_TRACE;
@@ -71,7 +71,7 @@ err:
   return result;
 }
 
-bool Consistent_archive_command::consistent_archive_purge_init(
+bool Consistent_archive_purge_command::consistent_archive_purge_init(
     UDF_INIT *init_id, UDF_ARGS *args, char *message) {
   DBUG_TRACE;
   if (args->arg_count != 1) {
@@ -95,6 +95,6 @@ bool Consistent_archive_command::consistent_archive_purge_init(
   return false;
 }
 
-void Consistent_archive_command::consistent_archive_purge_deinit(UDF_INIT *) {
+void Consistent_archive_purge_command::consistent_archive_purge_deinit(UDF_INIT *) {
   DBUG_TRACE;
 }
