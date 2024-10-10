@@ -81,11 +81,11 @@ jobs:
               cat $logfile
           done
 
-#      - name: get self runner name
-#        id: get_runner_name
-#        if: ${{ always() }}
-#        run: |
-#          echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
+      - name: get self runner name
+        id: get_runner_name
+        if: ${{ always() }}
+        run: |
+          echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
 
   mtr-normal-file:
     needs: [ enable-runner ]
@@ -139,46 +139,46 @@ jobs:
               cat $logfile
           done
 
-#      - name: get self runner name
-#        id: get_runner_name
-#        if: ${{ always() }}
-#        run: |
-#          echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
-#
-#  remove-serverless-runner:
-#    runs-on: ubuntu-latest
-#    needs: [ mtr-serverless ]
-#    if: ${{ always() }}
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Delete self runner
-#        uses: './.github/actions/delete-runner'
-#        with:
-#          github-token: ${{ env.GITHUB_TOKEN }}
-#          runner-name: ${{ needs.mtr-serverless.outputs.runner-name }}
-#          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-#          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-#
-#  remove-normal-file-runner:
-#    runs-on: ubuntu-latest
-#    needs: [ mtr-normal-file ]
-#    if: ${{ always() }}
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Delete self runner
-#        uses: './.github/actions/delete-runner'
-#        with:
-#          github-token: ${{ env.GITHUB_TOKEN }}
-#          runner-name: ${{ needs.mtr-normal-file.outputs.runner-name }}
-#          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-#          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-#
-#  disable-runner:
-#    needs: [ mtr-serverless, mtr-normal-file ]
-#    if: ${{ always() }}
-#    uses: ./.github/workflows/enable-self-runner.yml
-#    with:
-#      ENABLE: "disable"
-#    secrets: inherit
+      - name: get self runner name
+        id: get_runner_name
+        if: ${{ always() }}
+        run: |
+          echo runner-name=${RUNNER_NAME} >> $GITHUB_OUTPUT
+
+  remove-serverless-runner:
+    runs-on: ubuntu-latest
+    needs: [ mtr-serverless ]
+    if: ${{ always() }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Delete self runner
+        uses: './.github/actions/delete-runner'
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          runner-name: ${{ needs.mtr-serverless.outputs.runner-name }}
+          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+
+  remove-normal-file-runner:
+    runs-on: ubuntu-latest
+    needs: [ mtr-normal-file ]
+    if: ${{ always() }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Delete self runner
+        uses: './.github/actions/delete-runner'
+        with:
+          github-token: ${{ env.GITHUB_TOKEN }}
+          runner-name: ${{ needs.mtr-normal-file.outputs.runner-name }}
+          access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+
+  disable-runner:
+    needs: [ mtr-serverless, mtr-normal-file ]
+    if: ${{ always() }}
+    uses: ./.github/workflows/enable-self-runner.yml
+    with:
+      ENABLE: "disable"
+    secrets: inherit
