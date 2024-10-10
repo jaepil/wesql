@@ -170,6 +170,7 @@ class Consistent_archive {
   int archive_consistent_snapshot_cleanup(bool failed);
   int wait_for_consistent_archive(const std::chrono::seconds &timeout,
                                   bool &abort);
+  bool mysql_binlog_has_updated();
   // index file for every archive type.
   bool open_index_file(const char *index_file_name_arg, const char *log_name,
                        Archive_type arch_type, bool need_lock = false);

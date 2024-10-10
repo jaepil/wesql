@@ -13,7 +13,7 @@ INSERT INTO t1 values(3);
 INSERT INTO t1 values(4);
 SELECT * FROM t1;
 
---echo # Wait for at least 1 snapshots to be generated 
+--echo # Wait for at least 2 snapshots to be generated 
 let $wait_condition= SELECT count(*) >=2 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 --source include/wait_condition_or_abort.inc
 
@@ -32,7 +32,7 @@ SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_IN
 --enable_warnings
 
 INSERT INTO t1 SELECT * FROM t1;
---echo # Wait for at least 4 snapshots to be generated 
+--echo # Wait for at least 3 snapshots to be generated 
 --let $wait_condition= SELECT count(*) >=3 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX
 --source include/wait_condition_or_abort.inc
 
@@ -42,12 +42,12 @@ INSERT INTO t1 SELECT * FROM t1;
 --source include/wait_condition_or_abort.inc
 
 INSERT INTO t1 SELECT * FROM t1;
---echo # Wait for at least 4 snapshots to be generated 
+--echo # Wait for at least 5 snapshots to be generated 
 --let $wait_condition= SELECT count(*) >=5 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX
 --source include/wait_condition_or_abort.inc
 
 INSERT INTO t1 SELECT * FROM t1;
---echo # Wait for at least 4 snapshots to be generated 
+--echo # Wait for at least 6 snapshots to be generated 
 --let $wait_condition= SELECT count(*) >=6 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX
 --source include/wait_condition_or_abort.inc
 

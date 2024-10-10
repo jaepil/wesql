@@ -143,6 +143,8 @@ class Binlog_archive {
                                       my_off_t &binlog_pos,
                                       my_off_t &binlog_write_pos);
 
+  int get_mysql_current_archive_binlog(LOG_INFO *linfo,
+                                   bool need_lock = true);
  private:
   // the binlog archive THD handle.
   THD *m_thd;
@@ -202,7 +204,7 @@ class Binlog_archive {
   String m_packet;
   bool m_binlog_in_transaction;
   bool m_rotate_forbidden;
-  time_t m_slice_create_ts;
+  ulonglong m_slice_create_ts;
   int new_binlog_slice(bool new_binlog, const char *log_file, my_off_t log_pos,
                        uint64_t previous_consensus_index);
   int archive_init();

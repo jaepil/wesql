@@ -221,8 +221,12 @@ int start_consistent_archive() {
   // remove local archive data dir and recreate it.
   remove_file(tmp_archive_data_dir);
   if (my_mkdir(tmp_archive_data_dir, 0777, MYF(0))) {
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-           "Failed to create archive data dir");
+    std::string err_msg;
+    err_msg.assign("error ");
+    err_msg.append(std::to_string(my_errno()));
+    err_msg.append(", failed to create archive dir ");
+    err_msg.append(tmp_archive_data_dir);
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     return 1;
   }
 
@@ -773,24 +777,6 @@ void Consistent_archive::run() {
     }
     mysql_mutex_unlock(&m_consistent_index_lock);
 
-    m_atomic_archive_progress.store(STAGE_NONE, std::memory_order_release);
-    memset(m_consistent_snapshot_local_time, 0,
-           sizeof(m_consistent_snapshot_local_time));
-    memset(m_binlog_file, 0, sizeof(m_binlog_file));
-    memset(m_mysql_binlog_file, 0, sizeof(m_mysql_binlog_file));
-    memset(m_mysql_clone_name, 0, sizeof(m_mysql_clone_name));
-    memset(m_se_backup_name, 0, sizeof(m_se_backup_name));
-    m_mysql_binlog_pos = 0;
-    m_consensus_index = 0;
-    m_se_snapshot_id = 0;
-    m_consistent_snapshot_archive_start_ts = 0;
-    m_consistent_snapshot_archive_end_ts = 0;
-    m_innodb_clone_duration = 0;
-    m_innodb_archive_duration = 0;
-    m_se_backup_duration = 0;
-    m_se_archive_duration = 0;
-    m_wait_binlog_archive_duration = 0;
-
     // If the thread is killed, again archive last consistent snapshot, before
     // exit.
     mysql_mutex_lock(&m_run_lock);
@@ -933,6 +919,32 @@ bool Consistent_archive::archive_consistent_snapshot() {
   int64 previous_time = 0;
   int64 current_time = 0;
 
+  // Check whether any new binlogs have updated since the last consistent
+  // snapshot.
+  if (!mysql_binlog_has_updated()) {
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+           "persistent binlog has not changed.");
+    return false;
+  }
+
+  m_atomic_archive_progress.store(STAGE_NONE, std::memory_order_release);
+  memset(m_consistent_snapshot_local_time, 0,
+         sizeof(m_consistent_snapshot_local_time));
+  memset(m_binlog_file, 0, sizeof(m_binlog_file));
+  memset(m_mysql_binlog_file, 0, sizeof(m_mysql_binlog_file));
+  memset(m_mysql_clone_name, 0, sizeof(m_mysql_clone_name));
+  memset(m_se_backup_name, 0, sizeof(m_se_backup_name));
+  m_mysql_binlog_pos = 0;
+  m_consensus_index = 0;
+  m_se_snapshot_id = 0;
+  m_consistent_snapshot_archive_start_ts = 0;
+  m_consistent_snapshot_archive_end_ts = 0;
+  m_innodb_clone_duration = 0;
+  m_innodb_archive_duration = 0;
+  m_se_backup_duration = 0;
+  m_se_archive_duration = 0;
+  m_wait_binlog_archive_duration = 0;
+
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
          "archive consistent snapshot.");
   /*
@@ -978,20 +990,6 @@ bool Consistent_archive::archive_consistent_snapshot() {
   err_msg.append(":");
   err_msg.append(std::to_string(m_mysql_binlog_pos_previous_snapshot));
   LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-  if (DBUG_EVALUATE_IF("force_consistent_snapshot_persistent", 0, 1)) {
-    // Check whether binlog had changed.
-    if (compare_log_name(m_mysql_binlog_file_previous_snapshot,
-                         m_mysql_binlog_file) == 0 &&
-        m_mysql_binlog_pos_previous_snapshot == m_mysql_binlog_pos) {
-      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-             "smartengine backup binlog position no change.");
-      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-             "release backup lock.");
-      release_backup_lock(thd);
-      ret = true;
-      goto err;
-    }
-  }
 
   // consistent archive mysql innodb
   m_atomic_archive_progress.store(STAGE_INNODB_CLONE,
@@ -1396,6 +1394,19 @@ int Consistent_archive::archive_innodb_data() {
 
     clone_keyid.append(clone_full_name);
     clone_keyid.append(FN_DIRSEP);
+    // If a directory with the same name already exists, it should be deleted
+    // first, as it is leftover garbage data from a previous failed persistence
+    // attempt.
+    err_msg.assign(
+        "delete persistent innodb clone same name already exists from object "
+        "store:");
+    err_msg.append(" keyid=");
+    err_msg.append(clone_keyid);
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
+           err_msg.c_str());
+    snapshot_objstore->delete_directory(std::string_view(opt_objstore_bucket),
+                                        clone_keyid);
+
     // Directly persistent clone dir innodb_archive_000001/ to objstore.
     err_msg.assign("directly persistent innodb clone to object store begin: ");
     err_msg.append(" keyid=");
@@ -1585,15 +1596,26 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
   // If the snapshot data does not need to be tarred but is directly persisted
   // to S3, there is no need to copy it to a temporary directory.
   if (m_se_tar_compression_mode == CONSISTENT_SNAPSHOT_NO_TAR) {
-    err_msg.assign("directly persistent smartengine to object store begin: ");
-    err_msg.append(m_se_backup_name);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
-           err_msg.c_str());
     std::string se_keyid_prefix;
     // key = prefix + se_backup_name + "/"
     se_keyid_prefix.assign(m_archive_dir);
     se_keyid_prefix.append(se_backup_full_name);
     se_keyid_prefix.append(FN_DIRSEP);
+
+    err_msg.assign(
+        "delete persistent smartengine same name already exists from object "
+        "store:");
+    err_msg.append(" keyid=");
+    err_msg.append(se_keyid_prefix);
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
+           err_msg.c_str());
+    snapshot_objstore->delete_directory(std::string_view(opt_objstore_bucket),
+                                        se_keyid_prefix);
+
+    err_msg.assign("directly persistent smartengine to object store begin: ");
+    err_msg.append(m_se_backup_name);
+    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
+           err_msg.c_str());
     strmake(m_se_backup_keyid, se_keyid_prefix.c_str(),
             sizeof(m_se_backup_keyid) - 1);
     // It is necessary to persist `se_archive_000001/` as a separate key;
@@ -1870,6 +1892,35 @@ bool Consistent_archive::write_consistent_snapshot_file() {
          "persistent update index end.");
   return false;
 err:
+  return true;
+}
+
+/**
+ * @brief Check whether any new binlogs have updated since the last consistent
+ * snapshot.
+ *
+ * @return true , updated.
+ * @return false , not updated.
+ */
+bool Consistent_archive::mysql_binlog_has_updated() {
+  DBUG_TRACE;
+  DBUG_PRINT("info", ("mysql_binlog_pos_has_advanced"));
+  DBUG_EXECUTE_IF("force_consistent_snapshot_mysql_binlog_updated",
+                  { return true; });
+
+  // If mysql binlog not opened, also considered as updated.
+  if (mysql_bin_log.is_open()) {
+    LOG_INFO li{};
+    Binlog_archive::get_instance()->get_mysql_current_archive_binlog(&li);
+    if ((m_mysql_binlog_file_previous_snapshot[0] == '\0') ||
+        (m_mysql_binlog_pos_previous_snapshot == 0) ||
+        (compare_log_name(m_mysql_binlog_file_previous_snapshot,
+                          li.log_file_name) != 0) ||
+        li.pos > m_mysql_binlog_pos_previous_snapshot) {
+      return true;
+    }
+    return false;
+  }
   return true;
 }
 

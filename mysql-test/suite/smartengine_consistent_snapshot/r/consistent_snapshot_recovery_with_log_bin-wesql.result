@@ -15,7 +15,7 @@ ERROR HY000: Lost connection to MySQL server during query
 # Create an empty data directory...
 # 1. Recovery start using consistent snapshot with raft_index = 0
 # restart: 
-# Wait for first snapshots to be generated after startup recovery.
+# Wait for at least 2 snapshots to be generated after startup recovery.
 SELECT COUNT(*) FROM t1;
 COUNT(*)
 1
@@ -47,7 +47,7 @@ ERROR HY000: Lost connection to MySQL server during query
 # Create an empty data directory...
 # 2. Recovery start using consistent snapshot
 # restart: 
-# Wait for snapshots to be generated after startup recovery
+# Wait for at least 3 snapshots to be generated after startup recovery
 SELECT count(*) FROM t1;
 count(*)
 544
@@ -68,7 +68,7 @@ ERROR HY000: Lost connection to MySQL server during query
 # Create an empty data directory...
 # 3. Recovery start using consistent snapshot
 # restart
-# Wait for snapshots to be generated after startup recovery 
+# Wait for at least 4 snapshots to be generated after startup recovery 
 SELECT count(*) FROM t1;
 count(*)
 1094

@@ -8,6 +8,7 @@ binlog_archive_slice_max_size=          4096
 consistent_snapshot_archive_period=     1000
 consistent_snapshot_expire_auto_purge=  false
 binlog_archive_expire_auto_purge=       false
+binlog_archive_period=                  3000
 recovery_from_objectstore=              true
 server_id_on_objectstore= 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 
@@ -20,6 +21,7 @@ log-bin=                            logger1-bin.index
 table_on_objectstore =              false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false
+binlog_archive_period=              3000
 server_id_on_objectstore= 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyy'
 
 [mysqld.3]
@@ -31,4 +33,5 @@ log-bin=                            logger2-bin.index
 table_on_objectstore =              false
 consistent_snapshot_archive=        false
 binlog_archive_expire_auto_purge=   false
+binlog_archive_period=              3000
 server_id_on_objectstore= 'zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz'

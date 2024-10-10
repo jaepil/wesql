@@ -11,7 +11,7 @@ c1
 2
 3
 4
-# Wait for at least 1 snapshots to be generated 
+# Wait for at least 2 snapshots to be generated 
 # Select CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX
 SELECT IF(RIGHT(INNODB_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 2;
 name
@@ -33,13 +33,13 @@ name
 se_archive_000001
 se_archive_000002
 INSERT INTO t1 SELECT * FROM t1;
-# Wait for at least 4 snapshots to be generated 
+# Wait for at least 3 snapshots to be generated 
 INSERT INTO t1 SELECT * FROM t1;
 # Wait for at least 4 snapshots to be generated 
 INSERT INTO t1 SELECT * FROM t1;
-# Wait for at least 4 snapshots to be generated 
+# Wait for at least 5 snapshots to be generated 
 INSERT INTO t1 SELECT * FROM t1;
-# Wait for at least 4 snapshots to be generated 
+# Wait for at least 6 snapshots to be generated 
 # Purge persistent snapshot to timestamp
 include/assert.inc [Purge consistent snapshot.]
 include/assert.inc [Check results after purge.]
