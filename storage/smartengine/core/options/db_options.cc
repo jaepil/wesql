@@ -46,6 +46,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions &options)
       table_cache_size(options.table_cache_size),
       persistent_cache_dir(options.persistent_cache_dir),
       persistent_cache_size(options.persistent_cache_size),
+      persistent_cache_mode(options.persistent_cache_mode),
       parallel_flush_log(options.parallel_flush_log)
 {}
 
@@ -80,6 +81,7 @@ void ImmutableDBOptions::Dump() const {
   __SE_LOG(INFO, "                       Options.table_cache_size: %d", table_cache_size);
   __SE_LOG(INFO, "                   Options.persistent_cache_dir: %s", persistent_cache_dir);
   __SE_LOG(INFO, "                  Options.persistent_cache_size: %d", persistent_cache_size);
+  __SE_LOG(INFO, "                  Options.persistent_cache_mode: %s", persistent_cache_mode_names[persistent_cache_mode]);
   __SE_LOG(INFO, " .                   Options.parallel_flush_log: %d", parallel_flush_log);
 }
 

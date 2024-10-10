@@ -45,6 +45,8 @@ int FileNameUtil::parse_file_name(const std::string &file_name, int64_t &file_nu
   if (UNLIKELY(file_name.empty())) {
     ret = common::Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(file_name));
+  } else if ("." == file_name || ".." == file_name) {
+    ret = Status::kNotSupported;
   } else if (Slice(CURRENT_FILE_NAME) == rest) {
     file_number = 0;
     file_type = kCurrentFile;
@@ -71,7 +73,7 @@ int FileNameUtil::parse_file_name(const std::string &file_name, int64_t &file_nu
     } else if (Slice(TEMP_FILE_SUFFIX) == rest) {
       file_type = kTempFile;
     } else {
-      ret = common::Status::kErrorUnexpected;
+      ret = common::Status::kNotSupported;
       SE_LOG(WARN, "Unsupport file type", K(ret), K(file_name), K(rest));
     }
   }

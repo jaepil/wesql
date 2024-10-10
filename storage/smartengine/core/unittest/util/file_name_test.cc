@@ -97,11 +97,13 @@ TEST(FileNameUtil, parse_file_name)
 
   FileInfo file_infos[] = {
       {"", kInvalidFileType, 0, Status::kInvalidArgument},
+      {".", kInvalidFileType, 0, Status::kNotSupported},
+      {"..", kInvalidFileType, 0, Status::kNotSupported},
       {"ppl", kInvalidFileType, 0, Status::kErrorUnexpected},
       {"123", kInvalidFileType, 0, Status::kErrorUnexpected},
       {"123.", kInvalidFileType, 0, Status::kErrorUnexpected},
       {"123-wal", kInvalidFileType, 0, Status::kErrorUnexpected},
-      {"123.wa", kInvalidFileType, 123, Status::kErrorUnexpected},
+      {"123.wa", kInvalidFileType, 123, Status::kNotSupported},
       {"CURRENT", kCurrentFile, 0, Status::kOk},
       {"LOCK", kLockFile, 0, Status::kOk},
       {"0.wal", kWalFile, 0, Status::kOk},

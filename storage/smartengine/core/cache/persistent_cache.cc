@@ -300,6 +300,7 @@ DEFINE_TO_STRING(PersistentCacheInfo, KVP_(cache_file), KV_(extent_id))
 
 PersistentCache::PersistentCache()
     : is_inited_(false),
+      mode_(kReadWriteThrough),
       cache_(nullptr),
       cache_file_()
 {}
@@ -315,7 +316,10 @@ PersistentCache &PersistentCache::get_instance()
   return persistent_cache;
 }
 
-int PersistentCache::init(Env *env, const std::string &cache_file_path, int64_t cache_size)
+int PersistentCache::init(Env *env,
+                          const std::string &cache_file_path,
+                          int64_t cache_size,
+                          PersistentCacheMode mode)
 {
   int ret = Status::kOk;
   int64_t actual_cache_size = ((cache_size + storage::MAX_EXTENT_SIZE -1) / storage::MAX_EXTENT_SIZE) * storage::MAX_EXTENT_SIZE;
@@ -325,9 +329,10 @@ int PersistentCache::init(Env *env, const std::string &cache_file_path, int64_t 
     SE_LOG(WARN, "the PersistentCache has been inited", K(ret));
   } else if (UNLIKELY(IS_NULL(env)) ||
              UNLIKELY(cache_file_path.empty()) ||
-             UNLIKELY(cache_size < 0)) {
+             UNLIKELY(cache_size < 0) ||
+             UNLIKELY(mode >= kMaxPersistentCacheMode)) {
     ret = Status::kInvalidArgument;
-    SE_LOG(WARN, "invalid argument", K(ret), KP(env), K(cache_file_path), K(cache_size));
+    SE_LOG(WARN, "invalid argument", K(ret), KP(env), K(cache_file_path), K(cache_size), KE(mode));
   } else {
     if (0 == actual_cache_size) {
       SE_LOG(INFO, "the PersistentCache is disabled");
@@ -342,8 +347,9 @@ int PersistentCache::init(Env *env, const std::string &cache_file_path, int64_t 
     } else if (FAILED(cache_file_.open(env, cache_file_path, actual_cache_size))) { 
       SE_LOG(WARN, "fail to open persistent cache file", K(ret), K(cache_file_path), K(actual_cache_size));
     } else {
+      mode_ = mode;
       is_inited_ = true;
-      SE_LOG(INFO, "success to enable PersistentCache", K(cache_file_path), K(cache_size));
+      SE_LOG(INFO, "success to enable PersistentCache", K(cache_file_path), K(cache_size), KE(mode));
     }
   }
 

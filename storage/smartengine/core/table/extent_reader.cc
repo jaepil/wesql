@@ -456,7 +456,7 @@ int ExtentReader::check_in_bloom_filter(const Slice &user_key, const BlockInfo &
     SE_LOG(WARN, "fail to check through bloom filter reader", K(ret), K(user_key));
   } else {
 #ifndef NDEBUG
-    SE_LOG(INFO, "check in bloom filter", K(may_exist));
+    SE_LOG(DEBUG, "check in bloom filter", K(may_exist));
 #endif
   }
 

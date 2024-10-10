@@ -535,7 +535,7 @@ TEST_F(ObjectIOExtentTest, object_io_extent_sync_read_with_persistent_cache)
   Slice result;
 
   // init persistent cache
-  ret = cache::PersistentCache::get_instance().init(Env::Default(), test_dir, 1 * 1024 * 1024 * 1024);
+  ret = cache::PersistentCache::get_instance().init(Env::Default(), test_dir, 1 * 1024 * 1024 * 1024, common::kReadWriteThrough);
   ASSERT_EQ(Status::kOk, ret);
 
   // Prepare data
@@ -667,7 +667,7 @@ TEST_F(ObjectIOExtentTest, object_io_extent_async_read_with_persistent_cache)
   ObjectIOExtent object_extent;
 
   // init persistent cache
-  ret = cache::PersistentCache::get_instance().init(Env::Default(), test_dir, 1 * 1024 * 1024 * 1024);
+  ret = cache::PersistentCache::get_instance().init(Env::Default(), test_dir, 1 * 1024 * 1024 * 1024, common::kReadWriteThrough);
   ASSERT_EQ(Status::kOk, ret);
 
   // Prepare data

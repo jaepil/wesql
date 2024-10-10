@@ -106,6 +106,8 @@ extern bool se_rpl_skip_tx_api_var;
 
 extern bool se_skip_unique_key_check_in_boost_insert;
 
+extern uint64_t se_persistent_cache_mode;
+
 void se_set_collation_exception_list(const char *const exception_list);
 
 ulong se_thd_lock_wait_timeout(THD *thd);

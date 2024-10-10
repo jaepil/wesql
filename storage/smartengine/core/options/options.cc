@@ -22,12 +22,14 @@
 #include "table/extent_table_factory.h"
 #include "util/compression.h"
 
-namespace smartengine {
+namespace smartengine
+{
 using namespace util;
 using namespace table;
 using namespace cache;
 
-namespace common {
+namespace common
+{
 
 AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions() {
   assert(memtable_factory.get() != nullptr);
@@ -137,8 +139,15 @@ DBOptions::DBOptions(const Options &options)
       master_thread_compaction_enabled(options.master_thread_compaction_enabled),
       persistent_cache_dir(options.persistent_cache_dir),
       persistent_cache_size(options.persistent_cache_size),
+      persistent_cache_mode(options.persistent_cache_mode),
       parallel_flush_log(options.parallel_flush_log)
 {}
+
+const char *persistent_cache_mode_names[kMaxPersistentCacheMode + 1] = {
+    "read_through",
+    "read_write_through",
+    nullptr
+};
 
 void DBOptions::Dump() const {
   ImmutableDBOptions(*this).Dump();

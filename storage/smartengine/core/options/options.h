@@ -226,6 +226,15 @@ struct DbPath {
   DbPath(const std::string& p, uint64_t t) : path(p), target_size(t) {}
 };
 
+enum PersistentCacheMode
+{
+  kReadThrough = 0,
+  kReadWriteThrough,
+  kMaxPersistentCacheMode
+};
+
+extern const char *persistent_cache_mode_names[kMaxPersistentCacheMode + 1];
+
 struct DBOptions {
   // Create DBOptions with default values for all fields
   DBOptions();
@@ -505,6 +514,7 @@ struct DBOptions {
   bool master_thread_compaction_enabled = true;
   std::string persistent_cache_dir = "";
   uint64_t persistent_cache_size = 0;
+  uint64_t persistent_cache_mode = kReadWriteThrough;
   bool parallel_flush_log = false;
 };
 

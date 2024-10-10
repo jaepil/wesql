@@ -512,6 +512,7 @@ int ObjectIOExtent::fill_aio_info(AIOHandle *aio_handle, int64_t offset, int64_t
 int ObjectIOExtent::write_object(const char *data, int64_t data_size)
 {
   int ret = Status::kOk;
+  int tmp_ret = Status::kOk;
   // bool forbid_overwrite = true;
   bool forbid_overwrite = false;
   ::objstore::Status object_status;
@@ -535,6 +536,17 @@ int ObjectIOExtent::write_object(const char *data, int64_t data_size)
     SE_LOG(WARN, "io error, failed to put obj", K(ret), KE((object_status.error_code())), K(std::string(object_status.error_message())),
         K_(extent_id), K_(bucket), K(object_id), K(data_size), K_(bucket));
   } else {
+    // A failure in writing to the persistent cache does not affect the extent write operation.
+    if (PersistentCache::get_instance().use_read_write_through_mode()) {
+      if (Status::kOk != (tmp_ret = PersistentCache::get_instance().insert(extent_id_, Slice(data, data_size), nullptr))) {
+        SE_LOG(WARN, "fail to write extent data to persistent cache", K(tmp_ret), K_(extent_id));
+      } else {
+#ifndef NDEBUG
+        SE_LOG(INFO, "success to write extent data to persistent cache", K_(extent_id));
+#endif
+      }
+    }
+
     SE_LOG(DEBUG, "success to write object", K_(extent_id), K_(bucket), K(object_id));
   }
 

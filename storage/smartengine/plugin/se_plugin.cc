@@ -194,6 +194,7 @@ static int se_init_func(void *const p)
   se_tbl_options.cluster_id = opt_cluster_objstore_id;
   se_db_options.allow_concurrent_memtable_write = true;
   se_db_options.use_direct_write_for_wal = false;
+  se_db_options.persistent_cache_mode = se_persistent_cache_mode;
   //se_db_options.concurrent_writable_file_buffer_num =
   //    DEFAULT_SE_CONCURRENT_WRITABLE_FILE_BUFFER_NUMBER;
   //se_db_options.concurrent_writable_file_single_buffer_size =

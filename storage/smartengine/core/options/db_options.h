@@ -50,6 +50,7 @@ struct ImmutableDBOptions {
   uint64_t table_cache_size;
   std::string persistent_cache_dir;
   uint64_t persistent_cache_size;
+  uint64_t persistent_cache_mode;
   bool parallel_flush_log;
 };
 

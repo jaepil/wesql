@@ -113,7 +113,10 @@ class PersistentCache
 public:
   static PersistentCache &get_instance();
 
-  int init(util::Env *env, const std::string &cache_file_path, int64_t cache_size);
+  int init(util::Env *env,
+           const std::string &cache_file_path,
+           int64_t cache_size,
+           common::PersistentCacheMode mode);
   void destroy();
   int insert(const storage::ExtentId &extent_id,
              const common::Slice &extent_data,
@@ -129,6 +132,7 @@ public:
   void release_handle(cache::Cache::Handle *handle);
   PersistentCacheInfo *get_cache_info_from_handle(cache::Cache::Handle *handle);
   inline bool is_enabled() const { return is_inited_; } 
+  inline bool use_read_write_through_mode() const { return is_enabled() && (common::kReadWriteThrough == mode_); }
 
 private:
   PersistentCache();
@@ -140,6 +144,7 @@ private:
 
 private:
   bool is_inited_;
+  common::PersistentCacheMode mode_;
   // TODO(Zhao Dongsheng) : don't use shared_ptr!
   std::shared_ptr<cache::Cache> cache_;
   PersistentCacheFile cache_file_;

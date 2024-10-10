@@ -245,7 +245,8 @@ int DBImpl::prepare_recovery(const ColumnFamilyOptions &cf_options)
     if (SUCCED(ret)) {
       if (FAILED(cache::PersistentCache::get_instance().init(env_,
                                                              immutable_db_options_.persistent_cache_dir,
-                                                             immutable_db_options_.persistent_cache_size))) {
+                                                             immutable_db_options_.persistent_cache_size,
+                                                             static_cast<PersistentCacheMode>(immutable_db_options_.persistent_cache_mode)))) {
         SE_LOG(WARN, "fail to init PersistentCache", K(ret), "persist_cache_dir", immutable_db_options_.persistent_cache_dir,
             "persistent_cache_size", immutable_db_options_.persistent_cache_size);
       }

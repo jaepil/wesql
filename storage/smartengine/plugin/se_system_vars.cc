@@ -858,6 +858,14 @@ static void se_set_master_thread_compaction_enabled(THD *thd,
   SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
 }
 
+static TYPELIB se_persistent_cache_mode_typelib = {
+    array_elements(common::persistent_cache_mode_names) - 1,
+    "se_persistent_cache_mode_typelib",
+    common::persistent_cache_mode_names,
+    nullptr};
+
+uint64_t se_persistent_cache_mode = 0;
+
 static MYSQL_SYSVAR_STR(
     data_dir, se_data_dir,
     PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
@@ -1487,6 +1495,14 @@ static MYSQL_SYSVAR_ULONG(
     nullptr, nullptr,
     se_db_options.persistent_cache_size, 0, ULONG_MAX, 0);
 
+static MYSQL_SYSVAR_ENUM(
+    persistent_cache_mode,
+    se_persistent_cache_mode,
+    PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
+    "With which mode to add data into persistent cache",
+    nullptr, nullptr, kReadWriteThrough,
+    &se_persistent_cache_mode_typelib);
+
 static MYSQL_SYSVAR_BOOL(
     parallel_flush_log,
     se_db_options.parallel_flush_log,
@@ -1618,6 +1634,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(master_thread_compaction_enabled),
     MYSQL_SYSVAR(persistent_cache_dir),
     MYSQL_SYSVAR(persistent_cache_size),
+    MYSQL_SYSVAR(persistent_cache_mode),
     MYSQL_SYSVAR(parallel_flush_log),
     nullptr};
 

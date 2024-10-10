@@ -221,20 +221,20 @@ TEST_F(PersistentCacheTest, persistent_cache_init)
   int ret = Status::kOk;
   
   // invalid argument
-  ret = PersistentCache::get_instance().init(nullptr, file_path_, 0);
+  ret = PersistentCache::get_instance().init(nullptr, file_path_, 0, kReadWriteThrough);
   ASSERT_EQ(Status::kInvalidArgument, ret);
-  ret = PersistentCache::get_instance().init(Env::Default(), std::string(), 0);
+  ret = PersistentCache::get_instance().init(Env::Default(), std::string(), 0, kReadWriteThrough);
   ASSERT_EQ(Status::kInvalidArgument, ret);
-  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, -1);
+  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, -1, kReadWriteThrough);
   ASSERT_EQ(Status::kInvalidArgument, ret);
 
   // disable persistent cache
-  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, 0);
+  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, 0, kReadWriteThrough);
   ASSERT_EQ(Status::kOk, ret);
   ASSERT_FALSE(PersistentCache::get_instance().is_enabled());
 
   // enable persistent cache
-  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, storage::MAX_EXTENT_SIZE * 3);
+  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, storage::MAX_EXTENT_SIZE * 3, kReadWriteThrough);
   ASSERT_EQ(Status::kOk, ret);
   ASSERT_TRUE(PersistentCache::get_instance().is_enabled());
 
@@ -256,7 +256,7 @@ TEST_F(PersistentCacheTest, persistent_cache_insert)
   ASSERT_EQ(Status::kNotInit, ret);
 
   // init persistent cache
-  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, storage::MAX_EXTENT_SIZE * 3);
+  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, storage::MAX_EXTENT_SIZE * 3, kReadWriteThrough);
   ASSERT_EQ(Status::kOk, ret);
 
   // full fill the persistent cache and acquire the handle
@@ -304,7 +304,7 @@ TEST_F(PersistentCacheTest, persistent_cache_read_from_handle)
   ASSERT_EQ(Status::kNotInit, ret);
 
   // init persistent cache
-  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, storage::MAX_EXTENT_SIZE * 3);
+  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, storage::MAX_EXTENT_SIZE * 3, kReadWriteThrough);
   ASSERT_EQ(Status::kOk, ret);
 
   // invalid argument
@@ -383,7 +383,7 @@ TEST_F(PersistentCacheTest, persistent_cache_lookup_and_evict)
   // init persistent cache
   // make cache size enough to contain three extent
   int64_t cache_size = (1 << 8) * storage::MAX_EXTENT_SIZE;
-  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, cache_size);
+  ret = PersistentCache::get_instance().init(Env::Default(), file_path_, cache_size, kReadWriteThrough);
   ASSERT_EQ(Status::kOk, ret);
 
   // prepare data
