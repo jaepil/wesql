@@ -20,6 +20,7 @@
 #include "table/extent_writer.h"
 #include "util/common.h"
 #include "util/misc_utility.h"
+#include "util/sync_point.h"
 
 namespace smartengine
 {
@@ -93,6 +94,10 @@ int FileIOExtent::write(const common::Slice &data)
   } else if (FAILED(align_to_direct_write(fd_, get_base_offset(), data.data(), data.size()))) {
     SE_LOG(WARN, "fail to align to direct write", K(ret));
   }
+
+#ifndef NDEBUG
+  TEST_SYNC_POINT_CALLBACK("IOExtent::write_failed", &ret);
+#endif
 
   return ret;
 }
@@ -533,6 +538,10 @@ int ObjectIOExtent::write_object(const char *data, int64_t data_size)
     SE_LOG(DEBUG, "success to write object", K_(extent_id), K_(bucket), K(object_id));
   }
 
+#ifndef NDEBUG
+  TEST_SYNC_POINT_CALLBACK("IOExtent::write_failed", &ret);
+#endif
+
   return ret;
 }
 
@@ -698,16 +707,26 @@ void WriteExtentJob::destroy()
 int WriteExtentJob::execute()
 {
   int ret = Status::kOk;
+  int tmp_ret = Status::kOk;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "IOExtentJob should be inited", K(ret));
-  } else if (FAILED(extent_->write(Slice(data_, data_size_)))) {
-    SE_LOG(WARN, "fail to write extent data", K(ret), "extent_id", extent_->get_extent_id());
-  } else if (FAILED(writer_->mark_write_extent_finish(extent_->get_extent_id()))) {
-    SE_LOG(WARN, "fail to mark io complete", K(ret), "extent_id", extent_->get_extent_id());
   } else {
-    SE_LOG(INFO, "success to do io extent job", "extent_id", extent_->get_extent_id());
+    if (FAILED(extent_->write(Slice(data_, data_size_)))) {
+      SE_LOG(WARN, "fail to write extent data", K(ret), "extent_id", extent_->get_extent_id());
+    } else {
+#ifndef  NDEBUG
+      SE_LOG(INFO, "success to do io extent job", "extent_id", extent_->get_extent_id());
+#endif
+    }
+    
+    // Regardless of whether the write is successful, this extent job needs to be
+    // marked as finished.Additionally, the marking action is not expected to fail.
+    if (Status::kOk != (tmp_ret = writer_->mark_write_extent_finish(extent_->get_extent_id()))) {
+      SE_LOG(WARN, "fail to mark io complete", K(tmp_ret), "extent_id", extent_->get_extent_id());
+      se_assert(false);
+    }
   }
 
   if (FAILED(ret)) {
@@ -831,7 +850,7 @@ int WriteExtentJobScheduler::consume()
     QUERY_TRACE_RESET();
     QUERY_TRACE_SCOPE(monitor::TracePoint::WRITE_EXTENT_TIME);
     if (FAILED(job->execute())) {
-      SE_LOG(WARN, "fail o execute io extent job", K(ret));
+      SE_LOG(WARN, "fail to execute io extent job", K(ret));
     }
 
     MOD_DELETE_OBJECT(WriteExtentJob, job);

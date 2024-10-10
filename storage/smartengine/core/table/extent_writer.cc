@@ -284,7 +284,7 @@ int ExtentWriter::rollback()
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
   } else { 
     if (FAILED(wait_pending_extents_finish())) {
-      SE_LOG(WARN, "fail to wait write extent jobs finish", K(ret));
+      SE_LOG(WARN, "fail to wait write extent jobs finish", K(ret), K_(write_extent_ret));
     } else if (FAILED(write_extent_ret_)) {
       SE_LOG(ERROR, "fail to execute write extent job", K(ret));
     }

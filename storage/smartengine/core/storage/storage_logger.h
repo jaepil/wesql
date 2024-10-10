@@ -148,7 +148,6 @@ public:
   //thread safe
   int external_write_checkpoint();
   int replay(memory::ArenaAllocator &arena);
-  void set_log_writer(db::log::Writer* writer) { log_writer_ = writer; }
   // for hotbackup
   int manifest_file_in_current(std::string &manifest_file);
   int manifest_file_range(int32_t &begin, int32_t &end, int64_t &end_pos);
@@ -160,6 +159,7 @@ public:
                                     const uint64_t last_manifest_file_size);
 #ifndef NDEBUG
   void TEST_reset();
+  int set_log_writer(int64_t file_number);
 #endif
 
 private:

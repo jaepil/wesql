@@ -650,6 +650,7 @@ set(TESTS
         unittest/table/bloom_filter_test.cc
         unittest/table/merger_test.cc
         #unittest/table/extent_table_test.cc
+        unittest/table/extent_writer_test.cc
         unittest/table/in_mem_extent_table_test.cc
         unittest/table/large_object_test.cc
         unittest/table/sstable_scan_iterator_test.cc

@@ -836,8 +836,14 @@ int StorageLogger::manifest_file_range(int32_t &begin, int32_t &end, int64_t &en
 }
 
 #ifndef NDEBUG
-void StorageLogger::TEST_reset() {
+void StorageLogger::TEST_reset()
+{
   StorageLogger::local_trans_id_ = 0;
+}
+
+int StorageLogger::set_log_writer(int64_t file_number)
+{
+  return update_log_writer(file_number);
 }
 #endif
 

@@ -297,24 +297,7 @@ void InternalIteratorTestBase::init(const TestArgs &args)
                                      context_->idb_options_,
                                      version_set_,
                                      1 * 1024 * 1024 * 1024);
-  int64_t file_number = 1;
-  common::Status s;
-  std::string manifest_filename = util::FileNameUtil::manifest_file_path(dbname_, file_number);
-  util::WritableFile *descriptor_file = nullptr;
-  util::EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(context_->env_options_);
-  s = NewWritableFile(env_, manifest_filename, descriptor_file, opt_env_opts);
-  assert(s.ok());
-  util::ConcurrentDirectFileWriter *file_writer = MOD_NEW_OBJECT(memory::ModId::kDefaultMod,
-      util::ConcurrentDirectFileWriter, descriptor_file, opt_env_opts);
-  s = file_writer->init_multi_buffer();
-  assert(s.ok());
-  descriptor_log_ = MOD_NEW_OBJECT(memory::ModId::kStorageLogger,
-                                   db::log::Writer,
-                                   file_writer,
-                                   0,
-                                   false);
-  assert(descriptor_log_ != nullptr);
-  StorageLogger::get_instance().set_log_writer(descriptor_log_);
+  StorageLogger::get_instance().set_log_writer(1);
 
   // storage manager
   db::CreateSubTableArgs subtable_args;

@@ -296,23 +296,7 @@ void ParallelReadTest::init(const TestArgs args) {
   ExtentSpaceManager::get_instance().create_table_space(0);
   WriteExtentJobScheduler::get_instance().start(env_, 1);
 
-  int64_t file_number = 1;
-  std::string manifest_filename = util::FileNameUtil::manifest_file_path(dbname_, file_number);
-  WritableFile *descriptor_file = nullptr;
-  EnvOptions opt_env_opts =
-      env_->OptimizeForManifestWrite(context_->env_options_);
-  s = NewWritableFile(env_, manifest_filename, descriptor_file, opt_env_opts);
-  if (s.ok()) {
-    util::ConcurrentDirectFileWriter *file_writer =
-        MOD_NEW_OBJECT(memory::ModId::kTestMod, util::ConcurrentDirectFileWriter,
-                       descriptor_file, opt_env_opts);
-    s = file_writer->init_multi_buffer();
-    if (s.ok()) {
-      db::log::Writer *log_writer = MOD_NEW_OBJECT(
-          memory::ModId::kTestMod, db::log::Writer, file_writer, 0, false);
-      StorageLogger::get_instance().set_log_writer(log_writer);
-    }
-  }
+  StorageLogger::get_instance().set_log_writer(1);
 
   //create subtable
   CreateSubTableArgs subtable_args;
