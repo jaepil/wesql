@@ -739,6 +739,7 @@ void Binlog_archive::run() {
     if (m_slice_pipeline_head) {
       m_slice_pipeline_head->close();
       m_slice_pipeline_head = nullptr;
+      m_slice_create_ts = 0;
     }
     mysql_mutex_unlock(&m_rotate_lock);
 
@@ -1319,6 +1320,7 @@ err_slice:
   if (m_slice_pipeline_head) {
     m_slice_pipeline_head->close();
     m_slice_pipeline_head = nullptr;
+    m_slice_create_ts = 0;
   }
   mysql_mutex_unlock(&m_rotate_lock);
   return error;
@@ -1480,6 +1482,8 @@ int Binlog_archive::wait_new_mysql_binlog_events(my_off_t log_pos) {
   DBUG_TRACE;
   DBUG_PRINT("info", ("wait_new_mysql_binlog_events"));
   int ret = 0;
+  std::chrono::nanoseconds timeout =
+      std::chrono::nanoseconds{1000000ULL} * opt_binlog_archive_period;
 
   /*
     MYSQL_BIN_LOG::binlog_end_pos is atomic. We should only acquire the
@@ -1495,11 +1499,15 @@ int Binlog_archive::wait_new_mysql_binlog_events(my_off_t log_pos) {
   m_thd->ENTER_COND(mysql_bin_log.get_log_cond(),
                     mysql_bin_log.get_binlog_end_pos_lock(), nullptr, nullptr);
   while ((ret = stop_waiting_for_mysql_binlog_update(log_pos)) == 1) {
-    // wait 1 microsecond
-    std::chrono::nanoseconds timeout = std::chrono::nanoseconds{1000000ULL};
-    mysql_bin_log.wait_for_update(timeout);
-    time_t now = time(nullptr);
-    if ((ulonglong)(now - m_slice_create_ts) >= opt_binlog_archive_period) {
+    // wait opt_binlog_archive_period millisecond
+    if (m_slice_create_ts > 0)
+      mysql_bin_log.wait_for_update(timeout);
+    else
+      mysql_bin_log.wait_for_update();
+      
+    ulonglong now = my_milli_time();
+    if ((m_slice_create_ts > 0) &&
+        ((ulonglong)(now - m_slice_create_ts) >= opt_binlog_archive_period)) {
       mysql_bin_log.unlock_binlog_end_pos();
       m_thd->EXIT_COND(nullptr);
 
@@ -1755,6 +1763,7 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
     // persistence fails, it must be retried continuously until successful.
     m_slice_pipeline_head->close();
     m_slice_pipeline_head = nullptr;
+    m_slice_create_ts = 0;
     remove_file(std::string(m_binlog_slice_local_name));
   }
   assert(log_pos == 0 || m_mysql_binlog_last_event_end_pos >= log_pos);
