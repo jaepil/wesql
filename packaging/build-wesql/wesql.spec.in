@@ -136,7 +136,7 @@ Name:           wesql-server
 Summary:        A very fast and reliable SQL database server
 Group:          Applications/Databases
 Version:        @MYSQL_NO_DASH_VERSION@
-Release:        @WESQL_VERSION@.%{rpm_release}@MYSQL_VERSION_EXTRA_DOT@%{?dist}
+Release:        @WESQL_VERSION@-%{rpm_release}@MYSQL_VERSION_EXTRA_DOT@%{?dist}
 License:        Copyright (c) 2000, @MYSQL_COPYRIGHT_YEAR@, %{mysql_vendor}. Under %{?license_type} license as shown in the Description field.
 URL:            http://www.mysql.com/
 Packager:       WeSQL Development Team <mengborong@infracreate.com>
