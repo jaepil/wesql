@@ -112,8 +112,8 @@ int rpl_consensus_init(bool is_learner, uint64 mock_start_index,
 }
 
 void rpl_consensus_set_ready() {
-  assert(rpl_consensus_inited && consensus_ptr != nullptr);
-  rpl_consensus_ready = true;
+  if (rpl_consensus_inited && consensus_ptr != nullptr)
+    rpl_consensus_ready = true;
 }
 
 bool rpl_consensus_is_ready() { return rpl_consensus_ready; }

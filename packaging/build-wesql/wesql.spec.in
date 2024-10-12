@@ -136,7 +136,7 @@ Name:           wesql-server
 Summary:        A very fast and reliable SQL database server
 Group:          Applications/Databases
 Version:        @MYSQL_NO_DASH_VERSION@
-Release:        @WESQL_VERSION@-%{rpm_release}@MYSQL_VERSION_EXTRA_DOT@%{?dist}
+Release:        @WESQL_VERSION@_%{rpm_release}@MYSQL_VERSION_EXTRA_DOT@%{?dist}
 License:        Copyright (c) 2000, @MYSQL_COPYRIGHT_YEAR@, %{mysql_vendor}. Under %{?license_type} license as shown in the Description field.
 URL:            http://www.mysql.com/
 Packager:       WeSQL Development Team <mengborong@infracreate.com>
@@ -513,6 +513,7 @@ mkdir -p debug
            -DCMAKE_C_FLAGS="$optflags" \
            -DCMAKE_CXX_FLAGS="$optflags" \
            -DUSE_LD_LLD=0 \
+           -DWITH_CLONE=1 \
 %if 0%{?ssl_default}
            -DWITH_AUTHENTICATION_CLIENT_PLUGINS=1 \
 %else
@@ -522,7 +523,6 @@ mkdir -p debug
            -DWITH_AUTHENTICATION_LDAP=0 \
            -DWITH_AUTHENTICATION_OCI=0 \
            -DWITH_COMPONENT_KEYRING_OCI=0 \
-           -DWITH_CLONE=1 \
            -DWITH_CURL=0 \
            -DWITH_KEYRING_HASHICORP=0 \
            -DWITH_KEYRING_OCI=0 \
@@ -566,6 +566,7 @@ mkdir -p release
            -DCMAKE_C_FLAGS="%{optflags}" \
            -DCMAKE_CXX_FLAGS="%{optflags}" \
            -DUSE_LD_LLD=0 \
+           -DWITH_CLONE=1 \
 %if 0%{?ssl_default}
            -DWITH_AUTHENTICATION_CLIENT_PLUGINS=1 \
 %else
@@ -576,7 +577,6 @@ mkdir -p release
            -DWITH_AUTHENTICATION_OCI=0 \
            -DWITH_COMPONENT_KEYRING_OCI=0 \
            -DWITH_CURL=0 \
-           -DWITH_CLONE=1 \
            -DWITH_KEYRING_HASHICORP=0 \
            -DWITH_KEYRING_OCI=0 \
 %endif # ssl_default
