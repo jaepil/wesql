@@ -19,14 +19,14 @@
 #include "util/mutexlock.h"
 #include "logger/log_module.h"
 
-using namespace smartengine;
-using namespace monitor;
+namespace smartengine
+{
 using namespace common;
-using namespace util;
-
-namespace smartengine {
 using namespace memory;
-namespace cache {
+using namespace monitor;
+using namespace util;
+namespace cache
+{
 
 ShardedCache::ShardedCache(size_t capacity, int num_shard_bits,
                            bool strict_capacity_limit, bool row_cache)

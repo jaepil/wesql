@@ -343,6 +343,7 @@ int ExtentReader::setup_data_block_iterator(const int64_t scan_add_blocks_limit,
       char cache_key_buf[CacheEntryKey::MAX_CACHE_KEY_SZIE] = {0};
       Slice cache_key;
 
+      update_mod_id(data_block->data_, ModId::kDataBlockCache);
       if (FAILED(cache_entry_key_.generate(data_block_handle.block_info_.get_handle().get_offset(), cache_key_buf, cache_key))) {
         SE_LOG(WARN, "fail to generate cache key", K(ret));
       } else if (FAILED(block_cache_->Insert(cache_key,
@@ -548,21 +549,24 @@ int ExtentReader::get_data_block_through_cache(BlockDataHandle<RowBlock> &data_b
                                data_block_handle.get_aio_handle(),
                                data_block))) {
       SE_LOG(WARN, "fail to read row block", K(ret), K(data_block_handle.block_info_));
-    } else if (FAILED(block_cache_->Insert(cache_key,
-                                           data_block,
-                                           data_block->usable_size(),
-                                           &CacheEntryHelper::delete_entry<RowBlock>,
-                                           &(data_block_handle.block_entry_.handle_),
-                                           Cache::Priority::LOW).code())) {
-      QUERY_COUNT(CountPoint::BLOCK_CACHE_ADD_FAILURES);
-      SE_LOG(WARN, "fail to insert into block cache", K(ret));
     } else {
-      data_block_handle.cache_ = block_cache_;
-      data_block_handle.block_entry_.value_ = data_block;
-      data_block_handle.need_do_cleanup_ = true;
+      update_mod_id(data_block->data_, ModId::kDataBlockCache);
+      if (FAILED(block_cache_->Insert(cache_key,
+                                      data_block,
+                                      data_block->usable_size(),
+                                      &CacheEntryHelper::delete_entry<RowBlock>,
+                                      &(data_block_handle.block_entry_.handle_),
+                                      Cache::Priority::LOW).code())) {
+        QUERY_COUNT(CountPoint::BLOCK_CACHE_ADD_FAILURES);
+        SE_LOG(WARN, "fail to insert into block cache", K(ret));
+      } else {
+        data_block_handle.cache_ = block_cache_;
+        data_block_handle.block_entry_.value_ = data_block;
+        data_block_handle.need_do_cleanup_ = true;
 
-      QUERY_COUNT(CountPoint::BLOCK_CACHE_ADD);
-      QUERY_COUNT(CountPoint::BLOCK_CACHE_DATA_ADD);
+        QUERY_COUNT(CountPoint::BLOCK_CACHE_ADD);
+        QUERY_COUNT(CountPoint::BLOCK_CACHE_DATA_ADD);
+      }
     }
   }
 
@@ -606,8 +610,7 @@ int ExtentReader::read_index_block(const BlockHandle &handle, RowBlock *&index_b
   if (UNLIKELY(!handle.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(handle));
-  } else if (IS_NULL(index_block_buf = reinterpret_cast<char *>(base_memalign(
-      DIOHelper::DIO_ALIGN_SIZE, handle.get_raw_size(), ModId::kExtentReader)))) {
+  } else if (IS_NULL(index_block_buf = reinterpret_cast<char *>(base_malloc(handle.get_raw_size(), ModId::kExtentReader)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for index block buf", K(ret), K(handle));
   } else if (FAILED(read_and_uncompress_block(handle, nullptr /*aio_handle*/, index_block_buf, index_block_content))) {
@@ -626,7 +629,7 @@ int ExtentReader::read_index_block(const BlockHandle &handle, RowBlock *&index_b
   // resource clean
   if (FAILED(ret)) {
     if (IS_NOTNULL(index_block_buf)) {
-      base_memalign_free(index_block_buf);
+      base_free(index_block_buf);
       index_block_buf = nullptr;
     }
   }
@@ -644,8 +647,7 @@ int ExtentReader::read_data_block(const BlockInfo &block_info, AIOHandle *aio_ha
   if (UNLIKELY(!block_info.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(block_info));
-  } else if (IS_NULL(block_buf = reinterpret_cast<char *>(base_memalign(
-      DIOHelper::DIO_ALIGN_SIZE, block_info.get_handle().get_raw_size(), ModId::kExtentReader)))) {
+  } else if (IS_NULL(block_buf = reinterpret_cast<char *>(base_malloc(block_info.get_handle().get_raw_size(), ModId::kExtentReader)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for block buf", K(ret), K(block_info));
   } else if (FAILED(read_and_uncompress_block(block_info.get_handle(),
@@ -658,7 +660,7 @@ int ExtentReader::read_data_block(const BlockInfo &block_info, AIOHandle *aio_ha
       SE_LOG(WARN, "fail to convert column block to row block", K(ret), K(block_info));
     } else {
       // free the block buf with column format.
-      base_memalign_free(block_buf);
+      base_free(block_buf);
       block_buf = nullptr;
     }
   } else {
@@ -679,7 +681,7 @@ int ExtentReader::read_data_block(const BlockInfo &block_info, AIOHandle *aio_ha
   // resource clean
   if (FAILED(ret)) {
     if (IS_NOTNULL(block_buf)) {
-      base_memalign_free(block_buf);
+      base_free(block_buf);
       block_buf = nullptr;
     }
   }
@@ -737,8 +739,7 @@ int ExtentReader::read_and_uncompress_block(const BlockHandle &handle,
       Slice compressed_block;
       CompressorHelper compressor_helper;
 
-      if (IS_NULL(compressed_buf = reinterpret_cast<char *>(base_memalign(
-          DIOHelper::DIO_ALIGN_SIZE, handle.get_size(), ModId::kExtentReader)))) {
+      if (IS_NULL(compressed_buf = reinterpret_cast<char *>(base_malloc(handle.get_size(), ModId::kExtentReader)))) {
         ret = Status::kMemoryLimit;
         SE_LOG(WARN, "fail to allocate memory for compressed buf", K(ret), K(handle));      
       } else if (FAILED(read_block(handle, aio_handle, compressed_buf, compressed_block))) {
@@ -752,7 +753,7 @@ int ExtentReader::read_and_uncompress_block(const BlockHandle &handle,
       }
 
       if (IS_NOTNULL(compressed_buf)) {
-        base_memalign_free(compressed_buf);
+        base_free(compressed_buf);
         compressed_buf = nullptr;
       }
     }

@@ -1111,8 +1111,7 @@ int ExtentWriter::collect_migrating_block(const Slice &block,
   if (UNLIKELY(block.empty()) || UNLIKELY(!block_handle.is_valid())) {
     ret = Status::kInvalidArgument;
     SE_LOG(WARN, "invalid argument", K(ret), K(block), K(block_handle));
-  } else if (IS_NULL(migrating_block_buf = reinterpret_cast<char *>(base_memalign(
-      DIOHelper::DIO_ALIGN_SIZE, block.size(), ModId::kExtentWriter)))) {
+  } else if (IS_NULL(migrating_block_buf = reinterpret_cast<char *>(base_malloc(block.size(), ModId::kDataBlockCache)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for block", K(ret), "size", block.size());
   } else {
