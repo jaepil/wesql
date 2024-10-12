@@ -155,7 +155,7 @@ bool Consensus_info::read_info(Rpl_info_handler *from) {
   ulong temp_recover_status = 0;
   ulong temp_local_term = 0;
   ulong temp_start_apply_index = 0;
-  char temp_cluster_id[UUID_LENGTH + 1];
+  char temp_cluster_id[256];
   char temp_cluster_info[CLUSTER_CONF_STR_LENGTH];
   char temp_cluster_learner_info[CLUSTER_CONF_STR_LENGTH];
   ulong temp_cluster_recover_index = 0;

@@ -52,7 +52,7 @@ SET @cmd = "CREATE TABLE IF NOT EXISTS consensus_info (
   number_of_lines INTEGER UNSIGNED NOT NULL COMMENT 'Number of lines in the file or rows in the table. Used to version table definitions.',
   vote_for BIGINT UNSIGNED COMMENT 'current vote for', current_term BIGINT UNSIGNED COMMENT 'current term',
   recover_status BIGINT UNSIGNED COMMENT 'recover status', last_leader_term BIGINT UNSIGNED COMMENT 'last leader term',
-  start_apply_index BIGINT UNSIGNED COMMENT 'start apply index', cluster_id varchar(36) COMMENT 'cluster identifier',
+  start_apply_index BIGINT UNSIGNED COMMENT 'start apply index', cluster_id varchar(256) COMMENT 'cluster identifier',
   cluster_info varchar(6000) COMMENT 'cluster config information', cluster_learner_info varchar(6000) COMMENT 'cluster learner config information',
   cluster_config_recover_index BIGINT UNSIGNED COMMENT 'cluster config recover index',
   PRIMARY KEY(number_of_lines)) DEFAULT CHARSET=utf8 COMMENT 'Consensus cluster consensus information'";

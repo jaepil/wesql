@@ -58,7 +58,7 @@ class ConsensusMeta {
                          uint64 &index);
   int set_cluster_info(bool set_members, const std::string &members_info,
                        bool set_learners, const std::string &learners_info,
-                       uint64 index);
+                       bool set_index, uint64 index);
 
  private:
   bool inited;

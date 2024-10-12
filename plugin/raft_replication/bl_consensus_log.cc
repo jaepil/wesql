@@ -273,7 +273,7 @@ int BLConsensusLog::setMembersConfigure(bool setMembers,
                                         const std::string &strLearners,
                                         const uint64_t index) {
   return consensusMeta_->set_cluster_info(setMembers, strMembers, setLearners,
-                                          strLearners, index);
+                                          strLearners, true, index);
 }
 
 void BLConsensusLog::setTerm(uint64_t term) {

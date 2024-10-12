@@ -92,6 +92,8 @@ int ConsensusMeta::init_objstore_for_cluster_info() {
   cluster_info_bucket.append(opt_objstore_bucket);
   cluster_info_path.append(opt_cluster_objstore_id);
   cluster_info_path.append("/");
+  cluster_info_path.append("cluster_mgmt");
+  cluster_info_path.append("/");
   cluster_info_path.append(opt_server_id_on_objstore);
   cluster_info_path.append("/");
   cluster_info_path.append("cluster_info");
@@ -137,13 +139,13 @@ int ConsensusMeta::set_cluster_info(bool set_members,
                                     const std::string &members_info,
                                     bool set_learners,
                                     const std::string &learners_info,
-                                    uint64 index) {
+                                    bool set_index, uint64 index) {
   if (set_members) get_consensus_info()->set_cluster_info(members_info);
   if (set_learners)
     get_consensus_info()->set_cluster_learner_info(learners_info);
 
   if (cluster_info_objstore_initied) {
-    cluster_info_index = index;
+    if (set_index) cluster_info_index = index;
     return store_cluster_info_on_objstore();
   }
 
@@ -292,7 +294,7 @@ int ConsensusMeta::change_meta_if_needed() {
       return -1;
     }
     set_cluster_info(true, std::string(opt_cluster_info), false,
-                     std::string(""), 0);
+                     std::string(""), false, 0);
     consensus_info->flush_info(true, true);
 
     LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CHANGE_META_LOG);
@@ -325,10 +327,10 @@ int ConsensusMeta::update_consensus_info() {
 
     if (!opt_cluster_learner_node) {
       set_cluster_info(true, std::string(opt_cluster_info), false,
-                       std::string(""), 0);
+                       std::string(""), true, 1);
     } else {
       set_cluster_info(false, std::string(""), true,
-                       std::string(opt_cluster_info), 0);
+                       std::string(opt_cluster_info), true, 1);
     }
   }
 

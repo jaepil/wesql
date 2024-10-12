@@ -1,7 +1,6 @@
 /*
    Portions Copyright (c) 2024, ApeCloud Inc Holding Limited
    Portions Copyright (c) 2018, 2021, Alibaba and/or its affiliates.
-   Portions Copyright (c) 2009, 2023, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
