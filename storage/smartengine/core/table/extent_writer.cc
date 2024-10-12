@@ -18,6 +18,7 @@
 
 #include "cache/row_cache.h"
 #include "memory/base_malloc.h"
+#include "objstore/objstore_layout.h"
 #include "storage/change_info.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/extent_space_manager.h"
@@ -166,7 +167,7 @@ int ExtentWriter::init(const ExtentWriterArgs &args)
     block_info_.set_probe_num(BloomFilter::DEFAULT_PROBE_NUM);
     block_info_.set_per_key_bits(BloomFilter::DEFAULT_PER_KEY_BITS);
     change_info_ = args.change_info_;
-    prefix_ = FileNameUtil::data_prefix(args.cluster_id_, table_schema_);
+    prefix_ = util::make_data_prefix(args.cluster_id_, table_schema_.get_database_name(), table_schema_.get_index_id());
 
     is_inited_ = true;
   }
@@ -858,19 +859,14 @@ int ExtentWriter::flush_extent()
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
-  } else if (FAILED(ExtentSpaceManager::get_instance().allocate(table_space_id_,
-                                                                extent_space_type_,
-                                                                prefix_,
-                                                                extent))) {
+  } else if (FAILED(
+                 ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, prefix_, extent))) {
     SE_LOG(WARN, "fail to allocate extent", K(ret));
   } else {
     extent_info_.table_space_id_ = table_space_id_;
     extent_info_.extent_space_type_ = extent_space_type_;
     extent_info_.extent_id_ = extent->get_extent_id();
-    ExtentMeta extent_meta(storage::ExtentMeta::F_NORMAL_EXTENT,
-                           extent_info_,
-                           table_schema_,
-                           prefix_);
+    ExtentMeta extent_meta(storage::ExtentMeta::F_NORMAL_EXTENT, extent_info_, table_schema_, prefix_);
     if (FAILED(write_extent_meta(extent_meta, false /*is_large_object_extent*/))) {
       SE_LOG(WARN, "fail to write extent meta", K(ret));
     } else {
@@ -964,12 +960,13 @@ int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject 
              ? storage::MAX_EXTENT_SIZE : (compressed_value.size() - offset);
       memcpy(value_buf, compressed_value.data() + offset, size);
 
-      if (FAILED(storage::ExtentSpaceManager::get_instance().allocate(table_space_id_,
-                                                                      extent_space_type_,
-                                                                      prefix_,
-                                                                      extent))) {
+      if (FAILED(storage::ExtentSpaceManager::get_instance()
+                     .allocate(table_space_id_, extent_space_type_, prefix_, extent))) {
         SE_LOG(WARN, "fail to allocate writable extent", K(ret));
-      } else if (FAILED(build_large_object_extent_meta(Slice(large_object.key_), extent->get_extent_id(), size, extent_meta))) {
+      } else if (FAILED(build_large_object_extent_meta(Slice(large_object.key_),
+                                                       extent->get_extent_id(),
+                                                       size,
+                                                       extent_meta))) {
         SE_LOG(WARN, "fail to build large object extent meta", K(ret));
       } else if (FAILED(write_extent_meta(extent_meta, true /*is_large_object_extent*/))) {
         SE_LOG(WARN, "fail to write large object extent meta", K(ret), K(extent_meta));
@@ -1008,10 +1005,8 @@ int ExtentWriter::recycle_large_object_extent(LargeObject &large_object)
   int ret = Status::kOk;
 
   for (uint32_t i = 0; SUCCED(ret) && i < large_object.value_.extents_.size(); ++i) {
-    if (FAILED(ExtentSpaceManager::get_instance().recycle(table_space_id_,
-                                                          extent_space_type_,
-                                                          prefix_,
-                                                          large_object.value_.extents_[i]))) {
+    if (FAILED(ExtentSpaceManager::get_instance()
+                   .recycle(table_space_id_, extent_space_type_, prefix_, large_object.value_.extents_[i]))) {
       SE_LOG(WARN, "fail to recycle large object extent", K(ret), K(i),
           K_(prefix), "extent_id", large_object.value_.extents_[i]);
     }

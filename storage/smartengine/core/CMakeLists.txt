@@ -524,6 +524,9 @@ set(SOURCES
         util/to_string.cc
         util/misc_utility.cc
         util/memory_stat.cc
+        objstore/objstore_layout.cc
+        objstore/lease_lock.cc
+        objstore/snapshot_release_lock.cc
         compact/compaction.cc
         compact/compaction_job.cc
         compact/compaction_iterator.cc

@@ -21,13 +21,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <memory>
 
 namespace objstore {
-extern const char *backup_snapshot_releasing;
-extern const char *backup_snapshot_recovering;
-extern const char *backup_snapshot_status_prefix;
-
 // interfaces to manipulate object like aws S3.
 // this interfaces will shield the differences between different object storages
 // provider, such as aws S3, aliyun OSS, MinIO, etc.
@@ -37,6 +32,7 @@ enum Errors {
   // smartengine internal error codes
   SE_IO_ERROR = 1,
   SE_INVALID,
+  SE_UNEXPECTED,
 
   // object store errors, for s3, they are all not retryable errors:
   SE_BUCKET_ALREADY_EXISTS = 101,
@@ -51,8 +47,8 @@ enum Errors {
   // when forbid overwrite option is true, and the object already exists
   SE_OBJECT_FORBID_OVERWRITE,
 
-  // when we detected multiple data node may be running.
-  SE_MULTI_DATA_NODE_DETECTED,
+  // when we detected other data node may be running.
+  SE_OHTER_DATA_NODE_MAYBE_RUNNING,
 
   // object store common errors
   SE_ACCESS_DENIED,
@@ -208,35 +204,10 @@ void cleanup_object_store(ObjectStore *&objstore);
 
 int ensure_object_store_lock(const std::string_view &provider,
                              const std::string_view &region,
+                             const std::string_view *endpoint,
                              const std::string_view &bucket_dir,
                              const std::string_view &data_uuid,
                              const bool should_exist, std::string &err_msg);
-
-int tryBackupRecoveringLock(uint64_t auto_increment_id, ObjectStore *objstore,
-                            const std::string_view bucket_dir,
-                            std::string &err_msg);
-
-int tryBackupReleasingLock(uint64_t auto_increment_id, ObjectStore *objstore,
-                           const std::string_view bucket_dir,
-                           std::string &err_msg);
-
-int updateBackupStautsLockFile(uint64_t auto_increment_id,
-                               ObjectStore *objstore,
-                               const std::string_view bucket_dir,
-                               const std::string_view expected_status,
-                               const std::string_view new_status,
-                               std::string &err_msg);
-
-int removeBackupStatusLockFile(uint64_t auto_increment_id,
-                               ObjectStore *objstore,
-                               const std::string_view bucket_dir,
-                               const std::string_view expected_status,
-                               std::string &err_msg);
-
-int removeObsoletedBackupStatusLockFiles(ObjectStore *objstore,
-                                         const std::string_view bucket_dir,
-                                         uint64_t auto_increment_id_in_use,
-                                         std::string &err_msg);
 
 void destroy_object_store(ObjectStore *obj_store);
 

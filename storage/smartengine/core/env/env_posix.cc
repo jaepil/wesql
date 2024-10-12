@@ -572,6 +572,7 @@ class PosixEnv : public Env
                                          const std::string_view *endpoint,
                                          bool use_https,
                                          const std::string_view bucket,
+                                         const std::string &cluster_objstore_id,
                                          const std::string_view bucket_subdir_for_test) override
   {
     Status result;
@@ -593,6 +594,7 @@ class PosixEnv : public Env
       result = common::Status::InvalidArgument(obj_err_msg);
     } else {
       obj_store_bucket_ = bucket;
+      cluster_objstore_id_ = cluster_objstore_id;
     }
     return result;
   }
@@ -621,6 +623,8 @@ class PosixEnv : public Env
   virtual std::string& GetObjectStoreBucket() override {
     return obj_store_bucket_;
   }
+
+  virtual std::string &GetClusterObjstoreId() override { return cluster_objstore_id_; }
 
   virtual uint64_t NowMicros() override {
     struct timeval tv;
@@ -805,6 +809,7 @@ private:
 
   objstore::ObjectStore* obj_store_;
   std::string obj_store_bucket_;
+  std::string cluster_objstore_id_;
 };
 
 PosixEnv::PosixEnv() : thread_pools_(Priority::TOTAL)

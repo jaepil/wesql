@@ -47,6 +47,8 @@ SeBackgroundThread se_bg_thread;
 
 SeDropIndexThread se_drop_idx_thread;
 
+SeRenewLeaseLockThread se_renewal_objstore_lease_lock_thread;
+
 Regex_list_handler *se_collation_exceptions;
 
 std::shared_ptr<monitor::Statistics> se_stats;
@@ -123,23 +125,23 @@ static PSI_stage_info stage_waiting_on_row_lock = {0, "Waiting for row lock", 0}
 #ifdef HAVE_PSI_INTERFACE
 PSI_thread_key se_background_psi_thread_key;
 PSI_thread_key se_drop_idx_psi_thread_key;
+PSI_thread_key se_renewal_objstore_lease_lock_psi_thread_key;
 
 static PSI_stage_info *all_se_stages[] = {&stage_waiting_on_row_lock};
 
-my_core::PSI_mutex_key se_psi_open_tbls_mutex_key,
-    se_signal_bg_psi_mutex_key, se_signal_drop_idx_psi_mutex_key,
-    se_collation_data_mutex_key, se_mem_cmp_space_mutex_key,
-    key_mutex_tx_list, se_sysvars_psi_mutex_key;
+my_core::PSI_mutex_key se_psi_open_tbls_mutex_key, se_signal_bg_psi_mutex_key, se_signal_drop_idx_psi_mutex_key,
+    se_collation_data_mutex_key, se_mem_cmp_space_mutex_key, key_mutex_tx_list, se_sysvars_psi_mutex_key,
+    se_renewal_objstore_lease_lock_psi_mutex_key;
 
 static PSI_mutex_info all_se_mutexes[] = {
     {&se_psi_open_tbls_mutex_key, "open tables", PSI_FLAG_SINGLETON},
     {&se_signal_bg_psi_mutex_key, "stop background", PSI_FLAG_SINGLETON},
     {&se_signal_drop_idx_psi_mutex_key, "signal drop index", PSI_FLAG_SINGLETON},
     {&se_collation_data_mutex_key, "collation data init", PSI_FLAG_SINGLETON},
-    {&se_mem_cmp_space_mutex_key, "collation space char data init",
-     PSI_FLAG_SINGLETON},
+    {&se_mem_cmp_space_mutex_key, "collation space char data init", PSI_FLAG_SINGLETON},
     {&key_mutex_tx_list, "tx_list", PSI_FLAG_SINGLETON},
     {&se_sysvars_psi_mutex_key, "setting sysvar", PSI_FLAG_SINGLETON},
+    {&se_renewal_objstore_lease_lock_psi_mutex_key, "renewal objstore lease lock", PSI_FLAG_SINGLETON},
 };
 
 PSI_rwlock_key key_rwlock_collation_exception_list;
@@ -154,17 +156,18 @@ static PSI_rwlock_info all_se_rwlocks[] = {
      PSI_FLAG_SINGLETON},
 };
 
-PSI_cond_key se_signal_bg_psi_cond_key, se_signal_drop_idx_psi_cond_key;
+PSI_cond_key se_signal_bg_psi_cond_key, se_signal_drop_idx_psi_cond_key, se_renewal_objstore_lease_lock_psi_cond_key;
 
 static PSI_cond_info all_se_conds[] = {
     {&se_signal_bg_psi_cond_key, "cond signal background", PSI_FLAG_SINGLETON},
-    {&se_signal_drop_idx_psi_cond_key, "cond signal drop index",
-     PSI_FLAG_SINGLETON},
+    {&se_signal_drop_idx_psi_cond_key, "cond signal drop index", PSI_FLAG_SINGLETON},
+    {&se_renewal_objstore_lease_lock_psi_cond_key, "cond signal renewal objstore lease lock", PSI_FLAG_SINGLETON},
 };
 
 static PSI_thread_info all_se_threads[] = {
     {&se_background_psi_thread_key, "background", "background", PSI_FLAG_SINGLETON},
     {&se_drop_idx_psi_thread_key, "drop index", "drop_index", PSI_FLAG_SINGLETON},
+    {&se_renewal_objstore_lease_lock_psi_thread_key, "renewal lease", "renewal_lease", PSI_FLAG_SINGLETON},
 };
 
 void init_se_psi_keys()

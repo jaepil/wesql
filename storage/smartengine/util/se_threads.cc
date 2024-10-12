@@ -23,9 +23,11 @@
 
 #include "se_threads.h"
 #include <sql_class.h>
-#include "sql/mysqld_thd_manager.h"
-#include "handler/se_hton.h"
+#include "core/db/db_impl.h"
 #include "dict/se_dict_util.h"
+#include "handler/se_hton.h"
+#include "objstore/lease_lock.h"
+#include "sql/mysqld_thd_manager.h"
 #include "transactions/transaction_db_impl.h"
 
 namespace smartengine {
@@ -310,6 +312,60 @@ void SeDropIndexThread::run()
 
     SE_MUTEX_LOCK_CHECK(m_signal_mutex);
     m_run_ = false;
+  }
+
+  SE_MUTEX_UNLOCK_CHECK(m_signal_mutex);
+}
+
+/*
+  Renewal single data node lease lock thread's main logic
+ */
+void SeRenewLeaseLockThread::run()
+{
+  std::string_view objstore_bucket = db::GlobalContext::env_->GetObjectStoreBucket();
+  objstore::ObjectStore *objstore = nullptr;
+  if (0 != db::GlobalContext::env_->GetObjectStore(objstore).code()) {
+    sql_print_error("Failed to get object store in renewal lease lock thread");
+    abort_with_stack_traces();
+  } else if (objstore == nullptr) {
+    sql_print_error("Object store is nullptr in renewal lease lock thread");
+    abort_with_stack_traces();
+  }
+  const std::chrono::seconds renewal_schedule_interval = std::chrono::duration_cast<std::chrono::seconds>(
+      objstore::single_data_node_lock_renewal_interval);
+
+  SE_MUTEX_LOCK_CHECK(m_signal_mutex);
+
+  for (;;) {
+    if (m_stop) {
+      break;
+    }
+    timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += renewal_schedule_interval.count();
+
+    const int ret MY_ATTRIBUTE((__unused__)) = mysql_cond_timedwait(&m_signal_cond, &m_signal_mutex, &ts);
+    if (m_stop) {
+      break;
+    }
+    // make sure, no program error is returned
+    assert(ret == 0 || ret == ETIMEDOUT);
+    SE_MUTEX_UNLOCK_CHECK(m_signal_mutex);
+
+    std::string err_msg;
+    std::string important_msg;
+    bool need_abort = false;
+    int err = objstore::try_single_data_node_lease_lock(objstore, objstore_bucket, err_msg, important_msg, need_abort);
+    if (!important_msg.empty()) {
+      sql_print_warning("%s", important_msg.c_str());
+    }
+    if (0 != err) {
+      sql_print_error("Failed to get single data node lease lock: %s", err_msg.c_str());
+      if (need_abort) {
+        abort();
+      }
+    }
+    SE_MUTEX_LOCK_CHECK(m_signal_mutex);
   }
 
   SE_MUTEX_UNLOCK_CHECK(m_signal_mutex);

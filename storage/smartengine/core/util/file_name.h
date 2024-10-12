@@ -55,8 +55,6 @@ public:
   static std::string checkpoint_file_path(const std::string &dir, int64_t file_number);
   static std::string temp_file_name(int64_t file_number);
   static std::string temp_file_path(const std::string &dir, int64_t file_number);
-  static std::string index_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema);
-  static std::string data_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema);
 
 private:
   static const char *DATA_FILE_SUFFIX;

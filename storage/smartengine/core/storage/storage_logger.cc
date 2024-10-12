@@ -20,6 +20,7 @@
 #include "db/log_reader.h"
 #include "db/version_set.h"
 #include "logger/log_module.h"
+#include "objstore/snapshot_release_lock.h"
 #include "storage/extent_meta_manager.h"
 #include "util/file_reader_writer.h"
 #include "util/file_name.h"
@@ -951,20 +952,22 @@ int StorageLogger::replay_after_ckpt(memory::ArenaAllocator &arena)
   if (SUCCED(ret) && env_->IsObjectStoreInited()) {
     objstore::ObjectStore *objstore = nullptr;
     std::string_view objstore_bucket = env_->GetObjectStoreBucket();
+    const std::string &cluster_objstore_id = env_->GetClusterObjstoreId();
     if (FAILED(env_->GetObjectStore(objstore).code())) {
       SE_LOG(WARN, "fail to get object store", K(ret));
     } else {
       std::string err_msg;
       BackupSnapshotMap *backup_snapshots = &BackupSnapshotImpl::get_instance()->get_backup_snapshot_map();
       uint64_t auto_increment_id_for_recover = backup_snapshots->get_max_auto_increment_id() + 1;
-      if (FAILED(
-              objstore::tryBackupRecoveringLock(auto_increment_id_for_recover, objstore, objstore_bucket, err_msg))) {
+      if (FAILED(objstore::tryBackupRecoveringLock(auto_increment_id_for_recover,
+                                                   objstore,
+                                                   objstore_bucket,
+                                                   cluster_objstore_id,
+                                                   err_msg))) {
         SE_LOG(WARN, "fail to try backup recovering lock", K(ret), K(err_msg));
-        if (objstore::Errors::SE_MULTI_DATA_NODE_DETECTED == ret) {
-          abort();
-        }
       } else if (FAILED(objstore::removeObsoletedBackupStatusLockFiles(objstore,
                                                                        objstore_bucket,
+                                                                       cluster_objstore_id,
                                                                        auto_increment_id_for_recover,
                                                                        err_msg))) {
         SE_LOG(WARN, "fail to remove obsoleted backup status lock files", K(ret), K(err_msg));

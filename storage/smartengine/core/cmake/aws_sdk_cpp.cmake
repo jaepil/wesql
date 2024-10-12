@@ -92,6 +92,7 @@ MACRO (MYSQL_BUILD_OBJSTORE)
   SET(MY_OBJSTORE_SOURCES
     ${OBJSTORE_SRC}/objstore/local.cc
     ${OBJSTORE_SRC}/objstore/objstore.cc
+    ${OBJSTORE_SRC}/objstore/objstore_lock.cc
     ${OBJSTORE_SRC}/objstore/aliyun_oss.cc
     ${OBJSTORE_SRC}/objstore/s3.cc)
 

@@ -21,7 +21,9 @@
 #include <iostream>
 #include <chrono>
 
+#include "db/db_test_util.h"
 #include "objstore.h"
+#include "objstore/lease_lock.h"
 #include "storage/storage_common.h"
 #include "util/file_name.h"
 #include "util/testharness.h"
@@ -32,6 +34,9 @@ namespace fs = std::filesystem;
 using namespace common;
 using namespace util;
 namespace obj {
+
+using ObjectMeta = ::objstore::ObjectMeta;
+using Status = ::objstore::Status;
 
 const std::string ALIYUN_PROVIDER = "aliyun";
 const std::string S3_PROVIDER = "aws";
@@ -62,15 +67,15 @@ public:
       bucket_ = bucket_local_;
     }
 
-    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "");
+    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "", "");
     ASSERT_OK(s);
     s = env_->GetObjectStore(obs);
     ASSERT_OK(s);
     obj_store_ = obs;
 
-    objstore::Status ss;
+    Status ss;
     ss = obs->delete_bucket(bucket_);
-    ASSERT_TRUE(ss.is_succ() || ss.error_code() == objstore::SE_NO_SUCH_BUCKET);
+    ASSERT_TRUE(ss.is_succ() || ss.error_code() == ::objstore::SE_NO_SUCH_BUCKET);
     if (provider_ == ALIYUN_PROVIDER) {
       // In Alibaba Cloud OSS, once a bucket is deleted, 
       // it cannot be immediately recreated with the same name for a period of time. 
@@ -89,19 +94,19 @@ public:
   objstore::ObjectStore *create_objstore_client()
   {
     std::string obj_err_msg;
-    objstore::init_objstore_provider(provider_);
-    return objstore::create_object_store(provider_, region_, endpoint_, false, obj_err_msg);
+    ::objstore::init_objstore_provider(provider_);
+    return ::objstore::create_object_store(provider_, region_, endpoint_, false, obj_err_msg);
   }
 
   void release_objstore_client(objstore::ObjectStore *client)
   {
-    objstore::destroy_object_store(client);
-    objstore::cleanup_objstore_provider(obj_store_);
+    ::objstore::destroy_object_store(client);
+    ::objstore::cleanup_objstore_provider(obj_store_);
   }
 
   void TearDown() override
   {
-    objstore::Status ss;
+    Status ss;
     ss = obj_store_->delete_bucket(bucket_);
     if (!ss.is_succ()) {
       std::cout << "tear down:" << ss.error_code() << " " << ss.error_message() << std::endl;
@@ -111,112 +116,125 @@ public:
     env_->DestroyObjectStore();
     delete endpoint_;
   }
-  objstore::Status create_bucket()
+
+  Status create_bucket()
   {
     if (provider_ == ALIYUN_PROVIDER) {
       bucket_ = bucket_aliyun_ + std::to_string(getCurrentTimeMillis());
     }
-    objstore::Status ss = obj_store_->create_bucket(bucket_);
+    Status ss = obj_store_->create_bucket(bucket_);
     if (!ss.is_succ()) {
       std::cout << "create bucket:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status create_same_bucket_for_aliyun()
+
+  Status create_same_bucket_for_aliyun()
   {
-    objstore::Status ss = obj_store_->create_bucket(bucket_);
+    Status ss = obj_store_->create_bucket(bucket_);
     if (!ss.is_succ()) {
       std::cout << "create bucket:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status delete_bucket()
+
+  Status delete_bucket()
   {
-    objstore::Status ss = obj_store_->delete_bucket(bucket_);
+    Status ss = obj_store_->delete_bucket(bucket_);
     if (!ss.is_succ()) {
       std::cout << "delete bucket:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status put_object(const std::string &key, const std::string &data, bool forbid_overwrite = false)
+
+  Status put_object(const std::string &key, const std::string &data, bool forbid_overwrite = false)
   {
-    objstore::Status ss = obj_store_->put_object(bucket_, key, data, forbid_overwrite);
+    Status ss = obj_store_->put_object(bucket_, key, data, forbid_overwrite);
     if (!ss.is_succ()) {
       std::cout << "put object:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status get_object(const std::string &key, std::string &data)
+
+  Status get_object(const std::string &key, std::string &data)
   {
-    objstore::Status ss = obj_store_->get_object(bucket_, key, data);
+    Status ss = obj_store_->get_object(bucket_, key, data);
     if (!ss.is_succ()) {
       std::cout << "get object:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status get_object_range(const std::string &key, std::string &data, size_t off, size_t len)
+
+  Status get_object_range(const std::string &key, std::string &data, size_t off, size_t len)
   {
-    objstore::Status ss = obj_store_->get_object(bucket_, key, off, len, data);
+    Status ss = obj_store_->get_object(bucket_, key, off, len, data);
     if (!ss.is_succ()) {
       std::cout << "get object range:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status delete_object(const std::string &key)
+
+  Status delete_object(const std::string &key)
   {
-    objstore::Status ss = obj_store_->delete_object(bucket_, key);
+    Status ss = obj_store_->delete_object(bucket_, key);
     if (!ss.is_succ()) {
       std::cout << "delete object:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status delete_directory(const std::string &prefix)
+
+  Status delete_directory(const std::string &prefix)
   {
-    objstore::Status ss = obj_store_->delete_directory(bucket_, prefix);
+    Status ss = obj_store_->delete_directory(bucket_, prefix);
     if (!ss.is_succ()) {
       std::cout << "delete directory:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss; 
   }
-  objstore::Status list_object(const std::string &prefix,
+
+  Status list_object(const std::string &prefix,
                                bool recursive,
                                std::string &start_after,
                                bool &finished,
-                               std::vector<objstore::ObjectMeta> &objects)
+                               std::vector<::objstore::ObjectMeta> &objects)
   {
-    objstore::Status ss = obj_store_->list_object(bucket_, prefix, recursive, start_after, finished, objects);
+    Status ss = obj_store_->list_object(bucket_, prefix, recursive, start_after, finished, objects);
     if (!ss.is_succ()) {
       std::cout << "list object: " << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status put_object_from_file(const std::string &key, const std::string &data_file_path)
+
+  Status put_object_from_file(const std::string &key, const std::string &data_file_path)
   {
-    objstore::Status ss = obj_store_->put_object_from_file(bucket_, key, data_file_path);
+    Status ss = obj_store_->put_object_from_file(bucket_, key, data_file_path);
     if (!ss.is_succ()) {
       std::cout << "put object from file: " << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status get_object_to_file(const std::string &key, const std::string &output_file_path)
+
+  Status get_object_to_file(const std::string &key, const std::string &output_file_path)
   {
-    objstore::Status ss = obj_store_->get_object_to_file(bucket_, key, output_file_path);
+    Status ss = obj_store_->get_object_to_file(bucket_, key, output_file_path);
     if (!ss.is_succ()) {
       std::cout << "get object to file: " << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status put_objects_from_dir(const std::string &src_dir, const std::string &dst_dir)
+
+  Status put_objects_from_dir(const std::string &src_dir, const std::string &dst_dir)
   {
-    objstore::Status ss = obj_store_->put_objects_from_dir(src_dir, bucket_, dst_dir);
+    Status ss = obj_store_->put_objects_from_dir(src_dir, bucket_, dst_dir);
     if (!ss.is_succ()) {
       std::cout << "upload directory: " << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
-  objstore::Status get_objects_to_dir(const std::string &src_dir, const std::string &dst_dir)
+
+  Status get_objects_to_dir(const std::string &src_dir, const std::string &dst_dir)
   {
-    objstore::Status ss = obj_store_->get_objects_to_dir(bucket_, src_dir, dst_dir);
+    Status ss = obj_store_->get_objects_to_dir(bucket_, src_dir, dst_dir);
     if (!ss.is_succ()) {
       std::cout << "download directory: " << ss.error_code() << " " << ss.error_message() << std::endl;
     }
@@ -246,33 +264,33 @@ INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
                         testing::Values( // clang-format off
                             // "aws"
-                            // "aliyun"
-                            "local"
+                            "aliyun"
+                            // "local"
                             )); // clang-format on
 
 TEST_P(ObjstoreTest, reinitObjStoreApi)
 {
   objstore::ObjectStore *obs = nullptr;
 
-  objstore::init_objstore_provider(provider_);
-  objstore::init_objstore_provider(provider_);
-  objstore::init_objstore_provider(provider_);
-  objstore::cleanup_objstore_provider(obj_store_);
-  objstore::cleanup_objstore_provider(obj_store_);
-  objstore::cleanup_objstore_provider(obj_store_);
+  ::objstore::init_objstore_provider(provider_);
+  ::objstore::init_objstore_provider(provider_);
+  ::objstore::init_objstore_provider(provider_);
+  ::objstore::cleanup_objstore_provider(obj_store_);
+  ::objstore::cleanup_objstore_provider(obj_store_);
+  ::objstore::cleanup_objstore_provider(obj_store_);
 
   env_->GetObjectStore(obs);
   ASSERT_TRUE(obs != nullptr);
 
-  objstore::cleanup_objstore_provider(obj_store_);
-  objstore::init_objstore_provider(provider_);
+  ::objstore::cleanup_objstore_provider(obj_store_);
+  ::objstore::init_objstore_provider(provider_);
 
   env_->DestroyObjectStore();
 
   env_->GetObjectStore(obs);
   ASSERT_TRUE(obs == nullptr);
 
-  auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "");
+  auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "", "");
   ASSERT_OK(s);
   s = env_->GetObjectStore(obs);
   ASSERT_OK(s);
@@ -281,15 +299,15 @@ TEST_P(ObjstoreTest, reinitObjStoreApi)
 
 TEST_P(ObjstoreTest, noBucket)
 {
-  objstore::Status ss = delete_bucket();
+  Status ss = delete_bucket();
   ASSERT_TRUE(ss.is_succ());
   std::string data;
 
   ss = get_object("x", data);
   if (provider_ == LOCAL_PROVIDER) {
-    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_KEY);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_KEY);
   } else {
-    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_BUCKET);
   }
 
   ss = put_object("x", "x");
@@ -297,24 +315,24 @@ TEST_P(ObjstoreTest, noBucket)
     // local object store will create the bucket automatically
     ASSERT_TRUE(ss.is_succ());
   } else {
-    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_BUCKET);
   }
 
   ss = delete_object("x");
   if (provider_ == LOCAL_PROVIDER) {
     ASSERT_TRUE(ss.is_succ());
   } else {
-    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_BUCKET);
   }
 
   bool finished = false;
   std::string start_after;
-  std::vector<objstore::ObjectMeta> objects;
+  std::vector<::objstore::ObjectMeta> objects;
   ss = list_object("x", true, start_after, finished, objects);
   if (provider_ == LOCAL_PROVIDER) {
     ASSERT_TRUE(ss.is_succ());
   } else {
-    ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_BUCKET);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_BUCKET);
   }
 
   ss = create_bucket();
@@ -323,7 +341,7 @@ TEST_P(ObjstoreTest, noBucket)
 
 TEST_P(ObjstoreTest, createBucket)
 {
-  objstore::Status ss = delete_bucket();
+  Status ss = delete_bucket();
   ASSERT_TRUE(ss.is_succ());
   std::string data;
 
@@ -332,10 +350,10 @@ TEST_P(ObjstoreTest, createBucket)
 
   if (provider_ == S3_PROVIDER) {
     ss = create_bucket();
-    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
   } else if (provider_ == ALIYUN_PROVIDER) {
     ss = create_same_bucket_for_aliyun();
-    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_EXISTS);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_BUCKET_ALREADY_EXISTS);
   }
 
   objstore::ObjectStore *new_client = create_objstore_client();
@@ -343,9 +361,9 @@ TEST_P(ObjstoreTest, createBucket)
 
   ss = new_client->create_bucket(bucket_);
   if (provider_ == S3_PROVIDER) {
-    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
   } else if (provider_ == ALIYUN_PROVIDER) {
-    ASSERT_EQ(ss.error_code(), objstore::SE_BUCKET_ALREADY_EXISTS);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_BUCKET_ALREADY_EXISTS);
   }
 
   release_objstore_client(new_client);
@@ -357,7 +375,7 @@ TEST_P(ObjstoreTest, operateObject)
   std::string raw_data = "test_put_object_data";
   std::string zero_len_key = "zero_len_key";
   std::string data;
-  objstore::Status ss = put_object(key, raw_data);
+  ::objstore::Status ss = put_object(key, raw_data);
   ASSERT_TRUE(ss.is_succ());
 
   ss = get_object(key, data);
@@ -383,7 +401,7 @@ TEST_P(ObjstoreTest, operateObject)
   ASSERT_TRUE(ss.is_succ());
 
   ss = get_object(key, data);
-  ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_KEY);
+  ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_KEY);
 
   ss = put_object(zero_len_key, "");
   ASSERT_TRUE(ss.is_succ());
@@ -398,8 +416,8 @@ TEST_P(ObjstoreTest, operateObject)
 
 TEST_P(ObjstoreTest, listObject)
 {
-  objstore::Status ss;
-  std::vector<objstore::ObjectMeta> objects;
+  Status ss;
+  std::vector<::objstore::ObjectMeta> objects;
   bool finished = false;
   std::string start_after;
   // put 1001 objects with the same prefix
@@ -458,8 +476,8 @@ TEST_P(ObjstoreTest, listObject)
 
 TEST_P(ObjstoreTest, listObjectWithRecursiveOption)
 {
-  objstore::Status ss;
-  std::vector<objstore::ObjectMeta> objects;
+  Status ss;
+  std::vector<::objstore::ObjectMeta> objects;
   bool finished = false;
   std::string start_after;
 
@@ -578,7 +596,7 @@ TEST_P(ObjstoreTest, operateObjectFromFile)
   fwrite(data.c_str(), 1, data.size(), fp);
   fclose(fp);
 
-  objstore::Status ss = put_object_from_file(key, data_file_path);
+  Status ss = put_object_from_file(key, data_file_path);
   ASSERT_TRUE(ss.is_succ());
 
   std::string output_file_path = "/tmp/test_get_object_to_file_data";
@@ -605,14 +623,14 @@ TEST_P(ObjstoreTest, operateObjectFromFile)
 TEST_P(ObjstoreTest, noSuckKey) {
   std::string key = "test_put_object_key";
   std::string data = "test-data";
-  objstore::Status ss = put_object(key, data);
+  Status ss = put_object(key, data);
   ASSERT_TRUE(ss.is_succ());
 
   ss = delete_object(key);
   ASSERT_TRUE(ss.is_succ());
   ss = get_object(key, data);
   ASSERT_TRUE(!ss.is_succ());
-  ASSERT_EQ(ss.error_code(), objstore::SE_NO_SUCH_KEY);
+  ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_KEY);
 }
 
 std::string read_file_content(const fs::path& path) {
@@ -677,10 +695,10 @@ TEST_P(ObjstoreTest, copyDir)
   ASSERT_TRUE(fs::create_directories(empty_dir));
   expect_keys.push_back(remote_dir + "empty_dir/");
 
-  objstore::Status ss = put_objects_from_dir(upload_local_dir, remote_dir);
+  Status ss = put_objects_from_dir(upload_local_dir, remote_dir);
   ASSERT_TRUE(ss.is_succ());
 
-  std::vector<objstore::ObjectMeta> objects;
+  std::vector<::objstore::ObjectMeta> objects;
   if (provider_ != LOCAL_PROVIDER) {
     // test if the key is correct
     std::string start_after;
@@ -692,7 +710,7 @@ TEST_P(ObjstoreTest, copyDir)
     ASSERT_EQ(expect_keys.size(), 1232);
     ASSERT_EQ(expect_keys.size(), objects.size());
     std::sort(expect_keys.begin(), expect_keys.end());
-    std::sort(objects.begin(), objects.end(), [&](const objstore::ObjectMeta &a, objstore::ObjectMeta &b) { return a.key < b.key; });
+    std::sort(objects.begin(), objects.end(), [&](const ::objstore::ObjectMeta &a, ::objstore::ObjectMeta &b) { return a.key < b.key; });
     for (size_t i = 0; i < expect_keys.size(); i++) {
       ASSERT_EQ(expect_keys[i], objects[i].key);
     }
@@ -708,7 +726,7 @@ TEST_P(ObjstoreTest, copyDir)
   ASSERT_TRUE(compare_directories(upload_local_dir, download_local_dir));
 
   // clean the bucket
-  for (const objstore::ObjectMeta &meta : objects) {
+  for (const ::objstore::ObjectMeta &meta : objects) {
     ss = delete_object(meta.key);
     ASSERT_TRUE(ss.is_succ());
   }
@@ -724,7 +742,7 @@ TEST_P(ObjstoreTest, deleteDir)
   std::string dir3 = "dir1dir3";
   std::string raw_data = "test_put_object_data";
   const int key_num = 100;
-  objstore::Status ss;
+  Status ss;
   for (int i = 0; i < key_num; i++) {
     std::string key1 = dir1 + "/test_key_" + std::to_string(i + 1);
     std::string key2 = dir2 + "/test_key_" + std::to_string(i + 1);
@@ -746,7 +764,7 @@ TEST_P(ObjstoreTest, deleteDir)
     std::string data;
     ss = get_object(key1, data);
     ASSERT_TRUE(!ss.is_succ());
-    ASSERT_EQ(ss.error_code(), objstore::Errors::SE_NO_SUCH_KEY);
+    ASSERT_EQ(ss.error_code(), ::objstore::Errors::SE_NO_SUCH_KEY);
 
     ss = get_object(key2, data);
     ASSERT_TRUE(ss.is_succ());
@@ -767,12 +785,12 @@ TEST_P(ObjstoreTest, forbidOverwrite)
 {
   std::string key = "forbid_overwrite_key";
 
-  objstore::Status ss = put_object(key, "data1");
+  Status ss = put_object(key, "data1");
   ASSERT_TRUE(ss.is_succ());
 
   ss = put_object(key, "data2", true);
   ASSERT_FALSE(ss.is_succ());
-  ASSERT_EQ(ss.error_code(), objstore::Errors::SE_OBJECT_FORBID_OVERWRITE);
+  ASSERT_EQ(ss.error_code(), ::objstore::Errors::SE_OBJECT_FORBID_OVERWRITE);
   std::cout << "err code:" << ss.error_code() << ", cloud err code:" << ss.cloud_provider_err_code()
             << ", err msg:" << ss.error_message() << std::endl;
 
@@ -782,24 +800,186 @@ TEST_P(ObjstoreTest, forbidOverwrite)
 
 TEST_P(ObjstoreTest, is_first_level_sub_key)
 {
-  ASSERT_TRUE(objstore::is_first_level_sub_key("a", ""));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("a/", ""));
-  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b", ""));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("a", ""));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("a/", ""));
+  ASSERT_FALSE(::objstore::is_first_level_sub_key("a/b", ""));
 
-  ASSERT_TRUE(objstore::is_first_level_sub_key("a", "a"));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("ab", ""));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("a/", "a"));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("aa/", "a"));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("ab/", ""));
-  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b", "a"));
-  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b/", "a"));
-  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b/c", "a"));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("a", "a"));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("ab", ""));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("a/", "a"));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("aa/", "a"));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("ab/", ""));
+  ASSERT_FALSE(::objstore::is_first_level_sub_key("a/b", "a"));
+  ASSERT_FALSE(::objstore::is_first_level_sub_key("a/b/", "a"));
+  ASSERT_FALSE(::objstore::is_first_level_sub_key("a/b/c", "a"));
 
-  ASSERT_FALSE(objstore::is_first_level_sub_key("a", "a/"));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("a/", "a/"));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("a/b", "a/"));
-  ASSERT_TRUE(objstore::is_first_level_sub_key("a/b/", "a/"));
-  ASSERT_FALSE(objstore::is_first_level_sub_key("a/b/c", "a/"));
+  ASSERT_FALSE(::objstore::is_first_level_sub_key("a", "a/"));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("a/", "a/"));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("a/b", "a/"));
+  ASSERT_TRUE(::objstore::is_first_level_sub_key("a/b/", "a/"));
+  ASSERT_FALSE(::objstore::is_first_level_sub_key("a/b/c", "a/"));
+}
+
+TEST_P(ObjstoreTest, lease_lock)
+{
+  std::string err_msg;
+  std::string important_msg;
+  bool need_abort = false;
+  std::string start_after;
+  bool finished = false;
+  std::vector<::objstore::ObjectMeta> objects;
+  std::string last_lock_version;
+
+  int ret = delete_object(objstore::single_data_node_lease_lock).error_code();
+  ASSERT_TRUE(ret == 0 || ret == ::objstore::SE_NO_SUCH_KEY);
+
+  auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+  auto new_lease_time = now + objstore::single_data_node_lock_lease_timeout;
+
+  // objstore is not initialized
+  ret = objstore::renewal_single_data_node_lease_lock(nullptr, bucket_, new_lease_time, err_msg);
+  ASSERT_EQ(ret, ::objstore::SE_INVALID);
+  // not lease lock owner, can not renew lease
+  ret = objstore::renewal_single_data_node_lease_lock(obj_store_, bucket_, new_lease_time, err_msg);
+  ASSERT_EQ(ret, ::objstore::SE_INVALID);
+
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(objstore::is_lease_lock_owner_node());
+
+  start_after = "";
+  objects.clear();
+  ret = list_object(objstore::single_data_node_lock_version_file_prefix, false, start_after, finished, objects)
+            .error_code();
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objects.size(), 1);
+  last_lock_version = objects[0].key;
+  std::cout << "initial lock version: " << last_lock_version << std::endl;
+
+  // can renew lease lock now
+  ret = objstore::renewal_single_data_node_lease_lock(obj_store_, bucket_, new_lease_time, err_msg);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(objstore::is_lease_lock_owner_node());
+
+  // renew lease lock again
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(objstore::is_lease_lock_owner_node());
+
+  // no new lock version file should be created if the lease lock is renewed in renewal timeout
+  start_after = "";
+  objects.clear();
+  ret = list_object(objstore::single_data_node_lock_version_file_prefix, false, start_after, finished, objects)
+            .error_code();
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objects.size(), 1);
+  ASSERT_EQ(last_lock_version, objects[0].key);
+
+  // emulate the case that another node try to get the lease lock
+  objstore::TEST_unset_lease_lock_owner();
+  ASSERT_FALSE(objstore::is_lease_lock_owner_node());
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  ASSERT_EQ(ret, ::objstore::SE_OHTER_DATA_NODE_MAYBE_RUNNING);
+  // wait for a lease timeout when the lease lock is owned by another node
+  std::this_thread::sleep_for(objstore::single_data_node_lock_lease_timeout + std::chrono::milliseconds(100));
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  ASSERT_EQ(ret, 0);
+
+  // a new lock version file should be created if the lease lock is renewed after a lease timeout
+  start_after = "";
+  objects.clear();
+  ret = list_object(objstore::single_data_node_lock_version_file_prefix, false, start_after, finished, objects)
+            .error_code();
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objects.size(), 1);
+  ASSERT_NE(last_lock_version, objects[0].key);
+  last_lock_version = objects[0].key;
+  std::cout << "renew the lease lock after a lease timeout, new lock version created: " << last_lock_version
+            << std::endl;
+
+  // wait for a renewal timeout
+  std::this_thread::sleep_for(objstore::single_data_node_lock_renewal_timeout + std::chrono::milliseconds(100));
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(objstore::is_lease_lock_owner_node());
+  // a new lock version file should be created if the lease lock is renewed after a renewal timeout
+  start_after = "";
+  start_after = "";
+  objects.clear();
+  ret = list_object(objstore::single_data_node_lock_version_file_prefix, false, start_after, finished, objects)
+            .error_code();
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objects.size(), 1);
+  ASSERT_NE(last_lock_version, objects[0].key);
+  last_lock_version = objects[0].key;
+  std::cout << "renew the lease lock after a renewal timeout, new lock version created: " << last_lock_version
+            << std::endl;
+
+  // test the case that a node was lease lock owner, but fail to renew, should abort this node
+  SyncPoint::GetInstance()->SetCallBack("objstore::try_single_data_node_lease_lock", [&](void *arg) {
+    int *ret = static_cast<int *>(arg);
+    *ret = ::objstore::SE_OHTER_DATA_NODE_MAYBE_RUNNING;
+  });
+  SyncPoint::GetInstance()->EnableProcessing();
+
+  ASSERT_TRUE(objstore::is_lease_lock_owner_node());
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  // std::cout << "err code:" << ret << ", err msg:" << err_msg << ", important msg:" << important_msg << std::endl;
+  ASSERT_EQ(ret, ::objstore::SE_OHTER_DATA_NODE_MAYBE_RUNNING);
+  ASSERT_FALSE(objstore::is_lease_lock_owner_node());
+  ASSERT_TRUE(need_abort);
+  SyncPoint::GetInstance()->DisableProcessing();
+
+  // wait for a lease timeout when the lease lock is owned by me
+  std::this_thread::sleep_for(objstore::single_data_node_lock_lease_timeout + std::chrono::milliseconds(100));
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  ASSERT_EQ(ret, 0);
+  // a new lock version file should be created if the lease lock is renewed after a renewal timeout
+  start_after = "";
+  objects.clear();
+  ret = list_object(objstore::single_data_node_lock_version_file_prefix, false, start_after, finished, objects)
+            .error_code();
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objects.size(), 1);
+  ASSERT_NE(last_lock_version, objects[0].key);
+  last_lock_version = objects[0].key;
+  std::cout << "renew the lease lock after a lease timeout, new lock version created: " << last_lock_version
+            << std::endl;
+
+  // use a small lease time to test the case that the lease lock is expired
+  now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+  new_lease_time = now + std::chrono::milliseconds(100);
+  std::string new_lease_time_str = std::to_string(new_lease_time.count());
+  ret = put_object(objstore::single_data_node_lease_lock, new_lease_time_str).error_code();
+  ASSERT_EQ(ret, 0);
+  // will for the lease lock expired
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  // emulate the case that the lease lock is owned by another node
+  objstore::TEST_unset_lease_lock_owner();
+  new_lease_time = now + objstore::single_data_node_lock_lease_timeout;
+  new_lease_time_str = std::to_string(new_lease_time.count());
+  ret = put_object(objstore::single_data_node_lease_lock, new_lease_time_str).error_code();
+  ASSERT_EQ(ret, 0);
+  // the lease time is valid and the lease lock is owned by another node
+  ret = objstore::try_single_data_node_lease_lock(obj_store_, bucket_, err_msg, important_msg, need_abort);
+  // std::cout << "err code:" << ret << ", err msg:" << err_msg << ", important msg:" << important_msg << std::endl;
+  ASSERT_EQ(ret, ::objstore::SE_OHTER_DATA_NODE_MAYBE_RUNNING);
+  // no new lock version file should be created if the lease lock is not renewed by me
+  start_after = "";
+  objects.clear();
+  ret = list_object(objstore::single_data_node_lock_version_file_prefix, false, start_after, finished, objects)
+            .error_code();
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(objects.size(), 1);
+  ASSERT_EQ(last_lock_version, objects[0].key);
+  std::cout << "no new lock version created when fail to renew lease lock, last lock version is: " << last_lock_version
+            << std::endl;
+
+  // cleanup bucket
+  ret = delete_object(objstore::single_data_node_lease_lock).error_code();
+  ASSERT_TRUE(ret == 0);
+  ret = delete_object(last_lock_version).error_code();
+  ASSERT_TRUE(ret == 0);
 }
 
 } // namespace obj

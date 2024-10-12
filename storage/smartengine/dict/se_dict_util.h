@@ -84,6 +84,11 @@ extern const char *const HIDDEN_PK_NAME;
 extern const char *const BG_THREAD_NAME;
 
 /*
+  Name for the renewal objstore lease lock thread.
+*/
+extern const char *const RENEW_LEASE_LOCK_THREAD_NAME;
+
+/*
   Name for the drop index thread.
 */
 extern const char *const INDEX_THREAD_NAME;

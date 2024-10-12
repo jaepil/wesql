@@ -397,6 +397,7 @@ class Env {
                                          const std::string_view *endpoint,
                                          bool use_https,
                                          const std::string_view bucket,
+                                         const std::string &cluster_objstore_id,
                                          const std::string_view bucket_subdir_for_test)
   {
     return common::Status::NotSupported("Not supported.");
@@ -419,6 +420,12 @@ class Env {
   }
 
   virtual const std::string &GetObjectStoreBucket() {
+    static std::string kNotSupportedStr("Not supported.");
+    return kNotSupportedStr;
+  }
+
+  virtual const std::string &GetClusterObjstoreId()
+  {
     static std::string kNotSupportedStr("Not supported.");
     return kNotSupportedStr;
   }

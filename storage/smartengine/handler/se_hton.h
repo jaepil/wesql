@@ -60,6 +60,8 @@ extern SeBackgroundThread se_bg_thread;
 
 extern SeDropIndexThread se_drop_idx_thread;
 
+extern SeRenewLeaseLockThread se_renewal_objstore_lease_lock_thread;
+
 // TODO (Zhao Dongsheng) : In the original logic, se_collation_exceptions
 // was used to list the table names that would skip collation checks(as follow
 // comment), and there table names were configured through the system variable
@@ -131,17 +133,18 @@ bool print_stats(THD *const thd,
 */
 
 #ifdef HAVE_PSI_INTERFACE
-extern my_core::PSI_mutex_key se_psi_open_tbls_mutex_key,
-    se_signal_bg_psi_mutex_key, se_signal_drop_idx_psi_mutex_key,
-    se_collation_data_mutex_key, se_mem_cmp_space_mutex_key,
-    key_mutex_tx_list, se_sysvars_psi_mutex_key;
+extern my_core::PSI_mutex_key se_psi_open_tbls_mutex_key, se_signal_bg_psi_mutex_key, se_signal_drop_idx_psi_mutex_key,
+    se_collation_data_mutex_key, se_mem_cmp_space_mutex_key, key_mutex_tx_list, se_sysvars_psi_mutex_key,
+    se_renewal_objstore_lease_lock_psi_mutex_key;
 
-extern PSI_cond_key se_signal_bg_psi_cond_key, se_signal_drop_idx_psi_cond_key;
+extern PSI_cond_key se_signal_bg_psi_cond_key, se_signal_drop_idx_psi_cond_key,
+    se_renewal_objstore_lease_lock_psi_cond_key;
 
 extern PSI_rwlock_key key_rwlock_collation_exception_list;
 
 extern PSI_thread_key se_background_psi_thread_key;
 extern PSI_thread_key se_drop_idx_psi_thread_key;
+extern PSI_thread_key se_renewal_objstore_lease_lock_psi_thread_key;
 extern PSI_rwlock_key key_rwlock_skip_unique_check_tables;
 extern void init_se_psi_keys();
 #endif

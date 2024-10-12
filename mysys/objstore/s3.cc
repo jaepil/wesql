@@ -616,7 +616,7 @@ S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
     // if one of the access_key_id and access_secret_key is empty, we treat it
     // as an invalid input.
     err_msg =
-        "access_key_id and access_secret_key environment variables should be "
+        "access key id and access secret key environment variables should be "
         "both set or both empty for s3";
     return nullptr;
   } else {

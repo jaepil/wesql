@@ -331,6 +331,9 @@ AliyunOssObjectStore *create_aliyun_oss_objstore_helper(
     const std::string_view region, const std::string_view *endpoint,
     const std::string_view bucket_dir, std::string &err_msg) {
   if (endpoint == nullptr) {
+    err_msg =
+        "endpoint is not set for aliyun oss, should check your "
+        "object store endpoint configuration.";
     return nullptr;
   }
   AlibabaCloud::OSS::ClientConfiguration conf;

@@ -174,9 +174,11 @@ class SpecialEnv : public util::EnvWrapper {
                                          const std::string_view *endpoint,
                                          bool use_https,
                                          const std::string_view bucket,
+                                         const std::string &cluster_objstore_id,
                                          const std::string_view bucket_subdir_for_test) override
   {
-    return target()->InitObjectStore(provider, region, endpoint, use_https, bucket, bucket_subdir_for_test);
+    return target()
+        ->InitObjectStore(provider, region, endpoint, use_https, bucket, cluster_objstore_id, bucket_subdir_for_test);
   }
 
   virtual common::Status DestroyObjectStore() override {

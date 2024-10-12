@@ -94,6 +94,7 @@ struct GlobalContext
 
   static cache::Cache *get_cache() { return GlobalContext::cache_; }
   static util::Env *get_env() { return GlobalContext::env_; }
+  static void set_env(util::Env *env) { GlobalContext::env_ = env; }
 
   bool is_valid();
   void reset();

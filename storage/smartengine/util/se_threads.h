@@ -159,4 +159,16 @@ private:
   bool m_run_;
 };
 
+/*
+  thread for renewal single data node lease lock
+*/
+struct SeRenewLeaseLockThread : public SeThread
+{
+  virtual void run() override;
+  bool is_run() { return m_run_; }
+
+private:
+  bool m_run_;
+};
+
 } //namespace smartengine

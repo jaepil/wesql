@@ -141,25 +141,6 @@ std::string FileNameUtil::temp_file_path(const std::string &dir, int64_t file_nu
   return dir + "/" + temp_file_name(file_number);
 }
 
-std::string FileNameUtil::index_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema)
-{
-  std::string prefix = "/" + cluster_id +
-                       "/" + "smartengine" +
-                       "/" + "v1"
-                       "/" + table_schema.get_database_name() +
-                       "/" + std::to_string(table_schema.get_index_id()) +
-                       "/";
-
-  return prefix;
-}
-
-std::string FileNameUtil::data_prefix(const std::string &cluster_id, const schema::TableSchema &table_schema)
-{
-  std::string prefix = index_prefix(cluster_id, table_schema) + "data" + "/";
-  
-  return prefix;
-}
-
 std::string FileNameUtil::file_name(int64_t file_number, const char *suffix)
 {
   assert(nullptr != suffix);

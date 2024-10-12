@@ -52,6 +52,7 @@
 #include "monitoring/query_perf_context.h"
 #include "monitoring/thread_status_updater.h"
 #include "monitoring/thread_status_util.h"
+#include "objstore/snapshot_release_lock.h"
 #include "options/cf_options.h"
 #include "options/options_helper.h"
 #include "port/likely.h"
@@ -203,17 +204,17 @@ int BackupSnapshotMap::release_backup_snapshot(BackupSnapshotId backup_id)
   } else if (GlobalContext::env_->IsObjectStoreInited()) {
     objstore::ObjectStore *objstore = nullptr;
     std::string_view objstore_bucket = GlobalContext::env_->GetObjectStoreBucket();
+    const std::string &cluster_objstore_id = GlobalContext::env_->GetClusterObjstoreId();
     std::string err_msg;
     uint64_t auto_increment_id_for_recover = backup_snapshot_map.get_auto_increment_id_for_recover();
     if (FAILED(GlobalContext::env_->GetObjectStore(objstore).code())) {
       SE_LOG(WARN, "fail to get object store", K(ret));
     } else if (auto_increment_id == auto_increment_id_for_recover &&
-               FAILED(objstore::updateBackupStautsLockFile(auto_increment_id,
-                                                           objstore,
-                                                           objstore_bucket,
-                                                           objstore::backup_snapshot_recovering,
-                                                           objstore::backup_snapshot_releasing,
-                                                           err_msg))) {
+               FAILED(objstore::updateBackupStautsToReleasing(auto_increment_id,
+                                                              objstore,
+                                                              objstore_bucket,
+                                                              cluster_objstore_id,
+                                                              err_msg))) {
       SE_LOG(WARN,
              "fail to update backup status lock file of the snapshot used for recovery",
              K(backup_id),
@@ -221,14 +222,18 @@ int BackupSnapshotMap::release_backup_snapshot(BackupSnapshotId backup_id)
              K(ret),
              K(err_msg));
     } else if (auto_increment_id != auto_increment_id_for_recover &&
-               FAILED(objstore::tryBackupReleasingLock(auto_increment_id, objstore, objstore_bucket, err_msg))) {
+               FAILED(objstore::tryBackupReleasingLock(auto_increment_id,
+                                                       objstore,
+                                                       objstore_bucket,
+                                                       cluster_objstore_id,
+                                                       err_msg))) {
       SE_LOG(WARN,
-             "fail to get backup releasing lock, there is another node do recovering using this snapshot, just exit",
+             "fail to get backup releasing lock",
              K(backup_id),
+             K(auto_increment_id),
              K(auto_increment_id_for_recover),
              K(ret),
              K(err_msg));
-      abort();
     } else {
       SE_LOG(INFO, "success to get backup releasing lock", K(backup_id), K(auto_increment_id));
     }

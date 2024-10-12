@@ -84,6 +84,11 @@ const char *const BG_THREAD_NAME = "se-bg";
 */
 const char *const INDEX_THREAD_NAME = "se-index";
 
+/*
+  Name for the renewal objstore lease lock thread.
+*/
+const char *const RENEW_LEASE_LOCK_THREAD_NAME = "se-renewal";
+
 /* SE supports only the following collations for indexed columns */
 static const std::set<const my_core::CHARSET_INFO *> SE_INDEX_COLLATIONS =
   {&my_charset_bin, &my_charset_latin1_bin,

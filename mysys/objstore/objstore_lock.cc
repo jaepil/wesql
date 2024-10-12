@@ -14,6 +14,8 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#include <cstring>
+#include <thread>
 #include "objstore.h"
 
 namespace objstore {
@@ -22,6 +24,7 @@ static constexpr std::string_view data_lock_file{"data.lock"};
 
 int ensure_object_store_lock(const std::string_view &provider,
                              const std::string_view &region,
+                             const std::string_view *endpoint,
                              const std::string_view &bucket_dir,
                              const std::string_view &store_id,
                              const bool should_exist, std::string &err_msg) {
@@ -31,7 +34,8 @@ int ensure_object_store_lock(const std::string_view &provider,
 
   objstore::init_objstore_provider(provider);
 
-  ObjectStore *objstore = create_object_store(provider, region, nullptr, false, err_msg);
+  ObjectStore *objstore =
+      create_object_store(provider, region, endpoint, false, err_msg);
   if (objstore == nullptr) {
     return 1;
   }

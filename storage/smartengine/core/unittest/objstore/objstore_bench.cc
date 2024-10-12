@@ -37,7 +37,8 @@ public:
 
     objstore::ObjectStore *obs = nullptr;
 
-    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "");
+    std::string cluster_objstore_id = "objstore_bench";
+    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, cluster_objstore_id, "");
     if (!s.ok()) {
       std::cout << "init object store failed:" << s.ToString() << std::endl;
       std::abort();

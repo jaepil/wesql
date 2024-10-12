@@ -18,24 +18,26 @@
 
 #include <string_view>
 
-#include "se_api.h"
-#include "se_hton.h"
-#include "se_status_vars.h"
-#include "se_system_vars.h"
-#include "ha_smartengine.h"
-#include "se_i_s.h"
-#include "mysqld.h"
-#include "mysql/plugin.h"
+#include "core/cache/row_cache.h"
+#include "core/options/options_helper.h"
+#include "core/util/sync_point.h"
+#include "db_impl.h"
 #include "dict/se_charset_info.h"
 #include "dict/se_dict_util.h"
+#include "ha_smartengine.h"
+#include "mysql/plugin.h"
+#include "mysqld.h"
+#include "objstore/lease_lock.h"
+#include "se_api.h"
+#include "se_hton.h"
+#include "se_i_s.h"
+#include "se_status_vars.h"
+#include "se_system_vars.h"
+#include "transaction/se_transaction.h"
 #include "transactions/transaction_db.h"
 #include "util/rate_limiter.h"
-#include "util/se_mutex_wrapper.h"
 #include "util/se_logger.h"
-#include "transaction/se_transaction.h"
-#include "core/cache/row_cache.h"
-#include "core/util/sync_point.h"
-#include "core/options/options_helper.h"
+#include "util/se_mutex_wrapper.h"
 
 // Internal MySQL APIs not exposed in any header.
 extern "C" {
@@ -65,6 +67,8 @@ static int se_init_func(void *const p)
   se_bg_thread.init(se_signal_bg_psi_mutex_key, se_signal_bg_psi_cond_key);
   se_drop_idx_thread.init(se_signal_drop_idx_psi_mutex_key,
                            se_signal_drop_idx_psi_cond_key);
+  se_renewal_objstore_lease_lock_thread.init(se_renewal_objstore_lease_lock_psi_mutex_key,
+                                             se_renewal_objstore_lease_lock_psi_cond_key);
 #else
   se_bg_thread.init();
   se_drop_idx_thread.init();
@@ -263,6 +267,7 @@ static int se_init_func(void *const p)
                                                            opt_objstore_endpoint ? &endpoint : nullptr,
                                                            opt_objstore_use_https,
                                                            opt_objstore_bucket,
+                                                           opt_cluster_objstore_id,
                                                            mtr_test_bucket_subdir);
     if (!status.ok()) {
       std::string err_text = status.ToString();
@@ -275,6 +280,35 @@ static int se_init_func(void *const p)
           "region: %s, bucket: %s",
           opt_objstore_provider, opt_objstore_region, opt_objstore_bucket);
     }
+
+    db::GlobalContext::set_env(main_opts.env);
+
+    int ret = se_renewal_objstore_lease_lock_thread.create_thread(RENEW_LEASE_LOCK_THREAD_NAME
+#ifdef HAVE_PSI_INTERFACE
+                                                                  ,
+                                                                  se_renewal_objstore_lease_lock_psi_thread_key
+#endif
+    );
+    if (ret != 0) {
+      sql_print_error("SE: Couldn't start the renewal object store lease lock thread: (errno=%d)", ret);
+      se_open_tables.free_hash();
+      DBUG_RETURN(HA_EXIT_FAILURE);
+    }
+
+    sql_print_warning("SE: This node is not the owner of the lease lock, waiting...");
+    // retry 60 times( 1 minute ) to get single data node lease lock.
+    int retry = 60;
+    while (!objstore::is_lease_lock_owner_node() && retry > 0) {
+      // if this node is not the owner of the lease lock, can't do anything but wait
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      retry--;
+    }
+    if (!objstore::is_lease_lock_owner_node()) {
+      sql_print_error("SE: Couldn't get object store lease lock: other node may be running");
+      se_open_tables.free_hash();
+      DBUG_RETURN(HA_EXIT_FAILURE);
+    }
+    sql_print_warning("SE: This node becomes the owner of the lease lock, go on");
   }
 
   util::TransactionDBOptions tx_db_options;
@@ -336,10 +370,10 @@ static int se_init_func(void *const p)
 
   int ret = se_bg_thread.create_thread(BG_THREAD_NAME
 #ifdef HAVE_PSI_INTERFACE
-                                         ,
-                                         se_background_psi_thread_key
+                                       ,
+                                       se_background_psi_thread_key
 #endif
-                                         );
+  );
   if (ret != 0) {
     sql_print_error("SE: Couldn't start the background thread: (errno=%d)",
                     ret);
@@ -410,6 +444,13 @@ static int se_done_func(void *const p)
   // a flush that can stall due to background threads being stopped. As long
   // as these keys are stored in a WAL file, they can be retrieved on restart.
   se_bg_thread.signal(true);
+
+  if (opt_table_on_objstore && opt_serverless) {
+    // Signal the renewal object store lease lock thread to stop.
+    se_renewal_objstore_lease_lock_thread.signal(true);
+    // Wait for the renewal object store lease lock thread to finish.
+    se_renewal_objstore_lease_lock_thread.join();
+  }
 
   // Wait for the background thread to finish.
   auto err = se_bg_thread.join();

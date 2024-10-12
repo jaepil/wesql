@@ -1,0 +1,325 @@
+/*
+   Copyright (c) 2024, ApeCloud Inc Holding Limited.
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; version 2 of the License.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+
+#include "lease_lock.h"
+#include <atomic>
+#include <chrono>
+#include <cstring>
+#include "util/sync_point.h"
+
+namespace smartengine {
+namespace objstore {
+
+using ObjectMeta = ::objstore::ObjectMeta;
+using Status = ::objstore::Status;
+using Errors = ::objstore::Errors;
+
+static std::atomic<bool> is_lease_lock_owner = false;
+static std::chrono::milliseconds lease_lock_last_lease_time = std::chrono::milliseconds(0);
+
+// renewal interval is 3s(3000ms)
+const std::chrono::milliseconds single_data_node_lock_renewal_interval = std::chrono::milliseconds(3000);
+
+#ifdef NDEBUG
+namespace {
+#endif
+
+// lease timeout is 12s(10000ms)
+const std::chrono::milliseconds single_data_node_lock_lease_timeout = std::chrono::milliseconds(12000);
+// renewal timeout is 6s(6000ms), we can't renew the lock after this time
+const std::chrono::milliseconds single_data_node_lock_renewal_timeout = std::chrono::milliseconds(6000);
+
+// since we use a lock file to prevent multiple data nodes running at the same
+// time, this lease lock is shared by all wesql cluster in the same object store
+// bucket, we can't put this lock file into the cluster-id dir of the object
+// store, just put it into the root dir of the object store.
+const char *single_data_node_lease_lock = "lease_lock";
+const char *single_data_node_lock_version_file_prefix = "lease_lock_version_";
+
+int get_single_data_node_lease_lock_expire_time(ObjectStore *objstore,
+                                                const std::string_view bucket_dir,
+                                                std::string &err_msg,
+                                                std::chrono::milliseconds &expire_time)
+{
+  int ret = 0;
+  if (objstore == nullptr) {
+    ret = Errors::SE_INVALID;
+  } else {
+    std::string key = single_data_node_lease_lock;
+    std::string value;
+    Status status = objstore->get_object(bucket_dir, key, value);
+    if (status.error_code() == Errors::SE_NO_SUCH_KEY) {
+      // lease lock file not found, it means the lease lock is expired
+      expire_time = std::chrono::milliseconds(0);
+      ret = 0;
+    } else if (!status.is_succ()) {
+      ret = status.error_code();
+      err_msg = status.error_message();
+    } else {
+      // convert the value to a timestamp with milliseconds
+      errno = 0;
+      int64_t time_ms = std::strtoll(value.data(), nullptr, 10);
+      if (errno == ERANGE || 0 == time_ms) {
+        err_msg = key + ": invalid lock file value: " + value;
+        ret = Errors::SE_INVALID;
+      } else if (time_ms > 0) {
+        expire_time = std::chrono::milliseconds(time_ms);
+      } else {
+        err_msg = key + ": invalid lock file value: " + value;
+        ret = Errors::SE_INVALID;
+      }
+    }
+  }
+  return ret;
+}
+
+int try_single_data_node_lease_lock_if_expired(ObjectStore *objstore,
+                                               const std::string_view bucket_dir,
+                                               std::string &err_msg,
+                                               std::chrono::milliseconds &new_lease_time)
+{
+  int ret = 0;
+  Status status;
+
+  if (objstore == nullptr) {
+    err_msg = "object store is not initialized";
+    ret = Errors::SE_INVALID;
+  } else {
+    int64_t max_version = 0;
+
+    std::string start_after;
+    bool finished = false;
+    std::vector<ObjectMeta> stale_lock_version_files;
+    do {
+      std::string prefix = single_data_node_lock_version_file_prefix;
+      std::vector<ObjectMeta> results;
+      status = objstore->list_object(bucket_dir, prefix, false, start_after, finished, results);
+      if (!status.is_succ()) {
+        err_msg = std::string("fail to list all lock version files: ") + status.error_message().data();
+        ret = status.error_code();
+      } else if (results.empty()) {
+        if (!finished) {
+          err_msg = "no lock version file found but not finished, impossible";
+          ret = Errors::SE_UNEXPECTED;
+        } else {
+          // max_version = 0, no lock version file found
+        }
+      } else {
+        for (const ObjectMeta &object_meta : results) {
+          std::string_view key = object_meta.key;
+          int64_t version = std::strtoll(key.substr(strlen(prefix.data())).data(), nullptr, 10);
+          if (errno == ERANGE || version <= 0) {
+            err_msg = std::string(key) + ": invalid lock version file suffix";
+            ret = Errors::SE_INVALID;
+          } else if (version > 0) {
+            if (version > max_version) {
+              max_version = version;
+            }
+          }
+
+          if (0 != ret) {
+            break;
+          }
+        }
+        if (0 == ret) {
+          stale_lock_version_files.insert(stale_lock_version_files.end(), results.begin(), results.end());
+        }
+      }
+    } while (0 == ret && !finished);
+
+    if (0 == ret) {
+      // try to create new lock version file with forbid-overwrite option
+      int64_t new_max_version = max_version + 1;
+      std::string new_max_version_lock_version_key = std::string(single_data_node_lock_version_file_prefix) +
+                                                     std::to_string(new_max_version);
+
+      bool forbid_overwrite = true;
+      status = objstore->put_object(bucket_dir, new_max_version_lock_version_key, "", forbid_overwrite);
+      if (!status.is_succ()) {
+        err_msg = std::string("fail to put new lock version key: ") + status.error_message().data();
+        ret = status.error_code();
+      } else {
+        // new lock version file is created successfully
+
+        // caculate new lease time and update the lease lock file
+        std::chrono::milliseconds now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch());
+        std::chrono::milliseconds lease_time = now + single_data_node_lock_lease_timeout;
+        std::string lease_lock_key = single_data_node_lease_lock;
+        status = objstore->put_object(bucket_dir, lease_lock_key, std::to_string(lease_time.count()), false);
+        if (!status.is_succ()) {
+          err_msg = std::string("fail to update lease lock file: ") + status.error_message().data();
+          ret = status.error_code();
+        } else {
+          std::vector<std::string_view> stale_lock_version_keys;
+          stale_lock_version_keys.reserve(stale_lock_version_files.size());
+          for (const ObjectMeta &object_meta : stale_lock_version_files) {
+            assert(object_meta.key != new_max_version_lock_version_key);
+            stale_lock_version_keys.emplace_back(object_meta.key);
+          }
+          if (!stale_lock_version_keys.empty()) {
+            for (const std::string_view &key : stale_lock_version_keys) {
+              status = objstore->delete_object(bucket_dir, key);
+              if (!status.is_succ()) {
+                err_msg = std::string("fail to delete stale lock version file: ") + status.error_message().data();
+                ret = status.error_code();
+                break;
+              }
+            }
+            // TODO: why this not works
+            // status = objstore->delete_objects(bucket_dir, stale_lock_version_keys);
+            // if (!status.is_succ()) {
+            //   err_msg = std::string("fail to delete stale lock version files: ") + status.error_message().data();
+            //   ret = status.error_code();
+            // }
+          }
+          if (0 == ret) {
+            // stale lock version keys are deleted successfully
+            new_lease_time = lease_time;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// this is used for lease lock owner to renewal the lease lock
+int renewal_single_data_node_lease_lock(ObjectStore *objstore,
+                                        const std::string_view bucket_dir,
+                                        std::chrono::milliseconds &new_lease_time,
+                                        std::string &err_msg)
+{
+  int ret = 0;
+  const std::chrono::milliseconds last_lease_time = lease_lock_last_lease_time;
+  if (objstore == nullptr) {
+    err_msg = "object store is not initialized";
+    ret = Errors::SE_INVALID;
+  } else if (!is_lease_lock_owner) {
+    err_msg = "lease lock is not owned by this node";
+    ret = Errors::SE_INVALID;
+  } else if (last_lease_time.count() == 0 || last_lease_time.count() < single_data_node_lock_lease_timeout.count()) {
+    err_msg = std::string("last lease time is invalid:") + std::to_string(last_lease_time.count());
+    ret = Errors::SE_INVALID;
+  } else {
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch());
+    const std::chrono::milliseconds last_renewal_time = last_lease_time - single_data_node_lock_lease_timeout;
+    if (now.count() < last_renewal_time.count()) {
+      err_msg = std::string("current time:") + std::to_string(now.count()) +
+                "is less than last renewal time:" + std::to_string(last_renewal_time.count()) + ", impossible";
+      ret = Errors::SE_INVALID;
+    } else if (now.count() - last_renewal_time.count() < single_data_node_lock_renewal_timeout.count()) {
+      new_lease_time = now + single_data_node_lock_lease_timeout;
+      std::string new_lease_time_str = std::to_string(new_lease_time.count());
+      std::string lease_lock_key = single_data_node_lease_lock;
+      Status status = objstore->put_object(bucket_dir, lease_lock_key, new_lease_time_str, false);
+      if (!status.is_succ()) {
+        err_msg = status.error_message();
+        ret = status.error_code();
+      }
+    } else {
+      ret = try_single_data_node_lease_lock_if_expired(objstore, bucket_dir, err_msg, new_lease_time);
+      if (ret != 0) {
+        err_msg = "fail to get lease lock:" + err_msg;
+      }
+    }
+  }
+  return ret;
+}
+
+void TEST_unset_lease_lock_owner()
+{
+  is_lease_lock_owner = false;
+  lease_lock_last_lease_time = std::chrono::milliseconds(0);
+}
+
+#ifdef NDEBUG
+} // namespace
+#endif
+
+bool is_lease_lock_owner_node() { return is_lease_lock_owner; }
+
+int try_single_data_node_lease_lock(ObjectStore *objstore,
+                                    const std::string_view bucket_dir,
+                                    std::string &err_msg,
+                                    std::string &important_msg,
+                                    bool &need_abort)
+{
+  int ret = 0;
+  std::chrono::milliseconds expire_time;
+  std::chrono::milliseconds new_lease_time;
+
+  need_abort = false;
+  if (is_lease_lock_owner) {
+    ret = renewal_single_data_node_lease_lock(objstore, bucket_dir, new_lease_time, err_msg);
+#ifndef NDEBUG
+    TEST_SYNC_POINT_CALLBACK("objstore::try_single_data_node_lease_lock", &ret);
+#endif
+    if (ret != 0) {
+      err_msg = "fail to renewal lease lock:" + err_msg;
+    } else {
+      // success to renewal lease lock
+    }
+  } else {
+    ret = get_single_data_node_lease_lock_expire_time(objstore, bucket_dir, err_msg, expire_time);
+    if (ret != 0) {
+      err_msg = "fail to get lease lock expire time:" + err_msg;
+    } else {
+      std::chrono::milliseconds now = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch());
+      if (now.count() >= expire_time.count()) {
+        // lease lock is expired
+        ret = try_single_data_node_lease_lock_if_expired(objstore, bucket_dir, err_msg, new_lease_time);
+        if (ret != 0) {
+          err_msg = "fail to get lease lock:" + err_msg;
+        } else {
+          // success to get lease lock
+        }
+      } else if (now + single_data_node_lock_lease_timeout < expire_time) {
+        err_msg = "lease lock has an unexpected expire time:" + std::to_string(expire_time.count()) +
+                  ", now:" + std::to_string(now.count());
+        ret = Errors::SE_UNEXPECTED;
+      } else {
+        err_msg = "lease time is valid, lease lock maybe owned by another node";
+        ret = Errors::SE_OHTER_DATA_NODE_MAYBE_RUNNING;
+      }
+    }
+  }
+
+  if (ret == 0) {
+    if (!is_lease_lock_owner) {
+      important_msg = "this node becomes the lease lock owner! new lease time:" +
+                      std::to_string(new_lease_time.count());
+    }
+    // success to get/renewal the lease lock
+    is_lease_lock_owner = true;
+    lease_lock_last_lease_time = new_lease_time;
+  } else {
+    if (is_lease_lock_owner) {
+      important_msg = "this node was lease lock owner but is owned by other node now!!!";
+      // should abort as soon as possible
+      need_abort = true;
+    }
+    is_lease_lock_owner = false;
+    lease_lock_last_lease_time = std::chrono::milliseconds(0);
+  }
+
+  return ret;
+}
+
+} // namespace objstore
+} // namespace smartengine
