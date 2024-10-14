@@ -185,6 +185,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Delete self runner
+        continue-on-error: true
         uses: './.github/actions/delete-runner'
         with:
           github-token: ${{ env.GITHUB_TOKEN }}
@@ -200,6 +201,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Delete self runner
+        continue-on-error: true
         uses: './.github/actions/delete-runner'
         with:
           github-token: ${{ env.GITHUB_TOKEN }}
