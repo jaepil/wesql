@@ -98,8 +98,9 @@ public:
 private:
   int fill_aio_info(util::AIOHandle *aio_handle, int64_t offset, int64_t size, util::AIOInfo &aio_info);
   int write_object(const char *data, int64_t data_size);
+  int sync_read(int64_t offset, int64_t size, char *buf, common::Slice &result);
+  int async_read(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, common::Slice &result);
   int read_object(int64_t offset, int64_t size, char *buf, common::Slice &result);
-  int read_persistent_cache(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, common::Slice &result);
   int load_extent(cache::Cache::Handle **handle);
 
 protected:

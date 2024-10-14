@@ -55,7 +55,9 @@ int FileNameUtil::parse_file_name(const std::string &file_name, int64_t &file_nu
     file_type = kLockFile;
   } else if (!ConsumeDecimalNumber(&rest, &number)) {
     ret = common::Status::kErrorUnexpected;
+#ifndef NDEBUG
     SE_LOG(WARN, "fail to consume decimal number", K(ret), K(file_name), K(rest));
+#endif
   } else if (rest.size() <= 1 || DELIMITER != rest[0]) {
     ret = common::Status::kErrorUnexpected;
     SE_LOG(WARN, "the file name format is not correct", K(ret), K(file_name), K(rest));

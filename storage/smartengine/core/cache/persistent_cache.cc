@@ -411,8 +411,12 @@ int PersistentCache::insert(const ExtentId &extent_id,
   if (FAILED(ret)) {
     int tmp_ret = Status::kOk;
     if (IS_NOTNULL(cache_info)) {
-      if (Status::kOk != (tmp_ret = cache_file_.recycle(*cache_info))) {
-        SE_LOG(WARN, "fail to recycle cache space", K(tmp_ret), K(*cache_info));
+      if (cache_info->is_valid()) {
+        // The space for this extent in persistent cache has been successfully allocated
+        // and needs to be recycled.
+        if (Status::kOk != (tmp_ret = cache_file_.recycle(*cache_info))) {
+          SE_LOG(WARN, "fail to recycle cache space", K(tmp_ret), K(*cache_info));
+        }
       }
       MOD_DELETE_OBJECT(PersistentCacheInfo, cache_info);
     }

@@ -426,13 +426,15 @@ int ObjectIOExtent::read(util::AIOHandle *aio_handle, int64_t offset, int64_t si
   } else if (UNLIKELY(offset + size > storage::MAX_EXTENT_SIZE)) {
     ret = Status::kOverLimit;
     SE_LOG(WARN, "the range to read is overflow", K(ret), K(offset), K(size));
-  } else if (FAILED(read_persistent_cache(aio_handle, offset, size, buf, result))) {
-    if (Status::kNotFound != ret) {
-      SE_LOG(WARN, "fail to read from persistent cache", K(ret), K_(extent_id));
-    } else if (FAILED(read_object(offset, size, buf, result))) {
-      SE_LOG(WARN, "fail to read object", K(ret), K(offset), K(size));
+  } else {
+    if (IS_NULL(aio_handle)) {
+      if (FAILED(sync_read(offset, size, buf, result))) {
+        SE_LOG(WARN, "fail to sync read object", K(ret), K_(extent_id), K(offset), K(size));
+      }
     } else {
-      // succeed
+      if (FAILED(async_read(aio_handle, offset, size, buf, result))) {
+        SE_LOG(WARN, "fail to async read object", K(ret), K_(extent_id), K(offset), K(size));
+      }
     }
   }
 
@@ -539,7 +541,9 @@ int ObjectIOExtent::write_object(const char *data, int64_t data_size)
     // A failure in writing to the persistent cache does not affect the extent write operation.
     if (PersistentCache::get_instance().use_read_write_through_mode()) {
       if (Status::kOk != (tmp_ret = PersistentCache::get_instance().insert(extent_id_, Slice(data, data_size), nullptr))) {
-        SE_LOG(WARN, "fail to write extent data to persistent cache", K(tmp_ret), K_(extent_id));
+        if (Status::kNoSpace != tmp_ret) {
+          SE_LOG(WARN, "fail to write extent data to persistent cache", K(tmp_ret), K_(extent_id));
+        }
       } else {
 #ifndef NDEBUG
         SE_LOG(INFO, "success to write extent data to persistent cache", K_(extent_id));
@@ -553,6 +557,72 @@ int ObjectIOExtent::write_object(const char *data, int64_t data_size)
 #ifndef NDEBUG
   TEST_SYNC_POINT_CALLBACK("IOExtent::write_failed", &ret);
 #endif
+
+  return ret;
+}
+
+int ObjectIOExtent::sync_read(int64_t offset, int64_t size, char *buf, Slice &result)
+{
+  int ret = Status::kOk;
+  Cache::Handle *handle = nullptr;
+
+  if (PersistentCache::get_instance().is_enabled()) {
+    if (FAILED(PersistentCache::get_instance().lookup(extent_id_, handle))) {
+      // Overwrite the ret if persistent cache miss.
+      if (Status::kNotFound != ret) {
+        SE_LOG(WARN, "fail to look up from persustent cache", K(ret), K_(extent_id), K(offset), K(size));
+      } else if (FAILED(read_object(offset, size, buf, result))) {
+        SE_LOG(WARN, "fail to read object", K(ret), K_(extent_id), K(offset), K(size));
+      }
+    } else if (FAILED(PersistentCache::get_instance().read_from_handle(handle,
+                                                                       nullptr /*aio_handle*/,
+                                                                       offset,
+                                                                       size,
+                                                                       buf,
+                                                                       result))) {
+      SE_LOG(WARN, "fail to read from persistent cache handle", K(ret), K_(extent_id), K(offset), K(size));
+    } else {
+      SE_LOG(DEBUG, "success to read from persistent cache", K_(extent_id), K(offset), K(size));
+    }
+
+    if (IS_NOTNULL(handle)) {
+      PersistentCache::get_instance().release_handle(handle);
+      handle = nullptr;
+    }
+  } else {
+    if (FAILED(read_object(offset, size, buf, result))) {
+      SE_LOG(WARN, "fail to read object", K(ret), K_(extent_id), K(offset), K(size));
+    }
+  }
+
+  return ret;
+}
+
+int ObjectIOExtent::async_read(util::AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, Slice &result)
+{
+  assert(IS_NOTNULL(aio_handle));
+  int ret = aio_handle->aio_req_->status_;
+
+  if (Status::kNoSpace == ret) {
+    // The data hasn't been prefetched into persistent cache, maybe the persistent cache
+    // is disabled or the persistent cache space is exhausted.
+  } else if (FAILED(PersistentCache::get_instance().read_from_handle(aio_handle->aio_req_->handle_,
+                                                                     aio_handle,
+                                                                     offset,
+                                                                     size,
+                                                                     buf,
+                                                                     result))) {
+    SE_LOG(WARN, "fail to read data from persistent cache", K(ret), K_(extent_id), K(offset), K(size));
+  } else {
+    SE_LOG(DEBUG, "success to read from persistent cache", K_(extent_id), K(offset), K(size));
+  }
+
+  // Aync read object failed, try sync read, overwrite ret here.
+  if (FAILED(ret)) {
+    if (FAILED(read_object(offset, size, buf, result))) {
+      SE_LOG(WARN, "fail to read object", K(ret), K_(extent_id), K(offset), K(size));
+    }
+  }
 
   return ret;
 }
@@ -599,36 +669,6 @@ int ObjectIOExtent::read_object(int64_t offset, int64_t size, char *buf, common:
       assert(static_cast<int64_t>(body.size()) <= size);
       memcpy(buf, body.data(), body.size());
       result.assign(buf, size);
-    }
-  }
-
-  return ret;
-}
-
-int ObjectIOExtent::read_persistent_cache(AIOHandle *aio_handle, int64_t offset, int64_t size, char *buf, Slice &result)
-{
-  int ret = Status::kNotFound;
-  Cache::Handle *handle = nullptr;
-
-  if (PersistentCache::get_instance().is_enabled()) { 
-    if (FAILED(PersistentCache::get_instance().lookup(extent_id_, handle))) {
-      if (Status::kNotFound != ret) {
-        SE_LOG(WARN, "fail to lookup from PersistentCache", K(ret), K_(extent_id));
-      }
-    } else if (FAILED(PersistentCache::get_instance().read_from_handle(handle,
-                                                                       aio_handle,
-                                                                       offset,
-                                                                       size,
-                                                                       buf,
-                                                                       result))) {
-      SE_LOG(WARN, "fail to read data from handle", K(ret));
-    } else {
-      SE_LOG(DEBUG, "success to read from persistent cache", K_(extent_id));
-    }
-
-    if (IS_NOTNULL(handle)) {
-      PersistentCache::get_instance().release_handle(handle);
-      handle = nullptr;
     }
   }
 
