@@ -156,10 +156,10 @@ public:
     return ss;
   }
 
-  Status get_object(const std::string &key, std::string &data)
+  Status get_object(const std::string &key, std::string &data, bool quiet = false)
   {
     Status ss = obj_store_->get_object(bucket_, key, data);
-    if (!ss.is_succ()) {
+    if (!ss.is_succ() && !quiet) {
       std::cout << "get object:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
@@ -179,6 +179,15 @@ public:
     Status ss = obj_store_->delete_object(bucket_, key);
     if (!ss.is_succ()) {
       std::cout << "delete object:" << ss.error_code() << " " << ss.error_message() << std::endl;
+    }
+    return ss;
+  }
+
+  Status delete_objects(const std::vector<std::string_view> &keys)
+  {
+    Status ss = obj_store_->delete_objects(bucket_, keys);
+    if (!ss.is_succ()) {
+      std::cout << "delete objects:" << ss.error_code() << " " << ss.error_message() << std::endl;
     }
     return ss;
   }
@@ -264,8 +273,8 @@ INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
                         testing::Values( // clang-format off
                             // "aws"
-                            "aliyun"
-                            // "local"
+                            // "aliyun"
+                            "local"
                             )); // clang-format on
 
 TEST_P(ObjstoreTest, reinitObjStoreApi)
@@ -374,9 +383,14 @@ TEST_P(ObjstoreTest, operateObject)
   std::string key = "test_put_object";
   std::string raw_data = "test_put_object_data";
   std::string zero_len_key = "zero_len_key";
+  std::string illegal_key = "/illegal_key";
   std::string data;
   ::objstore::Status ss = put_object(key, raw_data);
   ASSERT_TRUE(ss.is_succ());
+
+  ss = put_object(illegal_key, raw_data);
+  // aliyun oss does not support key with '/' at the beginning
+  ASSERT_EQ(ss.error_code(), ::objstore::SE_INVALID);
 
   ss = get_object(key, data);
   ASSERT_TRUE(ss.is_succ());
@@ -781,11 +795,92 @@ TEST_P(ObjstoreTest, deleteDir)
   ASSERT_TRUE(ss.is_succ());
 }
 
+TEST_P(ObjstoreTest, CornerCase)
+{
+  std::vector<std::string_view> keys;
+  // ========= case: delete 0 keys =========
+  Status ss = delete_objects(keys);
+  ASSERT_EQ(ss.error_code(), 0);
+
+  // ========= case: delete keys contain empty string(key length = 0) =========
+  keys.push_back("");
+  ss = delete_objects(keys);
+  if (provider_ == ALIYUN_PROVIDER) {
+    ASSERT_TRUE(ss.error_message().find("MalformedXML") != std::string::npos);
+    ASSERT_EQ(ss.error_code(), ::objstore::CLOUD_PROVIDER_UNRECOVERABLE_ERROR);
+  } else if (provider_ == S3_PROVIDER) {
+    ASSERT_TRUE(ss.error_message().find("UserKeyMustBeSpecified") != std::string::npos);
+    ASSERT_EQ(ss.error_code(), ::objstore::CLOUD_PROVIDER_UNRECOVERABLE_ERROR);
+  } else if (provider_ == LOCAL_PROVIDER) {
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_INVALID);
+  }
+  keys.clear();
+
+  // ========= case: key length equal to 1024 should be invalid key =========
+  std::vector<std::string> mkeys;
+  std::string prefix;
+  // generate a prefix with length 1019
+  prefix.reserve(1019);
+  for (int x = 0; x < 4; x++) {
+    // the max file name length is 255 for Linux
+    for (int i = 0; i < 253; i++) {
+      prefix += "a";
+    }
+    prefix += "/";
+  }
+  prefix += "ooo";
+  ASSERT_EQ(prefix.length(), 1019);
+  std::string key_len_1024 = prefix + "aaaaa";
+  ASSERT_EQ(key_len_1024.length(), 1024);
+  // put object with key length 1024
+  // for aliyun oss, the max key length allowed is 1023
+  ss = put_object(key_len_1024, "data");
+  ASSERT_EQ(ss.error_code(), ::objstore::SE_INVALID);
+
+  // ========= case: delete more than 1000 keys with key length = 1023 =========
+  const size_t prepend_len = 1023 - prefix.size();
+  ASSERT_EQ(prepend_len, 4);
+  // generate more than 1000 keys with length 1023
+  for (int j = 0; j < 1010; j++) {
+    std::string key = prefix;
+    size_t my_prepend_len = prepend_len - std::to_string(j).length();
+    if (my_prepend_len > 0) {
+      for (size_t k = 0; k < my_prepend_len; k++) {
+        key += "0";
+      }
+    }
+    key += std::to_string(j);
+    ASSERT_TRUE(key.length() == 1023);
+    ss = put_object(key, "");
+    ASSERT_TRUE(ss.is_succ());
+
+    mkeys.push_back(std::move(key));
+  }
+
+  std::vector<std::string_view> mkeys_view(mkeys.begin(), mkeys.end());
+
+  ss = delete_objects(mkeys_view);
+  ASSERT_EQ(ss.error_code(), 0);
+
+  // make sure all keys are deleted
+  std::string data;
+  for (const std::string &key : mkeys) {
+    ss = get_object(key, data, true);
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_NO_SUCH_KEY);
+  }
+  keys.clear();
+}
+
 TEST_P(ObjstoreTest, forbidOverwrite)
 {
   std::string key = "forbid_overwrite_key";
 
-  Status ss = put_object(key, "data1");
+  Status ss = put_object(key, "data", true);
+  ASSERT_TRUE(ss.is_succ());
+  ss = delete_object(key);
+  ASSERT_TRUE(ss.is_succ());
+
+  ss = put_object(key, "data1");
   ASSERT_TRUE(ss.is_succ());
 
   ss = put_object(key, "data2", true);

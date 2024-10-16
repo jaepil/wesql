@@ -135,6 +135,9 @@ Status AliyunOssObjectStore::put_object(const std::string_view &bucket,
                                         const std::string_view &key,
                                         const std::string_view &data,
                                         bool forbid_overwrite) {
+  if (!is_valid_key(key)) {
+    return Status(Errors::SE_INVALID, EINVAL, "invalid key");
+  }
   std::shared_ptr<std::iostream> content = std::make_shared<std::stringstream>(std::string(data));
   if (content == nullptr) {
     return Status(SE_IO_ERROR, 0, "failed to allocate memory for put object.");

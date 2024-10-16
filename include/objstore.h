@@ -179,6 +179,8 @@ class ObjectStore {
 
   virtual Status delete_objects(const std::string_view &bucket,
                                 const std::vector<std::string_view> &object_keys) = 0;
+
+  bool is_valid_key(const std::string_view &key);
 };
 
 // create ObjectStore based credentials in credentials dir or environment

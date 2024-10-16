@@ -171,20 +171,11 @@ int try_single_data_node_lease_lock_if_expired(ObjectStore *objstore,
             stale_lock_version_keys.emplace_back(object_meta.key);
           }
           if (!stale_lock_version_keys.empty()) {
-            for (const std::string_view &key : stale_lock_version_keys) {
-              status = objstore->delete_object(bucket_dir, key);
-              if (!status.is_succ()) {
-                err_msg = std::string("fail to delete stale lock version file: ") + status.error_message().data();
-                ret = status.error_code();
-                break;
-              }
+            status = objstore->delete_objects(bucket_dir, stale_lock_version_keys);
+            if (!status.is_succ()) {
+              err_msg = std::string("fail to delete stale lock version files: ") + status.error_message().data();
+              ret = status.error_code();
             }
-            // TODO: why this not works
-            // status = objstore->delete_objects(bucket_dir, stale_lock_version_keys);
-            // if (!status.is_succ()) {
-            //   err_msg = std::string("fail to delete stale lock version files: ") + status.error_message().data();
-            //   ret = status.error_code();
-            // }
           }
           if (0 == ret) {
             // stale lock version keys are deleted successfully

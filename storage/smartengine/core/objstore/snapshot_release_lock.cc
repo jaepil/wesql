@@ -45,10 +45,10 @@ int tryObjectStoreFileLock(ObjectStore *objstore,
       std::string current_status;
       status = objstore->get_object(bucket_dir, key, current_status);
       if (status.error_code() == Errors::SE_NO_SUCH_KEY) {
-        err_msg = "lock file may be deleted by another node";
+        err_msg = key + ": lock file may be deleted by another node";
         ret = Errors::SE_OHTER_DATA_NODE_MAYBE_RUNNING;
       } else if (!status.is_succ()) {
-        err_msg = status.error_message();
+        err_msg = key + ": get lock file failed: " + status.error_message().data();
         ret = status.error_code();
       } else {
         if (current_status == backup_snapshot_status) {
@@ -57,12 +57,12 @@ int tryObjectStoreFileLock(ObjectStore *objstore,
           // written. since we don't support muliple data nodes at now, we
           // treat this as an normal case.
         } else {
-          err_msg = std::string() + "lock file exists but in " + current_status + " status";
+          err_msg = key + ": lock file exists but in " + current_status + " status";
           ret = Errors::SE_OHTER_DATA_NODE_MAYBE_RUNNING;
         }
       }
     } else if (!status.is_succ()) {
-      err_msg = status.error_message();
+      err_msg = key + ": put lock file failed: " + status.error_message().data();
       ret = status.error_code();
     } else {
       // lock file is created successfully

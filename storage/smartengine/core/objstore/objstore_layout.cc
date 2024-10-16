@@ -9,7 +9,7 @@ namespace util {
 std::string make_root_prefix(const std::string &cluster_id)
 {
   // clang-format off
-  std::string prefix = "/" + cluster_id + 
+  std::string prefix = cluster_id + 
                        "/" + "smartengine" +
                        "/" + "v1" +
                        "/";

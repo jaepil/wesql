@@ -488,11 +488,6 @@ Status LocalObjectStore::get_objects_to_dir(const std::string_view &src_bucket,
   return copy_directory(src_bucket_path, dst_dir);
 }
 
-bool LocalObjectStore::is_valid_key(const std::string_view &key) {
-  // key in s3, should be no more than 1024 bytes.
-  return key.size() > 0 && key.size() <= 1024;
-}
-
 std::string LocalObjectStore::generate_path(const std::string_view &bucket) {
   return std::string(basepath_) + "/" + std::string(bucket);
 }

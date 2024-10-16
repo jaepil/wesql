@@ -76,7 +76,6 @@ class LocalObjectStore : public ObjectStore {
   std::string_view get_provider() const override { return provider_; }
 
  private:
-  bool is_valid_key(const std::string_view &key);
   std::string generate_path(const std::string_view &bucket);
   std::string generate_path(const std::string_view &bucket,
                             const std::string_view &key);

@@ -110,6 +110,14 @@ void cleanup_objstore_provider(ObjectStore *objstore) {
   }
 }
 
+bool ObjectStore::is_valid_key(const std::string_view &key) {
+  // for s3, a key should be no more than 1024 bytes.
+  //
+  // for aliyun, a key should not start with '/' or '\', and key length must be
+  // in [1,1023].
+  return key.size() > 0 && key.size() < 1024 && key[0] != '/' && key[0] != '\\';
+}
+
 Status ObjectStore::delete_directory(const std::string_view &bucket,
                                      const std::string_view &prefix) {
   std::string dir_prefix(prefix);

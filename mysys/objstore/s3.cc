@@ -213,6 +213,9 @@ Status S3ObjectStore::put_object(const std::string_view &bucket,
                                  const std::string_view &key,
                                  const std::string_view &data,
                                  bool forbid_overwrite) {
+  if (!is_valid_key(key)) {
+    return Status(Errors::SE_INVALID, EINVAL, "invalid key");
+  }
   Aws::S3::Model::PutObjectRequest request;
   Aws::String full_key;
   if (bucket_dir_.empty()) {
@@ -441,7 +444,7 @@ Status S3ObjectStore::list_object(const std::string_view &bucket,
 
   for (const auto &obj : s3_objects) {
     // only list first-level sub keys
-    if (!recursive && !is_first_level_sub_key(obj.GetKey(), prefix)) {
+    if (!recursive && !is_first_level_sub_key(obj.GetKey(), full_prefix)) {
       continue;
     }
     ObjectMeta meta;
@@ -500,9 +503,9 @@ Status S3ObjectStore::delete_object(const std::string_view &bucket,
   return Status();
 }
 
-Status S3ObjectStore::delete_objects(const std::string_view &bucket,
-                                     const std::vector<std::string_view> &object_keys) { 
-  Aws::S3::Model::DeleteObjectsRequest request;
+Status S3ObjectStore::delete_objects(
+    const std::string_view &bucket,
+    const std::vector<std::string_view> &object_keys) {
   Aws::String full_key;
   Aws::String common_prefix;
   
@@ -511,7 +514,7 @@ Status S3ObjectStore::delete_objects(const std::string_view &bucket,
     common_prefix.append("/");
   }
 
-  std::vector<Aws::S3::Model::ObjectIdentifier> object_identifiers;
+  Aws::Vector<Aws::S3::Model::ObjectIdentifier> object_identifiers;
 
   for (size_t i = 0; i < object_keys.size(); i++) {
     const std::string_view &object_key = object_keys[i];
@@ -521,13 +524,14 @@ Status S3ObjectStore::delete_objects(const std::string_view &bucket,
       full_key = common_prefix;
       full_key.append(object_key);
     }
-    const Aws::S3::Model::ObjectIdentifier &identifier = Aws::S3::Model::ObjectIdentifier().WithKey(full_key);
-    object_identifiers.emplace_back(identifier);
+    object_identifiers.emplace_back(
+        Aws::S3::Model::ObjectIdentifier().WithKey(full_key));
     if (object_identifiers.size() == kDeleteObjsNumEach || i == object_keys.size() - 1) {
+      Aws::S3::Model::DeleteObjectsRequest request;
       Aws::S3::Model::Delete delete_object;
-      delete_object.SetObjects(object_identifiers);
+      delete_object.SetObjects(std::move(object_identifiers));
+      request.SetDelete(std::move(delete_object));
       request.SetBucket(Aws::String(bucket));
-      request.SetDelete(delete_object);
 
       int retry_times = retry_times_on_error_;
       Aws::S3::Model::DeleteObjectsOutcome outcome;
