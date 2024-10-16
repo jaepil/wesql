@@ -1310,10 +1310,6 @@ int Binlog_archive::archive_event(File_reader &reader, uchar *event_ptr,
   mysql_mutex_unlock(&m_rotate_lock);
 
 suc:
-  // Signal update after every event.
-  // Actually, it's enough to send a signal only when rotating the binlog
-  // file.
-  signal_archive();
   return 0;
 
 err_slice:
@@ -1769,6 +1765,8 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
   assert(log_pos == 0 || m_mysql_binlog_last_event_end_pos >= log_pos);
 
 end:
+  // Signal update after every slice.
+  signal_archive();
   if (need_lock) {
     mysql_mutex_unlock(&m_rotate_lock);
   }
