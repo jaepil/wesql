@@ -93,7 +93,7 @@ int SnapshotImpl::recover_extent_space()
 {
   int ret = Status::kOk;
   for (int64_t level = 0; SUCCED(ret) && level < storage::MAX_TIER_COUNT; ++level) {
-    if (FAILED(extent_layer_versions_[level]->recover_reference_extents())) {
+    if (FAILED(extent_layer_versions_[level]->recover_reference_extents(true))) {
       SE_LOG(WARN, "fail to recover extent space", K(ret), K(level));
     }
   }

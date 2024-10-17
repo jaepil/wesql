@@ -1824,7 +1824,7 @@ int StorageManager::recover_extent_space()
       if (IS_NULL(current_extent_layer_version = extent_layer_versions_[level])) {
         ret = Status::kErrorUnexpected;
         SE_LOG(WARN, "unexpected error, extent meta must not nullptr", K(ret), K(level));
-      } else if (FAILED(current_extent_layer_version->recover_reference_extents())) {
+      } else if (FAILED(current_extent_layer_version->recover_reference_extents(false))) {
         SE_LOG(WARN, "fail to recover reference extents", K(ret), K(level));
       }
     }
