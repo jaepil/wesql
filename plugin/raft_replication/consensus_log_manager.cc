@@ -369,8 +369,6 @@ int ConsensusLogManager::get_log_entry(uint64 channel_id,
         error = get_log_directly(consensus_index, consensus_term, log_content,
                                  outer, flag, checksum,
                                  channel_id == 0 ? false : true);
-      } else {
-        error = 1;
       }
       channel->set_prefetch_request(consensus_index);
     }
@@ -378,9 +376,9 @@ int ConsensusLogManager::get_log_entry(uint64 channel_id,
     channel->dec_ref_count();
   }
 
-  if (error == 1)
+  if (!error)
     LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_ENTRY_NOT_FOUND_FROM_CACHE,
-                 channel_id, consensus_index);
+                 channel_id, consensus_index, error);
   return error;
 }
 
@@ -753,7 +751,10 @@ int ConsensusLogManager::try_advance_commit_position(uint64 timeout) {
 
   mysql_mutex_lock(log->get_log_lock());
   if (advance_commit_index_if_greater(index, false)) {
-    (void)log->switch_and_seek_log(log_name, pos, true);
+    if (consensus_state_process.get_status() != BINLOG_WORKING)
+      (void)log->switch_and_seek_log(log_name, pos, true);
+    else
+      log->update_binlog_end_pos(log_name, pos);
   }
   mysql_mutex_unlock(log->get_log_lock());
 

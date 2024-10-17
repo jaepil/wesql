@@ -806,6 +806,9 @@ static int prefetch_logs_of_file(THD *thd, uint64 channel_id,
       rci_ev = static_cast<Consensus_cluster_info_log_event *>(ev);
     }
 
+    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_PREFETCH_ONE_ENTRY,
+                 channel_id, current_index, start_index);
+
     if (prefetch_channel->get_channel_id() == 0 &&
         (current_flag & (Consensus_log_event_flag::FLAG_LARGE_TRX |
                          Consensus_log_event_flag::FLAG_LARGE_TRX_END))) {
