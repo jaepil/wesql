@@ -17,7 +17,7 @@ while ($i <= $max) {
 }
 --enable_query_log
 
-SET GLOBAL SMARTENGINE_FORCE_FLUSH_MEMTABLE_NOW=1;
+SET GLOBAL SMARTENGINE_FLUSH_MEMTABLE=1;
 
 set session debug= "+d,myx_simulate_negative_stats";
 SELECT CASE WHEN DATA_LENGTH < 1024 * 1024 THEN 'true' ELSE 'false' END FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't1';

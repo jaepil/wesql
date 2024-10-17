@@ -391,8 +391,8 @@ bool SeDictionaryManager::update_system_cf_version(
   if (status.ok()) {
     version_in_dict = se_netbuf_to_uint16((const uchar *)value.c_str());
     if (0 != version_in_dict && version_in_dict > system_cf_version) {
-      XHANDLER_LOG(ERROR, "SE: set older version is disallowed.",
-                   K(version_in_dict), K(system_cf_version));
+      HANDLER_LOG(ERROR, "SE: set older version is disallowed.",
+                  K(version_in_dict), K(system_cf_version));
       return true;
     }
   }
@@ -433,10 +433,10 @@ bool SeDictionaryManager::update_max_table_id(
   if (get_max_table_id(&max_table_id_in_dict)) {
     if (dd::INVALID_OBJECT_ID != max_table_id_in_dict &&
         max_table_id_in_dict > table_id) {
-      XHANDLER_LOG(ERROR, "SE: found max table id from data dictionary but"
-                          " trying to update to older value. This should never"
-                          "happen and possibly a bug.",
-                   K(max_table_id_in_dict), K(table_id));
+      HANDLER_LOG(ERROR, "SE: found max table id from data dictionary but"
+                  " trying to update to older value. This should never"
+                  "happen and possibly a bug.",
+                  K(max_table_id_in_dict), K(table_id));
       return true;
     }
   }

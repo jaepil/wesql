@@ -134,7 +134,7 @@ static int se_update_query_perf_vars(SeStatusVars &status_vars)
 
   if (IS_NULL(perf_ctx = monitor::get_tls_query_perf_context())) {
     ret = common::Status::kErrorUnexpected;
-    XHANDLER_LOG(WARN, "The perf context must not been nullptr", K(ret), KP(perf_ctx));
+    HANDLER_LOG(WARN, "The perf context must not been nullptr", K(ret), KP(perf_ctx));
   } else {
 #define SE_ASSIGN_PERF_COUNTER(name, key) \
     status_vars.name##_ = perf_ctx->get_global_count(monitor::CountPoint::key)
@@ -231,9 +231,9 @@ int se_update_status_vars(SeStatusVars &status_vars)
   int ret = common::Status::kOk;
 
   if (FAILED(se_update_query_perf_vars(status_vars))) {
-    XHANDLER_LOG(WARN, "fail to update query perf variables", K(ret));
+    HANDLER_LOG(WARN, "fail to update query perf variables", K(ret));
   } else if (FAILED(se_update_global_statistic_vars(status_vars))) {
-    XHANDLER_LOG(WARN, "fail to update global statistis variables", K(ret));
+    HANDLER_LOG(WARN, "fail to update global statistis variables", K(ret));
   } else {
     //succeed
   }

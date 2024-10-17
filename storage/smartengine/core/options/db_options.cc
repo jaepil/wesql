@@ -101,7 +101,7 @@ MutableDBOptions::MutableDBOptions()
       use_direct_write_for_wal(true),
       mutex_backtrace_threshold_ns(100000),
       max_background_dumps(3),
-      dump_memtable_limit_size(64 * 1024 * 1024),
+      dump_memtable_limit_size(0),
       auto_shrink_enabled(true),
       max_free_extent_percent(10),
       shrink_allocate_interval(60 * 60),

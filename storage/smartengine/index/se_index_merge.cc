@@ -68,7 +68,7 @@ int SeIndexMerge::init()
     inplace index creation.
   */
   if (merge_file_create(m_merge_file)) {
-    XHANDLER_LOG(WARN, "SE:: fail to create merge file");
+    HANDLER_LOG(WARN, "SE:: fail to create merge file");
     return HA_ERR_INTERNAL_ERROR;
   }
 
@@ -105,12 +105,12 @@ int SeIndexMerge::merge_file_create(struct merge_file_info& file_info)
   if (nullptr == m_tmpfile_path) {
     if (0 > (fd = mysql_tmpfile("myx"))) {
       ret = HA_ERR_INTERNAL_ERROR;
-      XHANDLER_LOG(WARN, "SE:: fail to create tmpfile", K(ret), K(fd));
+      HANDLER_LOG(WARN, "SE:: fail to create tmpfile", K(ret), K(fd));
     }
   } else {
     if (0 > (fd = mysql_tmpfile_path(m_tmpfile_path, "myx"))) {
       ret = HA_ERR_INTERNAL_ERROR;
-      XHANDLER_LOG(WARN, "SE:: fail to create tmpfile", K(ret), K(fd), K(*m_tmpfile_path));
+      HANDLER_LOG(WARN, "SE:: fail to create tmpfile", K(ret), K(fd), K(*m_tmpfile_path));
     }
   }
 
@@ -152,7 +152,7 @@ int SeIndexMerge::add(const common::Slice &key, const common::Slice &val, bool &
     }
 
     if (merge_buf_write()) {
-      XHANDLER_LOG(ERROR, "Error writing sort buffer to disk.");
+      HANDLER_LOG(ERROR, "Error writing sort buffer to disk.");
       return HA_ERR_INTERNAL_ERROR;
     }
   }
@@ -363,7 +363,7 @@ int SeIndexMerge::next(common::Slice *const key, common::Slice *const val)
   if (m_merge_min_heap.empty()) {
     if ((res = merge_heap_prepare())) {
       // NO_LINT_DEBUG
-      XHANDLER_LOG(ERROR, "Error during preparation of heap.");
+      HANDLER_LOG(ERROR, "Error during preparation of heap.");
       return res;
     }
 
@@ -439,7 +439,7 @@ int SeIndexMerge::merge_heap_pop_and_get_next(common::Slice *const key,
 
     /* Try reading record again, should never fail. */
     if (entry->read_rec(&entry->key, &entry->val)) {
-      XHANDLER_LOG(ERROR, "chunk size is too small to read record.");
+      HANDLER_LOG(ERROR, "chunk size is too small to read record.");
       return HA_ERR_SE_OUT_OF_SORTMEMORY;
     }
   }
@@ -666,7 +666,7 @@ SeIndexMerge::Bg_merge::~Bg_merge()
 int SeIndexMerge::Bg_merge::init() {
   for (size_t i = 0; i < m_sorted_files.size(); i++) {
     if (m_se_merge->merge_file_create(m_sorted_files[i])) {
-      XHANDLER_LOG(WARN, "SE:: fail to create sorted file", K(i), "sorted_files_count", m_sorted_files.size());
+      HANDLER_LOG(WARN, "SE:: fail to create sorted file", K(i), "sorted_files_count", m_sorted_files.size());
       return HA_ERR_INTERNAL_ERROR;
     }
   }
@@ -718,7 +718,7 @@ int SeIndexMerge::Bg_merge::next(common::Slice *const key,
     /* Try reading record again, should never fail. */
     if (m_entries[part_id].read_rec(&m_entries[part_id].key,
                                      &m_entries[part_id].val)) {
-      XHANDLER_LOG(ERROR, "chunk size is too small to read record.");
+      HANDLER_LOG(ERROR, "chunk size is too small to read record.");
       return HA_ERR_SE_OUT_OF_SORTMEMORY;
     }
   }
@@ -793,7 +793,7 @@ int SeIndexMerge::Bg_merge::se_merge_sort(std::vector<common::Slice>& sample,
       }
 
       if (write_buf()) {
-        XHANDLER_LOG(ERROR, "Error writing sort buffer to disk.");
+        HANDLER_LOG(ERROR, "Error writing sort buffer to disk.");
         return HA_ERR_INTERNAL_ERROR;
       }
       while (m_curr_part < sample.size() &&
@@ -818,7 +818,7 @@ int SeIndexMerge::Bg_merge::se_merge_sort(std::vector<common::Slice>& sample,
 
   // write last sorted buf out
   if (write_buf()) {
-    XHANDLER_LOG(ERROR, "Error writing sort buffer to disk.");
+    HANDLER_LOG(ERROR, "Error writing sort buffer to disk.");
     return HA_ERR_INTERNAL_ERROR;
   }
 

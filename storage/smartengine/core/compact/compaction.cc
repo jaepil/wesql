@@ -545,7 +545,6 @@ int GeneralCompaction::build_compactor(NewCompactionIterator *&compactor,
       arena_, change_info_, context_.output_level_/*output level*/,
       context_.shutting_down_, context_.bg_stopped_, context_.cancel_type_, true,
       context_.mutable_cf_options_->background_disable_merge);
-      COMPACTION_LOG(INFO, "backgroud_merge is disabled, subtable_id: ", K(cf_desc_.column_family_id_));
   return ret;
 }
 

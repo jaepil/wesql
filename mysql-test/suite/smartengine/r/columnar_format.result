@@ -18,7 +18,7 @@ COUNT(*)
 SELECT COUNT(*) FROM t2;
 COUNT(*)
 9999
-SET GLOBAL smartengine_force_flush_memtable_now=ON;
+SET GLOBAL smartengine_flush_memtable=ON;
 SELECT COUNT(*) FROM t1;
 COUNT(*)
 9999
@@ -47,7 +47,7 @@ ALTER TABLE t1 add column c5 int default 100 , algorithm=instant;
 ALTER TABLE t2 add column c5 int default 100 , algorithm=instant;
 INSERT INTO t1 values (10000, "zds", "ppl", "summer", 1234);
 INSERT INTO t2 values (10000, "zds", "ppl", "summer", 1234);
-SET GLOBAL smartengine_force_flush_memtable_now=ON;
+SET GLOBAL smartengine_flush_memtable=ON;
 SELECT COUNT(*) FROM t1 WHERE c5 = 100;
 COUNT(*)
 9999

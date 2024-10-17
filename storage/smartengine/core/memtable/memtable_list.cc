@@ -17,17 +17,21 @@
 #include "storage/storage_manager.h"
 #include "table/merging_iterator.h"
 
-namespace smartengine {
-using namespace util;
+namespace smartengine
+{
 using namespace common;
-using namespace table;
 using namespace monitor;
 using namespace storage;
+using namespace table;
+using namespace util;
 
-namespace prot {
+namespace prot
+{
 class Mutex;
-}
-namespace db {
+} // namespace prot
+
+namespace db
+{
 
 class InternalKeyComparator;
 class VersionSet;
@@ -44,7 +48,6 @@ void MemTableListVersion::UnrefMemTable(autovector<MemTable*>* to_delete,
     to_delete->push_back(m);
     assert(*parent_memtable_list_memory_usage_ >= m->ApproximateMemoryUsage());
     *parent_memtable_list_memory_usage_ -= m->ApproximateMemoryUsage();
-  } else {
   }
 }
 
@@ -401,7 +404,6 @@ void MemTableList::InstallNewVersion() {
   } else {
     // somebody else holds the current version, we need to create new one
     MemTableListVersion* version = current_;
-//    current_ = new MemTableListVersion(&current_memory_usage_, current_);
     current_ = MOD_NEW_OBJECT(memory::ModId::kDefaultMod, MemTableListVersion, &current_memory_usage_, current_);
     current_->Ref();
     version->Unref();

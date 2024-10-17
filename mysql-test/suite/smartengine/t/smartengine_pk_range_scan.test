@@ -27,7 +27,7 @@ while ($i <= 10000)
   eval INSERT INTO t1 (k, c, pad) VALUES ($i, REPEAT('zds', 30), REPEAT('ppl', 10));
 }
 
-set global smartengine_force_flush_memtable_now=on;
+set global smartengine_flush_memtable=on;
 
 --enable_query_log
 

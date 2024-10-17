@@ -3,7 +3,7 @@ Warnings:
 Note	1051	Unknown table 'test.t1'
 create table t1 (a int primary key);
 insert into t1 values(42);
-set global smartengine_force_flush_memtable_now = 1;
+set global smartengine_flush_memtable = 1;
 show variables like 'autocommit';
 Variable_name	Value
 autocommit	ON

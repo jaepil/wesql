@@ -5,8 +5,8 @@ DROP TABLE IF EXISTS t1;
 --enable_warnings
 
 # Start from clean slate
-#set global smartengine_compact_cf = 'cf1';
-#set global smartengine_compact_cf = 'cf2';
+#set global smartengine_compact = 'cf1';
+#set global smartengine_compact = 'cf2';
 #set global smartengine_signal_drop_index_thread = 1;
 --source include/restart_mysqld.inc
 --exec truncate --size=0 $MYSQLTEST_VARDIR/log/mysqld.1.err

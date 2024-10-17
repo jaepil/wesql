@@ -255,9 +255,9 @@ my_core::enum_alter_inplace_result ha_smartengine::check_if_supported_inplace_al
    */
   if ((ha_alter_info->handler_flags & Alter_inplace_info::ALTER_RENAME) &&
       (ha_alter_info->handler_flags & ~Alter_inplace_info::ALTER_RENAME)) {
-    __XHANDLER_LOG(WARN, "SEDDL: Combination of renaming table with other "
-                         "alteration is disabled due to known issue. table:%s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: Combination of renaming table with other "
+                  "alteration is disabled due to known issue. table:%s",
+                  table->s->table_name.str);
     ha_alter_info->unsupported_reason = "Combination of renaming table with "
                                         "other alteration is disabled due to "
                                         "known issue";
@@ -282,9 +282,9 @@ my_core::enum_alter_inplace_result ha_smartengine::check_if_supported_inplace_al
   if ((ha_alter_info->handler_flags & (Alter_inplace_info::ADD_PK_INDEX |
                                        Alter_inplace_info::DROP_PK_INDEX)) ==
       Alter_inplace_info::DROP_PK_INDEX) {
-    __XHANDLER_LOG(WARN, "SEDDL: drop primary key is only allowed in "
-                         "combination with ADD PRIMARY KEY. table_name: %s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: drop primary key is only allowed in "
+                  "combination with ADD PRIMARY KEY. table_name: %s",
+                  table->s->table_name.str);
     ha_alter_info->unsupported_reason = "With INPLACE DDL, SE only allows "
                                         "that DROP PRIMARY KEY is combined with "
                                         "ADD PRIMARY KEY";
@@ -299,9 +299,9 @@ my_core::enum_alter_inplace_result ha_smartengine::check_if_supported_inplace_al
    * We can't support inplace DROP a PRIMARY KEY.
    */
   if (!has_hidden_pk(table) && has_hidden_pk(altered_table)) {
-    __XHANDLER_LOG(WARN, "SEDDL: drop primary key is only allowed in "
-                         "combination with ADD PRIMARY KEY. table_name: %s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: drop primary key is only allowed in "
+                  "combination with ADD PRIMARY KEY. table_name: %s",
+                  table->s->table_name.str);
     ha_alter_info->unsupported_reason = "With INPLACE DDL, SE only allows "
                                         "that DROP PRIMARY KEY is combined with "
                                         "ADD PRIMARY KEY";
@@ -364,9 +364,9 @@ my_core::enum_alter_inplace_result ha_smartengine::check_if_supported_inplace_al
         /* We cannot assign an AUTO_INCREMENT
            column values during online ALTER. */
         assert(key_part->field == altered_table->found_next_number_field);
-        __XHANDLER_LOG(WARN, "SEDDL: not support assign a auto_increment "
-                             "column value. table_name: %s",
-                       table->s->table_name.str);
+        __HANDLER_LOG(WARN, "SEDDL: not support assign a auto_increment "
+                      "column value. table_name: %s",
+                      table->s->table_name.str);
 
         /* for add autoinc column can't not downgrade lock after phase,
          * so, inplace ddl cost is the same as copy-ddl.
@@ -497,7 +497,7 @@ int ha_smartengine::create_inplace_key_defs(
     assert(new_key_stat.key_name == new_key_name);
 
 #ifndef NDEBUG
-    __XHANDLER_LOG(INFO, "key stat: %s", new_key_stat.to_string().c_str());
+    __HANDLER_LOG(INFO, "key stat: %s", new_key_stat.to_string().c_str());
 #endif
     if (new_key_stat.key_stat == prepare_inplace_key_stat::COPIED ||
         new_key_stat.key_stat == prepare_inplace_key_stat::RENAMED) {
@@ -779,7 +779,7 @@ bool ha_smartengine::prepare_inplace_alter_table(
   assert(new_dd_table != nullptr);
 
 #ifndef NDEBUG
-  __XHANDLER_LOG(INFO, "SEDDL: prepare alter sql is %s", ha_thd()->query().str);
+  __HANDLER_LOG(INFO, "SEDDL: prepare alter sql is %s", ha_thd()->query().str);
 #endif
 
   if (is_instant(ha_alter_info)) {
@@ -812,11 +812,11 @@ bool ha_smartengine::prepare_inplace_alter_table(
 
   if ((ret = prepare_inplace_alter_table_collect_key_stats(
                         altered_table, ha_alter_info))) {
-    XHANDLER_LOG(ERROR, "SEDDL: failed to collect status of keys for altered table",
-                 "table_name", table->s->table_name.str);
+    HANDLER_LOG(ERROR, "SEDDL: failed to collect status of keys for altered table",
+                "table_name", table->s->table_name.str);
   } else if (new_tdef->init_table_id(ddl_manager)) {
-    XHANDLER_LOG(ERROR, "SEDDL: failed to init table_id for creating table",
-                 "table_name", table->s->table_name.str);
+    HANDLER_LOG(ERROR, "SEDDL: failed to init table_id for creating table",
+                "table_name", table->s->table_name.str);
     ret = HA_EXIT_FAILURE;
   } else if (common::Status::kOk != create_key_defs(altered_table,
                                                     table,
@@ -826,43 +826,43 @@ bool ha_smartengine::prepare_inplace_alter_table(
                                                     new_dd_table->engine_attribute(),
                                                     need_rebuild)) {
     ret = HA_EXIT_FAILURE;
-    XHANDLER_LOG(ERROR, "SEDDL: failed creating new key definitions for altered table",
-                 "table_name", table->s->table_name.str);
+    HANDLER_LOG(ERROR, "SEDDL: failed creating new key definitions for altered table",
+                "table_name", table->s->table_name.str);
   } else if (new_tdef->write_dd_table(new_dd_table)) {
-    XHANDLER_LOG(ERROR, "SEDDL: failed to write dd::Table",
-                 "table_name", table->s->table_name.str);
+    HANDLER_LOG(ERROR, "SEDDL: failed to write dd::Table",
+                "table_name", table->s->table_name.str);
     ret = HA_EXIT_FAILURE;
   } else if (need_rebuild) {
     ret = prepare_inplace_alter_table_rebuild(
         altered_table, ha_alter_info, new_tdef, old_key_descr, old_n_keys,
         new_key_descr, new_n_keys);
     if (ret) {
-      XHANDLER_LOG(ERROR, "SEDDL: prepare for online inplace ddl failed",
-                   "table_name", table->s->table_name.str);
+      HANDLER_LOG(ERROR, "SEDDL: prepare for online inplace ddl failed",
+                  "table_name", table->s->table_name.str);
     }
   } else {
     ret = prepare_inplace_alter_table_norebuild(
         altered_table, ha_alter_info, new_tdef, old_key_descr, old_n_keys,
         new_key_descr, new_n_keys);
     if (ret) {
-      XHANDLER_LOG(ERROR, "SEDDL: prepare for online inplace ddl failed",
-                   "table_name", table->s->table_name.str);
+      HANDLER_LOG(ERROR, "SEDDL: prepare for online inplace ddl failed",
+                  "table_name", table->s->table_name.str);
     }
   }
 
   if (ret) {
-    XHANDLER_LOG(ERROR, "SEDDL: prepare for online inplace ddl failed",
-                 "table_name", table->s->table_name.str);
+    HANDLER_LOG(ERROR, "SEDDL: prepare for online inplace ddl failed",
+                "table_name", table->s->table_name.str);
     inplace_alter_table_release(new_tdef);
   } else {
 #ifndef NDEBUG
     for (auto &it : new_key_stats) {
       assert(it.first == it.second.key_name);
-      XHANDLER_LOG(INFO, "SEDDL: ", "key stat", it.second.to_string().c_str());
+      HANDLER_LOG(INFO, "SEDDL: ", "key stat", it.second.to_string().c_str());
     }
 #endif
-    XHANDLER_LOG(INFO, "SEDDL: prepare for online inplace ddl successfully",
-                 "table_name", table->s->table_name.str);
+    HANDLER_LOG(INFO, "SEDDL: prepare for online inplace ddl successfully",
+                "table_name", table->s->table_name.str);
   }
 
   DBUG_RETURN(ret);
@@ -971,14 +971,14 @@ static int setup_col_maps(Alter_inplace_info *ha_alter_info,
   dict_info->m_col_map = static_cast<uint *>(
       my_malloc(PSI_NOT_INSTRUMENTED, (n_cols) * sizeof(uint), MYF(0)));
   if (dict_info->m_col_map == nullptr) {
-    __XHANDLER_LOG(ERROR, "SEDDL: alloc memory failed, table_name: %s", old_table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: alloc memory failed, table_name: %s", old_table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
 
   dict_info->m_col_map_rev = static_cast<uint *>(
       my_malloc(PSI_NOT_INSTRUMENTED, (old_n_cols) * sizeof(uint), MYF(0)));
   if (dict_info->m_col_map_rev == nullptr) {
-    __XHANDLER_LOG(ERROR, "SEDDL: alloc memory failed, table_name: %s", old_table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: alloc memory failed, table_name: %s", old_table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
 
@@ -1033,25 +1033,25 @@ int ha_smartengine::prepare_inplace_alter_table_dict(
 
   old_tbl_def->m_dict_info = std::make_shared<SeInplaceDdlDictInfo>();
   if (old_tbl_def->m_dict_info == nullptr) {
-    __XHANDLER_LOG(ERROR, "SEDDL: allocate memory failed, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: allocate memory failed, table_name: %s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   } else if ((ret = setup_field_converters(
                   altered_table, m_new_pk_descr, old_tbl_def->m_dict_info->m_encoder_arr,
                   old_tbl_def->m_dict_info->m_fields_no_needed_to_decode,
                   old_tbl_def->m_dict_info->m_null_bytes_in_rec,
                   old_tbl_def->m_dict_info->m_maybe_unpack_info))) {
-    __XHANDLER_LOG(ERROR, "SEDDL: setup field converters failed, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: setup field converters failed, table_name: %s", table->s->table_name.str);
   } else if ((ret = setup_read_decoders(altered_table,
                                         old_tbl_def->m_dict_info->m_encoder_arr,
                                         m_instant_ddl_info,
                                         true /*force_decode_all_fields*/,
                                         old_tbl_def->m_dict_info->m_decoders_vect))) {
-    __XHANDLER_LOG(ERROR, "SEDDL: setup read decoders failed, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: setup read decoders failed, table_name: %s", table->s->table_name.str);
   } else if ((ret = setup_col_maps(ha_alter_info, altered_table, old_table,
                                    old_tbl_def->m_dict_info))) {
-    __XHANDLER_LOG(ERROR, "SEDDL: setup column maps failed, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: setup column maps failed, table_name: %s", table->s->table_name.str);
   } else {
-    __XHANDLER_LOG(INFO, "SEDDL: prepare alter rebuild table dictionary successfully, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(INFO, "SEDDL: prepare alter rebuild table dictionary successfully, table_name: %s", table->s->table_name.str);
   }
 
   return ret;
@@ -1095,16 +1095,16 @@ int ha_smartengine::prepare_inplace_alter_table_rebuild(
   s = txn_db_impl->GetDBImpl()->switch_major_compaction(column_family_handles,
                                                         false);
   if (!s.ok()) {
-    __XHANDLER_LOG(ERROR, "SEDDL: switch_major_compaction fail: %s, table_name: %s",
-                   s.ToString().c_str(), table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: switch_major_compaction fail: %s, table_name: %s",
+                  s.ToString().c_str(), table->s->table_name.str);
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
   // disable the garbage old MVCC version for the unique constraint check.
   s = txn_db_impl->GetDBImpl()->disable_backgroud_merge(column_family_handles);
   if (!s.ok()) {
-    __XHANDLER_LOG(ERROR, "SEDDL: disable_background_merge fail:%s, table_name: %s",
-                   s.ToString().c_str(), table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: disable_background_merge fail:%s, table_name: %s",
+                  s.ToString().c_str(), table->s->table_name.str);
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
@@ -1120,14 +1120,14 @@ int ha_smartengine::prepare_inplace_alter_table_rebuild(
   free_key_buffers();
   int err;
   if ((err = alloc_key_buffers(table, m_tbl_def.get(), true))) {
-    __XHANDLER_LOG(ERROR, "SEDDL: failed allocating key buffers during alter, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: failed allocating key buffers during alter, table_name: %s", table->s->table_name.str);
     DBUG_RETURN(err);
   }
 
   if ((err = prepare_inplace_alter_table_dict(ha_alter_info, altered_table,
                                               table, m_tbl_def.get(),
                                               table->s->table_name.str))) {
-    __XHANDLER_LOG(ERROR, "SEDDL: failed prepare dictionary for online copy ddl, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: failed prepare dictionary for online copy ddl, table_name: %s", table->s->table_name.str);
     DBUG_RETURN(err);
   }
 
@@ -1375,16 +1375,16 @@ int ha_smartengine::prepare_inplace_alter_table_norebuild(
                                                         false);
 
   if (!s.ok()) {
-    __XHANDLER_LOG(ERROR, "SEDDL: switch_major_compaction fail: %s, table_name: %s",
-                   s.ToString().c_str(), table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: switch_major_compaction fail: %s, table_name: %s",
+                  s.ToString().c_str(), table->s->table_name.str);
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
   // this option is only affect flush data from memtable to L0, this option
   // disable the garbage old MVCC version for the unique constraint check.
   s = txn_db_impl->GetDBImpl()->disable_backgroud_merge(column_family_handles);
   if (!s.ok()) {
-    __XHANDLER_LOG(ERROR, "SEDDL: disable_background_merge fail:%s, table_name: %s",
-                   s.ToString().c_str(), table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: disable_background_merge fail:%s, table_name: %s",
+                  s.ToString().c_str(), table->s->table_name.str);
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
@@ -1428,7 +1428,7 @@ int ha_smartengine::prepare_inplace_alter_table_norebuild(
              table, m_tbl_def.get(),
              ha_alter_info->handler_flags &
                  my_core::Alter_inplace_info::ADD_UNIQUE_INDEX))) {
-      __XHANDLER_LOG(ERROR, "SEDDL: failed allocating key buffers during alter, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: failed allocating key buffers during alter, table_name: %s", table->s->table_name.str);
       DBUG_RETURN(err);
     }
   }
@@ -1506,26 +1506,19 @@ bool ha_smartengine::inplace_alter_table(
   }
 
   if (res == HA_ERR_FOUND_DUPP_KEY) {
-    __XHANDLER_LOG(WARN,
-                   "SEDDL: duplicate error happened during ddl "
-                   "ddl_rebuild_type: %d, table_name: %s",
-                   (int)ctx->m_rebuild, table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: duplicate error happened during ddl ddl_rebuild_type: %d, table_name: %s",
+                  (int)ctx->m_rebuild, table->s->table_name.str);
   } else if (res == HA_ERR_INVALID_NULL_ERROR) {
-    __XHANDLER_LOG(WARN,
-                   "SEDDL: convert record error happened during ddl "
-                   "ddl_rebuild_type: %d, table_name: %s",
-                   (int)ctx->m_rebuild, table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: convert record error happened during ddl ddl_rebuild_type: %d, table_name: %s",
+                  (int)ctx->m_rebuild, table->s->table_name.str);
   } else if (res) {
-    __XHANDLER_LOG(ERROR,
-                   "SEDDL: failed populating secondary key during "
-                   "alter, errcode=%d, ddl_rebuild_type: %d, table_name: %s",
-                   res, (int)ctx->m_rebuild, table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: failed populating secondary key during "
+                  "alter, errcode=%d, ddl_rebuild_type: %d, table_name: %s",
+                  res, (int)ctx->m_rebuild, table->s->table_name.str);
 
   } else {
-    __XHANDLER_LOG(INFO,
-                   "SEDDL: online inplace ddl succcess, rebuild_type: %d, "
-                   "table_name: %s",
-                   (int)ctx->m_rebuild, table->s->table_name.str);
+    __HANDLER_LOG(INFO,"SEDDL: online inplace ddl succcess, rebuild_type: %d, table_name: %s",
+                  (int)ctx->m_rebuild, table->s->table_name.str);
   }
 
   DBUG_EXECUTE_IF("myx_simulate_index_create_rollback", {
@@ -1546,8 +1539,8 @@ int ha_smartengine::inplace_populate_new_table(TABLE *const new_table_arg,
   DBUG_ENTER_FUNC();
 
 #ifndef NDEBUG
-  __XHANDLER_LOG(INFO, "SEDDL: populate new primary key and secondary keys"
-                       " for new table: %s", new_table_arg->s->table_name.str);
+  __HANDLER_LOG(INFO, "SEDDL: populate new primary key and secondary keys for new table: %s",
+                new_table_arg->s->table_name.str);
 #endif
   std::unordered_set<std::shared_ptr<SeKeyDef>> new_indexes;
   std::shared_ptr<SeKeyDef> primary_key;
@@ -1593,7 +1586,7 @@ int ha_smartengine::inplace_populate_indexes(
 
   se_drop_idx_thread.enter_race_condition();
   if (se_shrink_table_space >= 0) {
-    __XHANDLER_LOG(ERROR, "SEDDL: Shrink extent space is running. table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: Shrink extent space is running. table_name: %s", table->s->table_name.str);
     ret = HA_ERR_INTERNAL_ERROR;
     se_drop_idx_thread.exit_race_condition();
     DBUG_RETURN(ret);
@@ -1601,9 +1594,8 @@ int ha_smartengine::inplace_populate_indexes(
 
   se_inplace_populate_indexes++;
 #ifndef NDEBUG
-  __XHANDLER_LOG(INFO, "SEDDL: Begin inplace populate indexes "
-                       "se_inplace_populate_indexes = %d table_name:%s",
-                 se_inplace_populate_indexes, table->s->table_name.str);
+  __HANDLER_LOG(INFO, "SEDDL: Begin inplace populate indexes se_inplace_populate_indexes = %d table_name:%s",
+                se_inplace_populate_indexes, table->s->table_name.str);
 #endif
   se_drop_idx_thread.exit_race_condition();
 
@@ -1640,7 +1632,7 @@ int ha_smartengine::inplace_populate_indexes(
   */
   if (m_sst_info != nullptr) {
     if ((ret = finalize_bulk_load())) {
-      __XHANDLER_LOG(ERROR, "SEDDL: finalize_bulk_load failed, errcode=%d, table_name: %s", ret, table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: finalize_bulk_load failed, errcode=%d, table_name: %s", ret, table->s->table_name.str);
       DBUG_RETURN(ret);
     }
     tx->commit();
@@ -1648,8 +1640,8 @@ int ha_smartengine::inplace_populate_indexes(
 
   if (nullptr != primary_key) {
 #ifndef NDEBUG
-    __XHANDLER_LOG(INFO, "SEDDL: populate primary key: %u for new table: %s, firstly",
-                   primary_key->get_index_number(), new_table_arg->s->table_name.str);
+    __HANDLER_LOG(INFO, "SEDDL: populate primary key: %u for new table: %s, firstly",
+                  primary_key->get_index_number(), new_table_arg->s->table_name.str);
 #endif
     assert(primary_key->is_primary_key());
     // build the primary key first, to avoid failure se_merge.add() on sk
@@ -1673,7 +1665,7 @@ int ha_smartengine::inplace_populate_indexes(
 
   if (ret && ha_thd()->mdl_context.upgrade_shared_lock(table->mdl_ticket,
                 MDL_EXCLUSIVE, ha_thd()->variables.lock_wait_timeout)) {
-    XHANDLER_LOG(ERROR, "update mdl_exclusive lock fail");
+    HANDLER_LOG(ERROR, "update mdl_exclusive lock fail");
     ret = HA_ERR_INTERNAL_ERROR;
   }
 
@@ -1694,8 +1686,8 @@ int ha_smartengine::inplace_populate_indexes(
   int ret_bulk_load = HA_EXIT_SUCCESS;
   if (m_sst_info != nullptr) {
     if ((ret_bulk_load = finalize_bulk_load())) {
-      __XHANDLER_LOG(ERROR, "SEDDL: finalize_bulk_load failed, errcode: %d, table_name: %s",
-                     ret_bulk_load, table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: finalize_bulk_load failed, errcode: %d, table_name: %s",
+                    ret_bulk_load, table->s->table_name.str);
     }
     tx->commit();
   }
@@ -1706,17 +1698,17 @@ int ha_smartengine::inplace_populate_indexes(
   se_inplace_populate_indexes--;
 
   if (ret == HA_ERR_FOUND_DUPP_KEY) {
-    __XHANDLER_LOG(WARN, "SEDDL: duplicate key happened during ddl, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: duplicate key happened during ddl, table_name: %s", table->s->table_name.str);
   } else if (ret == HA_ERR_INVALID_NULL_ERROR) {
-    __XHANDLER_LOG(WARN, "SEDDL: convert new record error during ddl, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: convert new record error during ddl, table_name: %s", table->s->table_name.str);
   } else if (ret) {
-    __XHANDLER_LOG(ERROR, "SEDDL: failed to finish inplace populate indexes"
-                          " se_inplace_populate_indexes = %d, errcode: %d, table_name: %s",
-                   se_inplace_populate_indexes, ret, table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: failed to finish inplace populate indexes"
+                  " se_inplace_populate_indexes = %d, errcode: %d, table_name: %s",
+                  se_inplace_populate_indexes, ret, table->s->table_name.str);
   } else {
-    __XHANDLER_LOG(INFO, "SEDDL: inplace populate indexes successfully "
-                         " se_inplace_populate_indexes = %d, table_name: %s",
-                   se_inplace_populate_indexes, table->s->table_name.str);
+    __HANDLER_LOG(INFO, "SEDDL: inplace populate indexes successfully "
+                  " se_inplace_populate_indexes = %d, table_name: %s",
+                  se_inplace_populate_indexes, table->s->table_name.str);
   }
 
   se_drop_idx_thread.exit_race_condition();
@@ -1744,24 +1736,24 @@ int ha_smartengine::inplace_update_added_key_info_status_dup_key(
       // using dup_key and dup_val
       if ((res = fill_new_duplicate_record(index.get(), new_table_arg,
                                            dup_key, dup_val, is_rebuild))) {
-        __XHANDLER_LOG(ERROR, "SEDDL: Fill new duplicate record error for index %d, error %d, table_name: %s",
-                       index->get_index_number(), res, table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: Fill new duplicate record error for index %d, error %d, table_name: %s",
+                      index->get_index_number(), res, table->s->table_name.str);
       } else {
 #ifndef NDEBUG
-        __XHANDLER_LOG(INFO, "SEDDL: Fill new duplicate record for index %d successfully, table_name: %s",
-                       index->get_index_number(), table->s->table_name.str);
+        __HANDLER_LOG(INFO, "SEDDL: Fill new duplicate record for index %d successfully, table_name: %s",
+                      index->get_index_number(), table->s->table_name.str);
 #endif
       }
     } else {
       // using table->record[0]
       if ((res = set_duplicate_key_for_print(new_table_arg, table, index.get(),
                                              m_tbl_def->m_dict_info, is_rebuild))) {
-        __XHANDLER_LOG(ERROR, "SEDDL: Generate duplicate key for index %d, error %d, table_name:%s",
-                       index->get_index_number(), res, table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: Generate duplicate key for index %d, error %d, table_name:%s",
+                      index->get_index_number(), res, table->s->table_name.str);
       } else {
 #ifndef NDEBUG
-        __XHANDLER_LOG(INFO, "SEDDL: Generate duplicate key for index %d successfully, table_name:%s",
-                       index->get_index_number(), table->s->table_name.str);
+        __HANDLER_LOG(INFO, "SEDDL: Generate duplicate key for index %d successfully, table_name:%s",
+                      index->get_index_number(), table->s->table_name.str);
 #endif
       }
     }
@@ -1769,16 +1761,16 @@ int ha_smartengine::inplace_update_added_key_info_status_dup_key(
     print_keydup_error(new_table_arg, key_info, MYF(0), table->s->table_name.str);
     res = HA_ERR_FOUND_DUPP_KEY;
   } else if (HA_ERR_FOUND_DUPP_KEY == added_key_info.status.load()) {
-    __XHANDLER_LOG(INFO, "SEDDL: other one set duplicate entry for index %d, table_name: %s",
-                   index->get_index_number(), table->s->table_name.str);
+    __HANDLER_LOG(INFO, "SEDDL: other one set duplicate entry for index %d, table_name: %s",
+                  index->get_index_number(), table->s->table_name.str);
     // the duplicate key is set by other, we wait for the duplicate key to be saved
     while (!added_key_info.dup_key_saved.load()) {}
     print_keydup_error(new_table_arg, key_info, MYF(0), table->s->table_name.str);
     res = HA_ERR_FOUND_DUPP_KEY;
   } else {
     res = (int)added_key_info.status.load();
-    __XHANDLER_LOG(INFO, "SEDDL: error %u for index %d is set by other, table_name: %s",
-                   res, index->get_index_number(), table->s->table_name.str);
+    __HANDLER_LOG(INFO, "SEDDL: error %u for index %d is set by other, table_name: %s",
+                  res, index->get_index_number(), table->s->table_name.str);
   }
   return res;
 }
@@ -1838,13 +1830,13 @@ int ha_smartengine::build_index(common::Slice& iter_key,
   // record
   if ((res = convert_record_from_storage_format(
            &iter_key, &iter_val, tbl->record[0], tbl))) {
-    __XHANDLER_LOG(ERROR, "SEDDL: Error getting record, table_name: %s", tbl->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: Error getting record, table_name: %s", tbl->s->table_name.str);
   }
 
   longlong hidden_pk_id = 0;
   if (hidden_pk_exists && read_hidden_pk_id_from_rowkey(
                               &hidden_pk_id, &ddl_ctx.primary_key)) {
-    __XHANDLER_LOG(ERROR, "SEDDL: Error retrieving hidden pk id, table_name: %s", tbl->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: Error retrieving hidden pk id, table_name: %s", tbl->s->table_name.str);
     return HA_ERR_INTERNAL_ERROR;
   }
 
@@ -1875,7 +1867,7 @@ int ha_smartengine::build_index(common::Slice& iter_key,
         0, nullptr, new_table_arg,
         m_tbl_def->m_dict_info, new_packed_size))) {
       if (res != HA_ERR_INVALID_NULL_ERROR) {
-        __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", tbl->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", tbl->s->table_name.str);
       }
       return res;
     }
@@ -1888,7 +1880,7 @@ int ha_smartengine::build_index(common::Slice& iter_key,
     if ((res = convert_new_record_from_old_record(
              tbl, new_table_arg, m_tbl_def->m_dict_info, key,
              &ddl_ctx.pk_unpack_info, &val, ddl_ctx.new_storage_record))) {
-      __XHANDLER_LOG(WARN, "SEDDL: convert new record error, table_name: %s, code is %d", tbl->s->table_name.str, res);
+      __HANDLER_LOG(WARN, "SEDDL: convert new record error, table_name: %s, code is %d", tbl->s->table_name.str, res);
       return res;
     }
   } else {
@@ -1901,7 +1893,7 @@ int ha_smartengine::build_index(common::Slice& iter_key,
             &ddl_ctx.sk_tails, should_store_row_debug_checksums(),
             hidden_pk_id, 0, nullptr, new_table_arg,
             m_tbl_def->m_dict_info, new_packed_size)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", tbl->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", tbl->s->table_name.str);
       return HA_EXIT_FAILURE;
     }
     assert(new_packed_size <= m_max_packed_sk_len);
@@ -1971,7 +1963,7 @@ int ha_smartengine::build_base_global_merge(
              PSI_NOT_INSTRUMENTED, m_max_packed_sk_len, MYF(0)))))) {
     my_free(dup_sk_packed_tuple);
     my_free(dup_sk_packed_tuple_old);
-    __XHANDLER_LOG(ERROR, "SEDDL: allocate memory for sk duplication check fail");
+    __HANDLER_LOG(ERROR, "SEDDL: allocate memory for sk duplication check fail");
     return HA_ERR_INTERNAL_ERROR;
   }
 
@@ -1986,8 +1978,7 @@ int ha_smartengine::build_base_global_merge(
     // se_merge.add can only detect duplication in singe (merge) segment
     if (need_unique_check) {
       if (check_duplicate_in_base(new_table_arg, *index, merge_key, &key_buf)) {
-        __XHANDLER_LOG(WARN, "SEDDL: duplicate entry found during se_merge, table_name:%s",
-                       table->s->table_name.str);
+        __HANDLER_LOG(WARN, "SEDDL: duplicate entry found during se_merge, table_name:%s", table->s->table_name.str);
         dup_key = merge_key;
         dup_val = merge_val;
         dup_ctx_id = part_id;
@@ -2001,8 +1992,8 @@ int ha_smartengine::build_base_global_merge(
         (0 == merged_count % BUILD_BASE_CHECK_ERROR_FREQUENCY) &&
         (res = inplace_check_dml_error(table, new_table_arg, key_info,
                                        added_key_info, false))) {
-      __XHANDLER_LOG(WARN, "SEDDL: error status found during DML, code is %d, table_name:%s",
-                     res, table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: error status found during DML, code is %d, table_name:%s",
+                    res, table->s->table_name.str);
       break;
     }
 
@@ -2011,9 +2002,8 @@ int ha_smartengine::build_base_global_merge(
        Use mirror index (cfh) to save the index of (t0, t1).
        */
     if ((res = sst_info.put(merge_key, merge_val))) {
-      __XHANDLER_LOG(ERROR, "SEDDL: Error while bulk loading keys in "
-                            "external merge sort, table_name:%s",
-                     table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: Error while bulk loading keys in external merge sort, table_name:%s",
+                    table->s->table_name.str);
       break;
     }
 
@@ -2029,13 +2019,12 @@ int ha_smartengine::build_base_global_merge(
       break;
     }
   }
-  __XHANDLER_LOG(INFO, "PART: %d, CNT: %d", part_id, merged_count);
+  __HANDLER_LOG(INFO, "PART: %d, CNT: %d", part_id, merged_count);
 
   int bulk_load_ret = sst_info.commit();
   if (res == HA_ERR_END_OF_FILE && (res = bulk_load_ret)) {
     // NO_LINT_DEBUG
-    __XHANDLER_LOG(ERROR, "SEDDL: Error finishing bulk load, table_name:%s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: Error finishing bulk load, table_name:%s", table->s->table_name.str);
   }
 
   my_free(dup_sk_packed_tuple);
@@ -2051,7 +2040,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
     Added_key_info& added_key_info,
     bool is_rebuild)
 {
-  __XHANDLER_LOG(INFO, "SEDDL: inplace build base parallel start");
+  __HANDLER_LOG(INFO, "SEDDL: inplace build base parallel start");
 
   DBUG_ENTER_FUNC();
 
@@ -2063,7 +2052,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
   if (ha_thd()->mdl_context.upgrade_shared_lock(
       table->mdl_ticket, MDL_EXCLUSIVE,
       ha_thd()->variables.lock_wait_timeout)) {
-    XHANDLER_LOG(ERROR, "SEDDL: update mdl_exclusive lock fail");
+    HANDLER_LOG(ERROR, "SEDDL: update mdl_exclusive lock fail");
     DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
   }
 
@@ -2089,9 +2078,8 @@ int ha_smartengine::inplace_build_base_phase_parallel(
     KEY *primary_key = &new_table_arg->key_info[iter->first->get_keyno()];
     if ((res = inplace_check_dml_error(table, new_table_arg,
                                        primary_key, iter->second))) {
-      XHANDLER_LOG(WARN, "SEDDL: error happened on primary key "
-                         "while building base for subtable",
-                   "subtable_id", index->get_index_number(), "code", res);
+      HANDLER_LOG(WARN, "SEDDL: error happened on primary key while building base for subtable",
+                  "subtable_id", index->get_index_number(), "code", res);
       DBUG_RETURN(res);
     }
   }
@@ -2159,7 +2147,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
     if ((res = this->build_index(iter_key, iter_val, *ddl_ctx, key, val,
                                  &tbl, hidden_pk_exists, index, is_rebuild,
                                  new_table_arg))) {
-//      __XHANDLER_LOG(ERROR, "SEDDL: build index error, table_name: %s", tbl.s->table_name.str);
+//      __HANDLER_LOG(ERROR, "SEDDL: build index error, table_name: %s", tbl.s->table_name.str);
       return res;
     }
     /*
@@ -2169,8 +2157,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
     bool inserted = false;
     res = ddl_ctx->se_merge->add(key, val, inserted);
     if (res) {
-      XHANDLER_LOG(ERROR, "Failed add record to sort merge buffer",
-                   "value_size", val.size());
+      HANDLER_LOG(ERROR, "Failed add record to sort merge buffer", "value_size", val.size());
       return res;
     } else if (!inserted) {
       dup_ctx_id = ctx->thread_id_;
@@ -2188,7 +2175,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
     DBUG_RETURN(res);
   }
   ha_index_end();
-  __XHANDLER_LOG(INFO, "Scan Finished");
+  __HANDLER_LOG(INFO, "Scan Finished");
 
   /* Step2: Sort and choose (partition_num-1) sample sort */
   std::vector<common::Slice> sample_tmp, sample;
@@ -2204,7 +2191,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
   for (size_t i = split_interval; i < sample_tmp.size(); i += split_interval) {
     sample.push_back(sample_tmp[i]);
   }
-  __XHANDLER_LOG(INFO, "Deal Sample Finished");
+  __HANDLER_LOG(INFO, "Deal Sample Finished");
 
   /* Step3: When one thread's scan finished, start background local merge */
   auto f_local_merge = [this, &ddl_ctx_set, &sample](size_t thread_id) {
@@ -2227,7 +2214,7 @@ int ha_smartengine::inplace_build_base_phase_parallel(
     });
     DBUG_RETURN(res);
   }
-  __XHANDLER_LOG(INFO, "Local Merge Finished");
+  __HANDLER_LOG(INFO, "Local Merge Finished");
 
   /* Step4: Start global merge, each partition perform an n-way merge of
    * n sorted buffers on disk, then writes all results to se via
@@ -2272,9 +2259,9 @@ int ha_smartengine::inplace_build_base_phase_parallel(
     DBUG_RETURN(res);
   }
 
-  __XHANDLER_LOG(INFO, "Global Merge Finished");
+  __HANDLER_LOG(INFO, "Global Merge Finished");
 
-  __XHANDLER_LOG(INFO, "SEDDL: inplace build base parallel end");
+  __HANDLER_LOG(INFO, "SEDDL: inplace build base parallel end");
 
   DBUG_RETURN(res);
 }
@@ -2315,14 +2302,14 @@ int ha_smartengine::inplace_build_base_phase(
                             se_merge_combine_read_size, index_comp);
 
   if ((res = se_merge.init())) {
-    __XHANDLER_LOG(ERROR, "SEDDL: se_merge init failed, errcode=%d, table_name: %s", res, table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: se_merge init failed, errcode=%d, table_name: %s", res, table->s->table_name.str);
     DBUG_RETURN(res);
   }
 
   if (ha_thd()->mdl_context.upgrade_shared_lock(
           table->mdl_ticket, MDL_EXCLUSIVE,
           ha_thd()->variables.lock_wait_timeout)) {
-    XHANDLER_LOG(ERROR, "SEDDL: update mdl_exclusive lock fail");
+    HANDLER_LOG(ERROR, "SEDDL: update mdl_exclusive lock fail");
     DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
   }
 
@@ -2347,9 +2334,8 @@ int ha_smartengine::inplace_build_base_phase(
     KEY *primary_key = &new_table_arg->key_info[iter->first->get_keyno()];
     if ((res = inplace_check_dml_error(table, new_table_arg,
                                        primary_key, iter->second))) {
-      XHANDLER_LOG(WARN, "SEDDL: error happened on primary key "
-                         "while building base for subtable",
-                   "subtable_id", index->get_index_number(), "code", res);
+      HANDLER_LOG(WARN, "SEDDL: error happened on primary key while building base for subtable",
+                  "subtable_id", index->get_index_number(), "code", res);
       DBUG_RETURN(res);
     }
   }
@@ -2361,7 +2347,7 @@ int ha_smartengine::inplace_build_base_phase(
   // get snapshot
   res = index_first(table->record[0]);
   if (res && res != HA_ERR_END_OF_FILE) {
-    __XHANDLER_LOG(ERROR, "SEDDL: failed to get first record, errcode=%d, table_name: %s", res, table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: failed to get first record, errcode=%d, table_name: %s", res, table->s->table_name.str);
     ha_index_end();
     table->mdl_ticket->downgrade_lock(MDL_SHARED_UPGRADABLE);
     DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
@@ -2382,7 +2368,7 @@ int ha_smartengine::inplace_build_base_phase(
   for (; res == 0; res = index_next(table->record[0])) {
     longlong hidden_pk_id = 0;
     if (hidden_pk_exists && read_hidden_pk_id_from_rowkey(&hidden_pk_id, &m_last_rowkey)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: Error retrieving hidden pk id, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: Error retrieving hidden pk id, table_name: %s", table->s->table_name.str);
       ha_index_end();
       DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
     }
@@ -2414,7 +2400,7 @@ int ha_smartengine::inplace_build_base_phase(
           0, nullptr, new_table_arg,
           m_tbl_def->m_dict_info, new_packed_size))) {
         if (res != HA_ERR_INVALID_NULL_ERROR) {
-          __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
+          __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
         }
         ha_index_end();
         DBUG_RETURN(res);
@@ -2428,7 +2414,7 @@ int ha_smartengine::inplace_build_base_phase(
                                                     m_tbl_def->m_dict_info, key,
                                                     &m_pk_unpack_info, &val,
                                                     m_new_storage_record))) {
-         __XHANDLER_LOG(WARN, "SEDDL: convert new record error, table_name: %s, code is %d", table->s->table_name.str, res);
+         __HANDLER_LOG(WARN, "SEDDL: convert new record error, table_name: %s, code is %d", table->s->table_name.str, res);
          my_error(ER_INVALID_USE_OF_NULL, MYF(0));
          processed_error = true;
          break;
@@ -2443,7 +2429,7 @@ int ha_smartengine::inplace_build_base_phase(
               &m_sk_tails, should_store_row_debug_checksums(), hidden_pk_id, 0,
               nullptr, new_table_arg, m_tbl_def->m_dict_info,
               new_packed_size)) {
-        __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
         ha_index_end();
         DBUG_RETURN(HA_EXIT_FAILURE);
       }
@@ -2463,8 +2449,7 @@ int ha_smartengine::inplace_build_base_phase(
     bool inserted = false;
     res = se_merge.add(key, val, inserted);
     if (res) {
-      XHANDLER_LOG(ERROR, "Failed add record to sort merge buffer",
-                   "value_size", val.size());
+      HANDLER_LOG(ERROR, "Failed add record to sort merge buffer", "value_size", val.size());
       processed_error = true;
       break;
     } else if (!inserted) {
@@ -2481,9 +2466,9 @@ int ha_smartengine::inplace_build_base_phase(
         res = inplace_update_added_key_info_status_dup_key(new_table_arg,
                   index, added_key_info, common::Slice(), common::Slice(), is_rebuild, false);
       } else {
-        XHANDLER_LOG(ERROR, "SEDDL: Unexpected error: failed to do "
-                            "se_merge.add while building base don't check unique",
-                     "table_name", table->s->table_name.str);
+        HANDLER_LOG(ERROR, "SEDDL: Unexpected error: failed to do "
+                    "se_merge.add while building base don't check unique",
+                    "table_name", table->s->table_name.str);
         assert(false);
       }
       ha_index_end();
@@ -2500,8 +2485,8 @@ int ha_smartengine::inplace_build_base_phase(
   if (res != HA_ERR_END_OF_FILE) {
     // NO_LINT_DEBUG
     if (!processed_error) {
-      XHANDLER_LOG(ERROR, "SEDDL: Error retrieving index entry from primary key",
-                   "code", res, "table_name", table->s->table_name.str);
+      HANDLER_LOG(ERROR, "SEDDL: Error retrieving index entry from primary key",
+                  "code", res, "table_name", table->s->table_name.str);
     }
     ha_index_end();
     DBUG_RETURN(res);
@@ -2534,8 +2519,7 @@ int ha_smartengine::inplace_build_base_phase(
            and then fill new_data record.
            using merge_key/merge_val to call fill_new_duplicate_record
         */
-        __XHANDLER_LOG(WARN, "SEDDL: duplicate entry found during se_merge, table_name:%s",
-                       table->s->table_name.str);
+        __HANDLER_LOG(WARN, "SEDDL: duplicate entry found during se_merge, table_name:%s", table->s->table_name.str);
         res = inplace_update_added_key_info_status_dup_key(new_table_arg, index,
                   added_key_info, merge_key, merge_val, is_rebuild);
         break;
@@ -2546,8 +2530,8 @@ int ha_smartengine::inplace_build_base_phase(
     if (merged_count &&
         (0 == merged_count % BUILD_BASE_CHECK_ERROR_FREQUENCY) &&
         (res = inplace_check_dml_error(table, new_table_arg, key_info, added_key_info))) {
-      __XHANDLER_LOG(WARN, "SEDDL: error status found during DML, code is %d, table_name:%s",
-                     res, table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: error status found during DML, code is %d, table_name:%s",
+                    res, table->s->table_name.str);
       break;
     }
 
@@ -2556,9 +2540,8 @@ int ha_smartengine::inplace_build_base_phase(
        Use mirror index (cfh) to save the index of (t0, t1).
        */
     if ((res = bulk_load_key(tx, *index, merge_key, merge_val, 2))) {
-      __XHANDLER_LOG(ERROR, "SEDDL: Error while bulk loading keys in "
-                            "external merge sort, table_name:%s",
-                     table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: Error while bulk loading keys in external merge sort, table_name:%s",
+                    table->s->table_name.str);
       break;
     }
     ++merged_count;
@@ -2580,8 +2563,7 @@ int ha_smartengine::inplace_build_base_phase(
   // Here, res == HA_ERR_END_OF_FILE means that we are finished
   if (res == HA_ERR_END_OF_FILE && (res = bulk_load_ret)) {
     // NO_LINT_DEBUG
-    __XHANDLER_LOG(ERROR, "SEDDL: Error finishing bulk load, table_name:%s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: Error finishing bulk load, table_name:%s", table->s->table_name.str);
   }
 
   DBUG_RETURN(res);
@@ -2642,7 +2624,7 @@ int ha_smartengine::inplace_check_unique_phase(
 
   KEY* key_info = &new_table_arg->key_info[index->get_keyno()];
   if ((res = inplace_check_dml_error(table, new_table_arg, key_info, added_key_info))) {
-    __XHANDLER_LOG(WARN, "error status found during DML, code is %d, table_name: %s", res, table->s->table_name.str);
+    __HANDLER_LOG(WARN, "error status found during DML, code is %d, table_name: %s", res, table->s->table_name.str);
     DBUG_RETURN(res);
   }
 
@@ -2661,7 +2643,7 @@ int ha_smartengine::inplace_check_unique_phase(
   if (ha_thd()->mdl_context.upgrade_shared_lock(
     table->mdl_ticket, MDL_EXCLUSIVE,
     ha_thd()->variables.lock_wait_timeout)) {
-    __XHANDLER_LOG(ERROR, "SEDDL: update mdl_exclusive lock fail, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: update mdl_exclusive lock fail, table_name: %s", table->s->table_name.str);
     DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
   }
 
@@ -2702,9 +2684,8 @@ int ha_smartengine::inplace_check_unique_phase(
         if (HA_EXIT_SUCCESS ==
             read_key_exact(*index, base_iter.get(), all_parts_used, memcmp_key)) {
 #ifndef NDEBUG
-          __XHANDLER_LOG(INFO, "SEDDL: find match record %s in L2 on index:%d during DDL",
-                         base_iter->key().ToString(true).c_str(),
-                         index->get_index_number());
+          __HANDLER_LOG(INFO, "SEDDL: find match record %s in L2 on index:%d during DDL",
+                        base_iter->key().ToString(true).c_str(), index->get_index_number());
 #endif
           // Use 0 as the sequence number of the record in base tier
           user_key_sequences.emplace_back(0, db::Iterator::kExist);
@@ -2735,9 +2716,8 @@ int ha_smartengine::inplace_check_unique_phase(
       memcmp_key_size = iter_key_memcmp_size;
       memcmp_key_inited = true;
 #ifndef NDEBUG
-      __XHANDLER_LOG(INFO, "SEDDL: unique check for %s(size=%u) on index:%d during DDL",
-                     memcmp_key.ToString(true).c_str(), memcmp_key_size,
-                     index->get_index_number());
+      __HANDLER_LOG(INFO, "SEDDL: unique check for %s(size=%u) on index:%d during DDL",
+                    memcmp_key.ToString(true).c_str(), memcmp_key_size, index->get_index_number());
 #endif
     }
 
@@ -2753,10 +2733,10 @@ int ha_smartengine::inplace_check_unique_phase(
       saved_iter_val = delta_iter->value().deep_copy(arena);
     }
 #ifndef NDEBUG
-    __XHANDLER_LOG(INFO, "SEDDL: find match record %s(%u, %s) in L0&L1 on index:%d during DDL",
-                   delta_iter->key().ToString(true).c_str(), delta_sequence,
-                   (db::Iterator::kExist == status) ? "PUT":"DEL",
-                   index->get_index_number());
+    __HANDLER_LOG(INFO, "SEDDL: find match record %s(%u, %s) in L0&L1 on index:%d during DDL",
+                  delta_iter->key().ToString(true).c_str(), delta_sequence,
+                  (db::Iterator::kExist == status) ? "PUT":"DEL",
+                  index->get_index_number());
 #endif
   }
 
@@ -2768,9 +2748,8 @@ int ha_smartengine::inplace_check_unique_phase(
     if (HA_EXIT_SUCCESS ==
         read_key_exact(*index, base_iter.get(), all_parts_used, memcmp_key)) {
 #ifndef NDEBUG
-      __XHANDLER_LOG(INFO, "SEDDL: find match record %s in L2 on index:%d during DDL",
-                     base_iter->key().ToString(true).c_str(),
-                     index->get_index_number());
+      __HANDLER_LOG(INFO, "SEDDL: find match record %s in L2 on index:%d during DDL",
+                    base_iter->key().ToString(true).c_str(), index->get_index_number());
 #endif
       // Use 0 as the sequence number of the record in base tier
       user_key_sequences.emplace_back(0, db::Iterator::kExist);
@@ -2782,9 +2761,8 @@ int ha_smartengine::inplace_check_unique_phase(
 
   if (has_dup) {
     assert(!saved_iter_key.empty());
-    __XHANDLER_LOG(WARN, "SEDDL: duplicate entry is found %s during DDL on index:%d",
-                   saved_iter_key.ToString(true).c_str(),
-                   index->get_index_number());
+    __HANDLER_LOG(WARN, "SEDDL: duplicate entry is found %s during DDL on index:%d",
+                  saved_iter_key.ToString(true).c_str(), index->get_index_number());
     // Current user key is duplicate entry
     // using saved_iter_key/saved_iter_val to call fill_new_duplicate_record
     res = inplace_update_added_key_info_status_dup_key(new_table_arg, index,
@@ -2903,29 +2881,28 @@ int ha_smartengine::inplace_populate_index(
       new_table_arg, index, need_unique_check, iter->second, is_rebuild))) {
     print_common_err(res);
     if (res != HA_ERR_FOUND_DUPP_KEY && res != HA_ERR_INVALID_NULL_ERROR) {
-      __XHANDLER_LOG(ERROR,
-                     "SEDDL: build base error, code: %d, table_name: %s",
-                     res, table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: build base error, code: %d, table_name: %s",
+                    res, table->s->table_name.str);
     }
   } else if (need_unique_check &&
              (res = inplace_check_unique_phase(new_table_arg, index, iter->second, is_rebuild))) {
     if (res != HA_ERR_FOUND_DUPP_KEY) {
-      __XHANDLER_LOG(ERROR, "SEDDL: check unique phase error, code: %d, table_name: %s",
-                     res, table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: check unique phase error, code: %d, table_name: %s",
+                    res, table->s->table_name.str);
     }
   } else if ((res = inplace_update_added_key_info_step(
                         iter->second, Added_key_info::FINISHED))) {
-    __XHANDLER_LOG(ERROR, "Failed to update state of Added_key_info::step after unique check");
+    __HANDLER_LOG(ERROR, "Failed to update state of Added_key_info::step after unique check");
   } else {
 #ifndef NDEBUG
-    __XHANDLER_LOG(INFO, "SEDDL: build index %d for table %s successfully",
-                   index->get_index_number(), table->s->table_name.str);
+    __HANDLER_LOG(INFO, "SEDDL: build index %d for table %s successfully",
+                  index->get_index_number(), table->s->table_name.str);
 #endif
   }
 
   if (res == HA_ERR_FOUND_DUPP_KEY) {
-    __XHANDLER_LOG(WARN, "SEDDL: duplicated error happened during build index %d for table %s",
-                   index->get_index_number(), table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: duplicated error happened during build index %d for table %s",
+                  index->get_index_number(), table->s->table_name.str);
   }
 
   DBUG_RETURN(res);
@@ -2954,11 +2931,11 @@ int ha_smartengine::dd_commit_instant_table(const TABLE *old_table,
   if (IS_NULL(old_table) || IS_NULL(new_table)
       || IS_NULL(old_dd_table) || IS_NULL(new_dd_table)) {
     ret = common::Status::kInvalidArgument;
-    XHANDLER_LOG(WARN, "invalid argument", K(ret), KP(old_table), KP(new_table),
+    HANDLER_LOG(WARN, "invalid argument", K(ret), KP(old_table), KP(new_table),
         KP(old_dd_table), KP(new_dd_table));
   } else if (old_dd_table->columns().size() > new_dd_table->columns()->size()) {
     ret = common::Status::kErrorUnexpected;
-    XHANDLER_LOG(WARN, "column count should increase after instant add column", K(ret),
+    HANDLER_LOG(WARN, "column count should increase after instant add column", K(ret),
         "old_column_count", old_dd_table->columns().size(),
         "new_column_count", new_dd_table->columns()->size());
   } else {
@@ -2987,9 +2964,9 @@ int ha_smartengine::dd_commit_instant_table(const TABLE *old_table,
     /**after instant add column, the primary key has not changed, so it is safe to
     use the m_tbl_def which  is old version.*/
     if (FAILED(pushdown_table_schema(new_table, new_dd_table, m_tbl_def.get(), new_dd_table->engine_attribute()))) {
-      XHANDLER_LOG(WARN, "fail to pushdown table schema", K(ret));
+      HANDLER_LOG(WARN, "fail to pushdown table schema", K(ret));
     } else {
-      XHANDLER_LOG(INFO, "success to push down table schema");
+      HANDLER_LOG(INFO, "success to push down table schema");
     }
   }
 
@@ -3088,11 +3065,11 @@ int ha_smartengine::dd_commit_inplace_instant(Alter_inplace_info *alter_info,
   if (IS_NULL(alter_info) || IS_NULL(old_table) || IS_NULL(new_table)
       || IS_NULL(old_dd_table) || IS_NULL(new_dd_table)) {
     ret = common::Status::kInvalidArgument;
-    XHANDLER_LOG(WARN, "invalid argument", K(ret), KP(alter_info), KP(old_table),
+    HANDLER_LOG(WARN, "invalid argument", K(ret), KP(alter_info), KP(old_table),
         KP(new_table), KP(old_dd_table), KP(new_dd_table));
   } else if (!is_instant(alter_info)) {
     ret = common::Status::kErrorUnexpected;
-    XHANDLER_LOG(WARN, "the ddl operation is not instant ddl", K(ret));
+    HANDLER_LOG(WARN, "the ddl operation is not instant ddl", K(ret));
   } else {
     Instant_Type type = static_cast<Instant_Type>(alter_info->handler_trivial_ctx);
     switch (type) {
@@ -3105,13 +3082,13 @@ int ha_smartengine::dd_commit_inplace_instant(Alter_inplace_info *alter_info,
                                            new_table,
                                            &old_dd_table->table(),
                                            &new_dd_table->table()))) {
-          XHANDLER_LOG(WARN, "fail to commit instant dd table", K(ret));
+          HANDLER_LOG(WARN, "fail to commit instant dd table", K(ret));
         }
         break;
       case Instant_Type::INSTANT_IMPOSSIBLE:
       default:
         ret = common::Status::kErrorUnexpected;
-        XHANDLER_LOG(WARN, "unexpected instant ddl type", KE(type));
+        HANDLER_LOG(WARN, "unexpected instant ddl type", KE(type));
     }
   }
 
@@ -3138,7 +3115,7 @@ int ha_smartengine::rollback_added_index(
   free_key_buffers();
 
   if ((ret = alloc_key_buffers(table, m_tbl_def.get()))) {
-    __XHANDLER_LOG(ERROR, "SE failed allocating key buffers during alter. table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SE failed allocating key buffers during alter. table_name: %s", table->s->table_name.str);
     return ret;
   }
 
@@ -3203,12 +3180,12 @@ bool ha_smartengine::commit_inplace_alter_table(
                               old_dd_table,
                               new_dd_table);
 #ifndef NDEBUG
-  __XHANDLER_LOG(INFO, "SEDDL: commit instant alter sql is %s, commit is %d", ha_thd()->query().str, (int)commit);
+  __HANDLER_LOG(INFO, "SEDDL: commit instant alter sql is %s, commit is %d", ha_thd()->query().str, (int)commit);
 #endif
     DBUG_RETURN(HA_EXIT_SUCCESS);
   } else if (nullptr == ctx) {
     /* If ctx has not been created yet, nothing to do here */
-    __XHANDLER_LOG(INFO, "SEDDL: ctx is released or not initialized");
+    __HANDLER_LOG(INFO, "SEDDL: ctx is released or not initialized");
     DBUG_RETURN(HA_EXIT_SUCCESS);
   } else {
     int ret = HA_EXIT_SUCCESS;
@@ -3229,16 +3206,16 @@ bool ha_smartengine::commit_inplace_alter_table(
 
     if (!ret) {
 #ifndef NDEBUG
-      __XHANDLER_LOG(INFO, "SEDDL: inplace ddl %s successfully, table: %s",
+      __HANDLER_LOG(INFO, "SEDDL: inplace ddl %s successfully, table: %s",
                      commit ? "commit" : "rollback", table->s->table_name.str);
 #endif
     } else {
-      __XHANDLER_LOG(WARN, "SEDDL: failed to commit inplace ddl, table: %s, errcode is %d",
+      __HANDLER_LOG(WARN, "SEDDL: failed to commit inplace ddl, table: %s, errcode is %d",
                      table->s->table_name.str, ret);
     }
 
 #ifndef NDEBUG
-    __XHANDLER_LOG(INFO, "SEDDL: commit alter sql is %s, inplace_rebuild: %d, commit is %d, code is %d", ha_thd()->query().str, (int)is_rebuild, (int)commit, ret);
+    __HANDLER_LOG(INFO, "SEDDL: commit alter sql is %s, inplace_rebuild: %d, commit is %d, code is %d", ha_thd()->query().str, (int)is_rebuild, (int)commit, ret);
 #endif
 
     DBUG_RETURN(ret);
@@ -3307,7 +3284,7 @@ int ha_smartengine::commit_inplace_alter_table_common(
 
   //update autoinc if necessary
   if (commit_inplace_alter_get_autoinc(ha_alter_info, altered_table, table)) {
-    __XHANDLER_LOG(ERROR, "SEDDL: get autoinc value failed. table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: get autoinc value failed. table_name: %s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
 
@@ -3378,7 +3355,7 @@ int ha_smartengine::commit_inplace_alter_table_common(
                                                    new_dd_table,
                                                    ctx0->m_new_tdef.get(),
                                                    new_dd_table->engine_attribute())) {
-    XHANDLER_LOG(WARN, "fail to push down table schema");
+    HANDLER_LOG(WARN, "fail to push down table schema");
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
@@ -3419,15 +3396,15 @@ int ha_smartengine::commit_inplace_alter_table_common(
   txn_db_impl->GetDBImpl()->switch_major_compaction(column_family_handles,
                                                     true);
   if (!s.ok()) {
-    __XHANDLER_LOG(ERROR, "SEDDL: switch_major_compaction fail: %s. table_name: %s",
-                   s.ToString().c_str(), table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: switch_major_compaction fail: %s. table_name: %s",
+                  s.ToString().c_str(), table->s->table_name.str);
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
   s = txn_db_impl->GetDBImpl()->enable_backgroud_merge(column_family_handles);
   if (!s.ok()) {
-    __XHANDLER_LOG(ERROR, "SEDDL: enable_background_merge fail: %s. table_name: %s",
-                   s.ToString().c_str(), table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: enable_background_merge fail: %s. table_name: %s",
+                  s.ToString().c_str(), table->s->table_name.str);
     DBUG_RETURN(HA_EXIT_FAILURE);
   }
 
@@ -3470,7 +3447,7 @@ bool ha_smartengine::commit_inplace_alter_table_rebuild(
       if ((ret = inplace_check_dml_error(table, altered_table,
                                 &altered_table->key_info[k.first->get_keyno()],
                                 k.second))) {
-        __XHANDLER_LOG(WARN, "SEDDL: found error when rebuild table, code: %d", ret);
+        __HANDLER_LOG(WARN, "SEDDL: found error when rebuild table, code: %d", ret);
 
         rollback_added_index(new_added_indexes);
         ret = HA_EXIT_FAILURE;
@@ -3530,7 +3507,7 @@ bool ha_smartengine::commit_inplace_alter_table_norebuild(
       if ((ret = inplace_check_dml_error(table, altered_table,
                                 &altered_table->key_info[k.first->get_keyno()],
                                 k.second))) {
-        __XHANDLER_LOG(WARN, "SEDDL: found error when build unique index, code is %d", ret);
+        __HANDLER_LOG(WARN, "SEDDL: found error when build unique index, code is %d", ret);
 
         assert(ctx0 != nullptr);
         rollback_added_index(ctx0->m_added_indexes);
@@ -3622,8 +3599,8 @@ void ha_smartengine::check_new_index_unique_inner(
       bool *const found) const
 {
 #ifndef NDEBUG
-  __XHANDLER_LOG(INFO, "SEDDL: unique check for %s(size=%u) on index:%d during DML",
-                 key.ToString(true).c_str(), key.size(), kd.get_index_number());
+  __HANDLER_LOG(INFO, "SEDDL: unique check for %s(size=%u) on index:%d during DML",
+                key.ToString(true).c_str(), key.size(), kd.get_index_number());
 #endif
   assert(ki.altered_table);
 
@@ -3658,7 +3635,7 @@ void ha_smartengine::check_new_index_unique_inner(
                                        &n_null_fields);
       if (n_null_fields > 0) {
 #ifndef NDEBUG
-        __XHANDLER_LOG(INFO, "SEDDL: null field exists: %u", n_null_fields);
+        __HANDLER_LOG(INFO, "SEDDL: null field exists: %u", n_null_fields);
 #endif
         continue;
       }
@@ -3668,9 +3645,8 @@ void ha_smartengine::check_new_index_unique_inner(
         memcmp(key.data(), uk_iter->key().data(), cmp_size)) {
       // current key doesn't match exactly, no further check in WriteBatch
 #ifndef NDEBUG
-      __XHANDLER_LOG(INFO, "SEDDL: record in WriteBatch doesn't match:(key:%s, size:%u) for indxe:%d",
-                     uk_iter->key().ToString(true).c_str(), cmp_size,
-                     kd.get_index_number());
+      __HANDLER_LOG(INFO, "SEDDL: record in WriteBatch doesn't match:(key:%s, size:%u) for indxe:%d",
+                    uk_iter->key().ToString(true).c_str(), cmp_size, kd.get_index_number());
 #endif
       break;
     }
@@ -3679,16 +3655,16 @@ void ha_smartengine::check_new_index_unique_inner(
     if (db::Iterator::kExist == wb_status) {
       // find conflict user key, no further check in WriteBatch and base
 #ifndef NDEBUG
-      __XHANDLER_LOG(INFO, "SEDDL: find duplicate record %s in WriteBatch for indxe:%d",
-                     key.ToString(true).c_str(), kd.get_index_number());
+      __HANDLER_LOG(INFO, "SEDDL: find duplicate record %s in WriteBatch for indxe:%d",
+                    key.ToString(true).c_str(), kd.get_index_number());
 #endif
       break;
     }
     assert(db::Iterator::kDeleted == wb_status);
     // found deleted record, check more in WriteBatch
 #ifndef NDEBUG
-    __XHANDLER_LOG(INFO, "SEDDL: find deleted record %s in WriteBatch for indxe:%d",
-                   uk_iter->key().ToString(true).c_str(), kd.get_index_number());
+    __HANDLER_LOG(INFO, "SEDDL: find deleted record %s in WriteBatch for indxe:%d",
+                  uk_iter->key().ToString(true).c_str(), kd.get_index_number());
 #endif
   }
 
@@ -3716,7 +3692,7 @@ void ha_smartengine::check_new_index_unique_inner(
                                          &n_null_fields);
         if (n_null_fields > 0) {
 #ifndef NDEBUG
-          __XHANDLER_LOG(INFO, "SEDDL: null field exist: %u", n_null_fields);
+          __HANDLER_LOG(INFO, "SEDDL: null field exist: %u", n_null_fields);
 #endif
           continue;
         }
@@ -3725,9 +3701,8 @@ void ha_smartengine::check_new_index_unique_inner(
           memcmp(key.data(), uk_iter->key().data(), cmp_size)) {
         // no more matching record in L0 and L1
 #ifndef NDEBUG
-        __XHANDLER_LOG(INFO, "SEDDL: record in L0&L1 doesn't match: (key:%s, size:%u) for index:%d",
-                       uk_iter->key().ToString().c_str(), cmp_size,
-                       kd.get_index_number());
+        __HANDLER_LOG(INFO, "SEDDL: record in L0&L1 doesn't match: (key:%s, size:%u) for index:%d",
+                      uk_iter->key().ToString().c_str(), cmp_size, kd.get_index_number());
 #endif
         break;
       }
@@ -3737,10 +3712,10 @@ void ha_smartengine::check_new_index_unique_inner(
                   db::Iterator::kDeleted == status);
       // match in (L0, L1), collect status for later usage
 #ifndef NDEBUG
-      __XHANDLER_LOG(INFO, "SEDDL: match record %s(%u, %s) in L0&L1 for index:%d",
-                     uk_iter->key().ToString(true).c_str(), sequence,
-                     (db::Iterator::kExist == status) ? "PUT" : "DEL",
-                     kd.get_index_number());
+      __HANDLER_LOG(INFO, "SEDDL: match record %s(%u, %s) in L0&L1 for index:%d",
+                    uk_iter->key().ToString(true).c_str(), sequence,
+                    (db::Iterator::kExist == status) ? "PUT" : "DEL",
+                    kd.get_index_number());
 #endif
       user_key_sequences.emplace_back(sequence, status);
     }
@@ -3752,8 +3727,8 @@ void ha_smartengine::check_new_index_unique_inner(
     if (HA_EXIT_SUCCESS ==
         read_key_exact(kd, iter.get(), all_parts_used, key)) {
 #ifndef NDEBUG
-      __XHANDLER_LOG(INFO, "SEDDL: find match record %s in L2 for index:%d",
-                     iter->key().ToString(true).c_str(), kd.get_index_number());
+      __HANDLER_LOG(INFO, "SEDDL: find match record %s in L2 for index:%d",
+                    iter->key().ToString(true).c_str(), kd.get_index_number());
 #endif
       user_key_sequences.emplace_back(0, db::Iterator::kExist);
     }
@@ -3763,8 +3738,8 @@ void ha_smartengine::check_new_index_unique_inner(
   }
 
   if (*found) {
-    __XHANDLER_LOG(WARN, "SEDDL: duplicate entry is found during DML for %s on index:%d",
-                   key.ToString(true).c_str(), kd.get_index_number());
+    __HANDLER_LOG(WARN, "SEDDL: duplicate entry is found during DML for %s on index:%d",
+                  key.ToString(true).c_str(), kd.get_index_number());
     // save the duplicated key
     uint err = HA_EXIT_SUCCESS;
     bool rc = ki.status.compare_exchange_strong(err, HA_ERR_FOUND_DUPP_KEY);
@@ -3773,12 +3748,12 @@ void ha_smartengine::check_new_index_unique_inner(
     if (rc) {
       if (set_duplicate_key_for_print(ki.altered_table, table, &kd,
                                       m_tbl_def->m_dict_info, is_rebuild)) {
-        __XHANDLER_LOG(WARN, "SEDDL: Generate duplicate key error, table_name:%s",
-                       table->s->table_name.str);
+        __HANDLER_LOG(WARN, "SEDDL: Generate duplicate key error, table_name:%s",
+                      table->s->table_name.str);
       } else {
 #ifndef NDEBUG
-        __XHANDLER_LOG(INFO, "SEDDL: Generate duplicate key successfully, table_name:%s",
-                       table->s->table_name.str);
+        __HANDLER_LOG(INFO, "SEDDL: Generate duplicate key successfully, table_name:%s",
+                      table->s->table_name.str);
 #endif
       }
 
@@ -3812,7 +3787,7 @@ int ha_smartengine::lock_and_check_new_index_pk(const SeKeyDef &kd,
                                       m_pk_packed_tuple, nullptr,
                                       false, 0, 0, nullptr, ki.altered_table,
                                       m_tbl_def->m_dict_info, new_pk_size)) {
-    __XHANDLER_LOG(ERROR, "SEDDL: pack new data for new table error. table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: pack new data for new table error. table_name: %s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
 
@@ -3823,7 +3798,7 @@ int ha_smartengine::lock_and_check_new_index_pk(const SeKeyDef &kd,
                                         m_pk_packed_tuple_old, nullptr,
                                         false, 0, 0, nullptr, ki.altered_table,
                                         m_tbl_def->m_dict_info, old_pk_size)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: pack old data for new table error. table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: pack old data for new table error. table_name: %s", table->s->table_name.str);
       return HA_EXIT_FAILURE;
     }
     assert(old_pk_size > 0);
@@ -3844,10 +3819,9 @@ int ha_smartengine::lock_and_check_new_index_pk(const SeKeyDef &kd,
   const common::Status s =
     get_for_update(row_info.tx, kd.get_cf(), new_pk_slice, &tmp_value);
   if (!s.ok() && !s.IsNotFound()) {
-    __XHANDLER_LOG(WARN, "SEDDL: get_for_update for key(%s) on pk(%u) failed with error:%s, table_name: %s",
-                   new_pk_slice.ToString(true).c_str(),
-                   kd.get_index_number(), s.ToString().c_str(),
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: get_for_update for key(%s) on pk(%u) failed with error:%s, table_name: %s",
+                  new_pk_slice.ToString(true).c_str(), kd.get_index_number(), s.ToString().c_str(),
+                  table->s->table_name.str);
     return row_info.tx->set_status_error(ki.altered_table->in_use, s,
                                          *m_new_pk_descr, m_tbl_def->m_inplace_new_tdef);
   }
@@ -3909,14 +3883,14 @@ int ha_smartengine::lock_and_check_new_index_sk(
                            m_sk_packed_tuple, nullptr, false, 0,
                            user_defined_key_parts, &n_null_fields,
                            altered_table, m_tbl_def->m_dict_info, size)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: pack new record errror, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: pack new record errror, table_name: %s", table->s->table_name.str);
       return HA_EXIT_FAILURE;
     }
   }
 
   if (n_null_fields > 0) {
 #ifndef NDEBUG
-    __XHANDLER_LOG(INFO, "SEDDL: null field exist: %u", n_null_fields);
+    __HANDLER_LOG(INFO, "SEDDL: null field exist: %u", n_null_fields);
 #endif
     /** If any fields are marked as NULL this will never match another row as
        to NULL never matches anything else including another NULL. */
@@ -3939,7 +3913,7 @@ int ha_smartengine::lock_and_check_new_index_sk(
                              m_sk_packed_tuple_old, nullptr, false,
                              0, user_defined_key_parts, nullptr, altered_table,
                              m_tbl_def->m_dict_info, size)) {
-        __XHANDLER_LOG(ERROR, "SEDDL: pack new record errror, table_name: %s", table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: pack new record errror, table_name: %s", table->s->table_name.str);
         return HA_EXIT_FAILURE;
       }
     }
@@ -3984,10 +3958,8 @@ int ha_smartengine::lock_and_check_new_index_sk(
   const common::Status s = lock_unique_key(
       row_info.tx, kd.get_cf(), new_slice, total_order_seek, fill_cache);
   if (!s.ok() && !s.IsNotFound()) {
-    __XHANDLER_LOG(WARN, "SEDDL: lock_unique_key for key(%s) on index:%d failed with error:%s, table_name: %s",
-                   new_slice.ToString(true).c_str(),
-                   kd.get_index_number(), s.ToString().c_str(),
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "SEDDL: lock_unique_key for key(%s) on index:%d failed with error:%s, table_name: %s",
+                  new_slice.ToString(true).c_str(), kd.get_index_number(), s.ToString().c_str(), table->s->table_name.str);
     auto tbl = is_rebuild ? m_tbl_def->m_inplace_new_tdef : m_tbl_def.get();
     return row_info.tx->set_status_error(ki.altered_table->in_use, s, kd, tbl);
   }
@@ -4036,7 +4008,7 @@ int ha_smartengine::check_uniqueness_and_lock_rebuild(const update_row_info &row
     }
 
     if (rc != HA_EXIT_SUCCESS){
-      __XHANDLER_LOG(WARN, "check duplicated key failed for new key of inplace DDL, errcode is %d", rc);
+      __HANDLER_LOG(WARN, "check duplicated key failed for new key of inplace DDL, errcode is %d", rc);
       break;
     }
   }
@@ -4073,7 +4045,7 @@ int ha_smartengine::update_new_table(update_row_info &row_info, bool pk_changed)
     }
 
     if (ret > 0) {
-      __XHANDLER_LOG(WARN, "SEDDL: update indexes error, code is %d, table_name: %s", ret, table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: update indexes error, code is %d, table_name: %s", ret, table->s->table_name.str);
       return ret;
     }
   }
@@ -4142,7 +4114,7 @@ int ha_smartengine::update_pk_for_new_table(const SeKeyDef &kd,
             table, m_pack_buffer, row_info.old_data, m_pk_packed_tuple_old,
             nullptr, false, 0, 0, nullptr,
             altered_table, m_tbl_def->m_dict_info, old_packed_size)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: pack old pk for new table error, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: pack old pk for new table error, table_name: %s", table->s->table_name.str);
       return HA_EXIT_FAILURE;
     }
     assert(old_packed_size <= m_max_packed_sk_len);
@@ -4152,9 +4124,8 @@ int ha_smartengine::update_pk_for_new_table(const SeKeyDef &kd,
     const common::Status s =
         delete_or_singledelete_new_table(altered_table, m_tbl_def->m_inplace_new_tdef, key_id, row_info.tx, kd.get_cf(), old_pk_slice);
     if (!s.ok()) {
-      __XHANDLER_LOG(WARN, "SEDDL: failed to delete old record(%s) for updating pk(%u), code is %d, table_name: %s",
-                     old_pk_slice.ToString(true).c_str(),
-                     kd.get_index_number(), s.code(), table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: failed to delete old record(%s) for updating pk(%u), code is %d, table_name: %s",
+                    old_pk_slice.ToString(true).c_str(), kd.get_index_number(), s.code(), table->s->table_name.str);
       return row_info.tx->set_status_error(table->in_use, s, kd, m_tbl_def.get());
     }
   }
@@ -4171,7 +4142,7 @@ int ha_smartengine::update_pk_for_new_table(const SeKeyDef &kd,
            table, altered_table, m_tbl_def->m_dict_info, row_info.new_pk_slice,
            row_info.new_pk_unpack_info, &value_slice, m_new_storage_record))) {
     if (rc == HA_ERR_INVALID_NULL_ERROR) {
-      __XHANDLER_LOG(WARN, "SEDDL: convert null to not null failed, code is %d, table_name: %s", rc, table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: convert null to not null failed, code is %d, table_name: %s", rc, table->s->table_name.str);
 
       //if errcode is set, set HA_ERR_INVALID_NULL_ERROR is failed, that'ok
       uint err = HA_EXIT_SUCCESS;
@@ -4179,7 +4150,7 @@ int ha_smartengine::update_pk_for_new_table(const SeKeyDef &kd,
 
       return HA_EXIT_SUCCESS;
     } else {
-      __XHANDLER_LOG(ERROR, "SEDDL: convert new record from old record error, code is %d, table_name: %s", rc, table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: convert new record from old record error, code is %d, table_name: %s", rc, table->s->table_name.str);
 
       return rc;
     }
@@ -4204,18 +4175,16 @@ int ha_smartengine::update_pk_for_new_table(const SeKeyDef &kd,
     const auto s = row_info.tx->put(cf, row_info.new_pk_slice, value_slice);
     if (!s.ok()) {
       if (s.IsBusy()) {
-        __XHANDLER_LOG(WARN, "SEDDL: duplicate entry is found during DML for key(%s) on pk:%d, table_name:%s",
-                       row_info.new_pk_slice.ToString(true).c_str(),
-                       kd.get_index_number(), table->s->table_name.str);
+        __HANDLER_LOG(WARN, "SEDDL: duplicate entry is found during DML for key(%s) on pk:%d, table_name:%s",
+                      row_info.new_pk_slice.ToString(true).c_str(), kd.get_index_number(), table->s->table_name.str);
         errkey = table->s->primary_key;
         m_dupp_errkey = errkey;
         rc = HA_ERR_FOUND_DUPP_KEY;
         // ToDo confirm this is due to duplicate entry which should be handled by DDL
       } else {
-        __XHANDLER_LOG(WARN, "SEDDL: failed to put record(%s:%s) for updating pk(%u), code is %d, table_name: %s",
-                       row_info.new_pk_slice.ToString(true).c_str(),
-                       value_slice.ToString(true).c_str(),
-                       kd.get_index_number(), rc, table->s->table_name.str);
+        __HANDLER_LOG(WARN, "SEDDL: failed to put record(%s:%s) for updating pk(%u), code is %d, table_name: %s",
+                      row_info.new_pk_slice.ToString(true).c_str(), value_slice.ToString(true).c_str(),
+                      kd.get_index_number(), rc, table->s->table_name.str);
         rc = row_info.tx->set_status_error(table->in_use, s, *m_pk_descr,
                                            m_tbl_def.get());
       }
@@ -4258,7 +4227,7 @@ int ha_smartengine::update_sk_for_new_table(const SeKeyDef &kd,
                          store_row_debug_checksums,
                          row_info.hidden_pk_id, 0, nullptr, altered_table,
                          m_tbl_def->m_dict_info, new_packed_size)) {
-    __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
   assert(new_packed_size <= m_max_packed_sk_len);
@@ -4270,7 +4239,7 @@ int ha_smartengine::update_sk_for_new_table(const SeKeyDef &kd,
                            store_row_debug_checksums, row_info.hidden_pk_id, 0,
                            nullptr, altered_table, m_tbl_def->m_dict_info,
                            old_packed_size)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
       return HA_EXIT_FAILURE;
     }
     assert(old_packed_size <= m_max_packed_sk_len);
@@ -4347,7 +4316,7 @@ int ha_smartengine::delete_row_new_table(struct update_row_info &row_info)
     /** generate new primary key **/
     if (!get_new_pk_flag) {
       if ((ret = get_new_pk_for_delete(&row_info, atab))) {
-        __XHANDLER_LOG(ERROR, "SEDDL: get new primary pk for rebuild ddl error, table_name: %s", table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: get new primary pk for rebuild ddl error, table_name: %s", table->s->table_name.str);
         DBUG_RETURN(ret);
       }
       get_new_pk_flag = true;
@@ -4362,10 +4331,10 @@ int ha_smartengine::delete_row_new_table(struct update_row_info &row_info)
           atab, m_tbl_def->m_inplace_new_tdef, index, row_info.tx, kd.get_cf(),
           row_info.new_pk_slice);
       if (!s.ok()) {
-        __XHANDLER_LOG(WARN, "SEDDL: failed to delete record(%s) on pk (%u) "
-                             "of new table, code is %d, table_name: %s",
-                       row_info.new_pk_slice.ToString(true).c_str(),
-                       kd.get_index_number(), s.code(), table->s->table_name.str);
+        __HANDLER_LOG(WARN, "SEDDL: failed to delete record(%s) on pk (%u) "
+                      "of new table, code is %d, table_name: %s",
+                      row_info.new_pk_slice.ToString(true).c_str(),
+                      kd.get_index_number(), s.code(), table->s->table_name.str);
         DBUG_RETURN(
             tx->set_status_error(table->in_use, s, *m_pk_descr, m_tbl_def.get()));
       }
@@ -4375,7 +4344,7 @@ int ha_smartengine::delete_row_new_table(struct update_row_info &row_info)
                                        m_sk_packed_tuple, &m_sk_tails,
                                        false, row_info.hidden_pk_id, 0, nullptr,
                                        atab, m_tbl_def->m_dict_info, packed_size))) {
-        __XHANDLER_LOG(ERROR, "SEDDL: pack new reocrd error, table_name: %s", table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: pack new reocrd error, table_name: %s", table->s->table_name.str);
         DBUG_RETURN(HA_EXIT_FAILURE);
       }
       assert(packed_size <= m_max_packed_sk_len);
@@ -4389,7 +4358,7 @@ int ha_smartengine::delete_row_new_table(struct update_row_info &row_info)
     }
 
     if (ret != HA_EXIT_SUCCESS) {
-      __XHANDLER_LOG(ERROR, "SEDDL: delete indexes error, code is %d, table_name: %s", ret, table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: delete indexes error, code is %d, table_name: %s", ret, table->s->table_name.str);
       DBUG_RETURN(ret);
     }
   }
@@ -4416,7 +4385,7 @@ int ha_smartengine::get_new_pk_for_delete(struct update_row_info *const row_info
             table, m_pack_buffer, row_info->old_data, m_pk_packed_tuple,
             row_info->new_pk_unpack_info, false, 0, 0, nullptr, altered_table,
             m_tbl_def->m_dict_info, size)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
       DBUG_RETURN(HA_EXIT_FAILURE);
     }
 
@@ -4426,7 +4395,7 @@ int ha_smartengine::get_new_pk_for_delete(struct update_row_info *const row_info
     //we don't support drop primary key online-ddl
     assert(has_hidden_pk(altered_table) && has_hidden_pk(table));
     if (read_hidden_pk_id_from_rowkey(&row_info->hidden_pk_id, &m_last_rowkey)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: read hidden_pk error, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: read hidden_pk error, table_name: %s", table->s->table_name.str);
       DBUG_RETURN(HA_EXIT_FAILURE);
     }
 
@@ -4463,7 +4432,7 @@ int ha_smartengine::get_new_pk_for_update(update_row_info *const row_info, const
         table, m_pack_buffer, row_info->new_data, m_pk_packed_tuple,
         row_info->new_pk_unpack_info, false, 0, 0, nullptr, altered_table,
         m_tbl_def->m_dict_info, size)) {
-      __XHANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: pack new record error, table_name: %s", table->s->table_name.str);
       return HA_EXIT_FAILURE;
     }
     assert(size <= m_max_packed_sk_len);
@@ -4533,14 +4502,14 @@ int ha_smartengine::fill_new_duplicate_record(const SeKeyDef *index,
     }
 
     if (res) {
-      __XHANDLER_LOG(ERROR, "SEDDL: unable to unpack record from value");
+      __HANDLER_LOG(ERROR, "SEDDL: unable to unpack record from value");
     }
   } else {
     //for utf8mb4_0900, try to use old-table record
     if ((res = fill_old_table_record(new_table_arg, table, dup_key, index))) {
       if (res != HA_ERR_KEY_NOT_FOUND) {
-        __XHANDLER_LOG(ERROR, "SEDDL: Fill old table record failed, table_name:%s",
-                     table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: Fill old table record failed, table_name:%s",
+                      table->s->table_name.str);
         DBUG_RETURN(res);
       }
     }
@@ -4551,25 +4520,21 @@ int ha_smartengine::fill_new_duplicate_record(const SeKeyDef *index,
                                &dup_key, &dup_val,
                                false)) {
         /* Should never reach here */
-        __XHANDLER_LOG(ERROR, "SEDDL: Error retrieving index entry, table_name:%s",
-                       table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "SEDDL: Error retrieving index entry, table_name:%s",
+                      table->s->table_name.str);
         assert(0);
       }
-      __XHANDLER_LOG(INFO, "SEDDL: duplicated entry for index:%d is "
-                           "deledted in old table:%s during online DML",
-                     index->get_index_number(), table->s->table_name.str);
+      __HANDLER_LOG(INFO, "SEDDL: duplicated entry for index:%d is "
+                    "deledted in old table:%s during online DML",
+                    index->get_index_number(), table->s->table_name.str);
     } else if ((res = set_duplicate_key_for_print(new_table_arg, table, index,
                                                   m_tbl_def->m_dict_info, is_rebuild))) {
-      __XHANDLER_LOG(ERROR,
-                     "SEDDL: Set duplicate record for new table failed, "
-                     "table_name:%s",
-                     table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: Set duplicate record for new table failed, table_name:%s",
+                    table->s->table_name.str);
       DBUG_RETURN(res);
     } else {
-      __XHANDLER_LOG(INFO,
-                     "SEDDL: Set duplicate record for new table successsfully, "
-                     "table_name:%s",
-                     table->s->table_name.str);
+      __HANDLER_LOG(INFO, "SEDDL: Set duplicate record for new table successsfully, table_name:%s",
+                    table->s->table_name.str);
     }
   }
 
@@ -4605,9 +4570,8 @@ int ha_smartengine::get_latest_row_by_rowid(uchar *const buf,
 
   s = tx->get_latest(m_pk_descr->get_cf(), key_slice, &m_retrieved_record);
   if (!s.IsNotFound() && !s.ok()) {
-    __XHANDLER_LOG(WARN, "XEngienDDL: lock failed for key(%s) on index %u, code is %d, table_name is: %s",
-                   key_slice.ToString(true).c_str(), m_pk_descr->get_index_number(),
-                   s.code(), table->s->table_name.str);
+    __HANDLER_LOG(WARN, "XEngienDDL: lock failed for key(%s) on index %u, code is %d, table_name is: %s",
+                  key_slice.ToString(true).c_str(), m_pk_descr->get_index_number(), s.code(), table->s->table_name.str);
     DBUG_RETURN(tx->set_status_error(table->in_use, s, *m_pk_descr, m_tbl_def.get()));
   }
   found = !s.IsNotFound();
@@ -4649,19 +4613,19 @@ int ha_smartengine::fill_old_table_record(TABLE *new_table,
     pk_size =
         dup_kd->get_primary_key_tuple(new_table, *m_pk_descr, &dup_key, m_pk_packed_tuple);
     if (pk_size == SE_INVALID_KEY_LEN) {
-      __XHANDLER_LOG(ERROR, "SEDDL: Get primary key failed, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: Get primary key failed, table_name: %s", table->s->table_name.str);
       ret = HA_ERR_INTERNAL_ERROR;
     }
   }
 
   if (ret != HA_EXIT_SUCCESS) {
-    __XHANDLER_LOG(ERROR, "SEDDL: Fill table record failed, table_name: %s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "SEDDL: Fill table record failed, table_name: %s", table->s->table_name.str);
     return ret;
   } else if ((ret = get_latest_row_by_rowid(old_table->record[0], reinterpret_cast<const char *>(m_pk_packed_tuple), pk_size))) {
     if (ret == HA_ERR_KEY_NOT_FOUND) {
-      __XHANDLER_LOG(WARN, "SEDDL: duplicate record maybe deleted, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: duplicate record maybe deleted, table_name: %s", table->s->table_name.str);
     } else {
-      __XHANDLER_LOG(ERROR, "SEDDL: Find duplicate record error, table_name: %s", table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: Find duplicate record error, table_name: %s", table->s->table_name.str);
     }
 
     return ret;
@@ -4745,9 +4709,7 @@ static int set_duplicate_key_for_print(
         assert(field->real_type() == old_field->real_type());
         if (fill_duplicate_blob_val((Field_blob *)old_field,
                                     (Field_blob *)field)) {
-          __XHANDLER_LOG(ERROR,
-                         "store duplicated blob field failed, index_id: %d",
-                         kd->get_index_number());
+          __HANDLER_LOG(ERROR, "store duplicated blob field failed, index_id: %d", kd->get_index_number());
           return HA_EXIT_FAILURE;
         }
       } else {

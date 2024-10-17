@@ -16,7 +16,7 @@ while ($i <= 1024) {
 set @@GLOBAL.DEBUG= '+d, before_sleep_in_flush_collect_stats';
 set @@GLOBAL.DEBUG= '+d, after_sleep_in_flush_collect_stats';
 --echo #sending
---send set global smartengine_force_flush_memtable_now=ON;
+--send set global smartengine_flush_memtable=ON;
 
 connection con2;
 sleep 10;

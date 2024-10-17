@@ -10,7 +10,7 @@ CREATE TABLE t1(c1 int primary key, c2 int) ENGINE=SMARTENGINE;
 
 INSERT INTO t1 values (1, 1);
 
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 
 let $id = `select SUBTABLE_ID from information_schema.smartengine_subtable where table_name='smartengine_compaction_stats_test.t1'`;
 

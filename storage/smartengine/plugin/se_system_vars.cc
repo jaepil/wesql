@@ -73,7 +73,7 @@ uint32_t se_parallel_recovery_thread_num = 0;
 
 bool se_pause_background_work = false;
 
-bool se_force_flush_memtable_now_var = false;
+bool se_flush_memtable_var = false;
 
 long long se_compact_cf_id = 0;
 
@@ -297,7 +297,7 @@ static void se_set_dump_memtable_limit_size(
   SE_MUTEX_UNLOCK_CHECK(se_sysvars_mutex);
 }
 
-static int se_force_flush_memtable_now(
+static int se_flush_memtable(
     THD *const thd, struct SYS_VAR *const var, void *const var_ptr,
     struct st_mysql_value *const value) {
   sql_print_information("SE: Manual memtable flush\n");
@@ -315,7 +315,7 @@ static int se_force_flush_memtable_now(
   return HA_EXIT_SUCCESS;
 }
 
-static void se_force_flush_memtable_now_stub(
+static void se_flush_memtable_stub(
     THD *const thd, struct SYS_VAR *const var, void *const var_ptr,
     const void *const save) {}
 
@@ -448,7 +448,7 @@ static int se_compact_column_family(THD *const thd,
 
   if (value->val_int(value, &mvalue)) {
     /* The value is NULL. That is invalid. */
-    __XHANDLER_LOG(ERROR, "SE: Can't parse value for compact_cf\n");
+    __HANDLER_LOG(ERROR, "SE: Can't parse value for compact\n");
     return HA_EXIT_FAILURE;
   }
 
@@ -457,13 +457,13 @@ static int se_compact_column_family(THD *const thd,
   int32_t compact_type = mvalue >> 32;
   if (0 == cf_id) {
     if (nullptr != se_db) {
-      __XHANDLER_LOG(INFO, "SE: Manual compaction of all sub tables: %u", cf_id);
+      __HANDLER_LOG(INFO, "SE: Manual compaction of all sub tables: %u", cf_id);
       se_db->CompactRange(compact_type);
     }
   } else {
     auto cfh = cf_manager.get_cf(cf_id);
     if (cfh != nullptr  && se_db != nullptr) {
-      __XHANDLER_LOG(INFO, "SE: Manual compaction of sub table: %u\n", cf_id);
+      __HANDLER_LOG(INFO, "SE: Manual compaction of sub table: %u\n", cf_id);
       se_db->CompactRange(cfh, compact_type);
     }
   }
@@ -628,13 +628,12 @@ static int se_reset_subtable_pending_shrink(
 
   if (value->val_int(value, &mvalue)) {
     /**The value is NULL. That is invalid.*/
-    XHANDLER_LOG(ERROR, "SE: Can't parse value for reset_pending_shrink");
+    HANDLER_LOG(ERROR, "SE: Can't parse value for reset_pending_shrink");
     return HA_EXIT_FAILURE;
   } else {
     subtable_id = static_cast<uint64_t>(mvalue);
     se_db->reset_pending_shrink(subtable_id);
-    XHANDLER_LOG(INFO, "SE: success to reset pending shrink", "index_id",
-                 subtable_id);
+    HANDLER_LOG(INFO, "SE: success to reset pending shrink", "index_id", subtable_id);
   }
 
   return HA_EXIT_SUCCESS;
@@ -1036,7 +1035,7 @@ static MYSQL_SYSVAR_INT(
     PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
     "CFOptions::max_write_buffer_number_to_maintain for SE",
     nullptr, nullptr,
-    1000, -1, INT_MAX, 0);
+    0, 0, INT_MAX, 0);
 
 static MYSQL_SYSVAR_INT(
     min_write_buffer_number_to_merge,
@@ -1139,14 +1138,14 @@ static MYSQL_SYSVAR_ULONG(
     PLUGIN_VAR_RQCMDARG,
     "DBOptions::dump_memtable_limit_size for SE",
     nullptr, se_set_dump_memtable_limit_size,
-    se_db_options.dump_memtable_limit_size, 0, ULONG_MAX, 0);
+    0, 0, ULONG_MAX, 0);
 
 static MYSQL_SYSVAR_BOOL(
-    force_flush_memtable_now,
-    se_force_flush_memtable_now_var,
+    flush_memtable,
+    se_flush_memtable_var,
     PLUGIN_VAR_RQCMDARG,
     "Forces memstore flush which may block all write requests so be careful",
-    se_force_flush_memtable_now, se_force_flush_memtable_now_stub,
+    se_flush_memtable, se_flush_memtable_stub,
     FALSE);
 
 static MYSQL_SYSVAR_INT(
@@ -1261,7 +1260,7 @@ static MYSQL_SYSVAR_INT(
     1000, 1, 1<<30, 0);
 
 static MYSQL_SYSVAR_LONGLONG(
-    compact_cf, se_compact_cf_id,
+    compact, se_compact_cf_id,
     PLUGIN_VAR_RQCMDARG,
     "Compact sub table",
     se_compact_column_family,
@@ -1589,7 +1588,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(pause_background_work),
     MYSQL_SYSVAR(max_background_dumps),
     MYSQL_SYSVAR(dump_memtable_limit_size),
-    MYSQL_SYSVAR(force_flush_memtable_now),
+    MYSQL_SYSVAR(flush_memtable),
     MYSQL_SYSVAR(flush_delete_percent),
     MYSQL_SYSVAR(flush_delete_percent_trigger),
     MYSQL_SYSVAR(flush_delete_record_trigger),
@@ -1604,7 +1603,7 @@ static SYS_VAR *se_system_vars_internal[] = {
     MYSQL_SYSVAR(level1_extents_major_compaction_trigger),
     MYSQL_SYSVAR(level2_usage_percent),
     MYSQL_SYSVAR(compaction_task_extents_limit),
-    MYSQL_SYSVAR(compact_cf),
+    MYSQL_SYSVAR(compact),
     MYSQL_SYSVAR(bottommost_level),
     MYSQL_SYSVAR(disable_online_ddl),
     MYSQL_SYSVAR(disable_instant_ddl),

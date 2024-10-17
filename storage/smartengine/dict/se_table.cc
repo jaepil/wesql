@@ -177,8 +177,8 @@ bool SeTableDef::write_dd_table(dd::Table* dd_table) const
   size_t dd_index_size = dd_table->indexes()->size();
   for (auto dd_index : *dd_table->indexes()) {
     if (m_key_descr_arr[key_no]->write_dd_index(dd_index, m_table_id)) {
-      XHANDLER_LOG(ERROR, "write_dd_index failed", "index_name",
-                   dd_index->name().c_str(), K(m_dbname_tablename));
+      HANDLER_LOG(ERROR, "write_dd_index failed", "index_name",
+                  dd_index->name().c_str(), K(m_dbname_tablename));
       return true;
     }
     ++key_no;
@@ -187,27 +187,22 @@ bool SeTableDef::write_dd_table(dd::Table* dd_table) const
   if (m_key_count > dd_index_size) {
     // table should have a hidden primary key created by SE
     if (m_key_count != (dd_index_size + 1)) {
-      XHANDLER_LOG(ERROR, "number of keys mismatch", K(m_dbname_tablename),
-                   K(m_key_count), K(dd_index_size));
+      HANDLER_LOG(ERROR, "number of keys mismatch", K(m_dbname_tablename), K(m_key_count), K(dd_index_size));
       return true;
     }
 
     auto& hidden_pk = m_key_descr_arr[dd_index_size];
     uint32_t hidden_pk_id = hidden_pk->get_index_number();
     if (!hidden_pk->is_hidden_primary_key()) {
-      XHANDLER_LOG(ERROR, "Invalid primary key definition",
-                   K(m_dbname_tablename), K(hidden_pk_id));
+      HANDLER_LOG(ERROR, "Invalid primary key definition", K(m_dbname_tablename), K(hidden_pk_id));
       return true;
     // persist subtable_id for hidden primary key created by SE
     } else if (dd_table->se_private_data().set(
                    dd_table_key_strings[DD_TABLE_HIDDEN_PK_ID], hidden_pk_id)) {
-      XHANDLER_LOG(ERROR, "failed to set hidden_pk_id in se_private_data",
-                   K(hidden_pk_id), K(m_dbname_tablename));
+      HANDLER_LOG(ERROR, "failed to set hidden_pk_id in se_private_data", K(hidden_pk_id), K(m_dbname_tablename));
       return true;
     } else if (hidden_pk->write_dd_index_ext(dd_table->se_private_data())) {
-      XHANDLER_LOG(ERROR,
-                   "failed to set metadata for hidden pk in se_private_data",
-                   K(hidden_pk_id), K(m_dbname_tablename));
+      HANDLER_LOG(ERROR, "failed to set metadata for hidden pk in se_private_data", K(hidden_pk_id), K(m_dbname_tablename));
       return true;
     }
   }
@@ -215,8 +210,8 @@ bool SeTableDef::write_dd_table(dd::Table* dd_table) const
   for (auto dd_column : *dd_table->columns()) {
     if (dd_column->se_private_data().set(
             dd_index_key_strings[DD_INDEX_TABLE_ID], m_table_id)) {
-      XHANDLER_LOG(ERROR, "failed to set table id in se_private_data",
-                   "column", dd_column->name().c_str(), K(m_dbname_tablename));
+      HANDLER_LOG(ERROR, "failed to set table id in se_private_data",
+                  "column", dd_column->name().c_str(), K(m_dbname_tablename));
       return true;
     }
   }

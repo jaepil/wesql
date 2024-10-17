@@ -412,9 +412,6 @@ DEFINE_int32(read_amp_bytes_per_bit,
              BlockBasedTableOptions().read_amp_bytes_per_bit,
              "Number of bytes per bit to be used in block read-amp bitmap");
 
-DEFINE_int64(compressed_cache_size, -1,
-             "Number of bytes to use as a cache of compressed data.");
-
 DEFINE_int64(row_cache_size, 0,
              "Number of bytes to use as a cache of individual rows"
              " (0 = disabled).");
@@ -2010,7 +2007,6 @@ struct StressErrorKey {
 class Benchmark {
  private:
   std::shared_ptr<Cache> cache_;
-  std::shared_ptr<Cache> compressed_cache_;
   DBWithColumnFamilies db_;
   std::vector<DBWithColumnFamilies> multi_dbs_;
   int64_t num_;
@@ -2213,7 +2209,6 @@ class Benchmark {
  public:
   Benchmark()
       : cache_(NewCache(FLAGS_cache_size, ModId::kDefaultBlockCache)),
-        compressed_cache_(NewCache(FLAGS_compressed_cache_size, ModId::kBkCacheCompress)),
         num_(FLAGS_num),
         value_size_(FLAGS_value_size),
         key_size_(FLAGS_key_size),
@@ -2860,7 +2855,6 @@ class Benchmark {
           true;
     }
     block_based_options.block_cache = cache_;
-    block_based_options.block_cache_compressed = compressed_cache_;
     block_based_options.block_size = FLAGS_block_size;
     block_based_options.block_restart_interval = FLAGS_block_restart_interval;
     block_based_options.index_block_restart_interval =

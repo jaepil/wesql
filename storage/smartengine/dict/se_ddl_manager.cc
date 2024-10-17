@@ -96,9 +96,8 @@ bool SeDdlManager::can_purge_subtable(THD* thd, const GL_INDEX_ID& gl_index_id)
        *   SeKeyDef in the SeTableDef is kept.
        *   The SeTableDef object may be loaded again later.
        */
-      XHANDLER_LOG(ERROR,
-                   "SE: unexpected error, key cache entry exists without "
-                   "table cache entry", "table_name", tbl_name);
+      HANDLER_LOG(ERROR, "SE: unexpected error, key cache entry exists without table cache entry",
+                  "table_name", tbl_name);
       return false;
     } else if (!table_def->m_key_descr_arr || keyno > table_def->m_key_count ||
                !table_def->m_key_descr_arr[keyno] ||
@@ -108,10 +107,8 @@ bool SeDdlManager::can_purge_subtable(THD* thd, const GL_INDEX_ID& gl_index_id)
        *   SeTableDef object is added but index cache entry of SeKeyDef in
        *   old SeTableDef is kept
        */
-      XHANDLER_LOG(ERROR,
-                   "SE: found invalid index_id in m_index_num_to_keydef "
-                   "without related SeTableDef/SeKeyDef object",
-                   K(subtable_id));
+      HANDLER_LOG(ERROR, "SE: found invalid index_id in m_index_num_to_keydef "
+                  "without related SeTableDef/SeKeyDef object", K(subtable_id));
       m_index_num_to_keydef.erase(it);
       return true;
     }
@@ -133,10 +130,8 @@ bool SeDdlManager::can_purge_subtable(THD* thd, const GL_INDEX_ID& gl_index_id)
       // and related dd::Table is locked by other thread
       return false;
     } else if (nullptr != dd_table) {
-      XHANDLER_LOG(WARN,
-                   "SE: subtable associated table is still present in "
-                   "global data dictionary!",
-                   K(subtable_id), K(schema_name), K(table_name));
+      HANDLER_LOG(WARN, "SE: subtable associated table is still present in global data dictionary!",
+                  K(subtable_id), K(schema_name), K(table_name));
       if (tbl_ticket) dd::release_mdl(thd, tbl_ticket);
       return false;
     } else {
@@ -184,13 +179,13 @@ bool SeDdlManager::init(THD *const thd, SeDictionaryManager *const dict_arg)
     // 5) set VERSION_1 as system_cf_version in dictionary
     case SeKeyDef::SYSTEM_CF_VERSION::VERSION_0: {
       if (load_existing_tables(max_index_id_in_dict)) {
-        XHANDLER_LOG(ERROR, "SE: failed to load existing tables!");
+        HANDLER_LOG(ERROR, "SE: failed to load existing tables!");
         return true;
       } else if (upgrade_system_cf_version1(thd)) {
-        XHANDLER_LOG(ERROR, "SE: failed to upgrade system_cf to VERSION1");
+        HANDLER_LOG(ERROR, "SE: failed to upgrade system_cf to VERSION1");
         return true;
       } else if (upgrade_system_cf_version2()) {
-        XHANDLER_LOG(ERROR, "SE: failed to upgrade system_cf to VERSION2");
+        HANDLER_LOG(ERROR, "SE: failed to upgrade system_cf to VERSION2");
         return true;
       }
       break;
@@ -199,18 +194,18 @@ bool SeDdlManager::init(THD *const thd, SeDictionaryManager *const dict_arg)
     case SeKeyDef::SYSTEM_CF_VERSION::VERSION_2: {
       uint64_t max_table_id_in_dict = 0;
       if (!m_dict->get_max_table_id(&max_table_id_in_dict)) {
-        XHANDLER_LOG(ERROR, "SE: failed to get max_table_id from dictionary");
+        HANDLER_LOG(ERROR, "SE: failed to get max_table_id from dictionary");
         return true;
       }
 /** there is OOM risk when populating all tables if table count is very large
       else if (!thd || populate_existing_tables(thd)) {
-        XHANDLER_LOG(ERROR, "SE: failed to populate existing tables!");
+        HANDLER_LOG(ERROR, "SE: failed to populate existing tables!");
         return true;
       }
 */
 
 #ifndef NDEBUG
-      XHANDLER_LOG(INFO, "ddl_manager init get max table id from dictionary",
+      HANDLER_LOG(INFO, "ddl_manager init get max table id from dictionary",
                    K(max_table_id_in_dict));
 #endif
       if (max_table_id_in_dict > DD_TABLE_ID_END)
@@ -218,13 +213,13 @@ bool SeDdlManager::init(THD *const thd, SeDictionaryManager *const dict_arg)
 
       if (SeKeyDef::SYSTEM_CF_VERSION::VERSION_1 == system_cf_version_in_dict
           && upgrade_system_cf_version2()) {
-        XHANDLER_LOG(ERROR, "SE: failed to upgrade system_cf to VERSION2");
+        HANDLER_LOG(ERROR, "SE: failed to upgrade system_cf to VERSION2");
         return true;
       }
       break;
     }
     default: {
-      XHANDLER_LOG(ERROR, "SE: unexpected value for system_cf_version",
+      HANDLER_LOG(ERROR, "SE: unexpected value for system_cf_version",
                    K(system_cf_version_in_dict));
       return true;
     }
@@ -238,24 +233,24 @@ bool SeDdlManager::upgrade_system_cf_version1(THD* thd)
 {
   if (!m_ddl_hash.empty()) {
     if (nullptr == thd) {
-      XHANDLER_LOG(ERROR, "SE: unable to upgrade existing tables!");
+      HANDLER_LOG(ERROR, "SE: unable to upgrade existing tables!");
       return true;
     } else if (upgrade_existing_tables(thd)) {
-      XHANDLER_LOG(ERROR, "SE: failed to upgrade existing tables!");
+      HANDLER_LOG(ERROR, "SE: failed to upgrade existing tables!");
       return true;
     }
   }
 
   uint16_t target_version = SeKeyDef::SYSTEM_CF_VERSION::VERSION_1;
   if (update_max_table_id(m_next_table_id - 1)) {
-    XHANDLER_LOG(ERROR, "SE: failed to set max_table_id in system cf!");
+    HANDLER_LOG(ERROR, "SE: failed to set max_table_id in system cf!");
     return true;
   } else if (update_system_cf_version(target_version)) {
-    XHANDLER_LOG(ERROR, "SE: failed to set system_cf_version as VERSION1!");
+    HANDLER_LOG(ERROR, "SE: failed to set system_cf_version as VERSION1!");
     return true;
   } else {
 #ifndef NDEBUG
-    XHANDLER_LOG(INFO, "SE: successfully upgrade system_cf to VERSION1");
+    HANDLER_LOG(INFO, "SE: successfully upgrade system_cf to VERSION1");
 #endif
     return false;
   }
@@ -265,7 +260,7 @@ bool SeDdlManager::upgrade_system_cf_version2()
 {
   auto wb = m_dict->begin();
   if (!wb) {
-    XHANDLER_LOG(ERROR, "XEgnine: failed to begin wrtiebatch");
+    HANDLER_LOG(ERROR, "SE: failed to begin wrtiebatch");
     return true;
   }
   auto write_batch = wb.get();
@@ -290,14 +285,14 @@ bool SeDdlManager::upgrade_system_cf_version2()
 
   uint16_t target_version = SeKeyDef::SYSTEM_CF_VERSION::VERSION_2;
   if (m_dict->update_system_cf_version(write_batch, target_version)) {
-    XHANDLER_LOG(ERROR, "SE: failed to set system_cf_version as VERSION2!");
+    HANDLER_LOG(ERROR, "SE: failed to set system_cf_version as VERSION2!");
     return true;
   } else if (m_dict->commit(write_batch)) {
-    XHANDLER_LOG(ERROR, "SE: failed commit into dictionary!");
+    HANDLER_LOG(ERROR, "SE: failed commit into dictionary!");
     return true;
   } else {
 #ifndef NDEBUG
-    XHANDLER_LOG(INFO, "SE: successfully upgrade system_cf to VERSION2");
+    HANDLER_LOG(INFO, "SE: successfully upgrade system_cf to VERSION2");
 #endif
     return false;
   }
@@ -325,8 +320,7 @@ bool SeDdlManager::load_existing_tables(uint max_index_id_in_dict)
       break;
 
     if (key.size() <= SeKeyDef::INDEX_NUMBER_SIZE) {
-      XHANDLER_LOG(ERROR, "SE: unexepected key size(corruption?)",
-                   "key_size", key.size());
+      HANDLER_LOG(ERROR, "SE: unexepected key size(corruption?)", "key_size", key.size());
       return true;
     }
 
@@ -337,8 +331,7 @@ bool SeDdlManager::load_existing_tables(uint max_index_id_in_dict)
     const int d_PACKED_SIZE = SeKeyDef::PACKED_SIZE * 2;
     const int real_val_size = val.size() - SeKeyDef::VERSION_SIZE;
     if (real_val_size % d_PACKED_SIZE) {
-      XHANDLER_LOG(ERROR, "SE: invalid keylist from dictionary",
-                   K(table_name));
+      HANDLER_LOG(ERROR, "SE: invalid keylist from dictionary", K(table_name));
       return true;
     }
     tdef->m_key_count = real_val_size / d_PACKED_SIZE;
@@ -348,8 +341,7 @@ bool SeDdlManager::load_existing_tables(uint max_index_id_in_dict)
     const int version = se_netbuf_read_uint16(&ptr);
     const int exp_version = SeKeyDef::DDL_ENTRY_INDEX_VERSION;
     if (version != exp_version) {
-      XHANDLER_LOG(ERROR, "SE: DDL ENTRY Version mismatch",
-                   "expected", exp_version, "actual", version);
+      HANDLER_LOG(ERROR, "SE: DDL ENTRY Version mismatch", "expected", exp_version, "actual", version);
       return true;
     }
     ptr_end = ptr + real_val_size;
@@ -365,13 +357,10 @@ bool SeDdlManager::load_existing_tables(uint max_index_id_in_dict)
 
       if (get_index_dict(table_name, gl_index_id, max_index_id_in_dict,
                          index_dict_version, index_type, kv_version, flags)) {
-        XHANDLER_LOG(ERROR,
-                     "SE: failed to get index information from dictionary.",
-                     K(table_name));
+        HANDLER_LOG(ERROR, "SE: failed to get index information from dictionary.", K(table_name));
         return true;
       } else if (nullptr == (cfh = cf_manager.get_cf(subtable_id))) {
-        XHANDLER_LOG(ERROR, "SE: failed to find subtable",
-                     K(table_name), K(subtable_id));
+        HANDLER_LOG(ERROR, "SE: failed to find subtable", K(table_name), K(subtable_id));
         return true;
       }
 
@@ -393,12 +382,11 @@ bool SeDdlManager::load_existing_tables(uint max_index_id_in_dict)
   }
 
   if (!it->status().ok()) {
-    XHANDLER_LOG(ERROR, "SE: failed to iterate dictioanry",
-                 "status", it->status().ToString());
+    HANDLER_LOG(ERROR, "SE: failed to iterate dictioanry", "status", it->status().ToString());
     return true;
   }
   MOD_DELETE_OBJECT(Iterator, it);
-  XHANDLER_LOG(INFO, "SE: loaded DDL data for tables", "count", i);
+  HANDLER_LOG(INFO, "SE: loaded DDL data for tables", "count", i);
   return false;
 }
 
@@ -421,8 +409,7 @@ bool SeDdlManager::upgrade_existing_tables(THD *const thd)
     filename_to_tablename(tbl_def->base_dbname().c_str(), schema_name, sizeof(schema_name));
     filename_to_tablename(tbl_def->base_tablename().c_str(), table_name, sizeof(table_name));
     if (NULL != strstr(table_name, tmp_file_prefix)) {
-      XHANDLER_LOG(WARN, "SE: found trashy temporary table, skip it during upgrading",
-                   K(schema_name), K(table_name));
+      HANDLER_LOG(WARN, "SE: found trashy temporary table, skip it during upgrading", K(schema_name), K(table_name));
       continue;
     }
 
@@ -439,41 +426,35 @@ bool SeDdlManager::upgrade_existing_tables(THD *const thd)
             MDL_key::SCHEMA, schema_name, "", MDL_INTENTION_EXCLUSIVE) &&
         thd->mdl_context.acquire_lock(&sch_mdl_request,
                                       thd->variables.lock_wait_timeout)) {
-      XHANDLER_LOG(ERROR, "SE: failed to acquire lock for dd::Schema",
-                   K(schema_name));
+      HANDLER_LOG(ERROR, "SE: failed to acquire lock for dd::Schema", K(schema_name));
       error = true;
     // acquire dd::Schema object
     } else if (dc->acquire(schema_name, &db_sch) || (nullptr == db_sch)) {
-      XHANDLER_LOG(ERROR, "SE: failed to acquire dd::Schema object",
-                   K(schema_name));
+      HANDLER_LOG(ERROR, "SE: failed to acquire dd::Schema object", K(schema_name));
       error = true;
     // acquire exclusive lock on dd::Table if needed
     } else if (!dd::has_exclusive_table_mdl(thd, schema_name, table_name) &&
                thd->mdl_context.acquire_lock(
                    &tbl_mdl_request, thd->variables.lock_wait_timeout)) {
-      XHANDLER_LOG(ERROR, "SE: failed to acquire exclusive lock for dd::Table",
+      HANDLER_LOG(ERROR, "SE: failed to acquire exclusive lock for dd::Table",
                    K(schema_name), K(table_name));
       error = true;
     // acquire dd::Table object to modify
     } else if (dc->acquire_for_modification(schema_name, table_name, &dd_table) ||
                (nullptr == dd_table) || dd_table->engine() != se_hton_name) {
-      XHANDLER_LOG(ERROR, "SE: failed to acquire dd::Table object",
-                   K(schema_name), K(table_name));
+      HANDLER_LOG(ERROR, "SE: failed to acquire dd::Table object", K(schema_name), K(table_name));
       error = true;
     // set se_private_id and se_private_data
     } else if (tbl_def->write_dd_table(dd_table)) {
-      XHANDLER_LOG(ERROR, "SE: failed to update dd_table",
-                   K(schema_name), K(table_name));
+      HANDLER_LOG(ERROR, "SE: failed to update dd_table", K(schema_name), K(table_name));
       error = true;
     // persist se_private_id and se_private_data of dd::Table/dd::Index
     } else if (dc->update(dd_table)) {
-      XHANDLER_LOG(ERROR, "SE: failed to persist dd::Table",
-                   K(schema_name), K(table_name));
+      HANDLER_LOG(ERROR, "SE: failed to persist dd::Table", K(schema_name), K(table_name));
       error = true;
     } else {
 #ifndef NDEBUG
-      XHANDLER_LOG(INFO, "SE: successfully upgrade dd::Table",
-                   K(schema_name), K(table_name));
+      HANDLER_LOG(INFO, "SE: successfully upgrade dd::Table", K(schema_name), K(table_name));
 #endif
       ++m_next_table_id;
       error = false;
@@ -510,14 +491,11 @@ bool SeDdlManager::populate_existing_tables(THD *const thd)
         oss << db_filename << '.' << table_filename;
         SeTableDef *tbl_def = restore_table_from_dd(dd_table, oss.str());
         if (nullptr == tbl_def) {
-          XHANDLER_LOG(ERROR, "SE: failed to restore table from dd::Table",
-                       K(schema_name), K(table_name));
+          HANDLER_LOG(ERROR, "SE: failed to restore table from dd::Table", K(schema_name), K(table_name));
           return true;
         } else {
 #ifndef NDEBUG
-          XHANDLER_LOG(INFO,
-                       "SE: successfully populate table from dd::Table",
-                       K(schema_name), K(table_name));
+          HANDLER_LOG(INFO, "SE: successfully populate table from dd::Table", K(schema_name), K(table_name));
 #endif
           put(std::shared_ptr<SeTableDef>(tbl_def));
           return false;
@@ -525,14 +503,10 @@ bool SeDdlManager::populate_existing_tables(THD *const thd)
       });
 
   if (error) {
-    XHANDLER_LOG(
-        ERROR,
-        "SE: failed to populate all se tables from data dictionary");
+    HANDLER_LOG(ERROR, "SE: failed to populate all se tables from data dictionary");
 #ifndef NDEBUG
   } else {
-    XHANDLER_LOG(INFO,
-                 "SE: successfully populate all se tables from data "
-                 "dictionary");
+    HANDLER_LOG(INFO, "SE: successfully populate all se tables from data dictionary");
 #endif
   }
   return error;
@@ -542,14 +516,14 @@ bool SeDdlManager::update_max_table_id(uint64_t table_id)
 {
   auto write_batch = m_dict->begin();
   if (nullptr == write_batch) {
-    XHANDLER_LOG(ERROR, "XEgnine: failed to begin wrtiebatch");
+    HANDLER_LOG(ERROR, "SE: failed to begin wrtiebatch");
     return true;
   }
 
   bool res = false;
   m_dict->update_max_table_id(write_batch.get(), table_id);
   if (m_dict->commit(write_batch.get())) {
-    XHANDLER_LOG(ERROR, "SE: failed to update max_table_id", K(table_id));
+    HANDLER_LOG(ERROR, "SE: failed to update max_table_id", K(table_id));
     res = true;
   }
   return res;
@@ -559,15 +533,14 @@ bool SeDdlManager::update_system_cf_version(uint16_t system_cf_version)
 {
   auto write_batch = m_dict->begin();
   if (!write_batch) {
-    XHANDLER_LOG(ERROR, "XEgnine: failed to begin wrtiebatch");
+    HANDLER_LOG(ERROR, "SE: failed to begin wrtiebatch");
     return true;
   }
 
   bool res = false;
   m_dict->update_system_cf_version(write_batch.get(), system_cf_version);
   if (m_dict->commit(write_batch.get())) {
-    XHANDLER_LOG(ERROR, "SE: failed to update system_cf_version",
-                 "version", system_cf_version);
+    HANDLER_LOG(ERROR, "SE: failed to update system_cf_version", "version", system_cf_version);
     res = true;
   }
   return res;
@@ -938,7 +911,7 @@ bool SeDdlManager::rename_cache(const std::string &from, const std::string &to)
   bool from_dict = false;
   if (!(tbl = find(from, &from_dict))) {
     /** if not found, that's ok for we may executed many times */
-    XHANDLER_LOG(WARN, "Table doesn't exist when rename_cache", K(from), K(to));
+    HANDLER_LOG(WARN, "Table doesn't exist when rename_cache", K(from), K(to));
     return false;
   }
 
@@ -1020,20 +993,20 @@ SeKeyDef* SeDdlManager::restore_index_from_dd(const dd::Properties& prop,
   if (prop.get(dd_index_key_strings[DD_INDEX_VERSION_ID], &index_version_id) ||
       prop.get(dd_index_key_strings[DD_INDEX_KV_VERSION], &kv_version) ||
       prop.get(dd_index_key_strings[DD_INDEX_FLAGS], &key_flags)) {
-    XHANDLER_LOG(ERROR, "SE: failed to get index metadata from se_private_data",
-                 K(index_name), K(subtable_id), K(table_name));
+    HANDLER_LOG(ERROR, "SE: failed to get index metadata from se_private_data",
+                K(index_name), K(subtable_id), K(table_name));
     return nullptr;
   } else if (!SeDictionaryManager::is_valid_index_version(index_version_id)) {
-    XHANDLER_LOG(ERROR, "SE: get invalid index version from se_private_data",
-                 K(index_version_id), K(index_name), K(subtable_id), K(table_name));
+    HANDLER_LOG(ERROR, "SE: get invalid index version from se_private_data",
+                K(index_version_id), K(index_name), K(subtable_id), K(table_name));
     return nullptr;
   } else if (!SeDictionaryManager::is_valid_kv_version(index_type, kv_version)) {
-    XHANDLER_LOG(ERROR, "SE: get invalid kv_version from se_private_data",
-                 K(kv_version), K(index_name), K(subtable_id), K(table_name));
+    HANDLER_LOG(ERROR, "SE: get invalid kv_version from se_private_data",
+                K(kv_version), K(index_name), K(subtable_id), K(table_name));
     return nullptr;
   } else if (nullptr == (cfh = cf_manager.get_cf(subtable_id))) {
-    XHANDLER_LOG(ERROR, "SE: failed to get column family handle for index",
-                 K(index_name), K(subtable_id), K(table_name));
+    HANDLER_LOG(ERROR, "SE: failed to get column family handle for index",
+                K(index_name), K(subtable_id), K(table_name));
     return nullptr;
   } else {
     return new SeKeyDef(subtable_id, keyno, cfh, index_version_id, index_type,
@@ -1076,24 +1049,20 @@ SeTableDef* SeDdlManager::restore_table_from_dd(const dd::Table* dd_table,
       const dd::Properties &p = dd_index->se_private_data();
       if (p.get(dd_index_key_strings[DD_INDEX_SUBTABLE_ID], &subtable_id) ||
           DD_SUBTABLE_ID_INVALID == subtable_id) {
-        XHANDLER_LOG(ERROR, "SE: failed to get subtable_id from "
-                            "se_private_data of dd::Index",
-                     K(index_name), K(table_name));
+        HANDLER_LOG(ERROR, "SE: failed to get subtable_id from se_private_data of dd::Index",
+                    K(index_name), K(table_name));
         error = true;
         break;
       } else if (max_index_id_in_dict < subtable_id) {
-        XHANDLER_LOG(ERROR, "SE: got invalid subtable id which larger than"
-                            "maximum id recored in dictioanry",
-                     K(max_index_id_in_dict), K(subtable_id),
-                     K(index_name), K(table_name));
+        HANDLER_LOG(ERROR, "SE: got invalid subtable id which larger than maximum id recored in dictioanry",
+                    K(max_index_id_in_dict), K(subtable_id), K(index_name), K(table_name));
         error = true;
         break;
       } else if (p.get(dd_index_key_strings[DD_INDEX_TYPE], &index_type) ||
                  (index_type != SeKeyDef::INDEX_TYPE_PRIMARY &&
                   index_type != SeKeyDef::INDEX_TYPE_SECONDARY)) {
-        XHANDLER_LOG(ERROR, "SE: failed to get index_type from "
-                            "se_private_data of dd::Index",
-                     K(index_type), K(subtable_id), K(index_name), K(table_name));
+        HANDLER_LOG(ERROR, "SE: failed to get index_type from se_private_data of dd::Index",
+                    K(index_type), K(subtable_id), K(index_name), K(table_name));
         error = true;
         break;
       } else if (nullptr == (kd = restore_index_from_dd(p, table_name,
@@ -1112,9 +1081,8 @@ SeTableDef* SeDdlManager::restore_table_from_dd(const dd::Table* dd_table,
       int index_type = SeKeyDef::INDEX_TYPE::INDEX_TYPE_HIDDEN_PRIMARY;
       SeKeyDef* kd = nullptr;
       if (max_index_id_in_dict < hidden_subtable_id) {
-        XHANDLER_LOG(ERROR, "SE: got invalid hidden_subtable_id which "
-                            "larger than maximum id recored in dictioanry",
-                     K(max_index_id_in_dict), K(hidden_subtable_id), K(table_name));
+        HANDLER_LOG(ERROR, "SE: got invalid hidden_subtable_id which larger than maximum id recored in dictioanry",
+                    K(max_index_id_in_dict), K(hidden_subtable_id), K(table_name));
         error = true;
       } else if (nullptr == (kd = restore_index_from_dd(
            dd_table->se_private_data(), table_name, HIDDEN_PK_NAME,
@@ -1140,8 +1108,7 @@ SeTableDef* SeDdlManager::restore_table_from_dd(THD* thd, const std::string& tab
 
   std::string db_name, tbl_name, part_name;
   if (se_split_normalized_tablename(table_name, &db_name, &tbl_name, &part_name)) {
-    XHANDLER_LOG(ERROR, "SE: failed to parse table name",
-                 "full_table_name", table_name);
+    HANDLER_LOG(ERROR, "SE: failed to parse table name", "full_table_name", table_name);
     return nullptr;
   }
 

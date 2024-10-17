@@ -13,7 +13,7 @@ while ($i <= 1024) {
   eval insert into t values($i);
   inc $i;
 }
-set global smartengine_force_flush_memtable_now=ON;
+set global smartengine_flush_memtable=ON;
 --enable_query_log
 --disable_result_log
 #do manual compaction for table t
@@ -25,7 +25,7 @@ set @@GLOBAL.DEBUG= '+d, before_manual_compaction';
 set @@GLOBAL.DEBUG= '+d, after_manual_compaction';
 --echo #sending
 --disable_query_log
---send_eval set global smartengine_compact_cf=$val
+--send_eval set global smartengine_compact=$val
 --enable_query_log
 
 connection con2;

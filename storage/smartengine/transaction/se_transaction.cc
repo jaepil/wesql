@@ -166,8 +166,7 @@ int SeTransaction::set_status_error(THD *const thd,
   assert(tbl_def != nullptr);
 
   if (s.IsTimedOut()) {
-    __XHANDLER_LOG(WARN, "tx failed with timeout on key(%u)",
-                   kd.get_index_number());
+    __HANDLER_LOG(WARN, "tx failed with timeout on key(%u)", kd.get_index_number());
     /*
       SQL layer has weird expectations. If we return an error when
       doing a read in DELETE IGNORE, it will ignore the error ("because it's
@@ -184,21 +183,18 @@ int SeTransaction::set_status_error(THD *const thd,
   }
 
   if (s.IsDeadlock()) {
-    __XHANDLER_LOG(WARN, "tx failed with deadlock on key(%u)",
-                   kd.get_index_number());
+    __HANDLER_LOG(WARN, "tx failed with deadlock on key(%u)", kd.get_index_number());
     my_core::thd_mark_transaction_to_rollback(thd,
                                               true /* whole transaction */);
     return HA_ERR_LOCK_DEADLOCK;
   } else if (s.IsBusy()) {
-    __XHANDLER_LOG(WARN, "tx failed with snapshot conflict on key(%u)",
-                   kd.get_index_number());
+    __HANDLER_LOG(WARN, "tx failed with snapshot conflict on key(%u)", kd.get_index_number());
     global_stats.snapshot_conflict_errors_++;
     return HA_ERR_LOCK_DEADLOCK;
   }
 
   if (s.IsLockLimit()) {
-    __XHANDLER_LOG(WARN, "tx failed with too many locks on key(%u)",
-                   kd.get_index_number());
+    __HANDLER_LOG(WARN, "tx failed with too many locks on key(%u)", kd.get_index_number());
     return HA_ERR_SE_TOO_MANY_LOCKS;
   }
 

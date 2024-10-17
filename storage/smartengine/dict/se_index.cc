@@ -879,7 +879,7 @@ int SeKeyDef::pack_new_record(const TABLE *const old_tbl,
       ret = pack_field(new_field, &m_pack_info[i], tuple, packed_tuple,
                        pack_buffer, unpack_info, n_null_fields);
       if (ret && ret != HA_ERR_INVALID_NULL_ERROR) {
-        __XHANDLER_LOG(ERROR, "pack field failed, error code: %d", ret);
+        __HANDLER_LOG(ERROR, "pack field failed, error code: %d", ret);
         return ret;
       }
     } else {
@@ -896,7 +896,7 @@ int SeKeyDef::pack_new_record(const TABLE *const old_tbl,
       ret = pack_field(field, &m_pack_info[i], tuple, packed_tuple, pack_buffer,
                        unpack_info, n_null_fields);
       if (ret && ret != HA_ERR_INVALID_NULL_ERROR) {
-        __XHANDLER_LOG(ERROR, "pack field failed, error code: %d", ret);
+        __HANDLER_LOG(ERROR, "pack field failed, error code: %d", ret);
         return ret;
       }
 
@@ -1315,8 +1315,7 @@ int SeKeyDef::unpack_record_pk(TABLE *const table,
 
   // Skip the index number
   if ((!reader.read(INDEX_NUMBER_SIZE))) {
-    __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
     return HA_ERR_INTERNAL_ERROR;
   }
 
@@ -1328,8 +1327,7 @@ int SeKeyDef::unpack_record_pk(TABLE *const table,
   const char *null_bytes = nullptr;
   if (null_bytes_in_rec &&
       !(null_bytes = value_reader.read(null_bytes_in_rec))) {
-    __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
     return HA_ERR_INTERNAL_ERROR;
   }
 
@@ -1339,8 +1337,7 @@ int SeKeyDef::unpack_record_pk(TABLE *const table,
   if (dict_info->m_maybe_unpack_info) {
     unpack_info = value_reader.read(schema::RecordFormat::RECORD_UNPACK_HEADER_SIZE);
     if (!unpack_info || unpack_info[0] != schema::RecordFormat::RECORD_UNPACK_DATA_FLAG) {
-      __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s",
-                     table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
       return HA_ERR_INTERNAL_ERROR;
     }
 
@@ -1354,15 +1351,13 @@ int SeKeyDef::unpack_record_pk(TABLE *const table,
   if (!unpack_info && !table_has_unpack_info(table)) {
     if (this->unpack_record_1(table, buf, packed_key, nullptr,
                               false /* verify_checksum */)) {
-      __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s",
-                     table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
       return HA_ERR_INTERNAL_ERROR;
     }
   } else if (this->unpack_record(table, buf, packed_key,
                                  unpack_info ? &unpack_slice : nullptr,
                                  false /* verify_checksum */)) {
-    __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s",
-                   table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
     return HA_ERR_INTERNAL_ERROR;
   }
 
@@ -1400,7 +1395,7 @@ int SeKeyDef::unpack_record(TABLE *const table,
 
   // Skip the index number
   if ((!reader.read(INDEX_NUMBER_SIZE))) {
-    __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
 
@@ -1411,7 +1406,7 @@ int SeKeyDef::unpack_record(TABLE *const table,
       unp_reader.remaining_bytes() &&
       *unp_reader.get_current_ptr() == schema::RecordFormat::RECORD_UNPACK_DATA_FLAG;
   if (has_unpack_info && !unp_reader.read(schema::RecordFormat::RECORD_UNPACK_HEADER_SIZE)) {
-    __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
 
@@ -1426,7 +1421,7 @@ int SeKeyDef::unpack_record(TABLE *const table,
         is_hidden_pk) {
       assert(fpi->m_unpack_func);
       if (fpi->m_skip_func(fpi, nullptr, &reader)) {
-        __XHANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "unexpected error record,table_name:%s", table->s->table_name.str);
         return HA_EXIT_FAILURE;
       }
       continue;
@@ -1460,7 +1455,7 @@ int SeKeyDef::unpack_record(TABLE *const table,
                         field->null_bit);
 
       if (res) {
-        __XHANDLER_LOG(ERROR, "unexpected error record, code:%d, table_name:%s", res, table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "unexpected error record, code:%d, table_name:%s", res, table->s->table_name.str);
         return res;
       }
     } else {
@@ -1468,7 +1463,7 @@ int SeKeyDef::unpack_record(TABLE *const table,
       if (fpi->m_maybe_null) {
         const char *nullp;
         if (!(nullp = reader.read(1))) {
-          __XHANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
+          __HANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
           return HA_EXIT_FAILURE;
         }
         if (*nullp == 0) {
@@ -1477,12 +1472,12 @@ int SeKeyDef::unpack_record(TABLE *const table,
         }
         /* If NULL marker is not '0', it can be only '1'  */
         if (*nullp != 1) {
-          __XHANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
+          __HANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
           return HA_EXIT_FAILURE;
         }
       }
       if (fpi->m_skip_func(fpi, field, &reader)) {
-        __XHANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
+        __HANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
         return HA_EXIT_FAILURE;
       }
     }
@@ -1524,7 +1519,7 @@ int SeKeyDef::unpack_record(TABLE *const table,
   }
 
   if (reader.remaining_bytes()) {
-    __XHANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
+    __HANDLER_LOG(ERROR, "unexpected error record, table_name:%s", table->s->table_name.str);
     return HA_EXIT_FAILURE;
   }
 

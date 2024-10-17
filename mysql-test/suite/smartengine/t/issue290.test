@@ -21,7 +21,7 @@ while ($i <= 10000) {
   eval $insert;
 }
 --enable_query_log
-set global smartengine_force_flush_memtable_now=1;
+set global smartengine_flush_memtable=1;
 
 insert into linktable (id1, link_type, id2) values (2, 1, 1);
 insert into linktable (id1, link_type, id2) values (2, 1, 2);

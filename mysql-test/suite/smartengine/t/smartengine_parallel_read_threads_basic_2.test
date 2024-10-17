@@ -27,7 +27,7 @@ while ($i < $max) {
 }
 eval commit;
 --enable_query_log
-set global smartengine_force_flush_memtable_now=1;
+set global smartengine_flush_memtable=1;
 select count(*) from t1;
 select count(*) from t1 where id > 0;
 
@@ -59,7 +59,7 @@ set smartengine_parallel_read_threads=8;
 select count(*) from t1;
 select count(*) from t1 where id > 0;
 
-set global smartengine_force_flush_memtable_now=1;
+set global smartengine_flush_memtable=1;
 --replace_column 3 #
 select table_name, subtable_name, subtable_id, sum(extent_count) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
 select count(*) from t1;

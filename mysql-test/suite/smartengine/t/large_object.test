@@ -14,7 +14,7 @@ INSERT INTO t1 values (4, REPEAT('I', 255), REPEAT('MYSQLMYSQL', 4000000));
 
 SELECT id,LENGTH(value),MD5(value) FROM t1;
 
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 
 --echo restarting...
 --source include/restart_mysqld.inc
@@ -30,9 +30,9 @@ while ($i<800)
 }
 --enable_query_log
 
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 DELETE FROM t1 where id % 2 = 0;
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 SELECT COUNT(*) FROM t1;
 
 --echo restarting...

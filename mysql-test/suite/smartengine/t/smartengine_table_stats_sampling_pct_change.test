@@ -22,7 +22,7 @@ while ($i < $n)
 }
 --enable_query_log
 
-set global smartengine_force_flush_memtable_now = true;
+set global smartengine_flush_memtable = true;
 
 # This should return 10K rows.
 select table_rows from information_schema.tables
@@ -54,7 +54,7 @@ while ($i < $n)
 }
 --enable_query_log
 
-set global smartengine_force_flush_memtable_now = true;
+set global smartengine_flush_memtable = true;
 
 # This should return 10K rows as well.
 select table_rows from information_schema.tables

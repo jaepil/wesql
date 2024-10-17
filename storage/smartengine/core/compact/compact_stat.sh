@@ -133,7 +133,7 @@ calc_frag() {
 #  DUMP_TASK = 18,                             // dump memtable to M0
 #  SWITCH_M02L0_TASK = 19,                     // switch M0 to L0
 #  MAX_TYPE_TASK
-#  set global smartengine_compact_cf=cf_id+(task_type << 32)
+#  set global smartengine_compact=cf_id+(task_type << 32)
 
 compact_sk() {
   ${mysql} -uroot -S /u01/my3306/run/mysql.sock -e "select COLUMN_FAMILY from information_schema.se_ddl where index_type=2" > ${cf_file}
@@ -141,7 +141,7 @@ compact_sk() {
   while read line ; do
     cnt=$((cnt+1))
     echo -e "Pharse 1: ${cnt} cf=${line}\n"
-    ${mysql} -uroot -S /u01/my3306/run/mysql.sock -e "set global smartengine_compact_cf=${line}+(13 << 32)";
+    ${mysql} -uroot -S /u01/my3306/run/mysql.sock -e "set global smartengine_compact=${line}+(13 << 32)";
 
     #echo `sed -n "/${line}/{n;n;n;n;n;n;n;p}" $cf_file`
     #echo -n `grep -A 5 -nr "\[${line}\]" $cf_file`
@@ -153,7 +153,7 @@ compact_sk() {
   while read line ; do
     cnt=$((cnt+1))
     echo -e "Pharse 2: ${cnt} cf=$line\n"
-    ${mysql} -uroot -S /u01/my3306/run/mysql.sock -e "set global smartengine_compact_cf=${line}+(6<<32)";
+    ${mysql} -uroot -S /u01/my3306/run/mysql.sock -e "set global smartengine_compact=${line}+(6<<32)";
   done < ${cf_file}
 }
 

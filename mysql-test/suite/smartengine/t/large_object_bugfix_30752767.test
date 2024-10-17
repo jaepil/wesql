@@ -10,7 +10,7 @@ CREATE TABLE t1(c1 int primary key, c2 mediumblob) ENGINE = SMARTENGINE;
 INSERT INTO t1 values (1, repeat('a', 16777216));
 --enable_warnings
 
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 sleep 5;
 
 --echo restarting...
@@ -18,7 +18,7 @@ sleep 5;
 
 SELECT c1, MD5(c2) FROM t1;
 
-set global smartengine_compact_cf = 55834574848;
+set global smartengine_compact = 55834574848;
 sleep 5;
 
 --echo restarting...

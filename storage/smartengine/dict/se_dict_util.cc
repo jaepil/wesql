@@ -370,7 +370,7 @@ bool SeDdHelper::traverse_all_se_tables(
   auto client = thd->dd_client();
   std::vector<dd::String_type> schema_names;
   if (client->fetch_global_component_names<dd::Schema>(&schema_names)) {
-    XHANDLER_LOG(ERROR, "SE: failed to fetch schema names!");
+    HANDLER_LOG(ERROR, "SE: failed to fetch schema names!");
     return true;
   }
 
@@ -381,19 +381,18 @@ bool SeDdHelper::traverse_all_se_tables(
     std::vector<dd::String_type> table_names;
     if (schema_mdl_locker.ensure_locked(schema_name.c_str()) ||
         client->acquire(schema_name, &dd_schema)) {
-      XHANDLER_LOG(ERROR, "SE: failed to acquire dd::Schema object",
-                   "schema_name", schema_name.c_str());
+      HANDLER_LOG(ERROR, "SE: failed to acquire dd::Schema object",
+                  "schema_name", schema_name.c_str());
       if (!exit_on_failure) continue;
       return true;
     } else if (nullptr == dd_schema) {
-      XHANDLER_LOG(INFO, "SE: dd::Schema was dropped", "schema_name",
-                   schema_name.c_str());
+      HANDLER_LOG(INFO, "SE: dd::Schema was dropped", "schema_name",
+                  schema_name.c_str());
       continue;
     } else if (client->fetch_schema_table_names_by_engine(
                    dd_schema, se_hton_name, &table_names)) {
-      XHANDLER_LOG(ERROR,
-                   "SE: failed to fetch table names from dd::Schema",
-                   "schema_name", schema_name.c_str());
+      HANDLER_LOG(ERROR,"SE: failed to fetch table names from dd::Schema",
+                  "schema_name", schema_name.c_str());
       if (!exit_on_failure) continue;
       return true;
     } else {
@@ -446,9 +445,9 @@ bool SeDdHelper::get_se_subtable_map(THD* thd,
           const auto &p = dd_index->se_private_data();
           if (!p.exists(dd_index_key_strings[DD_INDEX_SUBTABLE_ID]) ||
               p.get(dd_index_key_strings[DD_INDEX_SUBTABLE_ID], &subtable_id)) {
-            XHANDLER_LOG(ERROR, "SE: failed to get subtable_id",
-                         "table_name", dd_table->name().c_str(), "index_name",
-                         dd_index->name().c_str());
+            HANDLER_LOG(ERROR, "SE: failed to get subtable_id",
+                        "table_name", dd_table->name().c_str(),
+                        "index_name", dd_index->name().c_str());
             return true;
           } else {
             subtable_map.emplace(
@@ -461,9 +460,8 @@ bool SeDdHelper::get_se_subtable_map(THD* thd,
         if (p.exists(dd_table_key_strings[DD_TABLE_HIDDEN_PK_ID])) {
           if (p.get(dd_table_key_strings[DD_TABLE_HIDDEN_PK_ID],
                     &subtable_id)) {
-            XHANDLER_LOG(ERROR,
-                         "SE: failed to get subtable_id for hidden pk",
-                         "table_name", dd_table->name().c_str());
+            HANDLER_LOG(ERROR, "SE: failed to get subtable_id for hidden pk",
+                        "table_name", dd_table->name().c_str());
             return true;
           } else {
             subtable_map.emplace(subtable_id,
@@ -490,8 +488,8 @@ bool SeDdHelper::acquire_se_table(THD* thd, ulong lock_timeout,
     MDL_REQUEST_INIT(&mdl_request, MDL_key::TABLE, schema_name, table_name,
                      MDL_SHARED, MDL_EXPLICIT);
     if (thd->mdl_context.acquire_lock(&mdl_request, lock_timeout)) {
-      XHANDLER_LOG(ERROR, "SE: failed to acquire shared lock on dd::Table",
-                   K(schema_name), K(table_name));
+      HANDLER_LOG(ERROR, "SE: failed to acquire shared lock on dd::Table",
+                  K(schema_name), K(table_name));
       return true;
     } else {
       mdl_ticket = mdl_request.ticket;
@@ -500,12 +498,10 @@ bool SeDdHelper::acquire_se_table(THD* thd, ulong lock_timeout,
 
   // acquire the dd::Table and verify if it is SE table
   if (thd->dd_client()->acquire(schema_name, table_name, &dd_table)) {
-    XHANDLER_LOG(ERROR, "SE: failed to acquire dd::Table",
-                 K(schema_name), K(table_name));
+    HANDLER_LOG(ERROR, "SE: failed to acquire dd::Table", K(schema_name), K(table_name));
     error = true;
   } else if (!dd_table|| dd_table->engine() != se_hton_name) {
-    XHANDLER_LOG(WARN, "SE: no such se table",
-                 K(schema_name), K(table_name));
+    HANDLER_LOG(WARN, "SE: no such se table", K(schema_name), K(table_name));
     dd_table = nullptr;
   }
 
@@ -529,9 +525,9 @@ bool SeDdHelper::get_se_subtable_ids(THD* thd, ulong lock_timeout,
           const auto &p = dd_index->se_private_data();
           if (!p.exists(dd_index_key_strings[DD_INDEX_SUBTABLE_ID]) ||
               p.get(dd_index_key_strings[DD_INDEX_SUBTABLE_ID], &subtable_id)) {
-            XHANDLER_LOG(ERROR, "SE: failed to get subtable_id",
-                         "table_name", dd_table->name().c_str(), "index_name",
-                         dd_index->name().c_str());
+            HANDLER_LOG(ERROR, "SE: failed to get subtable_id",
+                        "table_name", dd_table->name().c_str(),
+                        "index_name", dd_index->name().c_str());
             return true;
           }
           subtable_ids.insert(subtable_id);
@@ -541,9 +537,8 @@ bool SeDdHelper::get_se_subtable_ids(THD* thd, ulong lock_timeout,
         if (p.exists(dd_table_key_strings[DD_TABLE_HIDDEN_PK_ID])) {
           if (p.get(dd_table_key_strings[DD_TABLE_HIDDEN_PK_ID],
                     &subtable_id)) {
-            XHANDLER_LOG(ERROR,
-                         "SE: failed to get subtable_id for hidden pk",
-                         "table_name", dd_table->name().c_str());
+            HANDLER_LOG(ERROR, "SE: failed to get subtable_id for hidden pk",
+                        "table_name", dd_table->name().c_str());
             return true;
           } else {
             subtable_ids.insert(subtable_id);
@@ -553,9 +548,7 @@ bool SeDdHelper::get_se_subtable_ids(THD* thd, ulong lock_timeout,
       });
 
   if (error) {
-    XHANDLER_LOG(ERROR,
-                 "SE: failed to collect subtable ids for all SE "
-                 "table from data dictionary");
+    HANDLER_LOG(ERROR, "SE: failed to collect subtable ids for all SE table from data dictionary");
   }
 
   return error;

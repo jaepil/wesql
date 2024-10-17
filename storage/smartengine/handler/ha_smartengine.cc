@@ -249,8 +249,7 @@ int ha_smartengine::create(const char *const name,
 
       DBUG_EXECUTE_IF("ddl_log_crash_truncate_after_delete_table", DBUG_SUICIDE(););
     } else if (is_prefix(table_def->base_tablename().c_str(), tmp_file_prefix)) {
-      XHANDLER_LOG(WARN, "SE: find garbage temporary table in dictionary",
-                   "table_name", str);
+      HANDLER_LOG(WARN, "SE: find garbage temporary table in dictionary", "table_name", str);
       assert(!from_dict);
       // remove cache entry of the table
       ddl_manager.remove_cache(table_def->full_tablename());
@@ -1031,7 +1030,7 @@ int ha_smartengine::delete_row(const uchar *const buf)
 
   int ret = HA_EXIT_SUCCESS;
   if ((ret = delete_indexes(buf))) {
-    __XHANDLER_LOG(ERROR, "delete failed, errcode is %d", ret);
+    __HANDLER_LOG(ERROR, "delete failed, errcode is %d", ret);
     DBUG_RETURN(ret);
   } else if (m_tbl_def->m_inplace_new_tdef != nullptr) {
     assert(!m_tbl_def->m_inplace_new_keys.empty());
@@ -1041,8 +1040,8 @@ int ha_smartengine::delete_row(const uchar *const buf)
 
     //delete the record for rebuild new table
     if ((ret = delete_row_new_table(del_row_info))) {
-      __XHANDLER_LOG(WARN, "SEDDL: failed to delete record for new table, errcode is %d, table_name:%s",
-                     ret, table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: failed to delete record for new table, errcode is %d, table_name:%s",
+                    ret, table->s->table_name.str);
       DBUG_RETURN(ret);
     }
   }
@@ -1712,7 +1711,7 @@ int ha_smartengine::update_write_row(const uchar *const old_data,
 
     /* Determine which indexes need updating. */
     if ((rc = calc_updated_indexes())) {
-      __XHANDLER_LOG(ERROR, "calculate update indexes error, code is %d", rc);
+      __HANDLER_LOG(ERROR, "calculate update indexes error, code is %d", rc);
       DBUG_RETURN(rc);
     }
   }
@@ -1755,8 +1754,8 @@ int ha_smartengine::update_write_row(const uchar *const old_data,
   if (!m_tbl_def->m_inplace_new_keys.empty()) {
     TABLE *atab = m_tbl_def->m_inplace_new_keys.begin()->second.altered_table;
     if ((rc = get_new_pk_for_update(&row_info, atab))) {
-      __XHANDLER_LOG(ERROR, "SEDDL: get_new_pk_for_update faield with %d, table_name: %s",
-                     rc, table->s->table_name.str);
+      __HANDLER_LOG(ERROR, "SEDDL: get_new_pk_for_update faield with %d, table_name: %s",
+                    rc, table->s->table_name.str);
       DBUG_RETURN(rc);
     }
   }
@@ -1793,10 +1792,10 @@ int ha_smartengine::update_pk(const SeKeyDef &kd,
     const common::Status s = delete_or_singledelete(
         key_id, row_info.tx, kd.get_cf(), row_info.old_pk_slice);
     if (!s.ok()) {
-      __XHANDLER_LOG(WARN, "DML: failed to delete old record(%s) for updating pk(%u) with error %s, table_name: %s",
-                     row_info.old_pk_slice.ToString(true).c_str(),
-                     kd.get_index_number(), s.ToString().c_str(),
-                     table->s->table_name.str);
+      __HANDLER_LOG(WARN, "DML: failed to delete old record(%s) for updating pk(%u) with error %s, table_name: %s",
+                    row_info.old_pk_slice.ToString(true).c_str(),
+                    kd.get_index_number(), s.ToString().c_str(),
+                    table->s->table_name.str);
       return row_info.tx->set_status_error(table->in_use, s, kd, m_tbl_def.get());
     }
   }
@@ -1808,8 +1807,7 @@ int ha_smartengine::update_pk(const SeKeyDef &kd,
   common::Slice value_slice;
   if ((rc = convert_record_to_storage_format(
            row_info.new_pk_slice, row_info.new_pk_unpack_info, &value_slice))) {
-    __XHANDLER_LOG(ERROR, "convert record to se format error, code is %d",
-                   rc);
+    __HANDLER_LOG(ERROR, "convert record to se format error, code is %d", rc);
     return rc;
   }
 
@@ -1832,18 +1830,16 @@ int ha_smartengine::update_pk(const SeKeyDef &kd,
     const auto s = row_info.tx->put(cf, row_info.new_pk_slice, value_slice);
     if (!s.ok()) {
       if (s.IsBusy()) {
-        __XHANDLER_LOG(WARN, "DML: duplicate entry is found for key(%s) on pk:%d, table_name:%s",
-                       row_info.new_pk_slice.ToString(true).c_str(),
-                       kd.get_index_number(), table->s->table_name.str);
+        __HANDLER_LOG(WARN, "DML: duplicate entry is found for key(%s) on pk:%d, table_name:%s",
+                      row_info.new_pk_slice.ToString(true).c_str(), kd.get_index_number(),
+                      table->s->table_name.str);
         errkey = table->s->primary_key;
         m_dupp_errkey = errkey;
         rc = HA_ERR_FOUND_DUPP_KEY;
       } else {
-        __XHANDLER_LOG(WARN, "DML: failed to put record(%s:%s) for updating pk(%u) with error %s, table_name: %s",
-                       row_info.new_pk_slice.ToString(true).c_str(),
-                       value_slice.ToString(true).c_str(),
-                       kd.get_index_number(), s.ToString().c_str(),
-                       table->s->table_name.str);
+        __HANDLER_LOG(WARN, "DML: failed to put record(%s:%s) for updating pk(%u) with error %s, table_name: %s",
+                      row_info.new_pk_slice.ToString(true).c_str(), value_slice.ToString(true).c_str(),
+                      kd.get_index_number(), s.ToString().c_str(), table->s->table_name.str);
         rc = row_info.tx->set_status_error(table->in_use, s, *m_pk_descr,
                                            m_tbl_def.get());
       }
@@ -2053,10 +2049,9 @@ int ha_smartengine::delete_indexes(const uchar *const old_record)
   common::Status s =
       delete_or_singledelete(index, tx, m_pk_descr->get_cf(), key_slice);
   if (!s.ok()) {
-    __XHANDLER_LOG(WARN, "DML: failed to delete record(%s) on pk (%u) with error %s, table_name: %s",
-                   key_slice.ToString(true).c_str(),
-                   m_pk_descr->get_index_number(), s.ToString().c_str(),
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "DML: failed to delete record(%s) on pk (%u) with error %s, table_name: %s",
+                  key_slice.ToString(true).c_str(), m_pk_descr->get_index_number(), s.ToString().c_str(),
+                  table->s->table_name.str);
     DBUG_RETURN(tx->set_status_error(table->in_use, s, *m_pk_descr, m_tbl_def.get()));
   }
 
@@ -2574,7 +2569,7 @@ int ha_smartengine::setup_field_converters(const TABLE *table,
   encoder_arr = static_cast<SeFieldEncoder *>(
       my_malloc(PSI_NOT_INSTRUMENTED, table->s->fields * sizeof(SeFieldEncoder), MYF(0)));
   if (encoder_arr == nullptr) {
-    __XHANDLER_LOG(ERROR, "allcate from memory failed");
+    __HANDLER_LOG(ERROR, "allcate from memory failed");
     return HA_EXIT_FAILURE;
   }
 
@@ -3157,10 +3152,10 @@ int ha_smartengine::check_and_lock_unique_pk(const uint &key_id,
       get_for_update(row_info.tx, m_pk_descr->get_cf(), row_info.new_pk_slice,
                      &m_retrieved_record);
   if (!s.ok() && !s.IsNotFound()) {
-    __XHANDLER_LOG(WARN, "DML: get_for_update for key(%s) on index(%u) failed with error:%s, table_name: %s",
-                   row_info.new_pk_slice.ToString(true).c_str(),
-                   m_pk_descr->get_index_number(), s.ToString().c_str(),
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "DML: get_for_update for key(%s) on index(%u) failed with error:%s, table_name: %s",
+                  row_info.new_pk_slice.ToString(true).c_str(),
+                  m_pk_descr->get_index_number(), s.ToString().c_str(),
+                  table->s->table_name.str);
     return row_info.tx->set_status_error(table->in_use, s,
                                          *m_key_descr_arr[key_id], m_tbl_def.get());
   }
@@ -3280,10 +3275,8 @@ int ha_smartengine::check_and_lock_sk(const uint &key_id,
   const common::Status s =
       lock_unique_key(row_info.tx, kd.get_cf(), new_slice, total_order_seek, fill_cache);
   if (!s.ok() && !s.IsNotFound()) {
-    __XHANDLER_LOG(WARN, "DML: lock_unique_key for key(%s) on index:%d failed with error:%s, table_name: %s",
-                   new_slice.ToString(true).c_str(),
-                   kd.get_index_number(), s.ToString().c_str(),
-                   table->s->table_name.str);
+    __HANDLER_LOG(WARN, "DML: lock_unique_key for key(%s) on index:%d failed with error:%s, table_name: %s",
+                  new_slice.ToString(true).c_str(), kd.get_index_number(), s.ToString().c_str(), table->s->table_name.str);
     return row_info.tx->set_status_error(table->in_use, s, kd, m_tbl_def.get());
   }
 
@@ -3343,8 +3336,8 @@ int ha_smartengine::check_uniqueness_and_lock(
     rc = lock_and_check_new_index_sk(kd, k.second, row_info, &found);
 
     if (rc != HA_EXIT_SUCCESS){
-      __XHANDLER_LOG(WARN, "SEDDL: check duplicated key failed for new added key %u, errcode is %d, table_name:%s",
-                     kd.get_index_number(), rc, table->s->table_name.str);
+      __HANDLER_LOG(WARN, "SEDDL: check duplicated key failed for new added key %u, errcode is %d, table_name:%s",
+                    kd.get_index_number(), rc, table->s->table_name.str);
       break;
     }
   }
@@ -3445,7 +3438,7 @@ int ha_smartengine::calc_updated_indexes()
 
         Field *const field = kd.get_table_field_for_part_no(atab, kp);
         if (field == nullptr) {
-          XHANDLER_LOG(ERROR, "table object is mismatch with m_tbl_def");
+          HANDLER_LOG(ERROR, "table object is mismatch with m_tbl_def");
           return HA_EXIT_FAILURE;
         } else if (bitmap_is_set(table->write_set, field->field_index())) {
           m_update_scope.set_bit(kd.get_keyno());
@@ -3466,7 +3459,7 @@ int ha_smartengine::calc_updated_indexes()
 
         Field *const field = kd.get_table_field_for_part_no(atab, kp);
         if (field == nullptr) {
-          XHANDLER_LOG(ERROR, "table object is mismatch with m_tbl_def");
+          HANDLER_LOG(ERROR, "table object is mismatch with m_tbl_def");
           return HA_EXIT_FAILURE;
         }
 

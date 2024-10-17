@@ -10,7 +10,7 @@ id	LENGTH(value)	MD5(value)
 1	10000000	c8ffc656c65b3e736280deff8a84feb3
 2	20000000	c3ae5d1128ef7aad710115b12cc4d079
 3	30000000	cae7eae2598c7ac9f88c2615141db87f
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 restarting...
 # restart
 SELECT id,LENGTH(value),MD5(value) FROM t1;
@@ -18,9 +18,9 @@ id	LENGTH(value)	MD5(value)
 1	10000000	c8ffc656c65b3e736280deff8a84feb3
 2	20000000	c3ae5d1128ef7aad710115b12cc4d079
 3	30000000	cae7eae2598c7ac9f88c2615141db87f
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 DELETE FROM t1 where id % 2 = 0;
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 SELECT COUNT(*) FROM t1;
 COUNT(*)
 500

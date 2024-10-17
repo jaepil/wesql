@@ -733,7 +733,7 @@ int ha_smartengine::records_from_index(ha_rows *num_rows, uint index)
         if (ctx->thread_id_ == 0) {
           --counter;
           if (counter == 0 && my_core::thd_killed(current_thd)) {
-            __XHANDLER_LOG(WARN, "query interrupted by user, %s", current_thd->query().str);
+            __HANDLER_LOG(WARN, "query interrupted by user, %s", current_thd->query().str);
             return (static_cast<int>(common::Status::kCancelTask));
           }
 
@@ -748,9 +748,9 @@ int ha_smartengine::records_from_index(ha_rows *num_rows, uint index)
       });
 
   if (ret) {
-    XHANDLER_LOG(WARN, "prepare for parallel scan failed", K(ret));
+    HANDLER_LOG(WARN, "prepare for parallel scan failed", K(ret));
   } else if ((ret = preader.run())) {
-    XHANDLER_LOG(WARN, "do parallel scan failed", K(ret));
+    HANDLER_LOG(WARN, "do parallel scan failed", K(ret));
   } else {
     // get total count
     Counter::for_each(n_recs, [=](const Counter::Type n) {
@@ -1067,7 +1067,7 @@ int ha_smartengine::check(THD *const thd, HA_CHECK_OPT *const check_opt)
           if (keydef->is_support_fast_unique_check()) {
             uint32_t pk_size = 0;
             if (get_pkvalue_from_fast_uk(sk_value_slice, pk_size)) {
-              XHANDLER_LOG(ERROR, "get pkvalue from fast_uk error!");
+              HANDLER_LOG(ERROR, "get pkvalue from fast_uk error!");
               advice_add_index(table, keyno, hidden_pk_id, table->record[0]);
               error = true;
               goto one_row_checked;
@@ -1575,7 +1575,7 @@ int ha_smartengine::convert_record_from_storage_format(
       }
       offset_for_default_vect++;
     } else {
-      __XHANDLER_LOG(ERROR, "Decode value failed for unkown err");
+      __HANDLER_LOG(ERROR, "Decode value failed for unkown err");
       assert(0);
     }
 
@@ -2324,9 +2324,9 @@ int ha_smartengine::scan_parallel(SeKeyDef *kd,
   ret = preader.add_scan(trx, config, std::move(f));
 
   if (ret) {
-    XHANDLER_LOG(WARN, "prepare for parallel scan failed", K(ret));
+    HANDLER_LOG(WARN, "prepare for parallel scan failed", K(ret));
   } else if ((ret = preader.run())) {
-    XHANDLER_LOG(WARN, "do parallel scan failed", K(ret));
+    HANDLER_LOG(WARN, "do parallel scan failed", K(ret));
   }
 
   return ret;
@@ -2711,9 +2711,9 @@ int ha_smartengine::get_row_by_rowid(uchar *const buf,
   }
 
   if (!s.IsNotFound() && !s.ok()) {
-    __XHANDLER_LOG(WARN, "DML: lock failed for key(%s) on index %u with error %s, table_name is: %s",
-                   key_slice.ToString(true).c_str(), m_pk_descr->get_index_number(),
-                   s.ToString().c_str(), tbl->s->table_name.str);
+    __HANDLER_LOG(WARN, "DML: lock failed for key(%s) on index %u with error %s, table_name is: %s",
+                  key_slice.ToString(true).c_str(), m_pk_descr->get_index_number(),
+                  s.ToString().c_str(), tbl->s->table_name.str);
     DBUG_RETURN(tx->set_status_error(tbl->in_use, s, *m_pk_descr, m_tbl_def.get()));
   }
   found = !s.IsNotFound();

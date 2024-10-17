@@ -3,7 +3,7 @@ SELECT @start_global_value;
 @start_global_value
 4
 create table t1(id int primary key auto_increment, b text) ENGINE = SMARTENGINE;
-set global smartengine_force_flush_memtable_now=1;
+set global smartengine_flush_memtable=1;
 select count(*) from t1;
 count(*)
 1000
@@ -33,7 +33,7 @@ count(*)
 select count(*) from t1 where id > 0;
 count(*)
 1999
-set global smartengine_force_flush_memtable_now=1;
+set global smartengine_flush_memtable=1;
 select table_name, subtable_name, subtable_id, sum(extent_count) > 0 from information_schema.SMARTENGINE_SUBTABLE where table_name='test.t1';
 table_name	subtable_name	subtable_id	sum(extent_count) > 0
 test.t1	PRIMARY	#	1

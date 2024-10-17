@@ -21,7 +21,7 @@ SELECT c1, CONCAT('$', c2, '$') AS c2, CONCAT('$', c3, '$') AS c3, CONCAT('$', c
 SELECT c1, LENGTH(c2), LENGTH(c3), LENGTH(c4) FROM t1;
 SET SQL_MODE = @OLD_SQL_MODE;
 
-SET GLOBAL SMARTENGINE_FORCE_FLUSH_MEMTABLE_NOW = ON;
+SET GLOBAL SMARTENGINE_FLUSH_MEMTABLE = ON;
 --echo restarting
 --source include/restart_mysqld.inc
 
@@ -53,7 +53,7 @@ SELECT c1, CONCAT('$', c2, '$') AS c2, CONCAT('$', c3, '$') AS c3, CONCAT('$', c
 SELECT c1, LENGTH(c2), LENGTH(c3), LENGTH(c4) FROM t1;
 SET SQL_MODE = @OLD_SQL_MODE;
 
-SET GLOBAL SMARTENGINE_FORCE_FLUSH_MEMTABLE_NOW = ON;
+SET GLOBAL SMARTENGINE_FLUSH_MEMTABLE = ON;
 --echo restarting
 --source include/restart_mysqld.inc
 

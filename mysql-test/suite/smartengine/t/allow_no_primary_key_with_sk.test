@@ -131,7 +131,7 @@ DELETE FROM t1 WHERE col1 = 2;
 # key it is deleting are both removed.  This will cause data inconsistency if
 # SingleDelete is called on PK, since we do multiple Put() operations to update
 # primary keys.
-set global smartengine_force_flush_memtable_now = true;
+set global smartengine_flush_memtable = true;
 
 select * from t1;
 DROP TABLE t1;

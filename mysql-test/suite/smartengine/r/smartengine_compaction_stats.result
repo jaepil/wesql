@@ -3,7 +3,7 @@ CREATE DATABASE smartengine_compaction_stats_test;
 USE smartengine_compaction_stats_test;
 CREATE TABLE t1(c1 int primary key, c2 int) ENGINE=SMARTENGINE;
 INSERT INTO t1 values (1, 1);
-set global smartengine_force_flush_memtable_now = on;
+set global smartengine_flush_memtable = on;
 level	type
 L0	DataBytes
 L0	IndexExtents

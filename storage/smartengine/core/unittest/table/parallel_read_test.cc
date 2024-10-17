@@ -531,7 +531,7 @@ void ParallelReadTest::scan_all_data(
     const Slice value = iterator->value();
     bool ret = func(row, key, value);
     if (!ret) {
-      XHANDLER_LOG(ERROR, "check error", K(row), K(key), K(value));
+      HANDLER_LOG(ERROR, "check error", K(row), K(key), K(value));
     }
     ASSERT_TRUE(ret);
     ++row;

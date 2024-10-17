@@ -71,7 +71,7 @@ extern uint32_t se_parallel_recovery_thread_num;
 
 extern bool se_pause_background_work;
 
-extern bool se_force_flush_memtable_now_var;
+extern bool se_flush_memtable_var;
 
 extern long long se_compact_cf_id;
 

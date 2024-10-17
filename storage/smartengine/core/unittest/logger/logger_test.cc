@@ -186,38 +186,20 @@ TEST(TestLogger, test_log_print)
 	FLUSH_LOG(FATAL, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
 	__FLUSH_LOG(FATAL, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
 
-	
+	HANDLER_LOG(DEBUG, "test print debug log without vars.");
+	HANDLER_LOG(DEBUG, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
+	HANDLER_LOG(DEBUG, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
+	__HANDLER_LOG(DEBUG, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
 
+	HANDLER_LOG(WARN, "test print debug log without vars.");
+	HANDLER_LOG(WARN, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
+	HANDLER_LOG(WARN, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
+	__HANDLER_LOG(WARN, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
 
-	REPLAY_LOG(DEBUG, "test print debug log without vars.");
-	REPLAY_LOG(DEBUG, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	REPLAY_LOG(DEBUG, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	__REPLAY_LOG(DEBUG, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
-
-	REPLAY_LOG(WARN, "test print debug log without vars.");
-	REPLAY_LOG(WARN, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	REPLAY_LOG(WARN, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	__REPLAY_LOG(WARN, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
-
-	REPLAY_LOG(FATAL, "test print debug log without vars.");
-	REPLAY_LOG(FATAL, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	REPLAY_LOG(FATAL, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	__REPLAY_LOG(FATAL, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
-
-	XHANDLER_LOG(DEBUG, "test print debug log without vars.");
-	XHANDLER_LOG(DEBUG, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	XHANDLER_LOG(DEBUG, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	__XHANDLER_LOG(DEBUG, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
-
-	XHANDLER_LOG(WARN, "test print debug log without vars.");
-	XHANDLER_LOG(WARN, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	XHANDLER_LOG(WARN, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	__XHANDLER_LOG(WARN, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
-
-	XHANDLER_LOG(FATAL, "test print debug log without vars.");
-	XHANDLER_LOG(FATAL, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	XHANDLER_LOG(FATAL, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
-	__XHANDLER_LOG(FATAL, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
+	HANDLER_LOG(FATAL, "test print debug log without vars.");
+	HANDLER_LOG(FATAL, "test print debug log with vars by K.", K(ret), K(var_bool), K(var_int8), K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
+	HANDLER_LOG(FATAL, "test print debug log with vars by K.", K(ret), "var_bool", var_bool, "var_int8", var_int8, K(var_uint8), K(var_int16), K(var_uint16), K(var_int32), K(var_uint32), K(var_int64), K(var_uint64), K(var_double), K(var_float), K(var_str));
+	__HANDLER_LOG(FATAL, "test print debug log with vars by fmt. ret = %d, var_bool = %d, var_int8 = %d, var_str = %s\n", ret, var_bool, var_int8, var_str);
   dup2(stdout_fd, fileno(stdout));
   dup2(stderr_fd, fileno(stderr));
 	std::cout<<"test_log_print over"<<std::endl;

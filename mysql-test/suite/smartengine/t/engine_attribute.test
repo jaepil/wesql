@@ -147,7 +147,7 @@ while ($i < 10000)
 SELECT COUNT(*) FROM t1;
 SELECT SUM(c1), SUM(c2), SUM(c3) FROM t1;
 
-SET GLOBAL smartengine_force_flush_memtable_now=ON;
+SET GLOBAL smartengine_flush_memtable=ON;
 SELECT COUNT(*) FROM t1;
 SELECT SUM(c1), SUM(c2), SUM(c3) FROM t1;
 

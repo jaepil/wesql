@@ -1358,9 +1358,7 @@ static int i_s_se_tables_fill_table(THD *thd, Table_ref *tables, Item *) {
       });
 
   if (error) {
-    XHANDLER_LOG(
-        ERROR,
-        "SE: failed to scan all se tables from data dictionary!");
+    HANDLER_LOG(ERROR, "SE: failed to scan all se tables from data dictionary!");
   }
 
   DBUG_RETURN(0);
@@ -1473,9 +1471,7 @@ static int i_s_se_columns_fill_table(THD *thd, Table_ref *tables, Item *) {
       });
 
   if (error) {
-    XHANDLER_LOG(
-        ERROR,
-        "SE: failed to scan all se tables from data dictionary!");
+    HANDLER_LOG(ERROR, "SE: failed to scan all se tables from data dictionary!");
   }
 
   DBUG_RETURN(0);
@@ -1556,7 +1552,7 @@ static int se_i_s_se_subtable_fill_table(
   // collect subtables from dd
   std::map<uint32_t, std::pair<std::string, std::string>> subtable_id_map;
   if (SeDdHelper::get_se_subtable_map(thd, subtable_id_map)) {
-    XHANDLER_LOG(ERROR, "SE: failed to collection subtables from dd");
+    HANDLER_LOG(ERROR, "SE: failed to collection subtables from dd");
   }
   subtable_id_map.emplace(0, std::make_pair("<internal>", DEFAULT_CF_NAME));
   subtable_id_map.emplace(DEFAULT_SYSTEM_SUBTABLE_ID,

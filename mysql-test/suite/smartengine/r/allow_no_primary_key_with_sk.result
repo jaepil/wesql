@@ -782,7 +782,7 @@ select * from t1;
 col1	col2	extra
 2	1	NULL
 DELETE FROM t1 WHERE col1 = 2;
-set global smartengine_force_flush_memtable_now = true;
+set global smartengine_flush_memtable = true;
 select * from t1;
 col1	col2	extra
 DROP TABLE t1;

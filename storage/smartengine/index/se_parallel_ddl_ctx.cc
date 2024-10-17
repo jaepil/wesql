@@ -79,12 +79,12 @@ int ParallelDDLScanCtx::init()
 {
   int res = HA_EXIT_SUCCESS;
   if ((res = ParallelScanCtx::init())) {
-    __XHANDLER_LOG(ERROR, "SEDDL: ParallelScanCtx init failed, errcode=%d, table_name: %s", res, table_name);
+    __HANDLER_LOG(ERROR, "SEDDL: ParallelScanCtx init failed, errcode=%d, table_name: %s", res, table_name);
     assert(0);
   } else if ((res = se_merge->init())) {
-    __XHANDLER_LOG(ERROR, "SEDDL: se_merge init failed, errcode=%d, table_name: %s", res, table_name);
+    __HANDLER_LOG(ERROR, "SEDDL: se_merge init failed, errcode=%d, table_name: %s", res, table_name);
   } else if ((res = bg_merge.init())) {
-    __XHANDLER_LOG(ERROR, "SEDDL: bg_merge init failed, errcode=%d, table_name: %s", res, table_name);
+    __HANDLER_LOG(ERROR, "SEDDL: bg_merge init failed, errcode=%d, table_name: %s", res, table_name);
   }
   return res;
 }

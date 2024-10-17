@@ -10,7 +10,7 @@ CREATE DATABASE mysqltest;
 USE mysqltest;
 CREATE TABLE t1 (a INT PRIMARY KEY);
 INSERT INTO t1 VALUES(42);
-SET GLOBAL smartengine_force_flush_memtable_now = 1;
+SET GLOBAL smartengine_flush_memtable = 1;
 SELECT sleep(1);
 DROP TABLE t1;
 EOF

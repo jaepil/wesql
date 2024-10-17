@@ -350,8 +350,8 @@ struct DBOptions {
 
   // when handle wal full, if memtable's size is smaller than dump_memtable_limit_size,
   // will do dump task , other will do flush task
-  // default: 64M
-  uint64_t dump_memtable_limit_size = 64 * 1024 * 1024;
+  // default: 0
+  uint64_t dump_memtable_limit_size = 0;
 
   // Number of shards used for table cache.
   int table_cache_numshardbits = 7;

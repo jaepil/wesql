@@ -27,7 +27,7 @@ eval select count(1) = 1 from $table force index($index) where c1 > $cv2 and c2 
 eval select count(1) = 3 from $table force index($index) where c1 >= $cv2 and c2 >= $cv2 and c1 <= $cv4 and c2 <= $cv4;
 
 # test end key push down in sstable
-set global smartengine_force_flush_memtable_now=on;
+set global smartengine_flush_memtable=on;
 
 eval select count(1) = 1 from $table where k1 > $kv2 and k1 < $kv4;
 eval select count(1) = 3 from $table where k1 >= $kv2 and k1 <= $kv4;

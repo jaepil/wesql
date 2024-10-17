@@ -275,7 +275,7 @@ while ($i <= $max) {
 --enable_query_log
 
 set information_schema_stats_expiry = 0;
-set global smartengine_force_flush_memtable_now=1;
+set global smartengine_flush_memtable=1;
 
 --let $data_length_old = query_get_value("select INDEX_LENGTH from information_schema.tables where table_schema=database() and table_name='t1'", INDEX_LENGTH, 1)
 
@@ -336,7 +336,7 @@ INSERT INTO t1 VALUES (1,2), (2,4), (3,6), (4,8), (5,10);
 ALTER TABLE t1 ADD INDEX kj(j), ALGORITHM=INPLACE;
 
 # Flush memtable out to SST
-SET GLOBAL smartengine_force_flush_memtable_now = 1;
+SET GLOBAL smartengine_flush_memtable = 1;
 
 # cleanup
 DROP TABLE t1;

@@ -240,8 +240,7 @@ static void purge_invalid_subtables()
       for (auto& subtable_id : last_invalid_subtables) {
         auto it = current_invalid_subtables.find(subtable_id);
         if (it != current_invalid_subtables.end()) {
-          XHANDLER_LOG(WARN, "SE: going to purge trashy subtable",
-                       K(subtable_id));
+          HANDLER_LOG(WARN, "SE: going to purge trashy subtable", K(subtable_id));
           dict_manager.delete_index_info(write_batch,
                             {.cf_id=subtable_id, .index_id = subtable_id});
           auto cfh = cf_manager.get_cf(subtable_id);
@@ -256,7 +255,7 @@ static void purge_invalid_subtables()
     }
     last_invalid_subtables = current_invalid_subtables;
   } else {
-    XHANDLER_LOG(WARN, "SE: failed to collect subtable id from DD!");
+    HANDLER_LOG(WARN, "SE: failed to collect subtable id from DD!");
   }
 
   thd->release_resources();
