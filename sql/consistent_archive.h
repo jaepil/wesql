@@ -65,6 +65,7 @@ typedef enum Consistent_snapshot_archive_progress {
   STAGE_INNODB_SNAPSHOT_ARCHIVE,
   STAGE_SMARTENGINE_SNAPSHOT_ARCHIVE,
   STAGE_WRITE_CONSISTENT_SNAPSHOT_INDEX,
+  STAGE_FAIL,
   STAGE_END,
   NUM_STAGES
 } Consistent_snapshot_archive_progress;

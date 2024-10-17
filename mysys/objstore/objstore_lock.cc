@@ -27,6 +27,7 @@ int ensure_object_store_lock(const std::string_view &provider,
                              const std::string_view *endpoint,
                              const std::string_view &bucket_dir,
                              const std::string_view &store_id,
+                             const std::string_view &branch_id,
                              const bool should_exist, std::string &err_msg) {
   Status status;
   std::string data_lock;
@@ -40,8 +41,12 @@ int ensure_object_store_lock(const std::string_view &provider,
     return 1;
   }
 
-  std::string data_lock_path(store_id.data());
-  data_lock_path.append("/");
+  std::string branch_path(store_id.data());
+  branch_path.append("/");
+  branch_path.append(branch_id.data());
+  branch_path.append("/");
+
+  std::string data_lock_path(branch_path);
   data_lock_path.append(data_lock_file.data());
 
   status = objstore->get_object(bucket_dir, data_lock_path, data_lock);
@@ -57,6 +62,11 @@ int ensure_object_store_lock(const std::string_view &provider,
     err_msg = "lock file should not exist";
     error = 1;
   } else if (!should_exist) {
+    status = objstore->put_object(bucket_dir, branch_path, "");
+    if (!status.is_succ()) {
+      err_msg = status.error_message();
+      error = 1;
+    }
     status = objstore->put_object(bucket_dir, data_lock_path, "");
     if (!status.is_succ()) {
       err_msg = status.error_message();

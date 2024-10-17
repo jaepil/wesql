@@ -195,7 +195,9 @@ static int se_init_func(void *const p)
   se_tbl_options.cache_index_and_filter_blocks = true;
   se_tbl_options.cache_index_and_filter_blocks_with_high_priority = true;
   se_tbl_options.pin_l0_filter_and_index_blocks_in_cache = false;
-  se_tbl_options.cluster_id = opt_cluster_objstore_id;
+  se_tbl_options.cluster_id = opt_repo_objstore_id;
+  se_tbl_options.cluster_id.append("/");
+  se_tbl_options.cluster_id.append(opt_branch_objstore_id);
   se_db_options.allow_concurrent_memtable_write = true;
   se_db_options.use_direct_write_for_wal = false;
   se_db_options.persistent_cache_mode = se_persistent_cache_mode;
@@ -267,7 +269,7 @@ static int se_init_func(void *const p)
                                                            opt_objstore_endpoint ? &endpoint : nullptr,
                                                            opt_objstore_use_https,
                                                            opt_objstore_bucket,
-                                                           opt_cluster_objstore_id,
+                                                           se_tbl_options.cluster_id,
                                                            mtr_test_bucket_subdir);
     if (!status.ok()) {
       std::string err_text = status.ToString();

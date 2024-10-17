@@ -513,12 +513,14 @@ void Binlog_archive::run() {
                   NullS);
 
   // Binlog archive object directory prefix.
-  strmake(m_binlog_archive_dir, opt_cluster_objstore_id,
+  std::string binlog_objectstore_path(opt_repo_objstore_id);
+  binlog_objectstore_path.append(FN_DIRSEP);
+  binlog_objectstore_path.append(opt_branch_objstore_id);
+  binlog_objectstore_path.append(FN_DIRSEP);
+  binlog_objectstore_path.append(BINLOG_ARCHIVE_SUBDIR);
+  binlog_objectstore_path.append(FN_DIRSEP);
+  strmake(m_binlog_archive_dir, binlog_objectstore_path.c_str(),
           sizeof(m_binlog_archive_dir) - 1);
-  convert_dirname(m_binlog_archive_dir, m_binlog_archive_dir, NullS);
-  strmake(m_binlog_archive_dir + strlen(m_binlog_archive_dir),
-          STRING_WITH_LEN(BINLOG_ARCHIVE_SUBDIR));
-  convert_dirname(m_binlog_archive_dir, m_binlog_archive_dir, NullS);
 
   mysql_mutex_lock(&m_run_lock);
   m_thd_state.set_running();
@@ -1500,7 +1502,7 @@ int Binlog_archive::wait_new_mysql_binlog_events(my_off_t log_pos) {
       mysql_bin_log.wait_for_update(timeout);
     else
       mysql_bin_log.wait_for_update();
-      
+
     ulonglong now = my_milli_time();
     if ((m_slice_create_ts > 0) &&
         ((ulonglong)(now - m_slice_create_ts) >= opt_binlog_archive_period)) {

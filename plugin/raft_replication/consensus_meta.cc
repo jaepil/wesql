@@ -90,7 +90,9 @@ int ConsensusMeta::init_objstore_for_cluster_info() {
   }
 
   cluster_info_bucket.append(opt_objstore_bucket);
-  cluster_info_path.append(opt_cluster_objstore_id);
+  cluster_info_path.append(opt_repo_objstore_id);
+  cluster_info_path.append("/");
+  cluster_info_path.append(opt_branch_objstore_id);
   cluster_info_path.append("/");
   cluster_info_path.append("cluster_mgmt");
   cluster_info_path.append("/");

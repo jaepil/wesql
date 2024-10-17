@@ -654,11 +654,14 @@ void Consistent_archive::run() {
   convert_dirname(m_mysql_archive_data_dir, m_mysql_archive_data_dir, NullS);
 
   // Consistent snapshot persistent directory prefix.
-  strmake(m_archive_dir, opt_cluster_objstore_id, sizeof(m_archive_dir) - 1);
-  convert_dirname(m_archive_dir, m_archive_dir, NullS);
-  strmake(m_archive_dir + strlen(m_archive_dir),
-          STRING_WITH_LEN(CONSISTENT_ARCHIVE_SUBDIR));
-  convert_dirname(m_archive_dir, m_archive_dir, NullS);
+  std::string snapshot_objectstore_path(opt_repo_objstore_id);
+  snapshot_objectstore_path.append(FN_DIRSEP);
+  snapshot_objectstore_path.append(opt_branch_objstore_id);
+  snapshot_objectstore_path.append(FN_DIRSEP);
+  snapshot_objectstore_path.append(CONSISTENT_ARCHIVE_SUBDIR);
+  snapshot_objectstore_path.append(FN_DIRSEP);
+  strmake(m_archive_dir, snapshot_objectstore_path.c_str(),
+          sizeof(m_archive_dir) - 1);
 
   // get smartengine temp backup dir name.
   {
@@ -812,13 +815,13 @@ void Consistent_archive::run() {
     }
 
     if (archive_consistent_snapshot()) {
-      m_atomic_archive_progress.store(STAGE_NONE, std::memory_order_release);
+      m_atomic_archive_progress.store(STAGE_FAIL, std::memory_order_release);
     }
     // Wait for the next archive period.
     std::chrono::seconds timeout =
         std::chrono::seconds{opt_consistent_snapshot_archive_period};
     ret = wait_for_consistent_archive(timeout, abort);
-    if(ret == 0) {
+    if (ret == 0) {
       // The current thread has been forcibly awakened.
       LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_THREAD_LOG,
              "forcefully wake up the consistent snapshot thread.");
@@ -3773,6 +3776,9 @@ static const char *convert_archive_progress_to_str(
       break;
     case STAGE_WRITE_CONSISTENT_SNAPSHOT_INDEX:
       ret = "WRITE_CONSISTENT_SNAPSHOT_INDEX";
+      break;
+    case STAGE_FAIL:
+      ret = "FAIL";
       break;
     case STAGE_END:
       ret = "END";

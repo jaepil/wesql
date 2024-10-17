@@ -209,6 +209,7 @@ int ensure_object_store_lock(const std::string_view &provider,
                              const std::string_view *endpoint,
                              const std::string_view &bucket_dir,
                              const std::string_view &data_uuid,
+                             const std::string_view &branch_id,
                              const bool should_exist, std::string &err_msg);
 
 void destroy_object_store(ObjectStore *obj_store);
