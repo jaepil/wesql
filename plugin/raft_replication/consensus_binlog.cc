@@ -1790,7 +1790,7 @@ int write_rotate_event_into_consensus_log(MYSQL_BIN_LOG *binlog) {
   r.server_id = 0;
   r.common_header->when.tv_sec = consensus_log_manager.get_event_timestamp();
 
-  return binlog->write_event_to_binlog(&r);
+  return binlog_write_event_directly(binlog, &r);
 }
 
 static int append_one_log_entry(ConsensusLogEntry &log,

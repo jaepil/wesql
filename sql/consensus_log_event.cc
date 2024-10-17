@@ -47,8 +47,9 @@ Consensus_log_event::Consensus_log_event(
       Log_event(header(), footer()) {
   DBUG_TRACE;
 #ifndef DBUG_OFF
-  uint8_t const common_header_len = description_event->common_header_len;
-  uint8 const post_header_len =
+  [[maybe_unused]] uint8_t const common_header_len =
+      description_event->common_header_len;
+  [[maybe_unused]] uint8 const post_header_len =
       description_event->post_header_len[binary_log::CONSENSUS_LOG_EVENT - 1];
   DBUG_PRINT("info",
              ("event_len: %u; common_header_len: %d; post_header_len: %d",
@@ -140,7 +141,8 @@ void Consensus_log_event::print(FILE *file [[maybe_unused]],
 }
 #endif
 #if defined(MYSQL_SERVER)
-int Consensus_log_event::do_apply_event(Relay_log_info const *rli) {
+int Consensus_log_event::do_apply_event(Relay_log_info const *rli
+                                        [[maybe_unused]]) {
   DBUG_TRACE;
   assert(rli->info_thd == thd);
   return 0;
@@ -183,8 +185,9 @@ Previous_consensus_index_log_event::Previous_consensus_index_log_event(
       Log_event(header(), footer()) {
   DBUG_TRACE;
 #ifndef DBUG_OFF
-  uint8_t const common_header_len = description_event->common_header_len;
-  uint8 const post_header_len =
+  [[maybe_unused]] uint8_t const common_header_len =
+      description_event->common_header_len;
+  [[maybe_unused]] uint8 const post_header_len =
       description_event
           ->post_header_len[binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT - 1];
   DBUG_PRINT("info",
@@ -248,8 +251,8 @@ void Previous_consensus_index_log_event::print(
 }
 #endif
 #if defined(MYSQL_SERVER)
-int Previous_consensus_index_log_event::do_apply_event(
-    Relay_log_info const *rli) {
+int Previous_consensus_index_log_event::do_apply_event(Relay_log_info const *rli
+                                                       [[maybe_unused]]) {
   DBUG_TRACE;
   assert(rli->info_thd == thd);
   return 0;
@@ -290,8 +293,9 @@ Consensus_cluster_info_log_event::Consensus_cluster_info_log_event(
       Log_event(header(), footer()) {
   DBUG_TRACE;
 #ifndef DBUG_OFF
-  uint8_t const common_header_len = description_event->common_header_len;
-  uint8 const post_header_len =
+  [[maybe_unused]] uint8_t const common_header_len =
+      description_event->common_header_len;
+  [[maybe_unused]] uint8 const post_header_len =
       description_event
           ->post_header_len[binary_log::CONSENSUS_CLUSTER_INFO_EVENT - 1];
   DBUG_PRINT("info",
@@ -357,8 +361,8 @@ void Consensus_cluster_info_log_event::print(
 }
 #endif
 #if defined(MYSQL_SERVER)
-int Consensus_cluster_info_log_event::do_apply_event(
-    Relay_log_info const *rli) {
+int Consensus_cluster_info_log_event::do_apply_event(Relay_log_info const *rli
+                                                     [[maybe_unused]]) {
   DBUG_TRACE;
   assert(rli->info_thd == thd);
   return 0;
@@ -395,8 +399,9 @@ Consensus_empty_log_event::Consensus_empty_log_event(
       Log_event(header(), footer()) {
   DBUG_TRACE;
 #ifndef DBUG_OFF
-  uint8_t const common_header_len = description_event->common_header_len;
-  uint8 const post_header_len =
+  [[maybe_unused]] uint8_t const common_header_len =
+      description_event->common_header_len;
+  [[maybe_unused]] uint8 const post_header_len =
       description_event->post_header_len[binary_log::CONSENSUS_EMPTY_EVENT - 1];
   DBUG_PRINT("info",
              ("event_len: %u; common_header_len: %d; post_header_len: %d",
@@ -435,7 +440,8 @@ void Consensus_empty_log_event::print(
 }
 #endif
 #if defined(MYSQL_SERVER)
-int Consensus_empty_log_event::do_apply_event(Relay_log_info const *rli) {
+int Consensus_empty_log_event::do_apply_event(Relay_log_info const *rli
+                                              [[maybe_unused]]) {
   DBUG_TRACE;
   assert(rli->info_thd == thd);
   return 0;

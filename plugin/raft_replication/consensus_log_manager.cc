@@ -754,7 +754,7 @@ int ConsensusLogManager::try_advance_commit_position(uint64 timeout) {
     if (consensus_state_process.get_status() != BINLOG_WORKING)
       (void)log->switch_and_seek_log(log_name, pos, true);
     else
-      log->update_binlog_end_pos(log_name, pos);
+      binlog_update_end_pos(log, log_name, pos);
   }
   mysql_mutex_unlock(log->get_log_lock());
 

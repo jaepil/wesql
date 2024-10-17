@@ -1457,6 +1457,10 @@ void binlog_update_end_pos(MYSQL_BIN_LOG *binlog, const char *file,
   binlog->update_binlog_end_pos(file, pos);
 }
 
+bool binlog_write_event_directly(MYSQL_BIN_LOG *binlog, Log_event *ev) {
+  return binlog->write_event_to_binlog(ev);
+}
+
 my_off_t binlog_file_get_current_pos(MYSQL_BIN_LOG::Binlog_ofile *binlog_file) {
   return binlog_file->position();
 }
