@@ -38,7 +38,7 @@
 --error 1
 --exec $MYSQLD --defaults-file=$MYSQLTEST_VARDIR/my.cnf --defaults-group-suffix=.1 --serverless=true --log_error_verbosity=3  >$MYSQLD_LOG 2>&1
 --let $grep_file=$MYSQLD_LOG
---let $grep_pattern=lock file does not exist
+--let $grep_pattern=lock file should exist but not
 --let $grep_output= print_count
 --source include/grep_pattern.inc
 --remove_file $MYSQLD_LOG
