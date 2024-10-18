@@ -43,15 +43,17 @@ struct LOG_ARCHIVED_INFO {
   char log_line[FN_REFLEN] = {0};
   char log_file_name[FN_REFLEN] = {0};
   char log_slice_name[FN_REFLEN] = {0};
-  uint64_t previous_consensus_index;
+  uint64_t slice_end_consensus_index;
   uint64_t slice_consensus_term;
+  uint64_t log_previous_consensus_index;
   my_off_t slice_end_pos;
   my_off_t index_file_offset, index_file_start_offset;
   my_off_t pos;
   int entry_index;  // used in purge_logs(), calculatd in find_log_pos().
   LOG_ARCHIVED_INFO()
-      : previous_consensus_index(0),
+      : slice_end_consensus_index(0),
         slice_consensus_term(0),
+        log_previous_consensus_index(0),
         slice_end_pos(0),
         index_file_offset(0),
         index_file_start_offset(0),
@@ -193,9 +195,9 @@ class Binlog_archive {
   uint64
       m_mysql_binlog_previouse_consensus_index;  // the previous consensus index
                                                  // of current mysql binlog
-  uint64 m_binlog_previouse_consensus_index;     // the previous
-                                                 // consensus index
-                                                 // of previous
+  uint64 m_binlog_previouse_consensus_index;     // the previous	
+                                                 // consensus index	
+                                                 // of previous	
                                                  // mysql binlog
   uint64 m_binlog_archive_start_consensus_index;
   Log_event_type m_binlog_last_event_type;
@@ -205,6 +207,8 @@ class Binlog_archive {
   bool m_binlog_in_transaction;
   bool m_rotate_forbidden;
   ulonglong m_slice_create_ts;
+  uint64 m_slice_end_consensus_index; // end consensus index of persisted binlogs.
+  uint64 m_mysql_end_consensus_index; // end consensus index of readed mysql binlogs.
   int new_binlog_slice(bool new_binlog, const char *log_file, my_off_t log_pos,
                        uint64_t previous_consensus_index);
   int archive_init();

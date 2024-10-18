@@ -42,7 +42,7 @@ let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTE
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
---let $expected_logger1_start_log_index= query_get_value(SELECT PREVIOUS_RAFT_INDEX FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX order by LOG_SLICE_NAME desc, PREVIOUS_RAFT_INDEX, 1)
+--let $expected_logger1_start_log_index= query_get_value(SELECT SLICE_END_RAFT_INDEX FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICE_INDEX order by LOG_SLICE_NAME desc, SLICE_END_RAFT_INDEX, 1)
 
 --echo # Connection mysqld.2 logger1
 --connection conn2
@@ -75,7 +75,7 @@ EOF
 --let $wait_follower= 0
 
 --let $assert_text= logger start index match
---let $assert_cond= "[SHOW CONSENSUS LOGS, Start_log_index, 1]" = $expected_logger1_start_log_index + 1
+--let $assert_cond= "[SELECT LAST_LOG_INDEX FROM INFORMATION_SCHEMA.WESQL_CLUSTER_LOCAL, LAST_LOG_INDEX, 1]" = $expected_logger1_start_log_index
 --source include/assert.inc
 
 --echo # Connection mysqld.1 data leader

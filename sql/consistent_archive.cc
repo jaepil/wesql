@@ -1119,33 +1119,35 @@ int Consistent_archive::archive_consistent_snapshot_binlog() {
       // If m_mysql_binlog_pos is less than or equal to 251, the consensus_index
       // is not accurate, so it is necessary to retrieve the log/pos using
       // consensus index again.
-      if (consensus_index > 0) {
-        char consensus_to_mysql_binlog[FN_REFLEN + 1] = {0};
-        my_off_t consensus_to_log_pos = 0;
-        if (RUN_HOOK(binlog_manager, get_pos_from_unique_index,
-                     (consensus_index, consensus_to_mysql_binlog,
-                      consensus_to_log_pos))) {
-          err_msg.append(" get log position using consensus index failed: ");
-          err_msg.append(std::to_string(consensus_index));
-          LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_BINLOG_LOG,
-                 err_msg.c_str());
-          ret = 1;
-          goto err;
+      DBUG_EXECUTE_IF("check_consistent_snapshot_binlog_position", {
+        if (consensus_index > 0) {
+          char consensus_to_mysql_binlog[FN_REFLEN + 1] = {0};
+          my_off_t consensus_to_log_pos = 0;
+          if (RUN_HOOK(binlog_manager, get_pos_from_unique_index,
+                       (consensus_index, consensus_to_mysql_binlog,
+                        consensus_to_log_pos))) {
+            err_msg.append(" get log position using consensus index failed: ");
+            err_msg.append(std::to_string(consensus_index));
+            LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_BINLOG_LOG,
+                   err_msg.c_str());
+            ret = 1;
+            goto err;
+          }
+          // diff mysqld binlog index entry name.
+          if (compare_log_name(consensus_to_mysql_binlog,
+                               m_mysql_binlog_file) != 0 ||
+              consensus_to_log_pos != m_mysql_binlog_pos) {
+            err_msg.append(" mysql binlog and position not match: consensus=");
+            err_msg.append(std::to_string(consensus_index));
+            err_msg.append(" using ");
+            err_msg.append(consensus_to_mysql_binlog);
+            err_msg.append(":");
+            err_msg.append(std::to_string(consensus_to_log_pos));
+            LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_BINLOG_LOG,
+                   err_msg.c_str());
+          }
         }
-        // diff mysqld binlog index entry name.
-        if (compare_log_name(consensus_to_mysql_binlog, m_mysql_binlog_file) !=
-                0 ||
-            consensus_to_log_pos != m_mysql_binlog_pos) {
-          err_msg.append(" mysql binlog and position not match: consensus=");
-          err_msg.append(std::to_string(consensus_index));
-          err_msg.append(" using ");
-          err_msg.append(consensus_to_mysql_binlog);
-          err_msg.append(":");
-          err_msg.append(std::to_string(consensus_to_log_pos));
-          LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_BINLOG_LOG,
-                 err_msg.c_str());
-        }
-      }
+      });
     }
     m_consensus_index = consensus_index;
 

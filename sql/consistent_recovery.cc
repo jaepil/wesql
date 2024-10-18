@@ -1515,17 +1515,14 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
     goto err;
   }
   error = 0;
-  consistent_recovery_snasphot_end_consensus_index =
-      log_info.previous_consensus_index;
+  consistent_recovery_snasphot_end_consensus_index = log_info.slice_end_consensus_index;
 
-  err_msg.assign("last previous consensus index=");
+  err_msg.assign("last binlog end consensus index=");
   err_msg.append(
       std::to_string(consistent_recovery_snasphot_end_consensus_index));
   err_msg.append(" log slice entry=");
   err_msg.append(log_info.log_slice_name);
-  LogErr(INFORMATION_LEVEL,
-         ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
-         err_msg.c_str());
+  LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 err:
   close_binlog_index_file(&binlog_index_file);
   if (objstore) {
