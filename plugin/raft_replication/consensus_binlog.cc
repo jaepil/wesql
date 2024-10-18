@@ -923,7 +923,7 @@ static int read_log_by_index(ConsensusLogIndex *log_file_index,
   my_off_t start_pos = lower_start_pos;
   my_off_t end_pos = start_pos;
   my_off_t consensus_log_length = 0;
-  uint64 cindex, cterm, cflag, ccrc32;
+  uint64 cindex = 0, cterm = 0, cflag = 0, ccrc32 = 0;
   std::vector<uint64> blob_index_list;
 
   while (!stop_scan &&

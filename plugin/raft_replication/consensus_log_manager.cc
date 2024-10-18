@@ -376,7 +376,7 @@ int ConsensusLogManager::get_log_entry(uint64 channel_id,
     channel->dec_ref_count();
   }
 
-  if (!error)
+  if (error)
     LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_ENTRY_NOT_FOUND_FROM_CACHE,
                  channel_id, consensus_index, error);
   return error;

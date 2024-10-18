@@ -233,7 +233,12 @@ int ConsensusLogIndex::get_lower_bound_pos_of_index(
   mysql_mutex_lock(&LOCK_consensuslog_index);
 
   auto file_iter = index_list.upper_bound(start_index);
-  assert(file_iter != index_list.begin());
+  if (file_iter == index_list.begin()) {
+    pos = 0;
+    mysql_mutex_unlock(&LOCK_consensuslog_index);
+    return 0;
+  }
+
   --file_iter;
   assert(file_iter->first == start_index);
 
@@ -263,7 +268,10 @@ void ConsensusLogIndex::update_pos_map_by_start_index(uint64 start_index,
   mysql_mutex_lock(&LOCK_consensuslog_index);
 
   auto iter_next = index_list.upper_bound(start_index);
-  assert(iter_next != index_list.begin());
+  if (iter_next == index_list.begin()) {
+    mysql_mutex_unlock(&LOCK_consensuslog_index);
+    return;
+  }
 
   auto iter = std::prev(iter_next);
   assert(iter->first == start_index);
@@ -310,7 +318,11 @@ int ConsensusLogIndex::truncate_pos_map_of_file(uint64 start_index,
   mysql_mutex_lock(&LOCK_consensuslog_index);
 
   auto iter = index_list.upper_bound(start_index);
-  assert(iter != index_list.begin());
+  if (iter == index_list.begin()) {
+    mysql_mutex_unlock(&LOCK_consensuslog_index);
+    return 1;
+  }
+
   --iter;
   assert(iter->first == start_index);
 
