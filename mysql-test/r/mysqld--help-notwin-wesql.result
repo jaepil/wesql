@@ -2493,7 +2493,7 @@ objectstore-bucket objectstore_bucket
 objectstore-endpoint (No default value)
 objectstore-mtr-test-bucket-dir 
 objectstore-provider local
-objectstore-region local_objectstore_region
+objectstore-region .local_objectstore_region
 objectstore-use-https FALSE
 offline-mode FALSE
 old FALSE
