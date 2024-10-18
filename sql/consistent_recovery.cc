@@ -53,6 +53,7 @@ Consistent_recovery::Consistent_recovery()
     : m_recovery_type(CONSISTENT_RECOVERY_NONE),
       m_state(CONSISTENT_RECOVERY_STATE_NONE),
       recovery_objstore(nullptr),
+      init_destination_objstore(nullptr),
       m_mysql_binlog_pos(0),
       m_consensus_index(0),
       m_se_snapshot_id(0),
@@ -61,6 +62,8 @@ Consistent_recovery::Consistent_recovery()
       m_se_backup_index_file(),
       m_se_backup_index(0) {
   m_objstore_bucket[0] = '\0';
+  m_smartengine_objstore_dir[0] = '\0';
+  m_init_destination_objstore_bucket[0] = '\0';
   m_binlog_archive_dir[0] = '\0';
   m_binlog_file[0] = '\0';
   m_mysql_binlog_end_file[0] = '\0';
@@ -104,8 +107,10 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
     err_msg.append(opt_initialize_objstore_provider);
     err_msg.append(" region=");
     err_msg.append(opt_initialize_objstore_region);
-    err_msg.append(" endpoint=");
-    err_msg.append(opt_initialize_objstore_endpoint);
+    if (opt_initialize_objstore_endpoint) {
+      err_msg.append(" endpoint=");
+      err_msg.append(opt_initialize_objstore_endpoint);
+    }
     err_msg.append(" bucket=");
     err_msg.append(opt_initialize_objstore_bucket);
     err_msg.append(" repo_objectsotre_id=");
@@ -119,38 +124,39 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
     }
 
     LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    // Init source object store.
+    {
+      objstore::init_objstore_provider(opt_initialize_objstore_provider);
 
-    objstore::init_objstore_provider(opt_initialize_objstore_provider);
-
-    std::string_view endpoint(
-        opt_initialize_objstore_endpoint
-            ? std::string_view(opt_initialize_objstore_endpoint)
-            : "");
-    std::string obj_error_msg;
-    recovery_objstore = objstore::create_object_store(
-        std::string_view(opt_initialize_objstore_provider),
-        std::string_view(opt_initialize_objstore_region),
-        opt_initialize_objstore_endpoint ? &endpoint : nullptr,
-        opt_initialize_objstore_use_https, obj_error_msg);
-    if (recovery_objstore == nullptr) {
-      err_msg.assign("Failed to create object store instance");
-      if (!obj_error_msg.empty()) {
-        err_msg.append(": ");
-        err_msg.append(obj_error_msg);
+      std::string_view endpoint(
+          opt_initialize_objstore_endpoint
+              ? std::string_view(opt_initialize_objstore_endpoint)
+              : "");
+      std::string obj_error_msg;
+      recovery_objstore = objstore::create_object_store(
+          std::string_view(opt_initialize_objstore_provider),
+          std::string_view(opt_initialize_objstore_region),
+          opt_initialize_objstore_endpoint ? &endpoint : nullptr,
+          opt_initialize_objstore_use_https, obj_error_msg);
+      if (recovery_objstore == nullptr) {
+        err_msg.assign("Failed to create object store instance");
+        if (!obj_error_msg.empty()) {
+          err_msg.append(": ");
+          err_msg.append(obj_error_msg);
+        }
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+        return 1;
       }
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-      return 1;
+      if (opt_initialize_objstore_bucket) {
+        strmake(m_objstore_bucket, opt_initialize_objstore_bucket,
+                sizeof(m_objstore_bucket) - 1);
+      } else {
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+               "Init database from object store, must set source"
+               "--initialize_objectstore_bucket");
+        return 1;
+      }
     }
-    if (opt_initialize_objstore_bucket) {
-      strmake(m_objstore_bucket, opt_initialize_objstore_bucket,
-              sizeof(m_objstore_bucket) - 1);
-    } else {
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-             "Init database from object store, must set source"
-             "--initialize_objectstore_bucket");
-      return 1;
-    }
-
     if (opt_initialize_repo_objstore_id) {
       std::string binlog_objectstore_path(opt_initialize_repo_objstore_id);
       binlog_objectstore_path.append(FN_DIRSEP);
@@ -167,13 +173,80 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
       snapshot_objectstore_path.append(FN_DIRSEP);
       snapshot_objectstore_path.append(CONSISTENT_ARCHIVE_SUBDIR);
       snapshot_objectstore_path.append(FN_DIRSEP);
-      strmake(m_consistent_snapshot_archive_dir, snapshot_objectstore_path.c_str(),
+      strmake(m_consistent_snapshot_archive_dir,
+              snapshot_objectstore_path.c_str(),
               sizeof(m_consistent_snapshot_archive_dir) - 1);
     } else {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
              "Init database from object store, must set "
              "--initialize_cluster_objectstore_id");
       return 1;
+    }
+
+    // Init smartengine destination objec store.
+    if (opt_initialize_smartengine_objectstore_data) {
+      err_msg.assign("Initialize smartengine data from source object store ");
+      err_msg.append(" provider=");
+      err_msg.append(opt_objstore_provider);
+      err_msg.append(" region=");
+      err_msg.append(opt_objstore_region);
+      if (opt_objstore_endpoint) {
+        err_msg.append(" endpoint=");
+        err_msg.append(opt_objstore_endpoint);
+      }
+      err_msg.append(" bucket=");
+      err_msg.append(opt_objstore_bucket);
+      err_msg.append(" repo_objectsotre_id=");
+      err_msg.append(opt_repo_objstore_id);
+      err_msg.append(" branch_objectsotre_id=");
+      err_msg.append(opt_branch_objstore_id);
+
+      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+
+      objstore::init_objstore_provider(opt_objstore_provider);
+      std::string_view endpoint(
+          opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
+      std::string obj_error_msg;
+      init_destination_objstore = objstore::create_object_store(
+          std::string_view(opt_objstore_provider),
+          std::string_view(opt_objstore_region),
+          opt_objstore_endpoint ? &endpoint : nullptr, opt_objstore_use_https,
+          obj_error_msg);
+      if (init_destination_objstore == nullptr) {
+        err_msg.assign("Failed to create destination object store");
+        if (!obj_error_msg.empty()) {
+          err_msg.append(": ");
+          err_msg.append(obj_error_msg);
+        }
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+        return 1;
+      }
+      if (opt_objstore_bucket) {
+        strmake(m_init_destination_objstore_bucket, opt_objstore_bucket,
+                sizeof(m_init_destination_objstore_bucket) - 1);
+      } else {
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+               "Init database smartengine data from object store, must set "
+               "--objectstore_bucket");
+        return 1;
+      }
+
+      if (opt_repo_objstore_id) {
+        std::string se_objectstore_path(opt_repo_objstore_id);
+        se_objectstore_path.append(FN_DIRSEP);
+        se_objectstore_path.append(opt_branch_objstore_id);
+        se_objectstore_path.append(FN_DIRSEP);
+        se_objectstore_path.append(
+            CONSISTENT_RECOVERY_SMARTENGINE_OBJECTSTORE_ROOT_PATH);
+        se_objectstore_path.append(FN_DIRSEP);
+        strmake(m_smartengine_objstore_dir, se_objectstore_path.c_str(),
+                sizeof(m_smartengine_objstore_dir) - 1);
+      } else {
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+               "Init database smartengine data from object store, must set "
+               "--repo_objectstore_id");
+        return 1;
+      }
     }
   } else if (!opt_initialize && opt_recovery_from_objstore) {
     // Crash recovery database from consistent snapshot.
@@ -341,6 +414,8 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   // recovery binlog to mysql
   if (flags & CONSISTENT_RECOVERY_BINLOG)
     if (recovery_binlog(opt_binlog_index_name, nullptr)) return 1;
+  if (flags & CONSISTENT_RECOVERY_SMARTENGINE_EXTENT)
+    if (recovery_smartengine_objectstore_data()) return 1;
   return 0;
 }
 
@@ -851,6 +926,9 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
   // For example: persistent binlog.000001 <-----> mysql master-bin.000001
   char mysql_binlog_basename[FN_REFLEN];
   char mysql_binlog_index_basename[FN_REFLEN];
+  
+  if (!opt_bin_logname) return false;
+
   // ref: mysql_bin_log.generate_new_name()
   fn_format(mysql_binlog_basename, opt_bin_logname, mysql_data_home, "",
             MY_UNPACK_FILENAME);
@@ -1050,6 +1128,84 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
   */
 
   m_state = CONSISTENT_RECOVERY_STATE_BINLOG;
+  return false;
+}
+/**
+ * @brief Recovery smartengine object store data from soure objct store,
+ * when initialize database.
+ *
+ * @return true
+ * @return false
+ */
+bool Consistent_recovery::recovery_smartengine_objectstore_data() {
+  if (!opt_initialize_smartengine_objectstore_data) return false;
+
+  // get source all smartengine extent objects.
+  std::vector<objstore::ObjectMeta> objects;
+  bool finished = false;
+  std::string err_msg;
+  std::string start_after{};
+  std::string source_se_objecstore_prefix;
+  source_se_objecstore_prefix.assign(opt_initialize_repo_objstore_id);
+  source_se_objecstore_prefix.append(FN_DIRSEP);
+  source_se_objecstore_prefix.append(opt_initialize_branch_objstore_id);
+  source_se_objecstore_prefix.append(FN_DIRSEP);
+  source_se_objecstore_prefix.append(
+      CONSISTENT_RECOVERY_SMARTENGINE_OBJECTSTORE_ROOT_PATH);
+  source_se_objecstore_prefix.append(FN_DIRSEP);
+  do {
+    std::vector<objstore::ObjectMeta> tmp_objects;
+    // Only return the files and directories at the first-level directory.
+    // innodb_archive_000001.tar or innodb_archive_000001.tar.gz
+    // or innodb_archive_000001/
+    objstore::Status ss = recovery_objstore->list_object(
+        std::string_view(opt_initialize_objstore_bucket), source_se_objecstore_prefix,
+        true, start_after, finished, tmp_objects);
+    if (!ss.is_succ()) {
+      err_msg.assign("list persistent object files: ");
+      err_msg.append(source_se_objecstore_prefix);
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+    objects.insert(objects.end(), tmp_objects.begin(), tmp_objects.end());
+  } while (finished == false);
+
+  for (const auto &object : objects) {
+    std::string data{};
+    // get object from source object store.
+    objstore::Status ss = recovery_objstore->get_object(
+        opt_initialize_objstore_bucket, object.key, data);
+    if (!ss.is_succ()) {
+      err_msg.assign("get object from source object store failed: ");
+      err_msg.append("key=");
+      err_msg.append(object.key);
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+    // replace smartengine root path
+    // suffix of the object key
+    std::string object_key_suffix =
+        object.key.substr(source_se_objecstore_prefix.length());
+    std::string destination_object_key(m_smartengine_objstore_dir);
+    destination_object_key.append(object_key_suffix);
+
+    // push object to destination object store.
+    ss = init_destination_objstore->put_object(opt_objstore_bucket,
+                                               destination_object_key, data);
+    if (!ss.is_succ()) {
+      err_msg.assign("put object to destination object store failed: ");
+      err_msg.append("key=");
+      err_msg.append(destination_object_key);
+      err_msg.append(" error=");
+      err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+  }
   return false;
 }
 

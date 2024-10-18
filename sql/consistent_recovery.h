@@ -29,11 +29,14 @@
 #define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_DATA_READY 2
 #define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_END 3
 
+#define CONSISTENT_RECOVERY_SMARTENGINE_OBJECTSTORE_ROOT_PATH "smartengine/v1"
+
 // smartengine, innodb, binlog no recovery order dependency.
 #define CONSISTENT_RECOVERY_NO 0
 #define CONSISTENT_RECOVERY_INNODB 1
 #define CONSISTENT_RECOVERY_SMARTENGINE 2
 #define CONSISTENT_RECOVERY_BINLOG 4
+#define CONSISTENT_RECOVERY_SMARTENGINE_EXTENT 8
 
 typedef struct Consistent_snapshot_recovery_status {
   int m_recovery_status;
@@ -61,6 +64,7 @@ class Consistent_recovery {
   bool recovery_smartengine();
   // recovery binlog
   bool recovery_binlog(const char *binlog_index_name, const char *bin_log_name);
+  bool recovery_smartengine_objectstore_data();
   int get_last_persistent_binlog_consensus_index();
   int read_consistent_snapshot_recovery_status(
       Consistent_snapshot_recovery_status &recovery_status);
@@ -98,6 +102,9 @@ class Consistent_recovery {
   Consistent_recovery_type m_recovery_type;
   Consistent_recovery_state m_state;
   objstore::ObjectStore *recovery_objstore;
+  objstore::ObjectStore *init_destination_objstore;
+  char m_smartengine_objstore_dir[FN_REFLEN + 1];
+  char m_init_destination_objstore_bucket[FN_REFLEN + 1];
   char m_objstore_bucket[FN_REFLEN + 1];
   char m_binlog_archive_dir[FN_REFLEN + 1];
   // Binlog file required for recovering consistent snapshot to a consistent
