@@ -34,30 +34,31 @@ bool is_lease_lock_owner_node();
 // so this is just a temporary solution.
 int try_single_data_node_lease_lock(ObjectStore *objstore,
                                     const std::string_view bucket_dir,
+                                    const std::string_view cluster_objstore_id,
                                     std::string &err_msg,
                                     std::string &important_msg,
                                     bool &need_abort);
 
 #ifndef NDEBUG
 
-extern const char *single_data_node_lease_lock;
-extern const char *single_data_node_lock_version_file_prefix;
-
 extern const std::chrono::milliseconds single_data_node_lock_lease_timeout;
 extern const std::chrono::milliseconds single_data_node_lock_renewal_timeout;
 
 int get_single_data_node_lease_lock_expire_time(ObjectStore *objstore,
                                                 const std::string_view bucket_dir,
+                                                const std::string_view cluster_objstore_id,
                                                 std::string &err_msg,
                                                 std::chrono::milliseconds &expire_time);
 
 int try_single_data_node_lease_lock_if_expired(ObjectStore *objstore,
                                                const std::string_view bucket_dir,
+                                               const std::string_view cluster_objstore_id,
                                                std::string &err_msg,
                                                std::chrono::milliseconds &new_lease_time);
 
 int renewal_single_data_node_lease_lock(ObjectStore *objstore,
                                         const std::string_view bucket_dir,
+                                        const std::string_view cluster_objstore_id,
                                         std::chrono::milliseconds &new_lease_time,
                                         std::string &err_msg);
 

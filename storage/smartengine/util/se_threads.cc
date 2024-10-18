@@ -321,10 +321,17 @@ void SeDropIndexThread::run()
  */
 void SeRenewLeaseLockThread::run()
 {
-  std::string_view objstore_bucket = db::GlobalContext::env_->GetObjectStoreBucket();
+  const std::string_view objstore_bucket = db::GlobalContext::env_->GetObjectStoreBucket();
+  const std::string_view cluster_objstore_id = db::GlobalContext::env_->GetClusterObjstoreId();
   objstore::ObjectStore *objstore = nullptr;
   if (0 != db::GlobalContext::env_->GetObjectStore(objstore).code()) {
     sql_print_error("Failed to get object store in renewal lease lock thread");
+    abort_with_stack_traces();
+  } else if (objstore_bucket.empty()) {
+    sql_print_error("Object store bucket is empty in renewal lease lock thread");
+    abort_with_stack_traces();
+  } else if (cluster_objstore_id.empty()) {
+    sql_print_error("Cluster object store id is empty in renewal lease lock thread");
     abort_with_stack_traces();
   } else if (objstore == nullptr) {
     sql_print_error("Object store is nullptr in renewal lease lock thread");
@@ -354,12 +361,17 @@ void SeRenewLeaseLockThread::run()
     std::string err_msg;
     std::string important_msg;
     bool need_abort = false;
-    int err = objstore::try_single_data_node_lease_lock(objstore, objstore_bucket, err_msg, important_msg, need_abort);
+    int err = objstore::try_single_data_node_lease_lock(objstore,
+                                                        objstore_bucket,
+                                                        cluster_objstore_id,
+                                                        err_msg,
+                                                        important_msg,
+                                                        need_abort);
     if (!important_msg.empty()) {
       sql_print_warning("%s", important_msg.c_str());
     }
     if (0 != err) {
-      sql_print_error("Failed to get single data node lease lock: %s", err_msg.c_str());
+      sql_print_warning("Failed to get single data node lease lock: %s", err_msg.c_str());
       if (need_abort) {
         abort();
       }

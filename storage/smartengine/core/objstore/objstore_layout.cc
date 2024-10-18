@@ -41,5 +41,15 @@ std::string make_data_prefix(const std::string &cluster_id, const std::string &d
   return prefix;
 }
 
+std::string get_lease_lock_key(const std::string_view cluster_id)
+{
+  return util::make_lock_prefix(cluster_id.data()) + "lease_lock";
+}
+
+std::string get_lease_lock_version_file_prefix(const std::string_view cluster_id)
+{
+  return util::make_lock_prefix(cluster_id.data()) + "lease_lock_version_";
+}
+
 } // namespace util
 } // namespace smartengine

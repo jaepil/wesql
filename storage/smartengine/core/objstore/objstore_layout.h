@@ -19,6 +19,10 @@ std::string make_index_prefix(const std::string &cluster_id, const std::string &
 // Make extent prefix name
 std::string make_data_prefix(const std::string &cluster_id, const std::string &database_name, const int64_t index_id);
 
+std::string get_lease_lock_key(const std::string_view cluster_id);
+
+std::string get_lease_lock_version_file_prefix(const std::string_view cluster_id);
+
 } // namespace util
 } // namespace smartengine
 
