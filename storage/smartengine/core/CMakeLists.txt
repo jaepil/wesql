@@ -635,6 +635,7 @@ set(TESTS
         unittest/memory/alloc_mgr_test.cc
         unittest/memory/base_malloc_test.cc
         unittest/memory/chunk_allocator_test.cc
+        unittest/memory/page_arena_test.cc
         unittest/monitoring/histogram_test.cc
         unittest/monitoring/iostats_context_test.cc
         #unittest/monitoring/statistics_test.cc
@@ -643,8 +644,6 @@ set(TESTS
         unittest/storage/extent_space_test.cc
         #unittest/storage/extent_space_manager_test.cc
         unittest/storage/io_extent_test.cc
-        #unittest/storage/level0_meta_test.cc
-        #unittest/storage/shrink_extent_spaces_test.cc
         unittest/storage/storage_common_test.cc
         #storage/storage_manager_test.cc
         unittest/storage/storage_logger_test.cc
@@ -658,12 +657,9 @@ set(TESTS
         unittest/table/large_object_test.cc
         unittest/table/sstable_scan_iterator_test.cc
         unittest/tools/ldb_cmd_test.cc
-        #unittest/tools/reduce_levels_test.cc
         #unittest/tools/sst_dump_test.cc
         #unittest/tools/backup_check_test.cc
         unittest/util/arena_test.cc
-        #unittest/util/alloc_mgr_test.cc
-        #unittest/util/auto_roll_logger_test.cc
         unittest/util/autovector_test.cc
         unittest/util/aio_test.cc
         unittest/util/coding_test.cc
@@ -673,7 +669,6 @@ set(TESTS
         unittest/util/dio_helper_test.cc
         unittest/util/dynamic_bloom_test.cc
         unittest/util/increment_number_allocator_test.cc
-        #unittest/util/event_logger_test.cc
         unittest/util/file_reader_writer_test.cc
         unittest/util/filelock_test.cc
         unittest/util/file_name_test.cc
@@ -688,59 +683,23 @@ set(TESTS
         unittest/util/fast_latch_test.cc
         unittest/util/time_interval_test.cc
         unittest/util/concurrent_hash_map_test.cc
-        #unittest/util/page_arena_test.cc
         #unittest/compact/reuse_block_merge_iterator_test.cc
         unittest/compact/compaction_test.cc
         #unittest/compact/minor_compaction_test.cc
         #unittest/compact/minor_compaction_util_test.cc
-        #db/column_family_test.cc
-        #db/compact_files_test.cc
-        #db/compaction_iterator_test.cc
-        #db/comparator_db_test.cc
-        #db/corruption_test.cc
-        #db/cuckoo_table_db_test.cc
-        #db/db_basic_test.cc
         unittest/db/bugfix_39705890_allocate_extent_failed_test.cc
         unittest/db/bugfix_25168148_test.cc
         unittest/db/db_block_cache_test.cc
-        #db/db_bloom_filter_test.cc
-        #db/db_compaction_filter_test.cc
-        #        db/db_compaction_test.cc
-        #db/db_dynamic_level_test.cc
-        #db/db_flush_test.cc
         unittest/db/db_recovery_failed_test.cc
         unittest/db/db_recovery_test.cc
         unittest/db/db_transaction_pipline_test.cc
-        #db/db_io_failure_test.cc
         unittest/db/db_iter_test.cc
-        #db/db_iterator_test.cc
-        #db/db_log_iter_test.cc
-        #db/db_options_test.cc
-        #db/db_properties_test.cc
-        #db/db_sst_test.cc
-        #db/db_table_properties_test.cc
-        #db/db_tailing_iter_test.cc
-        #db/db_test.cc
-        #db/db_test2.cc
-        #db/db_wal_test.cc
         unittest/db/dbformat_test.cc
-        #db/delete_extents_test.cc
-        #db/deletefile_test.cc
-        #db/external_sst_file_basic_test.cc
-        #db/external_sst_file_test.cc
-        #db/fault_injection_test.cc
-        #db/flush_job_test.cc
-        #db/listener_test.cc
         unittest/db/log_test.cc
-        #db/manual_compaction_test.cc
-        #db/memtable_list_test.cc
         unittest/db/perf_context_test.cc
-        #db/prefix_test.cc
         unittest/db/recover_no_space_test.cc
-        #db/table_properties_collector_test.cc
         unittest/db/shrink_job_test.cc
         #db/write_callback_test.cc
-        #db/end_key_pushdown_test.cc
         unittest/db/parallel_recovery_test.cc
         unittest/db/2pc_parallel_recovery_test.cc
         unittest/db/replay_thread_pool_test.cc

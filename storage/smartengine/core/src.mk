@@ -208,7 +208,6 @@ MAIN_SOURCES =                                                    \
   unittest/tools/db_bench_tool_test.cc                                           \
   unittest/tools/db_sanity_test.cc                                               \
   unittest/tools/ldb_cmd_test.cc                                                 \
-  unittest/tools/reduce_levels_test.cc                                           \
   unittest/tools/sst_dump_test.cc                                                \
   unittest/util/arena_test.cc                                                    \
   unittest/util/autovector_test.cc                                               \
@@ -216,7 +215,6 @@ MAIN_SOURCES =                                                    \
   unittest/util/crc32c_test.cc                                                   \
   unittest/util/dio_helper_test.cc                                               \
   unittest/util/dynamic_bloom_test.cc                                            \
-  unittest/util/event_logger_test.cc                                             \
   unittest/util/filelock_test.cc                                                 \
   unittest/util/log_write_bench.cc                                               \
   unittest/util/rate_limiter_test.cc                                             \
@@ -227,41 +225,17 @@ MAIN_SOURCES =                                                    \
   utilities/column_aware_encoding_exp.cc                                \
   utilities/column_aware_encoding_test.cc                               \
   unittest/backup/hotbackup_test.cc                                     \
-  unittest/db/column_family_test.cc                                     \
   unittest/db/compaction_job_stats_test.cc                              \
   unittest/db/compaction_job_test.cc                                    \
   unittest/db/compaction_picker_test.cc                                 \
-  unittest/db/comparator_db_test.cc                                     \
-  unittest/db/corruption_test.cc                                        \
-  unittest/db/db_basic_test.cc                                          \
   unittest/db/db_block_cache_test.cc                                    \
-  unittest/db/db_bloom_filter_test.cc                                   \
-  unittest/db/db_compaction_filter_test.cc                              \
-  unittest/db/db_compaction_test.cc                                     \
-  unittest/db/db_dynamic_level_test.cc                                  \
-  unittest/db/db_flush_test.cc                                          \
   unittest/db/db_inplace_update_test.cc                                 \
-  unittest/db/db_io_failure_test.cc                                     \
   unittest/db/db_iter_test.cc                                           \
-  unittest/db/db_iterator_test.cc                                       \
-  unittest/db/db_log_iter_test.cc                                       \
-  unittest/db/db_options_test.cc                                        \
-  unittest/db/db_sst_test.cc                                            \
-  unittest/db/db_tailing_iter_test.cc                                   \
-  unittest/db/db_test.cc                                                \
   unittest/db/db_universal_compaction_test.cc                           \
-  unittest/db/db_wal_test.cc                                            \
   unittest/db/dbformat_test.cc                                          \
-  unittest/db/deletefile_test.cc                                        \
-  unittest/db/external_sst_file_basic_test.cc                           \
-  unittest/db/external_sst_file_test.cc                                 \
-  unittest/db/fault_injection_test.cc                                   \
-  unittest/db/flush_job_test.cc                                         \
   unittest/db/log_test.cc                                               \
-  unittest/db/manual_compaction_test.cc                                 \
   unittest/db/merge_test.cc                                             \
   unittest/db/perf_context_test.cc                                      \
-  unittest/db/prefix_test.cc                                            \
   unittest/db/shrink_job_test.cc                                        \
   unittest/db/write_batch_test.cc                                       \
   unittest/db/write_callback_test.cc                                    \

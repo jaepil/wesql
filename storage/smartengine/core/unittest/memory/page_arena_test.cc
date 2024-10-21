@@ -163,9 +163,7 @@ TEST(TestPageArena, test_reuse_large_pages) {
   ASSERT_EQ(2, arena.pages());
 }
 
-/*
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-*/

@@ -112,7 +112,6 @@ TEST(TestLogger, test_log_print)
 #if 1
 	Logger::get_log().set_log_level(INFO_LEVEL);
 	Logger::get_log().set_log_level_mod(LOG_MOD_SUBMOD(SE, FLUSH), LOG_LEVEL(INFO));
-	Logger::get_log().set_log_level_mod(LOG_MOD_SUBMOD(SE, REPLAY), LOG_LEVEL(FATAL));
 	Logger::get_log().set_log_level_mod(LOG_MOD(SE), LOG_LEVEL(WARN));
 #endif
 	ASSERT_EQ(0, ret);
