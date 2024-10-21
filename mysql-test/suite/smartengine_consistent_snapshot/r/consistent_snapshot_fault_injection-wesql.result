@@ -11,81 +11,81 @@ c1
 2
 3
 4
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for at least 2 snapshots to be generated 
 # fault_injection_put_innodb_index_to_objstore
 set global debug = '+d,fault_injection_put_innodb_index_to_objstore';
 INSERT INTO t1 SELECT * FROM t1;
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for consistent snapshot fail.
 set global debug = '-d,fault_injection_put_innodb_index_to_objstore';
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for at least 3 snapshots to be generated 
 # fault_injection_delete_innodb_index_file
 set global debug = '+d,fault_injection_delete_innodb_index_file';
 INSERT INTO t1 SELECT * FROM t1;
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for consistent snapshot fail.
 set global debug = '-d,fault_injection_delete_innodb_index_file';
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for at least 4 snapshots to be generated 
 # fault_injection_reopen_innodb_index_file
 set global debug = '+d,fault_injection_reopen_innodb_index_file';
 INSERT INTO t1 SELECT * FROM t1;
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for consistent snapshot fail.
 set global debug = '-d,fault_injection_reopen_innodb_index_file';
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for at least 5 snapshots to be generated 
 # fault_injection_put_se_index_to_objstore
 set global debug = '+d,fault_injection_put_se_index_to_objstore';
 INSERT INTO t1 SELECT * FROM t1;
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for consistent snapshot fail.
 set global debug = '-d,fault_injection_put_se_index_to_objstore';
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for at least 6 snapshots to be generated 
 # fault_injection_delete_se_index_file
 set global debug = '+d,fault_injection_delete_se_index_file';
 INSERT INTO t1 SELECT * FROM t1;
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for consistent snapshot fail.
 set global debug = '-d,fault_injection_delete_se_index_file';
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for at least 7 snapshots to be generated 
 # fault_injection_reopen_se_index_file
 set global debug = '+d,fault_injection_reopen_se_index_file';
 INSERT INTO t1 SELECT * FROM t1;
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 # Wait for consistent snapshot fail.
 set global debug = '-d,fault_injection_reopen_se_index_file';
 # Wait for at least 8 snapshots to be generated 
-SELECT CONSISTENT_PERSISTENT_SNAPSHOT_FORCE();
-CONSISTENT_PERSISTENT_SNAPSHOT_FORCE()
+SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
+SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
 Pattern found.
 Pattern found.

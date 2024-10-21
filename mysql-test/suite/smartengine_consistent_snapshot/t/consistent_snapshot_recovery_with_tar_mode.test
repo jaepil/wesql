@@ -3,12 +3,12 @@
 #
 
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) >=1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >=1 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 --source include/wait_condition_or_abort.inc
 
-set global consistent_snapshot_archive=false;
-set global consistent_snapshot_innodb_tar_mode='tar';
-set global consistent_snapshot_smartengine_tar_mode='tar';
+set global snapshot_archive=false;
+set global snapshot_archive_innodb_tar_mode='tar';
+set global snapshot_archive_smartengine_tar_mode='tar';
 
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
@@ -19,40 +19,40 @@ INSERT INTO t1 values(4);
 SELECT * FROM t1;
 SHOW CREATE TABLE t1;
 
-set global consistent_snapshot_archive=true;
+set global snapshot_archive=true;
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX where right(MYSQL_INNODB_SNAPSHOT_NAME, 4) = '.tar' and right(SMARTENGINE_SNAPSHOT_NAME, 4) = '.tar';
+let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX where right(MYSQL_INNODB_SNAPSHOT_NAME, 4) = '.tar' and right(SMARTENGINE_SNAPSHOT_NAME, 4) = '.tar';
 --source include/wait_condition_or_abort.inc
 
-set global consistent_snapshot_archive=false;
-set global consistent_snapshot_innodb_tar_mode='tar_and_compress';
-set global consistent_snapshot_smartengine_tar_mode='tar_and_compress';
+set global snapshot_archive=false;
+set global snapshot_archive_innodb_tar_mode='tar_and_compress';
+set global snapshot_archive_smartengine_tar_mode='tar_and_compress';
 
 INSERT INTO t1 values(5);
 INSERT INTO t1 values(6);
 SELECT * FROM t1;
 
-set global consistent_snapshot_archive=true;
+set global snapshot_archive=true;
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX where right(MYSQL_INNODB_SNAPSHOT_NAME, 3) = '.gz' and right(SMARTENGINE_SNAPSHOT_NAME, 3) = '.gz';
+let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX where right(MYSQL_INNODB_SNAPSHOT_NAME, 3) = '.gz' and right(SMARTENGINE_SNAPSHOT_NAME, 3) = '.gz';
 --source include/wait_condition_or_abort.inc
 
 --echo # Wait for at least 1 snapshots to be generated 
-let $wait_condition= SELECT count(*) >=3 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >=3 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 --source include/wait_condition_or_abort.inc
 
---echo # Select CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX
-SELECT IF(RIGHT(INNODB_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
+--echo # Select SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX
+SELECT IF(RIGHT(INNODB_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
 --disable_warnings
---echo # Select CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS
-SELECT IF(RIGHT(INNODB_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
+--echo # Select SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS
+SELECT IF(RIGHT(INNODB_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
 --enable_warnings
 
---echo # Select CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX
-SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
+--echo # Select SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX
+SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
 --disable_warnings
---echo # CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS
-SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
+--echo # SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS
+SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
 --enable_warnings
 
 --let $MYSQLD_DATADIR=`select @@datadir`

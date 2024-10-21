@@ -1,7 +1,7 @@
 # Wait for at least 1 snapshots to be generated 
-set global consistent_snapshot_archive=false;
-set global consistent_snapshot_innodb_tar_mode='tar';
-set global consistent_snapshot_smartengine_tar_mode='tar';
+set global snapshot_archive=false;
+set global snapshot_archive_innodb_tar_mode='tar';
+set global snapshot_archive_smartengine_tar_mode='tar';
 CREATE DATABASE db1;
 CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
 INSERT INTO t1 values(1);
@@ -19,11 +19,11 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `c1` int DEFAULT NULL
 ) ENGINE=SMARTENGINE DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-set global consistent_snapshot_archive=true;
+set global snapshot_archive=true;
 # Wait for at least 1 snapshots to be generated 
-set global consistent_snapshot_archive=false;
-set global consistent_snapshot_innodb_tar_mode='tar_and_compress';
-set global consistent_snapshot_smartengine_tar_mode='tar_and_compress';
+set global snapshot_archive=false;
+set global snapshot_archive_innodb_tar_mode='tar_and_compress';
+set global snapshot_archive_smartengine_tar_mode='tar_and_compress';
 INSERT INTO t1 values(5);
 INSERT INTO t1 values(6);
 SELECT * FROM t1;
@@ -34,33 +34,33 @@ c1
 4
 5
 6
-set global consistent_snapshot_archive=true;
+set global snapshot_archive=true;
 # Wait for at least 1 snapshots to be generated 
 # Wait for at least 1 snapshots to be generated 
-# Select CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX
-SELECT IF(RIGHT(INNODB_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
+# Select SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX
+SELECT IF(RIGHT(INNODB_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
 name
-innodb_archive_000001
-innodb_archive_000002
-innodb_archive_000003
-# Select CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS
-SELECT IF(RIGHT(INNODB_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
+innodb_000001
+innodb_000002
+innodb_000003
+# Select SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS
+SELECT IF(RIGHT(INNODB_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(INNODB_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
 name
-innodb_archive_000001
-innodb_archive_000002
-innodb_archive_000003
-# Select CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX
-SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
+innodb_000001
+innodb_000002
+innodb_000003
+# Select SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX
+SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_NAME, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_NAME, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX ORDER BY name limit 3;
 name
-se_archive_000001
-se_archive_000002
-se_archive_000003
-# CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS
-SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
+smartengine_000001
+smartengine_000002
+smartengine_000003
+# SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS
+SELECT IF(RIGHT(SMARTENGINE_SNAPSHOT_KEY, 1) = '/', SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -2), '/', 1), SUBSTRING_INDEX(SUBSTRING_INDEX(SMARTENGINE_SNAPSHOT_KEY, '/', -1), '.', 1)) AS name FROM INFORMATION_SCHEMA.SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS ORDER BY name limit 3;
 name
-se_archive_000001
-se_archive_000002
-se_archive_000003
+smartengine_000001
+smartengine_000002
+smartengine_000003
 # Crash
 set debug = 'd, crash_commit_before_log';
 INSERT INTO t1 values(100);

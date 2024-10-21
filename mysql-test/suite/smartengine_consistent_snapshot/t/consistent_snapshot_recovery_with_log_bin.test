@@ -7,7 +7,7 @@
 --let $region = `select @@objectstore_region`
 
 --echo # Wait for first snapshots to be generated after startup 
-let $wait_condition= SELECT count(*) >= 1 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >= 1 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -45,7 +45,7 @@ let $wait_timeout= 600;
 --source include/wait_condition.inc
 
 --echo # Wait for at least 2 snapshots to be generated after startup recovery.
-let $wait_condition= SELECT count(*) >= 2 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >= 2 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -98,7 +98,7 @@ let $wait_timeout= 600;
 --source include/wait_condition.inc
 
 --echo # Wait for at least 3 snapshots to be generated after startup recovery
-let $wait_condition= SELECT count(*) >= 3 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >= 3 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -140,7 +140,7 @@ let $wait_timeout= 600;
 --source include/wait_condition.inc
 
 --echo # Wait for at least 4 snapshots to be generated after startup recovery 
-let $wait_condition= SELECT count(*) >= 4 FROM INFORMATION_SCHEMA.CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
+let $wait_condition= SELECT count(*) >= 4 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 

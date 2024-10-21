@@ -23,7 +23,7 @@
 #include "mysqld_error.h"
 #include "objstore.h"
 
-#define CONSISTENT_SNAPSHOT_RECOVERY_FILE "#status_consistent_snapshot_recovery"
+#define CONSISTENT_SNAPSHOT_RECOVERY_FILE "#status_snapshot_recovery"
 #define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_NONE 0
 #define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_BEGIN 1
 #define CONSISTENT_SNAPSHOT_RECOVERY_STAGE_DATA_READY 2

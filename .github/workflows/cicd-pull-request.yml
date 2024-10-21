@@ -69,8 +69,8 @@ jobs:
           ./mysql-test-run.pl --suite=smartengine  --nowarnings --retry=3  --parallel=6 --force --report-unstable-tests \
               --initialize="--serverless=true" \
               --initialize="--objectstore_provider=local" \
-              --initialize="--consistent_snapshot_smartengine_tar_mode=TAR" \
-              --initialize="--consistent_snapshot_innodb_tar_mode=TAR" \
+              --initialize="--snapshot_archive_smartengine_tar_mode=TAR" \
+              --initialize="--snapshot_archive_innodb_tar_mode=TAR" \
               --skip-test-list=collections/disabled-smartengine-serverless.def
 
       - name: view logs of mtr serverless

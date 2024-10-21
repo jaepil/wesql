@@ -1,8 +1,8 @@
 !include suite/smartengine_consistent_snapshot/my.cnf
 
 [mysqld]
-consistent_snapshot_archive_period=1
-consistent_snapshot_expire_auto_purge=  false
+snapshot_archive_period=1
+snapshot_archive_expire_auto_purge=  false
 binlog_archive_expire_auto_purge=       false
 binlog_archive_period=                  3000
-recovery_from_objectstore=  true
+recovery_snapshot_from_objectstore=  true

@@ -28,7 +28,7 @@ class Consistent_archive_purge_command : public Udf_service_impl {
 
  private:
   Udf_charset_service m_charset_service;
-  static constexpr const char *m_udf_name = "consistent_persistent_snapshot_purge";
+  static constexpr const char *m_udf_name = "snapshot_archive_persistent_purge";
   bool m_initialized{false};
   static char *consistent_archive_purge(UDF_INIT *, UDF_ARGS *args, char *result,
                     unsigned long *length, unsigned char *,

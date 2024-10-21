@@ -28,7 +28,7 @@ class Consistent_archive_force_command : public Udf_service_impl {
 
  private:
   Udf_charset_service m_charset_service;
-  static constexpr const char *m_udf_name = "consistent_persistent_snapshot_force";
+  static constexpr const char *m_udf_name = "snapshot_archive_persistent_force";
   bool m_initialized{false};
   static char *consistent_archive_force(UDF_INIT *, UDF_ARGS *args, char *result,
                     unsigned long *length, unsigned char *,

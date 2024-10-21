@@ -22,3 +22,5 @@ smartengine.smartengine_hotbackup               : WL#41 Can't run in serverless 
 smartengine.online_ddl_stage_no_pk_big_varchar  : WL#42 Timeout in serverless mode
 smartengine.online_ddl_stage_with_pk_text       : WL#42 Timeout in serverless mode
 smartengine.online_ddl_stage_with_pk_big_varchar : WL#42 Timeout in serverless mode
+smartengine.large_object_zstd                   : WL#42 Timeout in serverless mode
+smartengine.large_object                        : WL#42 Timeout in serverless mode

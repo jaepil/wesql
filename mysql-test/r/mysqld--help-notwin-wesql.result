@@ -115,6 +115,7 @@ The following options may be given as the first argument:
  binlog will be retained.
  --binlog-archive-period=# 
  binlog persist to object store at the given period
+ milliseconds
  --binlog-archive-slice-max-size=# 
  Binary log events will be persistent archived
  automatically when the size exceeds this value.
@@ -264,6 +265,11 @@ The following options may be given as the first argument:
  values are COMMIT_ORDER, WRITESET and WRITESET_SESSION.
  --block-encryption-mode=name 
  mode for AES_ENCRYPT/AES_DECRYPT
+ --branch-objectstore-id=name 
+ The branch identifier for cluster data directory in
+ object store. To ensure data consistency by accessing the
+ object using the key with the prefix that includes this
+ id.
  --bulk-insert-buffer-size=# 
  Size of tree cache used in bulk insert optimisation. Note
  that this is a limit per thread!
@@ -325,11 +331,6 @@ The following options may be given as the first argument:
  --clone-valid-donor-list[=name] 
  List of valid donor addresses allowed to clone from
  HOST1:PORT1,HOST2:PORT2,...
- --cluster-objectstore-id=name 
- The identifier for data directory in object store. To
- ensure data consistency by accessing the object using the
- key with the prefix that includes this id. If serverless
- is enabled, it must not be empty.
  --collation-server=name 
  Set the default collation.
  --completion-type=name 
@@ -345,37 +346,6 @@ The following options may be given as the first argument:
  memory counter
  --connection-memory-limit=# 
  Maximum amount of memory connection can consume
- --consistent-snapshot-archive 
- Indicate if consistent snapshot archive enable.
- (Defaults to on; use --skip-consistent-snapshot-archive to disable.)
- --consistent-snapshot-archive-dir=name 
- The location path for consistent snapshot archive
- --consistent-snapshot-archive-period=# 
- A consistent snapshot is created to archive at the given
- interval
- --consistent-snapshot-expire-auto-purge 
- Controls whether the server shall automatically purge
- consistent snapshot or not. If this variable is set to
- FALSE then the server will not purge persistent
- consistent snapshot automatically.
- (Defaults to on; use --skip-consistent-snapshot-expire-auto-purge to disable.)
- --consistent-snapshot-expire-seconds=# 
- If non-zero, consistent snapshot will be purged after
- consistent_snapshot_expire_seconds seconds. If zero, only
- the latest consistent snapshot will be retained.
- --consistent-snapshot-innodb-tar-mode=name 
- Indicates if innodb clone data of consistent snapshots is
- in tar or compressed mode.
- --consistent-snapshot-persistent-on-objectstore 
- Use object store to persist binlog and consistent
- snapshot.
- (Defaults to on; use --skip-consistent-snapshot-persistent-on-objectstore to disable.)
- --consistent-snapshot-smartengine-backup-checkpoint 
- Indicate  indicates whether to do a checkpoint before
- executing a smartengine backup.
- --consistent-snapshot-smartengine-tar-mode[=name] 
- Indicates if smartengine backup data of consistent
- snapshots is in tar or compressed mode.
  --console           Write error output on screen; don't remove the console
  window on windows.
  --core-file         Write core on errors.
@@ -575,13 +545,12 @@ The following options may be given as the first argument:
  --init-slave=name   This option is deprecated. Use init_replica instead.
  -I, --initialize    Create the default database and exit. Create a super user
  with a random expired password and store it into the log.
- --initialize-cluster-objectstore-id=name 
- The identifier for data directory of source cluster in
- object store. If initialize_from_objectstore is true, it
- must not be empty.
+ --initialize-branch-objectstore-id=name 
+ The branch identifier for data directory of source
+ cluster in object store.
  --initialize-from-objectstore 
- Initialzie instance using binlog and consistent snapshot
- from object store.
+ Initialzie instance using binlog and snapshot from object
+ store.
  --initialize-insecure 
  Create the default database and exit. Create a super user
  with empty password.
@@ -607,6 +576,14 @@ The following options may be given as the first argument:
  If initialize_from_objectstore is true, whether using
  https to connect to objstore or not as the source of data
  during instance initialization
+ --initialize-repo-objectstore-id=name 
+ The repo identifier for data directory of source cluster
+ in object store. If initialize_from_objectstore is true,
+ it must not be empty.
+ --initialize-smartengine-objectstore-data 
+ If initialize_from_objectstore is true, whether
+ initialize smartengine object store data from source
+ cluster object store.
  --interactive-timeout=# 
  The number of seconds the server waits for activity on an
  interactive connection before closing it
@@ -1264,7 +1241,11 @@ The following options may be given as the first argument:
  check interval for slave calling checkCommitIndex
  --raft-replication-checksum 
  Checksum when consensus receive log. Disabled by default.
- --raft-replication-cluster-id=# 
+ --raft-replication-cluseter-info-on-objectstore 
+ Use object store to store cluster info for consensus
+ cluster
+ (Defaults to on; use --skip-raft-replication-cluseter-info-on-objectstore to disable.)
+ --raft-replication-cluster-id=name 
  consensus cluster id
  --raft-replication-cluster-info=name 
  Consensus cluster nodes ip-port information
@@ -1391,19 +1372,18 @@ The following options may be given as the first argument:
  --read-rnd-buffer-size=# 
  When reading rows in sorted order after a sort, the rows
  are read through this buffer to avoid a disk seeks
- --recovery-consistent-snapshot-only 
- Indicate whether to recover only consistent snapshot
- without binlog archive recovery.
- --recovery-consistent-snapshot-timestamp=name 
- Consistent snapshot timestamp from object store used as
- the source of recovery during instance.
- --recovery-consistent-snapshot-tmpdir=name 
- The location temp path for consistent snapshot recovery
- from object store.
- --recovery-from-objectstore 
- Recovery binlog and consistent snapshot from object
+ --recovery-snapshot-from-objectstore 
+ Recovery binlog and snapshot from object store.
+ (Defaults to on; use --skip-recovery-snapshot-from-objectstore to disable.)
+ --recovery-snapshot-only 
+ Indicate whether to recover only snapshot without binlog
+ archive recovery.
+ --recovery-snapshot-timestamp=name 
+ Snapshot timestamp from object store used as the source
+ of recovery during instance.
+ --recovery-snapshot-tmpdir=name 
+ The location temp path for snapshot recovery from object
  store.
- (Defaults to on; use --skip-recovery-from-objectstore to disable.)
  --regexp-stack-limit=# 
  Stack size limit for regular expressions matches
  --regexp-time-limit=# 
@@ -1584,6 +1564,11 @@ The following options may be given as the first argument:
  --replication-sender-observe-commit-only 
  Optional flag that allows for only calling back observer
  hooks at commit.
+ --repo-objectstore-id=name 
+ The repository identifier for cluster data directory in
+ object store. To ensure data consistency by accessing the
+ object using the key with the prefix that includes this
+ id. If serverless is enabled, it must not be empty.
  --report-host=name  Hostname or IP that this replica will report to the
  source while initiating the replication connection. Will
  appear in the output of SHOW REPLICAS. Leave this unset
@@ -1642,6 +1627,9 @@ The following options may be given as the first argument:
  --server-id=#       Uniquely identifies the server instance in the community
  of replication partners
  --server-id-bits=#  Set number of significant bits in server-id
+ --server-id-on-objectstore=name 
+ The identifier for the meta directory of the current
+ server on object store.
  --serverless        Enable the serverless
  (Defaults to on; use --skip-serverless to disable.)
  --session-track-gtids=name 
@@ -1782,8 +1770,6 @@ The following options may be given as the first argument:
  (Defaults to on; use --skip-smartengine-auto-shrink-enabled to disable.)
  --smartengine-auto-shrink-schedule-interval=# 
  DBOptions::auto_shrink_schedule_interval for SE
- --smartengine-base-background-compactions=# 
- DBOptions::base_background_compactions for SE
  --smartengine-batch-group-max-group-size=# 
  DBOptions::batch_group_max_group_size for SE
  --smartengine-batch-group-max-leader-wait-time-us=# 
@@ -1806,7 +1792,7 @@ The following options may be given as the first argument:
  Enable or disable SMARTENGINE_COLUMNS plugin. Possible
  values are ON, OFF, FORCE (don't start if the plugin
  fails to load).
- --smartengine-compact-cf=# 
+ --smartengine-compact=# 
  Compact sub table
  --smartengine-compaction-delete-percent=# 
  CFOptions::compaction_delete_percent for SE
@@ -1824,6 +1810,8 @@ The following options may be given as the first argument:
  plugin fails to load).
  --smartengine-compaction-task-extents-limit=# 
  CFOptions::compaction_task_extents_limit for SE
+ --smartengine-compaction-threads=# 
+ DBOptions::max_background_compactions for SE
  --smartengine-compression-options=name 
  CFOptions::compression_opts for SE
  --smartengine-compression-per-level=name 
@@ -1836,12 +1824,8 @@ The following options may be given as the first argument:
  --smartengine-concurrent-writable-file-single-buffer-size=# 
  DBOptions::concurrent_writable_file_single_buffer_size
  for SE
- --smartengine-datadir[=name] 
+ --smartengine-data-dir[=name] 
  SE data directory
- --smartengine-db-total-write-buffer-size=# 
- DBOptions::db_total_write_buffer_size for SE
- --smartengine-db-write-buffer-size=# 
- DBOptions::db_write_buffer_size for SE
  --smartengine-dbstats[=name] 
  Enable or disable SMARTENGINE_DBSTATS plugin. Possible
  values are ON, OFF, FORCE (don't start if the plugin
@@ -1884,9 +1868,11 @@ The following options may be given as the first argument:
  Sync on transaction commit. Similar to
  innodb_flush_log_at_trx_commit. 1: sync on commit, 0: not
  sync until wal_bytes_per_sync, 2: sync per second
- --smartengine-force-flush-memtable-now 
+ --smartengine-flush-memtable 
  Forces memstore flush which may block all write requests
  so be careful
+ --smartengine-flush-threads=# 
+ DBOptions::max_background_flushes for SE
  --smartengine-global-info[=name] 
  Enable or disable SMARTENGINE_GLOBAL_INFO plugin.
  Possible values are ON, OFF, FORCE (don't start if the
@@ -1920,26 +1906,22 @@ The following options may be given as the first argument:
  (Defaults to on; use --skip-smartengine-master-thread-compaction-enabled to disable.)
  --smartengine-master-thread-monitor-interval-ms[=#] 
  DBOptions::master_thread_monitor_interval_ms for SE
- --smartengine-max-background-compactions=# 
- DBOptions::max_background_compactions for SE
  --smartengine-max-background-dumps=# 
  DBOptions::max_background_dumps for SE
- --smartengine-max-background-flushes=# 
- DBOptions::max_background_flushes for SE
  --smartengine-max-free-extent-percent=# 
  DBOptions::max_free_extent_percent for SE
  --smartengine-max-row-locks=# 
  Maximum number of locks a transaction can have
  --smartengine-max-shrink-extent-count=# 
  DBOptions::max_shrink_extent_count for SE
- --smartengine-max-total-wal-size=# 
- DBOptions::max_total_wal_size for SE
  --smartengine-max-write-buffer-number-to-maintain=# 
  CFOptions::max_write_buffer_number_to_maintain for SE
  --smartengine-mem-alloc[=name] 
  Enable or disable SMARTENGINE_MEM_ALLOC plugin. Possible
  values are ON, OFF, FORCE (don't start if the plugin
  fails to load).
+ --smartengine-memtable-size=# 
+ CFOptions::write_buffer_size for SE
  --smartengine-min-write-buffer-number-to-merge=# 
  CFOptions::min_write_buffer_number_to_merge for SE
  --smartengine-mutex-backtrace-threshold-ns=# 
@@ -1965,6 +1947,8 @@ The following options may be given as the first argument:
  plugin fails to load).
  --smartengine-persistent-cache-dir=name 
  DBOptions::persistent_cache_diror SE
+ --smartengine-persistent-cache-mode=name 
+ With which mode to add data into persistent cache
  --smartengine-persistent-cache-size=# 
  DBOptions::persistent_cache_size for SE
  --smartengine-purge-invalid-subtable-bg 
@@ -2021,6 +2005,10 @@ The following options may be given as the first argument:
  fails to load).
  --smartengine-total-max-shrink-extent-count=# 
  DBOptions::total_max_shrink_extent_count for SE
+ --smartengine-total-memtable-size=# 
+ DBOptions::db_total_write_buffer_size for SE
+ --smartengine-total-wal-size=# 
+ DBOptions::max_total_wal_size for SE
  --smartengine-trx[=name] 
  Enable or disable SMARTENGINE_TRX plugin. Possible values
  are ON, OFF, FORCE (don't start if the plugin fails to
@@ -2033,10 +2021,36 @@ The following options may be given as the first argument:
  --smartengine-wal-recovery-mode=# 
  DBOptions::wal_recovery_mode for SE. Default is
  kAbsoluteConsistency
- --smartengine-write-buffer-size=# 
- CFOptions::write_buffer_size for SE
  --smartengine-write-disable-wal 
  WriteOptions::disableWAL for SE
+ --snapshot-archive  Indicate if snapshot archive enable.
+ (Defaults to on; use --skip-snapshot-archive to disable.)
+ --snapshot-archive-dir=name 
+ The location path for snapshot archive
+ --snapshot-archive-expire-auto-purge 
+ Controls whether the server shall automatically purge
+ snapshot or not. If this variable is set to FALSE then
+ the server will not purge persistent snapshot
+ automatically.
+ (Defaults to on; use --skip-snapshot-archive-expire-auto-purge to disable.)
+ --snapshot-archive-expire-seconds=# 
+ If non-zero, snapshot will be purged after
+ snapshot_archive_expire_seconds seconds. If zero, only
+ the latest snapshot will be retained.
+ --snapshot-archive-innodb-tar-mode=name 
+ Indicates if innodb clone data of snapshots is in tar or
+ compressed mode.
+ --snapshot-archive-on-objectstore 
+ Use object store to persist snapshot.
+ (Defaults to on; use --skip-snapshot-archive-on-objectstore to disable.)
+ --snapshot-archive-period=# 
+ A snapshot is created to archive at the given period
+ --snapshot-archive-smartengine-backup-checkpoint 
+ Indicate if to do a checkpoint before executing a
+ smartengine backup.
+ --snapshot-archive-smartengine-tar-mode[=name] 
+ Indicates if smartengine backup data of snapshots is in
+ tar or compressed mode.
  --socket=name       Socket file to use for connection
  --sort-buffer-size=# 
  Each thread that needs to do a sort allocates a buffer of
@@ -2263,7 +2277,7 @@ binlog-archive TRUE
 binlog-archive-dir (No default value)
 binlog-archive-expire-auto-purge TRUE
 binlog-archive-expire-seconds 2592000
-binlog-archive-period 3
+binlog-archive-period 1000
 binlog-archive-slice-max-size 4194304
 binlog-archive-using-consensus-index TRUE
 binlog-cache-size 32768
@@ -2291,6 +2305,7 @@ binlog-transaction-compression-level-zstd 3
 binlog-transaction-dependency-history-size 25000
 binlog-transaction-dependency-tracking COMMIT_ORDER
 block-encryption-mode aes-128-ecb
+branch-objectstore-id main
 bulk-insert-buffer-size 8388608
 caching-sha2-password-digest-rounds 5000
 caching-sha2-password-private-key-path private_key.pem
@@ -2316,22 +2331,12 @@ clone-ssl-ca (No default value)
 clone-ssl-cert (No default value)
 clone-ssl-key (No default value)
 clone-valid-donor-list (No default value)
-cluster-objectstore-id wesql_serverless_data
 collation-server utf8mb4_0900_ai_ci
 completion-type NO_CHAIN
 concurrent-insert AUTO
 connect-timeout 10
 connection-memory-chunk-size 8192
 connection-memory-limit 18446744073709551615
-consistent-snapshot-archive TRUE
-consistent-snapshot-archive-dir (No default value)
-consistent-snapshot-archive-period 600
-consistent-snapshot-expire-auto-purge TRUE
-consistent-snapshot-expire-seconds 0
-consistent-snapshot-innodb-tar-mode OFF
-consistent-snapshot-persistent-on-objectstore TRUE
-consistent-snapshot-smartengine-backup-checkpoint FALSE
-consistent-snapshot-smartengine-tar-mode OFF
 console FALSE
 create-admin-listener-thread FALSE
 cte-max-recursion-depth 1000
@@ -2384,14 +2389,16 @@ init-file (No default value)
 init-replica 
 init-slave 
 initialize TRUE
-initialize-cluster-objectstore-id wesql_serverless_data
+initialize-branch-objectstore-id main
 initialize-from-objectstore FALSE
 initialize-insecure TRUE
-initialize-objectstore-bucket objbucket
+initialize-objectstore-bucket objectstore_bucket_1
 initialize-objectstore-endpoint (No default value)
 initialize-objectstore-provider local
-initialize-objectstore-region local_objstore_region
+initialize-objectstore-region local_objectstore_region_1
 initialize-objectstore-use-https FALSE
+initialize-repo-objectstore-id wesql_serverless_repo
+initialize-smartengine-objectstore-data FALSE
 interactive-timeout 28800
 internal-tmp-mem-storage-engine TempTable
 join-buffer-size 262144
@@ -2590,7 +2597,8 @@ raft-replication-auto-leader-transfer-check-seconds 60
 raft-replication-auto-reset-match-index TRUE
 raft-replication-check-commit-index-interval 1000
 raft-replication-checksum FALSE
-raft-replication-cluster-id 0
+raft-replication-cluseter-info-on-objectstore TRUE
+raft-replication-cluster-id 
 raft-replication-cluster-info 
 raft-replication-configure-change-timeout 60000
 raft-replication-current-term 0
@@ -2641,10 +2649,10 @@ range-optimizer-max-mem-size 8388608
 read-buffer-size 131072
 read-only FALSE
 read-rnd-buffer-size 262144
-recovery-consistent-snapshot-only FALSE
-recovery-consistent-snapshot-timestamp (No default value)
-recovery-consistent-snapshot-tmpdir recovery_tmp
-recovery-from-objectstore TRUE
+recovery-snapshot-from-objectstore TRUE
+recovery-snapshot-only FALSE
+recovery-snapshot-timestamp (No default value)
+recovery-snapshot-tmpdir recovery_tmp
 regexp-stack-limit 8000000
 regexp-time-limit 32
 relay-log relaylog
@@ -2672,6 +2680,7 @@ replica-type-conversions
 replicate-same-server-id FALSE
 replication-optimize-for-static-plugin-config FALSE
 replication-sender-observe-commit-only FALSE
+repo-objectstore-id wesql_serverless_repo
 report-host (No default value)
 report-password (No default value)
 report-port 0
@@ -2688,6 +2697,7 @@ select-into-disk-sync FALSE
 select-into-disk-sync-delay 0
 server-id 1
 server-id-bits 32
+server-id-on-objectstore 
 serverless TRUE
 session-track-gtids OFF
 session-track-schema TRUE
@@ -2727,30 +2737,28 @@ slow-query-log FALSE
 smartengine ON
 smartengine-auto-shrink-enabled TRUE
 smartengine-auto-shrink-schedule-interval 3600
-smartengine-base-background-compactions 1
-smartengine-batch-group-max-group-size 8
+smartengine-batch-group-max-group-size 15
 smartengine-batch-group-max-leader-wait-time-us 50
-smartengine-batch-group-slot-array-size 8
-smartengine-block-cache-size 536870912
+smartengine-batch-group-slot-array-size 5
+smartengine-block-cache-size 134217728
 smartengine-block-size 16384
 smartengine-bottommost-level 2
 smartengine-bulk-load-size 10000
 smartengine-cfstats ON
 smartengine-columns ON
-smartengine-compact-cf 0
-smartengine-compaction-delete-percent 70
+smartengine-compact 0
+smartengine-compaction-delete-percent 50
 smartengine-compaction-history ON
 smartengine-compaction-stats ON
 smartengine-compaction-task ON
 smartengine-compaction-task-extents-limit 1000
+smartengine-compaction-threads 1
 smartengine-compression-options -14:1:0
-smartengine-compression-per-level kNoCompression
+smartengine-compression-per-level kNoCompression:kZSTD:kZSTD
 smartengine-concurrent-writable-file-buffer-num 4
 smartengine-concurrent-writable-file-buffer-switch-limit 32768
 smartengine-concurrent-writable-file-single-buffer-size 65536
-smartengine-datadir ./.smartengine
-smartengine-db-total-write-buffer-size 107374182400
-smartengine-db-write-buffer-size 107374182400
+smartengine-data-dir smartengine
 smartengine-dbstats ON
 smartengine-ddl ON
 smartengine-deadlock-detect FALSE
@@ -2759,20 +2767,21 @@ smartengine-disable-auto-compactions FALSE
 smartengine-disable-instant-ddl FALSE
 smartengine-disable-online-ddl 0
 smartengine-disable-parallel-ddl FALSE
-smartengine-dump-memtable-limit-size 67108864
+smartengine-dump-memtable-limit-size 0
 smartengine-enable-2pc TRUE
 smartengine-estimate-cost-depth 0
 smartengine-flush-delete-percent 70
 smartengine-flush-delete-percent-trigger 700000
 smartengine-flush-delete-record-trigger 700000
 smartengine-flush-log-at-trx-commit 1
-smartengine-force-flush-memtable-now FALSE
+smartengine-flush-memtable FALSE
+smartengine-flush-threads 1
 smartengine-global-info ON
 smartengine-hotbackup 
 smartengine-idle-tasks-schedule-time 60
 smartengine-level-compaction-dynamic-level-bytes TRUE
 smartengine-level0-file-num-compaction-trigger 64
-smartengine-level0-layer-num-compaction-trigger 8
+smartengine-level0-layer-num-compaction-trigger 2
 smartengine-level1-extents-major-compaction-trigger 1000
 smartengine-level2-usage-percent 70
 smartengine-lock-scanned-rows FALSE
@@ -2780,16 +2789,14 @@ smartengine-lock-wait-timeout 1
 smartengine-locks ON
 smartengine-master-thread-compaction-enabled TRUE
 smartengine-master-thread-monitor-interval-ms 60000
-smartengine-max-background-compactions 1
 smartengine-max-background-dumps 1
-smartengine-max-background-flushes 1
 smartengine-max-free-extent-percent 10
 smartengine-max-row-locks 1073741824
 smartengine-max-shrink-extent-count 512
-smartengine-max-total-wal-size 107374182400
-smartengine-max-write-buffer-number-to-maintain 1000
+smartengine-max-write-buffer-number-to-maintain 0
 smartengine-mem-alloc ON
-smartengine-min-write-buffer-number-to-merge 2
+smartengine-memtable-size 134217728
+smartengine-min-write-buffer-number-to-merge 1
 smartengine-mutex-backtrace-threshold-ns 1000000000
 smartengine-parallel-flush-log FALSE
 smartengine-parallel-read-threads 4
@@ -2799,6 +2806,7 @@ smartengine-pause-background-work FALSE
 smartengine-perf-context ON
 smartengine-perf-context-global ON
 smartengine-persistent-cache-dir 
+smartengine-persistent-cache-mode read_write_through
 smartengine-persistent-cache-size 0
 smartengine-purge-invalid-subtable-bg TRUE
 smartengine-query-trace ON
@@ -2821,12 +2829,22 @@ smartengine-table-cache-size 1073741824
 smartengine-table-space ON
 smartengine-tables ON
 smartengine-total-max-shrink-extent-count 7680
+smartengine-total-memtable-size 107374182400
+smartengine-total-wal-size 134217728
 smartengine-trx ON
 smartengine-unsafe-for-binlog FALSE
-smartengine-wal-dir 
+smartengine-wal-dir smartengine
 smartengine-wal-recovery-mode 1
-smartengine-write-buffer-size 268435456
 smartengine-write-disable-wal FALSE
+snapshot-archive TRUE
+snapshot-archive-dir (No default value)
+snapshot-archive-expire-auto-purge TRUE
+snapshot-archive-expire-seconds 0
+snapshot-archive-innodb-tar-mode OFF
+snapshot-archive-on-objectstore TRUE
+snapshot-archive-period 300
+snapshot-archive-smartengine-backup-checkpoint FALSE
+snapshot-archive-smartengine-tar-mode OFF
 sort-buffer-size 262144
 source-verify-checksum FALSE
 sporadic-binlog-dump-fail FALSE

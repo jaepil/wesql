@@ -2,7 +2,7 @@
 !include suite/smartengine_consistent_snapshot/my.cnf
 
 [mysqld.1]
-consistent_snapshot_archive=            false
+snapshot_archive=                       false
 log-bin=                                master-bin
 log-bin=                                master-bin.index
 binlog_archive_slice_max_size=          4096
@@ -18,7 +18,7 @@ raft_replication_auto_leader_transfer=ON
 log-bin=                            logger1-bin
 log-bin=                            logger1-bin.index
 table_on_objectstore =              false
-consistent_snapshot_archive=        false
+snapshot_archive=                   false
 binlog_archive_expire_auto_purge=   false
 binlog_archive_period=              3000
 log-error-verbosity=                3
@@ -31,7 +31,7 @@ raft_replication_auto_leader_transfer=ON
 log-bin=                            logger2-bin
 log-bin=                            logger2-bin.index
 table_on_objectstore =              false
-consistent_snapshot_archive=        false
+snapshot_archive=                   false
 binlog_archive_expire_auto_purge=   false
 binlog_archive_period=              3000
 log-error-verbosity=                3

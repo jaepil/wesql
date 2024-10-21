@@ -6,4 +6,4 @@ log_bin-index=              master-bin.index
 binlog_archive_expire_auto_purge=   false
 binlog_archive_slice_max_size=      4096
 binlog_archive_period=              5000
-consistent_snapshot_archive=        false
+snapshot_archive=                   false

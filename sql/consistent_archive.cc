@@ -935,8 +935,12 @@ bool Consistent_archive::archive_consistent_snapshot() {
          sizeof(m_consistent_snapshot_local_time));
   memset(m_binlog_file, 0, sizeof(m_binlog_file));
   memset(m_mysql_binlog_file, 0, sizeof(m_mysql_binlog_file));
+  memset(m_mysql_clone_keyid, 0, sizeof(m_mysql_clone_keyid));
   memset(m_mysql_clone_name, 0, sizeof(m_mysql_clone_name));
+  memset(m_mysql_innodb_clone_dir, 0, sizeof(m_mysql_innodb_clone_dir));
+  memset(m_se_backup_keyid, 0, sizeof(m_se_backup_keyid));
   memset(m_se_backup_name, 0, sizeof(m_se_backup_name));
+  memset(m_se_snapshot_dir, 0, sizeof(m_se_snapshot_dir));
   m_mysql_binlog_pos = 0;
   m_consensus_index = 0;
   m_se_snapshot_id = 0;
@@ -1593,8 +1597,8 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
     return true;
   }
   strmake(strmake(m_se_snapshot_dir, m_mysql_archive_data_dir,
-                  FN_REFLEN - strlen(m_mysql_clone_name)),
-          m_se_backup_name, strlen(m_mysql_clone_name));
+                  FN_REFLEN - strlen(m_se_backup_name)),
+          m_se_backup_name, strlen(m_se_backup_name));
 
   se_backup_full_name.assign(m_se_backup_name);
 
