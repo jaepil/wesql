@@ -244,7 +244,7 @@ int Paxos::applyConfigureChangeNoLock_(uint64_t logIndex) {
       assert(val.addrs_size() == 1);
       if (state_ != LEARNER) {
         config_->addMember(addr, this);
-        config_->setMembersConfigure(true, false, this, logIndex);
+        config_->setMembersConfigure(true, true, this, logIndex);
       } else if (addr == localServer_->strAddr) {
         /* learner change to follower */
         std::vector<std::string> strConfig;
