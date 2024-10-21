@@ -1,6 +1,6 @@
 ---
 IndentWidth: 2
-ColumnLimit: 120
+ColumnLimit: 150
 PenaltyReturnTypeOnItsOwnLine: 2000000
 PenaltyExcessCharacter: 1000000
 PenaltyBreakAssignment: 1000000

@@ -49,7 +49,7 @@ class ExtentSpaceTest : public testing::TestWithParam<bool> {
                                      nullptr,
                                      false,
                                      test_local_obs_bucket,
-                                     "",
+                                     "repo/branch",
                                      "");
       assert(s.ok());
       s = env_->GetObjectStore(obs_);

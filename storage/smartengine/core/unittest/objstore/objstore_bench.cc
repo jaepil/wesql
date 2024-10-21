@@ -37,7 +37,7 @@ public:
 
     objstore::ObjectStore *obs = nullptr;
 
-    std::string cluster_objstore_id = "objstore_bench";
+    std::string cluster_objstore_id = "repo/branch";
     auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, cluster_objstore_id, "");
     if (!s.ok()) {
       std::cout << "init object store failed:" << s.ToString() << std::endl;

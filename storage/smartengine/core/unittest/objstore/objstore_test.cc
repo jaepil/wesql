@@ -68,7 +68,7 @@ public:
       bucket_ = bucket_local_;
     }
 
-    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "", "");
+    auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "repo/branch", "");
     ASSERT_OK(s);
     s = env_->GetObjectStore(obs);
     ASSERT_OK(s);
@@ -300,7 +300,7 @@ TEST_P(ObjstoreTest, reinitObjStoreApi)
   env_->GetObjectStore(obs);
   ASSERT_TRUE(obs == nullptr);
 
-  auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "", "");
+  auto s = env_->InitObjectStore(provider_, region_, endpoint_, false, bucket_, "repo/branch", "");
   ASSERT_OK(s);
   s = env_->GetObjectStore(obs);
   ASSERT_OK(s);

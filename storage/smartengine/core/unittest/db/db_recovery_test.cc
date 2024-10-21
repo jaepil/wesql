@@ -22,6 +22,7 @@
 #include "port/stack_trace.h"
 #include "util/sync_point.h"
 #include "util/testutil.h"
+#include "table/table.h"
 #include "transactions/transaction.h"
 #include "transactions/transaction_db.h"
 
@@ -56,7 +57,7 @@ public:
                                              nullptr,
                                              false,
                                              test_local_obs_bucket,
-                                             "",
+                                             "repo/branch",
                                              "");
       ASSERT_OK(s);
       s = options_.env->GetObjectStore(obs);
@@ -82,7 +83,13 @@ INSTANTIATE_TEST_CASE_P(FileOrObjstore, RecoveryTest,
                         testing::Values(false, true));
 
 TEST_P(RecoveryTest, simple_put_then_restart) {
-  Options options1;
+  DBOptions db_options;
+  ColumnFamilyOptions cf_options;
+  table::BlockBasedTableOptions table_options;
+  table_options.cluster_id = "repo/branch";
+  cf_options.table_factory.reset(table::NewExtentBasedTableFactory(table_options));
+
+  Options options1(db_options, cf_options);
   options1.write_buffer_size = 4096 * 4096;
   options1.db_total_write_buffer_size =  4 * 4096 * 4096;
   options1.db_write_buffer_size = 2 * 4096 * 4096;
