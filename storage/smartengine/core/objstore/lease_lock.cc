@@ -38,7 +38,7 @@ const std::chrono::milliseconds single_data_node_lock_renewal_interval = std::ch
 namespace {
 #endif
 
-// lease timeout is 12s(10000ms)
+// lease timeout is 12s(12000ms)
 const std::chrono::milliseconds single_data_node_lock_lease_timeout = std::chrono::milliseconds(12000);
 // renewal timeout is 6s(6000ms), we can't renew the lock after this time
 const std::chrono::milliseconds single_data_node_lock_renewal_timeout = std::chrono::milliseconds(6000);

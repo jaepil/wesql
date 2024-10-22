@@ -337,25 +337,12 @@ void SeRenewLeaseLockThread::run()
     sql_print_error("Object store is nullptr in renewal lease lock thread");
     abort_with_stack_traces();
   }
+  const std::chrono::seconds retry_lock_interval = std::chrono::seconds(1); // 1s
   const std::chrono::seconds renewal_schedule_interval = std::chrono::duration_cast<std::chrono::seconds>(
-      objstore::single_data_node_lock_renewal_interval);
+      objstore::single_data_node_lock_renewal_interval); // default 3s
 
   SE_MUTEX_LOCK_CHECK(m_signal_mutex);
-
   for (;;) {
-    if (m_stop) {
-      break;
-    }
-    timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += renewal_schedule_interval.count();
-
-    const int ret MY_ATTRIBUTE((__unused__)) = mysql_cond_timedwait(&m_signal_cond, &m_signal_mutex, &ts);
-    if (m_stop) {
-      break;
-    }
-    // make sure, no program error is returned
-    assert(ret == 0 || ret == ETIMEDOUT);
     SE_MUTEX_UNLOCK_CHECK(m_signal_mutex);
 
     std::string err_msg;
@@ -376,7 +363,26 @@ void SeRenewLeaseLockThread::run()
         abort();
       }
     }
+
     SE_MUTEX_LOCK_CHECK(m_signal_mutex);
+    if (m_stop) {
+      break;
+    }
+
+    timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    if (objstore::is_lease_lock_owner_node()) {
+      ts.tv_sec += renewal_schedule_interval.count();
+    } else {
+      ts.tv_sec += retry_lock_interval.count();
+    }
+
+    const int ret MY_ATTRIBUTE((__unused__)) = mysql_cond_timedwait(&m_signal_cond, &m_signal_mutex, &ts);
+    if (m_stop) {
+      break;
+    }
+    // make sure, no program error is returned
+    assert(ret == 0 || ret == ETIMEDOUT);
   }
 
   SE_MUTEX_UNLOCK_CHECK(m_signal_mutex);
