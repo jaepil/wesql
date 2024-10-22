@@ -122,13 +122,13 @@ int start_binlog_archive() {
   DBUG_PRINT("info", ("start_binlog_archive"));
   // Check if the binlog is enabled.
   if (!opt_bin_log) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
            "need enable binlog mode");
     return 0;
   }
   // Check if the binlog archive is enabled.
   if (!opt_binlog_archive || !opt_serverless) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_STARTUP,
            "the binlog persistent not enabled");
     return 0;
   }
@@ -203,7 +203,7 @@ int start_binlog_archive() {
     return 1;
   }
 
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, "start binlog archive");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, "start binlog archive");
 
   // persist the binlog to the object store.
   std::string obj_error_msg;
@@ -223,7 +223,7 @@ int start_binlog_archive() {
            !obj_error_msg.empty() ? obj_error_msg.c_str() : "");
     return 1;
   }
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_CREATE_OBJECT_STORE,
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_CREATE_OBJECT_STORE,
          opt_objstore_provider, opt_objstore_region,
          std::string(endpoint).c_str(), opt_objstore_bucket,
          opt_objstore_use_https ? "true" : "false", "");
@@ -263,12 +263,12 @@ int start_binlog_archive() {
 void stop_binlog_archive() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("stop_binlog_archive"));
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG,
          "stop binlog archive begin.");
 
   mysql_mutex_lock(&m_run_lock);
   if (mysql_binlog_archive.is_thread_dead()) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG,
            "binlog archive stopped already.");
     mysql_mutex_unlock(&m_run_lock);
     return;
@@ -281,7 +281,7 @@ void stop_binlog_archive() {
     objstore::destroy_object_store(mysql_binlog_archive.get_objstore());
     mysql_binlog_archive.set_objstore(nullptr);
   }
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stop binlog archive end.");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stop binlog archive end.");
 }
 
 /**
@@ -923,7 +923,7 @@ int Binlog_archive::archive_binlogs() {
       break;
     }
 
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG_START,
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG_START,
            m_mysql_linfo.log_file_name, start_pos);
     if (archive_binlog(reader, start_pos)) {
       ret = 1;
@@ -2937,7 +2937,7 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(const char *to_log) {
 
   err_msg.assign("purge binlog to: ");
   err_msg.append(to_log);
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
   strmake(purge_log_name, to_log, sizeof(purge_log_name) - 1);
 

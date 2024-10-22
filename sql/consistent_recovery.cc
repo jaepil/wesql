@@ -43,6 +43,7 @@ static bool remove_file(const std::string &file);
 static void root_directory(std::string in, std::string *out, std::string *left);
 static void recursive_create_dir(const std::string &dir,
                                  const std::string &root);
+static int recursive_chmod(const std::string &from);
 static int convert_str_to_datetime(const char *str, ulong &my_time);
 static bool is_number(const char *str, ulonglong *res, bool allow_wildcards);
 static const char *rpl_make_log_name(PSI_memory_key key, const char *opt,
@@ -201,7 +202,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
       err_msg.append(" branch_objectsotre_id=");
       err_msg.append(opt_branch_objstore_id);
 
-      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 
       objstore::init_objstore_provider(opt_objstore_provider);
       std::string_view endpoint(
@@ -336,7 +337,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   convert_dirname(m_mysql_archive_recovery_dir, m_mysql_archive_recovery_dir,
                   NullS);
   remove_file(m_mysql_archive_recovery_dir);
-  if (my_mkdir(m_mysql_archive_recovery_dir, 0777, MYF(0))) {
+  if (my_mkdir(m_mysql_archive_recovery_dir, my_umask_dir, MYF(0))) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
            "Failed to create tmp recovery dir.");
     return 1;
@@ -352,7 +353,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   convert_dirname(m_mysql_archive_recovery_data_dir,
                   m_mysql_archive_recovery_data_dir, NullS);
   remove_file(m_mysql_archive_recovery_data_dir);
-  if (my_mkdir(m_mysql_archive_recovery_data_dir, 0777, MYF(0))) {
+  if (my_mkdir(m_mysql_archive_recovery_data_dir, my_umask_dir, MYF(0))) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
            "Failed to create tmp recovery data dir.");
     return 1;
@@ -366,7 +367,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   convert_dirname(m_mysql_archive_recovery_binlog_dir,
                   m_mysql_archive_recovery_binlog_dir, NullS);
   remove_file(m_mysql_archive_recovery_binlog_dir);
-  if (my_mkdir(m_mysql_archive_recovery_binlog_dir, 0777, MYF(0))) {
+  if (my_mkdir(m_mysql_archive_recovery_binlog_dir, my_umask_dir, MYF(0))) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
            "Failed to create tmp recovery binlog dir.");
     return 1;
@@ -467,11 +468,12 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
   }
 
   if (my_chmod(consistent_file_name.c_str(),
-               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
-                   OTHERS_WRITE | OTHERS_READ,
+               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
                MYF(MY_WME))) {
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Failed to chmod consistent snapshot index file");
+    std::string err_msg;
+    err_msg.assign("Failed to chmod consistent snapshot index file: ");
+    err_msg.append(consistent_file_name);
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     return true;
   }
 
@@ -615,13 +617,19 @@ bool Consistent_recovery::recovery_mysql_innodb() {
     err_msg.append(m_mysql_clone_keyid);
     err_msg.append(" mysql datadir=");
     err_msg.append(mysql_real_data_home);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     objstore::Status ss = recovery_objstore->get_objects_to_dir(
         std::string_view(m_objstore_bucket), m_mysql_clone_keyid,
         mysql_real_data_home);
     if (!ss.is_succ()) {
       err_msg.append(" error=");
       err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+    if (recursive_chmod(mysql_real_data_home)) {
+      err_msg.assign("chmod failed: ");
+      err_msg.append(mysql_real_data_home);
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return true;
     }
@@ -642,7 +650,7 @@ bool Consistent_recovery::recovery_mysql_innodb() {
     err_msg.append(m_mysql_clone_keyid);
     err_msg.append(" file=");
     err_msg.append(mysql_clone_file_name);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     objstore::Status ss = recovery_objstore->get_object_to_file(
         std::string_view(m_objstore_bucket), m_mysql_clone_keyid,
         mysql_clone_file_name);
@@ -653,10 +661,10 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       return true;
     }
 
-    if (my_chmod(mysql_clone_file_name.c_str(),
-                 USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
-                     OTHERS_WRITE | OTHERS_READ,
-                 MYF(MY_WME))) {
+    if (my_chmod(
+            mysql_clone_file_name.c_str(),
+            USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+            MYF(MY_WME))) {
       err_msg.assign("chmod failed: ");
       err_msg.append(mysql_clone_file_name);
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
@@ -682,7 +690,7 @@ bool Consistent_recovery::recovery_mysql_innodb() {
     }
     err_msg.assign("untar mysql innodb clone file: ");
     err_msg.append(cmd.str());
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     if ((err = system(cmd.str().c_str())) != 0) {
       err_msg.append(" error=");
       err_msg.append(std::to_string(err));
@@ -698,7 +706,7 @@ bool Consistent_recovery::recovery_mysql_innodb() {
     err_msg.append(clone_untar_name);
     err_msg.append(" to mysql datadir ");
     err_msg.append(mysql_real_data_home);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     if (copy_directory(clone_untar_name, mysql_real_data_home)) {
       err_msg.append(" failed");
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
@@ -790,13 +798,19 @@ bool Consistent_recovery::recovery_smartengine() {
     err_msg.append(m_se_backup_keyid);
     err_msg.append(" smartengine datadir=");
     err_msg.append(smartengine_real_data_home);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     objstore::Status ss = recovery_objstore->get_objects_to_dir(
         std::string_view(m_objstore_bucket), m_se_backup_keyid,
         smartengine_real_data_home);
     if (!ss.is_succ()) {
       err_msg.append(" error=");
       err_msg.append(ss.error_message());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return true;
+    }
+    if (recursive_chmod(smartengine_real_data_home)) {
+      err_msg.assign("chmod failed: ");
+      err_msg.append(smartengine_real_data_home);
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return true;
     }
@@ -814,7 +828,7 @@ bool Consistent_recovery::recovery_smartengine() {
     err_msg.append(m_se_backup_keyid);
     err_msg.append(" file=");
     err_msg.append(se_file_name);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     objstore::Status ss = recovery_objstore->get_object_to_file(
         std::string_view(m_objstore_bucket), m_se_backup_keyid, se_file_name);
     if (!ss.is_succ()) {
@@ -824,10 +838,10 @@ bool Consistent_recovery::recovery_smartengine() {
       return true;
     }
 
-    if (my_chmod(se_file_name.c_str(),
-                 USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
-                     OTHERS_WRITE | OTHERS_READ,
-                 MYF(MY_WME))) {
+    if (my_chmod(
+            se_file_name.c_str(),
+            USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+            MYF(MY_WME))) {
       err_msg.assign("chmod failed: ");
       err_msg.append(se_file_name);
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
@@ -852,7 +866,7 @@ bool Consistent_recovery::recovery_smartengine() {
     }
     err_msg.assign("untar smartengine archive file: ");
     err_msg.append(cmd.str());
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     if ((err = system(cmd.str().c_str())) != 0) {
       err_msg.append(" error=");
       err_msg.append(std::to_string(err));
@@ -868,7 +882,7 @@ bool Consistent_recovery::recovery_smartengine() {
     err_msg.append(se_backup_untar_name);
     err_msg.append(" to smartengine datadir ");
     err_msg.append(smartengine_real_data_home);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     if (copy_directory(se_backup_untar_name, smartengine_real_data_home)) {
       err_msg.append(" failed");
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
@@ -926,7 +940,7 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
   // For example: persistent binlog.000001 <-----> mysql master-bin.000001
   char mysql_binlog_basename[FN_REFLEN];
   char mysql_binlog_index_basename[FN_REFLEN];
-  
+
   if (!opt_bin_logname) return false;
 
   // ref: mysql_bin_log.generate_new_name()
@@ -982,7 +996,7 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
     last_index_keyid.assign((objects.back()).key);
     err_msg.assign("the last persistent binlog index is ");
     err_msg.append(last_index_keyid);
-    LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     strmake(m_binlog_index_keyid, last_index_keyid.c_str(),
             sizeof(m_binlog_index_keyid) - 1);
   }
@@ -998,6 +1012,16 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
       return true;
     }
   }
+
+  if (my_chmod(m_binlog_index_file_name,
+               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+               MYF(0))) {
+    err_msg.assign("Failed to chmod: ");
+    err_msg.append(m_binlog_index_file_name);
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    return 1;
+  }
+
   if (open_binlog_index_file(&m_binlog_index_file, m_binlog_index_file_name,
                              READ_CACHE)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
@@ -1159,8 +1183,8 @@ bool Consistent_recovery::recovery_smartengine_objectstore_data() {
     // innodb_archive_000001.tar or innodb_archive_000001.tar.gz
     // or innodb_archive_000001/
     objstore::Status ss = recovery_objstore->list_object(
-        std::string_view(opt_initialize_objstore_bucket), source_se_objecstore_prefix,
-        true, start_after, finished, tmp_objects);
+        std::string_view(opt_initialize_objstore_bucket),
+        source_se_objecstore_prefix, true, start_after, finished, tmp_objects);
     if (!ss.is_succ()) {
       err_msg.assign("list persistent object files: ");
       err_msg.append(source_se_objecstore_prefix);
@@ -1271,7 +1295,7 @@ int Consistent_recovery::consistent_snapshot_consensus_recovery_finish() {
   if (m_state == CONSISTENT_RECOVERY_STATE_END) {
     // After consensus recovery finish, truncate persistent binlog
     if (opt_recovery_consistent_snapshot_only) {
-      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+      LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
              "recovey consistent snapshot only finish.");
     } else if (!opt_initialize) {
       if (compare_log_name(
@@ -1389,7 +1413,7 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
   convert_dirname(mysql_archive_recovery_dir, mysql_archive_recovery_dir,
                   NullS);
   remove_file(mysql_archive_recovery_dir);
-  if (my_mkdir(mysql_archive_recovery_dir, 0777, MYF(0))) {
+  if (my_mkdir(mysql_archive_recovery_dir, my_umask_dir, MYF(0))) {
     err_msg.assign("Failed to create tmp recovery dir: ");
     err_msg.append(mysql_archive_recovery_dir);
     LogErr(ERROR_LEVEL,
@@ -1407,7 +1431,7 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
   convert_dirname(mysql_archive_recovery_binlog_dir,
                   mysql_archive_recovery_binlog_dir, NullS);
   remove_file(mysql_archive_recovery_binlog_dir);
-  if (my_mkdir(mysql_archive_recovery_binlog_dir, 0777, MYF(0))) {
+  if (my_mkdir(mysql_archive_recovery_binlog_dir, my_umask_dir, MYF(0))) {
     err_msg.assign("Failed to create tmp recovery binlog dir: ");
     err_msg.append(mysql_archive_recovery_binlog_dir);
     LogErr(ERROR_LEVEL,
@@ -1457,7 +1481,7 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
     last_index_keyid.assign((objects.back()).key);
     err_msg.assign("the last persistent binlog index is ");
     err_msg.append(last_index_keyid);
-    LogErr(INFORMATION_LEVEL,
+    LogErr(SYSTEM_LEVEL,
            ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
            err_msg.c_str());
   }
@@ -1478,6 +1502,17 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
       error = 1;
       goto err;
     }
+  }
+
+  if (my_chmod(binlog_index_file_name.c_str(),
+               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+               MYF(0))) {
+    err_msg.assign("Failed to chmod: ");
+    err_msg.append(binlog_index_file_name);
+    LogErr(ERROR_LEVEL,
+           ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
+           err_msg.c_str());
+    return 1;
   }
 
   if (open_binlog_index_file(&binlog_index_file, binlog_index_file_name.c_str(),
@@ -1515,14 +1550,15 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
     goto err;
   }
   error = 0;
-  consistent_recovery_snasphot_end_consensus_index = log_info.slice_end_consensus_index;
+  consistent_recovery_snasphot_end_consensus_index =
+      log_info.slice_end_consensus_index;
 
   err_msg.assign("last binlog end consensus index=");
   err_msg.append(
       std::to_string(consistent_recovery_snasphot_end_consensus_index));
   err_msg.append(" log slice entry=");
   err_msg.append(log_info.log_slice_name);
-  LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 err:
   close_binlog_index_file(&binlog_index_file);
   if (objstore) {
@@ -1640,6 +1676,17 @@ int Consistent_recovery::truncate_binlog_slice_from_objstore(
             LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
             return 1;
           }
+
+          if (my_chmod(binlog_slice_name.c_str(),
+                       USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
+                           OTHERS_READ,
+                       MYF(0))) {
+            err_msg.assign("Failed to chmod: ");
+            err_msg.append(binlog_slice_name);
+            LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+            return 1;
+          }
+
           IO_CACHE_ostream file_ostream;
           file_ostream.open(0, binlog_slice_name.c_str(), MYF(0));
           file_ostream.truncate(slice_pos);
@@ -1703,7 +1750,7 @@ int Consistent_recovery::merge_slice_to_binlog_file(
 
   err_msg.assign("merge slice to binlog file ");
   err_msg.append(persistent_binlog_file);
-  LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
   // Find the first slice of the last binlog from persistent binlog.index.
   LOG_ARCHIVED_INFO log_info;
   int error = 1;
@@ -1741,6 +1788,17 @@ int Consistent_recovery::merge_slice_to_binlog_file(
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return 1;
     }
+
+    if (my_chmod(
+            binlog_slice_name.c_str(),
+            USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+            MYF(0))) {
+      err_msg.assign("Failed to chmod: ");
+      err_msg.append(binlog_slice_name);
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+      return 1;
+    }
+
     // append binlog slice file to binlog file.
     std::ofstream binlog_file;
     binlog_file.open(mysql_binlog_name, std::ofstream::app);
@@ -1786,13 +1844,12 @@ int Consistent_recovery::merge_slice_to_binlog_file(
   err_msg.append(std::to_string(binlog_size));
   err_msg.append(" last slice number=");
   err_msg.append(std::to_string(slice_number));
-  LogErr(INFORMATION_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
 
   mysql_binlog_end_pos = slice_number;
 
   if (my_chmod(mysql_binlog_name.c_str(),
-               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE |
-                   OTHERS_WRITE | OTHERS_READ,
+               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
                MYF(MY_WME))) {
     err_msg.assign("Failed to chmod: ");
     err_msg.append(mysql_binlog_name);
@@ -1980,6 +2037,14 @@ int Consistent_recovery::truncate_binlogs_from_objstore(
     return 1;
   }
 
+  if (my_chmod(index_file.c_str(),
+               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+               MYF(0))) {
+    err_msg.assign("Failed to chmod: ");
+    err_msg.append(index_file);
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+  }
+
   if (fn_format(new_index_file_name, BINLOG_ARCHIVE_INDEX_LOCAL_FILE,
                 m_mysql_archive_recovery_binlog_dir, ".~rec~",
                 MYF(MY_UNPACK_FILENAME | MY_SAFE_PATH | MY_REPLACE_EXT)) ==
@@ -2127,7 +2192,7 @@ static int copy_directory(const std::string &from, const std::string &to) {
 
   // If the destination directory does not exist, create it.
   if (!(b = my_dir(to_path, MYF(MY_DONT_SORT | MY_WANT_STAT)))) {
-    if (my_mkdir(to_path, 0777, MYF(0)) < 0) {
+    if (my_mkdir(to_path, my_umask_dir, MYF(0)) < 0) {
       std::string err_msg;
       err_msg.assign("Failed to create directory: ");
       err_msg.append(to_path);
@@ -2158,7 +2223,18 @@ static int copy_directory(const std::string &from, const std::string &to) {
         return 1;
       }
     } else {
-      my_copy(tmp_from.c_str(), tmp_to.c_str(), MYF(0));
+      if (my_copy(tmp_from.c_str(), tmp_to.c_str(),
+                  MYF(MY_DONT_OVERWRITE_FILE)) ||
+          my_chmod(
+              tmp_to.c_str(),
+              USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+              MYF(0))) {
+        std::string err_msg;
+        err_msg.assign("Failed to open directory: ");
+        err_msg.append(from_path);
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+        return 1;
+      }
     }
   }
   my_dirend(a);
@@ -2256,12 +2332,73 @@ static void recursive_create_dir(const std::string &dir,
   real_path.append(out);
   MY_STAT stat_area;
   if (!my_stat(real_path.c_str(), &stat_area, MYF(0))) {
-    if (my_mkdir(real_path.c_str(), 0777, MYF(0))) {
+    if (my_mkdir(real_path.c_str(), my_umask_dir, MYF(0))) {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
              "Failed to create binlog archive dir.");
     }
   }
   recursive_create_dir(left, real_path);
+}
+
+static int recursive_chmod(const std::string &from) {
+  uint i;
+  MY_DIR *a;
+  char from_path[FN_REFLEN + 1] = {0};
+
+  strmake(from_path, from.c_str(), sizeof(from_path) - 1);
+  convert_dirname(from_path, from_path, NullS);
+
+  // Check if the source directory exists.
+  if (!(a = my_dir(from_path, MYF(MY_DONT_SORT | MY_WANT_STAT)))) {
+    std::string err_msg;
+    err_msg.assign("Failed to open directory: ");
+    err_msg.append(from_path);
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    return 1;
+  }
+
+  if (my_chmod(from_path,
+               USER_READ | USER_WRITE | USER_EXECUTE | GROUP_READ |
+                   GROUP_WRITE | GROUP_EXECUTE | OTHERS_READ | OTHERS_EXECUTE,
+               MYF(0))) {
+    std::string err_msg;
+    err_msg.assign("Failed to chmod: ");
+    err_msg.append(from_path);
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+    return 1;
+  }
+
+  // Iterate through the source directory.
+  for (i = 0; i < (uint)a->number_off_files; i++) {
+    // Skip . and ..
+    if (strcmp(a->dir_entry[i].name, ".") == 0 ||
+        strcmp(a->dir_entry[i].name, "..") == 0) {
+      continue;
+    }
+    std::string tmp_from;
+    tmp_from.assign(from_path);
+    tmp_from.append(a->dir_entry[i].name);
+    // If its a folder, iterate it. Otherwise, copy the file.
+    if (MY_S_ISDIR(a->dir_entry[i].mystat->st_mode)) {
+      if (recursive_chmod(tmp_from)) {
+        my_dirend(a);
+        return 1;
+      }
+    } else {
+      if (my_chmod(
+              tmp_from.c_str(),
+              USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+              MYF(0))) {
+        std::string err_msg;
+        err_msg.assign("Failed to chmod: ");
+        err_msg.append(tmp_from);
+        LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
+        return 1;
+      }
+    }
+  }
+  my_dirend(a);
+  return 0;
 }
 
 /**
