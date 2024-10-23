@@ -60,6 +60,7 @@ class ConsensusLogIndex {
   int update_log_size_by_name(const std::string &log_name, my_off_t log_size);
   uint64 get_start_index_of_file(const std::string &log_name);
   std::string get_last_log_file_name();
+  std::string get_first_log_file_name();
 
   void update_pos_map_by_file_name(std::string &log_name,
                                    uint64 consensus_index, my_off_t pos);

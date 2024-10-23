@@ -333,12 +333,22 @@ int ConsensusLogIndex::truncate_pos_map_of_file(uint64 start_index,
   return 0;
 }
 
+std::string ConsensusLogIndex::get_first_log_file_name() {
+  std::string ret;
+  DBUG_TRACE;
+
+  mysql_mutex_lock(&LOCK_consensuslog_index);
+  if (!index_list.empty()) ret = (index_list.begin())->second.file_name;
+  mysql_mutex_unlock(&LOCK_consensuslog_index);
+  return ret;
+}
+
 std::string ConsensusLogIndex::get_last_log_file_name() {
   std::string ret;
   DBUG_TRACE;
 
   mysql_mutex_lock(&LOCK_consensuslog_index);
-  ret = (index_list.rbegin())->second.file_name;
+  if (!index_list.empty()) ret = (index_list.rbegin())->second.file_name;
   mysql_mutex_unlock(&LOCK_consensuslog_index);
   return ret;
 }

@@ -391,20 +391,28 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
 
   if (has_ha_recover_end && ha_recover_end_index > 0) {
     uint64 start_index;  // unused
-    if (consensus_find_log_by_index(consensus_log_manager.get_log_file_index(),
-                                    ha_recover_end_index,
+    ConsensusLogIndex *log_file_index =
+        consensus_log_manager.get_log_file_index();
+    if (consensus_find_log_by_index(log_file_index, ha_recover_end_index,
                                     ha_recover_file_str, start_index)) {
-      LogPluginErr(ERROR_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR,
-                   ha_recover_end_index, "recoverying");
-      return 1;
+      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_FIND_LOG_ERROR,
+                   ha_recover_end_index, "recovering");
+      assert(log_file_index->get_first_log_file_name().empty());
+      ha_recover_end_index = 0;
+      ha_recover_file = log_file_index->get_first_log_file_name().c_str();
+    } else {
+      ha_recover_file = ha_recover_file_str.c_str();
     }
-    ha_recover_file = ha_recover_file_str.c_str();
-    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_USING,
-                 ha_recover_file, ha_recover_end_index);
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_POINT,
+                 ha_recover_file, ha_recover_end_index,
+                 "for consistent recovering");
   } else {
     ha_recover_file_str = consensus_log_manager.get_first_in_use_file();
-    if (!ha_recover_file_str.empty())
+    if (!ha_recover_file_str.empty()) {
       ha_recover_file = ha_recover_file_str.c_str();
+      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_POINT,
+                   ha_recover_file, 0, "for first in-use binlog file");
+    }
   }
 
   if ((error = binlog->find_log_pos(&log_info, ha_recover_file,
@@ -460,9 +468,6 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
     return 1;
   }
 
-  LogPluginErr(INFORMATION_LEVEL, ER_BINLOG_RECOVERING_AFTER_CRASH_USING,
-               log_name);
-
   /*
     If the binary log was not properly closed it means that the server
     may have crashed. In that case, we need to call
@@ -485,6 +490,9 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
           DBUG_EVALUATE_IF("eval_force_bin_log_recovery", true, false)))));
 
   delete ev;
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_AFTER_CRASH_USING,
+               log_name, should_ha_recover);
 
   Consensus_binlog_recovery bl_recovery{binlog_file_reader};
   bl_recovery.consensus_recover(should_ha_recover, has_ha_recover_end, ha_recover_end_index, false);
@@ -553,6 +561,8 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
     }
 
     delete ev;
+
+    LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_USING, log_name);
 
     /* Scan the log file and recovery consensus log status */
     Consensus_binlog_recovery bl_scan{binlog_file_reader};

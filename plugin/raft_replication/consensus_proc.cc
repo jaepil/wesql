@@ -108,7 +108,7 @@ bool Sql_cmd_consensus_proc_change_leader::pc_execute(THD *thd) {
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
   res =
       rpl_consensus_transfer_leader(std::string(ip_port->val_str(nullptr)->ptr()));
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -137,7 +137,7 @@ bool Sql_cmd_consensus_proc_add_learner::pc_execute(THD *thd) {
   std::vector<std::string> info_vector;
   info_vector.push_back(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_add_learners(info_vector);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -175,7 +175,7 @@ bool Sql_cmd_consensus_proc_add_follower::pc_execute(THD *thd) {
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
   std::string addr(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_add_follower(addr);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -214,7 +214,7 @@ bool Sql_cmd_consensus_proc_drop_learner::pc_execute(THD *thd) {
   std::vector<std::string> info_vector;
   info_vector.push_back(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_drop_learners(info_vector);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -242,7 +242,7 @@ bool Sql_cmd_consensus_proc_upgrade_learner::pc_execute(THD *thd) {
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
   std::string addr(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_upgrade_learner(addr);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -270,7 +270,7 @@ bool Sql_cmd_consensus_proc_downgrade_follower::pc_execute(THD *thd) {
   Item_string *ip_port = dynamic_cast<Item_string *>(*(it++));
   std::string addr(ip_port->val_str(nullptr)->ptr());
   res = rpl_consensus_downgrade_follower(addr);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -297,7 +297,7 @@ bool Sql_cmd_consensus_proc_refresh_learner_meta::pc_execute(THD *thd) {
   int res = 0;
   std::vector<std::string> info_vector;
   res = rpl_consensus_sync_all_learners(info_vector);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -340,7 +340,7 @@ bool Sql_cmd_consensus_proc_configure_follower::pc_execute(THD *thd) {
     force_sync = fs ? fs->val_uint() : 0;
   }
   res = rpl_consensus_configure_member(addr, force_sync, election_weight);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res != 0 && res != 1)
@@ -377,7 +377,7 @@ bool Sql_cmd_consensus_proc_configure_learner::pc_execute(THD *thd) {
   }
 
   res = rpl_consensus_configure_learner(addr, source, use_applied);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res != 0 && res != 1)
@@ -402,7 +402,7 @@ Sql_cmd *Consensus_proc_force_single_mode::evoke_cmd(
 bool Sql_cmd_consensus_proc_force_single_mode::pc_execute(THD *thd) {
   int res = 0;
   res = rpl_consensus_force_single_leader();
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -426,7 +426,7 @@ Sql_cmd *Consensus_proc_force_promote::evoke_cmd(
 
 bool Sql_cmd_consensus_proc_force_promote::pc_execute(THD *thd) {
   rpl_consensus_force_promote();
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, 0);
   return false;
@@ -458,7 +458,7 @@ bool Sql_cmd_consensus_proc_fix_cluster_id::pc_execute(THD *thd) {
 
   std::string cluster_id(ci->val_str(nullptr)->ptr());
   res = rpl_consensus_set_cluster_id(cluster_id);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -495,7 +495,7 @@ bool Sql_cmd_consensus_proc_fix_matchindex::pc_execute(THD *thd) {
 
   uint64_t matchindex = mi->val_uint();
   rpl_consensus_force_fix_match_index(addr, matchindex);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -679,7 +679,7 @@ bool Sql_cmd_consensus_proc_purge_log::pc_execute(THD *thd) {
 
   uint64 index = item->val_uint();
   res = rpl_consensus_force_purge_log(false /* local */, index);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -714,7 +714,7 @@ bool Sql_cmd_consensus_proc_local_purge_log::pc_execute(THD *thd) {
 
   uint64 index = item->val_uint();
   res = rpl_consensus_force_purge_log(true /* local */, index);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -749,7 +749,7 @@ bool Sql_cmd_consensus_proc_force_purge_log::pc_execute(THD *thd) {
 
   uint64 index = item->val_uint();
   res = consensus_log_manager.purge_log(index);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -786,7 +786,7 @@ bool Sql_cmd_consensus_proc_drop_prefetch_channel::pc_execute(THD *thd) {
   uint64 channel_id = item->val_uint();
   res = consensus_log_manager.get_prefetch_manager()->drop_prefetch_channel(
       channel_id);
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
   if (res)
@@ -898,13 +898,13 @@ bool Sql_cmd_consensus_proc_activate_failpoint::pc_execute(THD *thd) {
              rpl_consensus_protocol_default_error());
     return true;
   }
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_FAILPOINT_ACTIVE,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_FAILPOINT_ACTIVE,
                fail_point_name->val_str(nullptr)->ptr(), type, exec_count,
                input_type, probability);
 
   fp->activate(type, exec_count, fail_point_data, probability);
 
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
 
@@ -938,12 +938,12 @@ bool Sql_cmd_consensus_proc_deactivate_failpoint::pc_execute(THD *thd) {
              rpl_consensus_protocol_default_error());
     return true;
   }
-  LogPluginErr(INFORMATION_LEVEL, ER_COSENNSUS_FAILPOINT_DEACTIVE,
+  LogPluginErr(SYSTEM_LEVEL, ER_COSENNSUS_FAILPOINT_DEACTIVE,
                fail_point_name->val_str(nullptr)->ptr());
 
   fp->deactivate();
 
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_CMD_LOG,
          thd->m_main_security_ctx.user().str,
          thd->m_main_security_ctx.host_or_ip().str, thd->query().str, res);
 

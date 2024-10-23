@@ -1732,9 +1732,11 @@ static int do_write_binlog_cache(THD *thd, Gtid_log_event &gtid_event,
       goto end;
     }
 
-    LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_FLUSH_CACHE_LOG,
-                 binlog_file_get_current_pos(binlog_file), payload_size,
-                 thd->consensus_context.consensus_index);
+    DBUG_PRINT("consensus_repl",
+               ("Flush binlog cache to the consensus log, current pos: %llu, "
+                "payload size: %lu, index: %llu.",
+                binlog_file_get_current_pos(binlog_file), payload_size,
+                (ulonglong)thd->consensus_context.consensus_index));
 
     /* Write consensus log event */
     if (write_consensus_log_event(binlog_file, flag,
@@ -1806,9 +1808,11 @@ static int append_one_log_entry(ConsensusLogEntry &log,
             ? BINLOG_CHECKSUM_LEN
             : 0));
 
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_LOG,
-               binlog_file_get_current_pos(binlog_file), payload_start_pos,
-               log.index, log.flag);
+  DBUG_PRINT("consensus_repl",
+             ("Append one log entry to consensus log, current pos: %llu, "
+              "payload start pos: %llu, index: %llu, flag: %#X",
+              binlog_file_get_current_pos(binlog_file), payload_start_pos,
+              (ulonglong)log.index, log.flag));
 
   add_cache = true;
 

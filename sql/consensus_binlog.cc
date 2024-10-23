@@ -176,8 +176,7 @@ int MYSQL_BIN_LOG::truncate_all_files() {
   for (;;) {
     if ((error = my_delete_allow_opened(linfo.log_file_name, MYF(0))) != 0) {
       if (my_errno() == ENOENT) {
-        LogErr(INFORMATION_LEVEL, ER_BINLOG_CANT_DELETE_FILE,
-               linfo.log_file_name);
+        LogErr(WARNING_LEVEL, ER_BINLOG_CANT_DELETE_FILE, linfo.log_file_name);
         error = 0;
       } else {
         LogErr(ERROR_LEVEL, ER_BINLOG_CANT_DELETE_FILE, linfo.log_file_name);
@@ -190,8 +189,7 @@ int MYSQL_BIN_LOG::truncate_all_files() {
   close(LOG_CLOSE_INDEX | LOG_CLOSE_TO_BE_OPENED, false, false);
   if ((error = my_delete_allow_opened(index_file_name, MYF(0)))) {
     if (my_errno() == ENOENT) {
-      LogErr(INFORMATION_LEVEL, ER_BINLOG_CANT_DELETE_FILE,
-             linfo.log_file_name);
+      LogErr(WARNING_LEVEL, ER_BINLOG_CANT_DELETE_FILE, linfo.log_file_name);
       error = false;
     } else {
       LogErr(ERROR_LEVEL, ER_BINLOG_CANT_DELETE_FILE, index_file_name);
@@ -1517,7 +1515,7 @@ int truncate_binlog_file_to_valid_pos(const char *log_name, my_off_t valid_pos,
       LogErr(ERROR_LEVEL, ER_BINLOG_CANT_TRIM_CRASHED_BINLOG);
       return 1;
     }
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_CRASHED_BINLOG_TRIMMED, log_name,
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_CRASHED_BINLOG_TRIMMED, log_name,
            binlog_size, valid_pos, valid_pos);
   }
 

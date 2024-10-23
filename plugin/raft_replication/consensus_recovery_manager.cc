@@ -35,9 +35,12 @@ void ConsensusRecoveryManager::add_trx_to_binlog_map(my_xid xid,
     this->recover_term = current_term;
   }
 
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_TRX_LOGS,
-               "insert into transactions map(xid, consensus_index)", xid,
-               current_index, enum_ha_recover_xa_state::COMMITTED);
+  DBUG_PRINT(
+      "consensus_repl",
+      ("Consensus recovery insert into transactions map(xid, consensus_index), "
+       "transaction id: %llu, consensus index: %llu, state: %d",
+       xid, (ulonglong)current_index,
+       (int)enum_ha_recover_xa_state::COMMITTED));
 
   total_trx_index_map[xid] = current_index;
 }
@@ -55,11 +58,13 @@ void ConsensusRecoveryManager::add_trx_to_binlog_xa_map(
     this->recover_term = current_term;
   }
 
-  LogPluginErr(INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS,
-               "insert into external transactions map(xid, consensus_index)",
-               xid->get_data(), current_index,
-               second_phase ? enum_ha_recover_xa_state::COMMITTED
-                            : enum_ha_recover_xa_state::PREPARED_IN_TC);
+  DBUG_PRINT("consensus_repl",
+             ("Consensus recovery insert into external transactions map(xid, "
+              "consensus_index), transaction id: '%s', consensus index: %llu, "
+              "state: %d",
+              xid->get_data(), (ulonglong)current_index,
+              second_phase ? (int)enum_ha_recover_xa_state::COMMITTED
+                           : (int)enum_ha_recover_xa_state::PREPARED_IN_TC));
 
   total_xa_trx_index_map[xid_str] = current_index;
 }
@@ -99,12 +104,12 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
         current_index = iter_xa_trx_map->second;
         xa_trx_index_map.erase(iter_xa_trx_map);
       }
-
-      LogPluginErr(
-          INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS,
-          found ? "found a transaction in external transactions map"
-                : "found a transaction not in external transactions map",
-          iter->first.get_data(), found ? current_index : 0, iter->second);
+      DBUG_PRINT(
+          "consensus_repl",
+          ("Consensus recovery found a transaction %s external transactions "
+           "map, transaction id: '%s', consensus index: %llu, state: %d",
+           found ? "in" : "not in", iter->first.get_data(),
+           found ? (ulonglong)current_index : 0, (int)iter->second));
     } else {
       auto iter_trx_map = trx_index_map.find(xid);
       if (iter_trx_map != trx_index_map.end()) {
@@ -112,12 +117,12 @@ uint64 ConsensusRecoveryManager::reconstruct_binlog_trx_list(
         current_index = iter_trx_map->second;
         trx_index_map.erase(iter_trx_map);
       }
-
-      LogPluginErr(
-          INFORMATION_LEVEL, ER_CONSENSUS_RECOVERY_TRX_LOGS,
-          found ? "found a prepared-in-se transaction in transactions map"
-                : "found a prepared-in-se transaction not in transactions map",
-          xid, found ? current_index : 0, iter->second);
+      DBUG_PRINT("consensus_repl",
+                 ("Consensus recovery found a prepared-in-se transaction %s "
+                  "transactions map, transaction id: '%llu', consensus index: "
+                  "%llu, state: %d",
+                  found ? "in" : "not in", xid,
+                  found ? (ulonglong)current_index : 0, (int)iter->second));
     }
   }
 
