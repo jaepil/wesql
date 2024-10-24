@@ -65,22 +65,12 @@ class LocalObjectStore : public ObjectStore {
   Status delete_directory(const std::string_view &bucket,
                           const std::string_view &prefix) override;
 
-  Status put_objects_from_dir(const std::string_view &src_dir,
-                              const std::string_view &dst_bucket,
-                              const std::string_view &dst_dir) override;
-  
-  Status get_objects_to_dir(const std::string_view &src_bucket,
-                            const std::string_view &src_dir,
-                            const std::string_view &dst_dir) override;
-
   std::string_view get_provider() const override { return provider_; }
 
  private:
   std::string generate_path(const std::string_view &bucket);
   std::string generate_path(const std::string_view &bucket,
                             const std::string_view &key);
-  Status copy_directory(const std::string_view &src_dir,
-                        const std::string_view &dst_dir);
 
  private:
   constexpr static std::string_view provider_{"local"};

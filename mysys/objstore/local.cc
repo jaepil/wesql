@@ -108,16 +108,45 @@ Status LocalObjectStore::put_object_from_file(
   }
 
   std::string key_path = generate_path(bucket, key);
-  // key may contains '/', so if its parent directory does not exists, we create
-  // for it.
+  // key may contains '/', so if its parent directory does not exists, we
+  // create for it.
   int ret = mkdir_p(fs::path(key_path).parent_path().native());
   assert(!ret);
-  std::error_code errcode;
-  fs::copy(data_file_path, key_path, fs::copy_options::overwrite_existing,
-           errcode);
-  Errors error_code = !errcode ? Errors::SE_SUCCESS : Errors::SE_INVALID;
-  return Status(error_code, errcode.value(), errcode.message());
+
+  // open output file.
+  std::ofstream output_file(key_path, std::ios::binary | std::ios::trunc);
+  if (!output_file) {
+    return Status(Errors::SE_INVALID, EINVAL, "Couldn't open file");
+  }
+
+  // open input file.
+  std::ifstream input_file(std::string(data_file_path), std::ios::in | std::ios::binary);
+  if (!input_file.is_open()) {
+    std::error_code errcode(errno, std::generic_category());
+    // if (ENOENT == errcode.value() && !fs::exists(generate_path(bucket))) {
+    //   return Status(Errors::SE_NO_SUCH_BUCKET, ENOENT, "bucket not found");
+    // }
+    Errors error_code = std_err_code_to_objstore_error(errcode);
+    return Status(error_code, errcode.value(), "Couldn't open file");
+  }
+
+  // read input file.
+  input_file.seekg(0, std::ios::end);
+  std::streamsize fileSize = input_file.tellg();
+  input_file.seekg(0, std::ios::beg);
+
+  std::string body;
+  body.resize(fileSize);
+  bool fail = !input_file.read(body.data(), body.size());
+  input_file.close();
+  if (fail) 
+    return Status(Errors::SE_IO_ERROR, EINVAL, "read fail");
+  // write output file.
+  fail = !output_file.write(body.data(), body.size());
+  output_file.close();
+  return fail ? Status(Errors::SE_IO_ERROR, EINVAL, "write fail") : Status();
 }
+
 Status LocalObjectStore::get_object_to_file(
     const std::string_view &bucket, const std::string_view &key,
     const std::string_view &output_file_path) {
@@ -128,14 +157,39 @@ Status LocalObjectStore::get_object_to_file(
   }
 
   std::string key_path = generate_path(bucket, key);
-  std::error_code errcode;
-  fs::copy(key_path, output_file_path, fs::copy_options::overwrite_existing,
-           errcode);
-  // if (ENOENT == errcode.value() && !fs::exists(generate_path(bucket))) {
-  //   return Status(Errors::SE_NO_SUCH_BUCKET, ENOENT, "bucket not found");
-  // }
-  Errors error_code = std_err_code_to_objstore_error(errcode);
-  return Status(error_code, errcode.value(), errcode.message());
+
+  // open output file.
+  std::ofstream output_file(std::string(output_file_path), std::ios::binary | std::ios::trunc);
+  if (!output_file) {
+    return Status(Errors::SE_INVALID, EINVAL, "Couldn't open file");
+  }
+
+  // open input file.
+  std::ifstream input_file(key_path, std::ios::in | std::ios::binary);
+  if (!input_file.is_open()) {
+    std::error_code errcode(errno, std::generic_category());
+    // if (ENOENT == errcode.value() && !fs::exists(generate_path(bucket))) {
+    //   return Status(Errors::SE_NO_SUCH_BUCKET, ENOENT, "bucket not found");
+    // }
+    Errors error_code = std_err_code_to_objstore_error(errcode);
+    return Status(error_code, errcode.value(), "Couldn't open file");
+  }
+
+  // read input file.
+  input_file.seekg(0, std::ios::end);
+  std::streamsize fileSize = input_file.tellg();
+  input_file.seekg(0, std::ios::beg);
+
+  std::string body;
+  body.resize(fileSize);
+  bool fail = !input_file.read(body.data(), body.size());
+  input_file.close();
+  if (fail) 
+    return Status(Errors::SE_IO_ERROR, EINVAL, "read fail");
+  // write output file.
+  fail = !output_file.write(body.data(), body.size());
+  output_file.close();
+  return fail ? Status(Errors::SE_IO_ERROR, EINVAL, "write fail") : Status();
 }
 
 Status LocalObjectStore::put_object(const std::string_view &bucket,
@@ -453,39 +507,6 @@ Status LocalObjectStore::delete_directory(const std::string_view &bucket,
     }
   }
   return Status();
-}
-
-Status LocalObjectStore::copy_directory(const std::string_view &src_dir,
-                                        const std::string_view &dst_dir) {
-  fs::path src_dir_path = fs::path(src_dir).lexically_normal();
-  fs::path dst_dir_path = fs::path(dst_dir).lexically_normal();
-  if (!fs::exists(src_dir_path) || !fs::is_directory(src_dir_path)) {
-    return Status(Errors::SE_INVALID, EINVAL, std::string(src_dir) + ": does not exist or not a directory");
-  }
-  if (!fs::exists(dst_dir_path)) {
-    int ret = mkdir_p(dst_dir_path.native());
-    if (ret != 0) {
-      return Status(Errors::SE_IO_ERROR, ret, std::string(dst_dir) + ":" + std::generic_category().message(ret));
-    }
-  }
-  std::error_code errcode;
-  fs::copy(src_dir_path, dst_dir_path, fs::copy_options::recursive | fs::copy_options::overwrite_existing, errcode);
-  Errors error_code = !errcode ? Errors::SE_SUCCESS : Errors::SE_IO_ERROR;
-  return Status(error_code, errcode.value(), errcode.message());
-}
-
-Status LocalObjectStore::put_objects_from_dir(const std::string_view &src_dir,
-                                              const std::string_view &dst_bucket,
-                                              const std::string_view &dst_dir) {
-  std::string dst_bucket_path = std::move(generate_path(dst_bucket, dst_dir));
-  return copy_directory(src_dir, dst_bucket_path);
-}
-  
-Status LocalObjectStore::get_objects_to_dir(const std::string_view &src_bucket,
-                                            const std::string_view &src_dir,
-                                            const std::string_view &dst_dir) {
-  std::string src_bucket_path = std::move(generate_path(src_bucket, src_dir));
-  return copy_directory(src_bucket_path, dst_dir);
 }
 
 std::string LocalObjectStore::generate_path(const std::string_view &bucket) {
