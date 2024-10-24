@@ -111,27 +111,27 @@ let $wait_condition= SELECT count(*) = 8 FROM INFORMATION_SCHEMA.SNAPSHOT_PERSIS
 --source include/wait_condition_or_abort.inc
 
 --let $grep_file=$error_log
---let $grep_pattern=innodb_archive.index upload to object store failed in move_crash_safe_index_file_to_index_file
+--let $grep_pattern=innodb.index upload to object store failed in move_crash_safe_index_file_to_index_file
 --let $grep_output=boolean
 --source include/grep_pattern.inc
 
---let $grep_pattern=innodb_archive.index delete failed in move_crash_safe_index_file_to_index_file
+--let $grep_pattern=innodb.index delete failed in move_crash_safe_index_file_to_index_file
 --let $grep_output=boolean
 --source include/grep_pattern.inc
 
---let $grep_pattern=innodb_archive.index open failed in move_crash_safe_index_file_to_index_file
+--let $grep_pattern=innodb.index open failed in move_crash_safe_index_file_to_index_file
 --let $grep_output=boolean
 --source include/grep_pattern.inc
 
---let $grep_pattern=se_archive.index upload to object store failed in move_crash_safe_index_file_to_index_file
+--let $grep_pattern=smartengine.index upload to object store failed in move_crash_safe_index_file_to_index_file
 --let $grep_output=boolean
 --source include/grep_pattern.inc
 
---let $grep_pattern=se_archive.index delete failed in move_crash_safe_index_file_to_index_file
+--let $grep_pattern=smartengine.index delete failed in move_crash_safe_index_file_to_index_file
 --let $grep_output=boolean
 --source include/grep_pattern.inc
 
---let $grep_pattern=se_archive.index open failed in move_crash_safe_index_file_to_index_file
+--let $grep_pattern=smartengine.index open failed in move_crash_safe_index_file_to_index_file
 --let $grep_output=boolean
 --source include/grep_pattern.inc
 

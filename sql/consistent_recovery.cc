@@ -103,7 +103,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
     m_recovery_type = CONSISTENT_RECOVERY_PITR;
     std::string err_msg;
     err_msg.assign(
-        "Initialize database from source object store consistent snapshot ");
+        "Initialize database from source object store snapshot ");
     err_msg.append(" provider=");
     err_msg.append(opt_initialize_objstore_provider);
     err_msg.append(" region=");
@@ -180,7 +180,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
     } else {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
              "Init database from object store, must set "
-             "--initialize_cluster_objectstore_id");
+             "--initialize_repo_objectstore_id");
       return 1;
     }
 
@@ -254,12 +254,12 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
     m_recovery_type = CONSISTENT_RECOVERY_REBULD;
     if (opt_recovery_consistent_snapshot_timestamp) {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-             "Crash recovery consistent snapshot can't set "
-             "--recovery_consistent_snapshot_timestamp");
+             "Crash recovery snapshot can't set "
+             "--recovery_snapshot_timestamp");
       return 1;
     }
     LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Crash recovery consistent snapshot from object store");
+           "Crash recovery snapshot from object store");
 
     objstore::init_objstore_provider(opt_objstore_provider);
 
@@ -318,7 +318,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   if (!opt_recovery_consistent_snapshot_tmpdir) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
            "Init or recovery db from object store, must set "
-           "--recovery_consistent_snapshot_tmpdir.");
+           "--recovery_snapshot_tmpdir.");
     return 1;
   }
 
@@ -336,14 +336,24 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   // create new tmp recovery dir.
   convert_dirname(m_mysql_archive_recovery_dir, m_mysql_archive_recovery_dir,
                   NullS);
-  remove_file(m_mysql_archive_recovery_dir);
+  if(remove_file(m_mysql_archive_recovery_dir)) {
+    std::string err_msg;
+    err_msg.assign("Failed to create tmp recovery dir: ");
+    err_msg.append(m_mysql_archive_recovery_dir);
+    err_msg.append(" error=");
+    err_msg.append(std::to_string(my_errno()));
+    LogErr(WARNING_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str()); 
+  }
   if (my_mkdir(m_mysql_archive_recovery_dir, my_umask_dir, MYF(0))) {
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Failed to create tmp recovery dir.");
-    return 1;
+    std::string err_msg;
+    err_msg.assign("Failed to create tmp recovery dir: ");
+    err_msg.append(m_mysql_archive_recovery_dir);
+    err_msg.append(" error=");
+    err_msg.append(std::to_string(my_errno()));
+    LogErr(WARNING_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
   }
 
-  // create new tmp recovery data dir.
+  // create new tmp recovery snapshot dir.
   strmake(
       strmake(m_mysql_archive_recovery_data_dir, m_mysql_archive_recovery_dir,
               sizeof(m_mysql_archive_recovery_data_dir) -
@@ -352,11 +362,13 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
 
   convert_dirname(m_mysql_archive_recovery_data_dir,
                   m_mysql_archive_recovery_data_dir, NullS);
-  remove_file(m_mysql_archive_recovery_data_dir);
   if (my_mkdir(m_mysql_archive_recovery_data_dir, my_umask_dir, MYF(0))) {
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Failed to create tmp recovery data dir.");
-    return 1;
+    std::string err_msg;
+    err_msg.assign("Failed to create tmp recovery snapshot dir: ");
+    err_msg.append(m_mysql_archive_recovery_data_dir);
+    err_msg.append(" error=");
+    err_msg.append(std::to_string(my_errno()));
+    LogErr(WARNING_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
   }
   // create new recovery binlog dir.
   strmake(
@@ -366,11 +378,13 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
       STRING_WITH_LEN(BINLOG_ARCHIVE_SUBDIR));
   convert_dirname(m_mysql_archive_recovery_binlog_dir,
                   m_mysql_archive_recovery_binlog_dir, NullS);
-  remove_file(m_mysql_archive_recovery_binlog_dir);
   if (my_mkdir(m_mysql_archive_recovery_binlog_dir, my_umask_dir, MYF(0))) {
-    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Failed to create tmp recovery binlog dir.");
-    return 1;
+    std::string err_msg;
+    err_msg.assign("Failed to create tmp recovery binlog dir: ");
+    err_msg.append(m_mysql_archive_recovery_binlog_dir);
+    err_msg.append(" error=");
+    err_msg.append(std::to_string(my_errno()));
+    LogErr(WARNING_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
   }
 
   Consistent_snapshot_recovery_status recovery_status{};
@@ -399,7 +413,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
   recovery_status.m_recovery_status = CONSISTENT_SNAPSHOT_RECOVERY_STAGE_BEGIN;
   if (write_consistent_snapshot_recovery_status(recovery_status)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Failed to write consistent snapshot recovery status.");
+           "Failed to write snapshot recovery status.");
     return 1;
   }
 
@@ -456,7 +470,7 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
       consistent_file_name);
   if (!ss.is_succ()) {
     std::string err_msg;
-    err_msg.assign("Failed to download consistent snapshot index file: ");
+    err_msg.assign("Failed to download snapshot index file: ");
     err_msg.append(" key=");
     err_msg.append(consistent_file_keyid);
     err_msg.append(" file=");
@@ -471,7 +485,7 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
                USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
                MYF(MY_WME))) {
     std::string err_msg;
-    err_msg.assign("Failed to chmod consistent snapshot index file: ");
+    err_msg.assign("Failed to chmod snapshot index file: ");
     err_msg.append(consistent_file_name);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     return true;
@@ -481,7 +495,7 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
   consistent_file.open(consistent_file_name, std::ifstream::in);
   if (!consistent_file.is_open()) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Failed to open consistent snapshot index file");
+           "Failed to open snapshot index file");
     return true;
   }
 
@@ -523,7 +537,7 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
     if (convert_str_to_datetime(ts.c_str(), snapshot_ts)) {
       std::string err_msg;
       err_msg.assign(
-          "Failed to convert consistent snapshot timestamp to "
+          "Failed to convert snapshot timestamp to "
           "seconds: ");
       err_msg.append(opt_recovery_consistent_snapshot_timestamp);
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
@@ -552,7 +566,7 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
   consistent_file.close();
   if (!found) {
     std::string err_msg;
-    err_msg.assign("Failed to find consistent snapshot file: ");
+    err_msg.assign("Failed to find snapshot file: ");
     err_msg.append(
         "The set recovery timestamp is too small, and no snapshot meets "
         "the requirements ");
@@ -564,7 +578,7 @@ bool Consistent_recovery::read_consistent_snapshot_file() {
   }
 
   std::string err_msg;
-  err_msg.assign("Recovery consistent snapshot: ");
+  err_msg.assign("Recovery snapshot: ");
   err_msg.append(m_consistent_snapshot_local_time);
   err_msg.append(" ");
   err_msg.append(m_mysql_clone_keyid);
@@ -1256,7 +1270,7 @@ bool Consistent_recovery::recovery_consistent_snapshot_finish() {
             sizeof(recovery_status.m_apply_stop_timestamp) - 1);
   if (write_consistent_snapshot_recovery_status(recovery_status)) {
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-           "Failed to write consistent snapshot recovery status.");
+           "Failed to write snapshot recovery status.");
     return 1;
   }
   // Write global variables for consensus archive recovery.
@@ -1296,7 +1310,7 @@ int Consistent_recovery::consistent_snapshot_consensus_recovery_finish() {
     // After consensus recovery finish, truncate persistent binlog
     if (opt_recovery_consistent_snapshot_only) {
       LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-             "recovey consistent snapshot only finish.");
+             "recovey snapshot only finish.");
     } else if (!opt_initialize) {
       if (compare_log_name(
               m_mysql_binlog_end_file,
@@ -1304,7 +1318,7 @@ int Consistent_recovery::consistent_snapshot_consensus_recovery_finish() {
           m_mysql_binlog_end_pos !=
               consistent_recovery_consensus_truncated_end_position) {
         LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
-               "recovey consistent snapshot binlog mismatch consensus recovery "
+               "recovey snapshot binlog mismatch consensus recovery "
                "binlog.");
         return 1;
       } else {
@@ -1394,7 +1408,7 @@ int Consistent_recovery::get_last_persistent_binlog_consensus_index() {
   if (!opt_recovery_consistent_snapshot_tmpdir) {
     LogErr(
         ERROR_LEVEL, ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG,
-        "In serverless mode, must set --recovery_consistent_snapshot_tmpdir");
+        "In serverless mode, must set --recovery_snapshot_tmpdir");
     error = 1;
     goto err;
   }
@@ -2224,7 +2238,7 @@ static int copy_directory(const std::string &from, const std::string &to) {
       }
     } else {
       if (my_copy(tmp_from.c_str(), tmp_to.c_str(),
-                  MYF(MY_DONT_OVERWRITE_FILE)) ||
+                  MYF(0)) ||
           my_chmod(
               tmp_to.c_str(),
               USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,

@@ -192,15 +192,21 @@ int start_binlog_archive() {
   convert_dirname(tmp_archive_binlog_dir, tmp_archive_binlog_dir, NullS);
 
   // remove local binlog archive dir and recreate it.
-  remove_file(tmp_archive_binlog_dir);
+  if (remove_file(tmp_archive_binlog_dir)) {
+    std::string err_msg;
+    err_msg.assign("error ");
+    err_msg.append(std::to_string(my_errno()));
+    err_msg.append(", failed to remove archive dir ");
+    err_msg.append(tmp_archive_binlog_dir);
+    LogErr(WARNING_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, err_msg.c_str());
+  }
   if (my_mkdir(tmp_archive_binlog_dir, 0777, MYF(0))) {
     std::string err_msg;
     err_msg.assign("error ");
     err_msg.append(std::to_string(my_errno()));
     err_msg.append(", failed to create archive dir ");
     err_msg.append(tmp_archive_binlog_dir);
-    LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, err_msg.c_str());
-    return 1;
+    LogErr(WARNING_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, err_msg.c_str());
   }
 
   LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_STARTUP, "start binlog archive");
@@ -1398,6 +1404,15 @@ int Binlog_archive::merge_slice_to_binlog_file(const char *log_name,
              std::string(ss.error_message()).c_str());
       return 1;
     }
+    if (my_chmod(
+            binlog_slice_name.c_str(),
+            USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+            MYF(0))) {
+      err_msg.assign("Failed to chmod: ");
+      err_msg.append(binlog_slice_name);
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      return 1;
+    }
     LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_GET_OBJECT_TO_FILE,
            "get binlog slice", binlog_slice_keyid.c_str(),
            binlog_slice_name.c_str(), "");
@@ -1745,6 +1760,17 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
         m_binlog_archive_file_name, binlog_slice_name,
         m_binlog_archive_write_last_event_end_pos, m_consensus_term);
     archived_binlog_keyid.append(binlog_slice_name);
+
+    if (my_chmod(
+            m_binlog_slice_local_name,
+            USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+            MYF(0))) {
+      err_msg.append(" failed to chmod: ");
+      err_msg.append(m_binlog_slice_local_name);
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      error = 1;
+      goto end;
+    }
     objstore::Status ss = binlog_objstore->put_object_from_file(
         std::string_view(opt_objstore_bucket), archived_binlog_keyid,
         std::string_view(m_binlog_slice_local_name));
@@ -2246,6 +2272,17 @@ bool Binlog_archive::open_index_file() {
                  "get last persistent binlog-index.index failed",
                  last_binlog_index_keyid.c_str(), m_index_local_file_name,
                  std::string(status.error_message()).c_str());
+          error = true;
+          goto end;
+        }
+        if (my_chmod(
+                m_crash_safe_index_local_file_name,
+                USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
+                MYF(0))) {
+          std::string err_msg;
+          err_msg.assign("Failed to chmod: ");
+          err_msg.append(m_crash_safe_index_local_file_name);
+          LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_OPEN_INDEX, err_msg.c_str());
           error = true;
           goto end;
         }
@@ -2960,7 +2997,7 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(const char *to_log) {
         reinit_io_cache(index_file, READ_CACHE, (my_off_t)0, false, false)) {
       consistent_snapshot_archive->unlock_consistent_snapshot_index();
       error = 1;
-      err_msg.assign("consistent_snapshot.index is not opened.");
+      err_msg.assign("snapshot.index is not opened.");
       LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
       return std::make_tuple(error, err_msg);
     }
@@ -2998,7 +3035,7 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(const char *to_log) {
         consistent_snapshot_archive->unlock_consistent_snapshot_index();
         error = 0;
         err_msg.assign(
-            "binlog is empty in the first consistent snapshot, so purge "
+            "binlog is empty in the first snapshot, so purge "
             "nothing.");
         LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
         return std::make_tuple(error, err_msg);
@@ -3016,7 +3053,7 @@ std::tuple<int, std::string> Binlog_archive::purge_logs(const char *to_log) {
     consistent_snapshot_archive->unlock_consistent_snapshot_index();
     if (index_file->error == -1) {
       error = 1;
-      err_msg.assign("Failed to read consistent_snapshot.index");
+      err_msg.assign("Failed to read snapshot.index");
       return std::make_tuple(error, err_msg);
     }
   }
