@@ -95,7 +95,7 @@ jobs:
 
           echo "${{ env.KNOWN_HOSTS }}" >> /home/mysql/.ssh/known_hosts
 
-          sshpass -p ${{ env.SSH_PASSWORD }} scp ${{ github.workspace }}/../rpm/* \
+          sshpass -p ${{ env.SSH_PASSWORD }} scp -v ${{ github.workspace }}/../rpm/* \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/var/www/html/release/8/rpms/x86_64/
 
           sshpass -p ${{ env.SSH_PASSWORD }} ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
@@ -160,7 +160,7 @@ jobs:
 
           echo "${{ env.KNOWN_HOSTS }}" >> /home/mysql/.ssh/known_hosts
 
-          sshpass -p ${{ env.SSH_PASSWORD }} scp ${{ github.workspace }}/rpm/* \
+          sshpass -p ${{ env.SSH_PASSWORD }} scp -v ${{ github.workspace }}/rpm/* \
             ${{ env.SSH_USER }}@${{ env.SSH_HOST }}:/var/www/html/release/8/rpms/aarch64/
 
           sshpass -p ${{ env.SSH_PASSWORD }} ssh ${{ env.SSH_USER }}@${{ env.SSH_HOST }} \
