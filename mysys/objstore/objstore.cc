@@ -110,6 +110,38 @@ void cleanup_objstore_provider(ObjectStore *objstore) {
   }
 }
 
+char *get_src_access_key_id() {
+  char *src_access_key_id = std::getenv("SOURCE_ACCESS_KEY_ID");
+  if (src_access_key_id) {
+    return src_access_key_id;
+  }
+  return nullptr;
+}
+
+char *get_src_access_secret_key() {
+  char *src_access_secret_key = std::getenv("SOURCE_SECRET_ACCESS_KEY");
+  if (src_access_secret_key) {
+    return src_access_secret_key;
+  }
+  return nullptr;
+}
+
+char *get_dest_access_key_id() {
+  char *dst_access_key_id = std::getenv("DEST_ACCESS_KEY_ID");
+  if (dst_access_key_id) {
+    return dst_access_key_id;
+  }
+  return nullptr;
+}
+
+char *get_dest_access_secret_key() {
+  char *dst_access_secret_key = std::getenv("DEST_SECRET_ACCESS_KEY");
+  if (dst_access_secret_key) {
+    return dst_access_secret_key;
+  }
+  return nullptr;
+}
+
 bool ObjectStore::is_valid_key(const std::string_view &key) {
   // for s3, a key should be no more than 1024 bytes.
   //
@@ -285,6 +317,36 @@ ObjectStore *create_object_store(const std::string_view &provider,
   }
 }
 
+ObjectStore *create_source_object_store(const std::string_view &provider,
+                                        const std::string_view region,
+                                        const std::string_view *endpoint,
+                                        bool use_https, std::string &err_msg) {
+  if (provider == "aws") {
+    return create_source_s3_objstore(region, endpoint, use_https, err_msg);
+  } else if (provider == "aliyun") {
+    return create_source_aliyun_oss_objstore(region, endpoint, err_msg);
+  } else if (provider == "local") {
+    return create_local_objstore(region, endpoint, use_https);
+  } else {
+    return nullptr;
+  }
+}
+
+ObjectStore *create_dest_object_store(const std::string_view &provider,
+                                      const std::string_view region,
+                                      const std::string_view *endpoint,
+                                      bool use_https, std::string &err_msg) {
+  if (provider == "aws") {
+    return create_dest_s3_objstore(region, endpoint, use_https, err_msg);
+  } else if (provider == "aliyun") {
+    return create_dest_aliyun_oss_objstore(region, endpoint, err_msg);
+  } else if (provider == "local") {
+    return create_local_objstore(region, endpoint, use_https);
+  } else {
+    return nullptr;
+  }
+}
+
 ObjectStore *create_object_store_for_test(const std::string_view &provider,
                                           const std::string_view region,
                                           const std::string_view *endpoint,
@@ -294,11 +356,11 @@ ObjectStore *create_object_store_for_test(const std::string_view &provider,
   if (provider == "aws") {
     return create_s3_objstore_for_test(region, endpoint, use_https, bucket_dir,
                                        err_msg);
-  } else if (provider == "local") {
-    return create_local_objstore(region, endpoint, use_https);
   } else if (provider == "aliyun") {
     return create_aliyun_oss_objstore_for_test(region, endpoint, bucket_dir,
                                                err_msg);
+  } else if (provider == "local") {
+    return create_local_objstore(region, endpoint, use_https);
   } else {
     return nullptr;
   }

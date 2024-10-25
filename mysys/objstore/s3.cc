@@ -591,11 +591,10 @@ char *get_s3_access_secret_key() {
   return nullptr;
 }
 
-S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
-                                         const std::string_view *endpoint,
-                                         bool use_https,
-                                         const std::string_view bucket_dir,
-                                         std::string &err_msg) {
+S3ObjectStore *create_s3_objstore_helper(
+    const std::string_view region, const std::string_view *endpoint,
+    char *access_key_id, char *access_secret_key, bool use_https,
+    const std::string_view bucket_dir, std::string &err_msg) {
   Aws::Client::ClientConfiguration clientConfig;
   clientConfig.region = region;
   if (endpoint != nullptr) {
@@ -603,9 +602,6 @@ S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
   }
   clientConfig.scheme =
       use_https ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
-
-  char *access_key_id = get_s3_access_key_id();
-  char *access_secret_key = get_s3_access_secret_key();
 
   if (access_key_id && access_secret_key) {
     // if both access_key_id and access_secret_key are not empty, we use them to
@@ -636,7 +632,43 @@ S3ObjectStore *create_s3_objstore_helper(const std::string_view region,
 S3ObjectStore *create_s3_objstore(const std::string_view region,
                                   const std::string_view *endpoint,
                                   bool use_https, std::string &err_msg) {
-  return create_s3_objstore_helper(region, endpoint, use_https, "", err_msg);
+  char *access_key_id = get_s3_access_key_id();
+  char *access_secret_key = get_s3_access_secret_key();
+  S3ObjectStore *s3_objstore =
+      create_s3_objstore_helper(region, endpoint, access_key_id,
+                                access_secret_key, use_https, "", err_msg);
+  if (!s3_objstore) {
+    err_msg = "failed to create s3 object store:" + err_msg;
+  }
+  return s3_objstore;
+}
+
+S3ObjectStore *create_source_s3_objstore(const std::string_view region,
+                                         const std::string_view *endpoint,
+                                         bool use_https, std::string &err_msg) {
+  char *source_access_key_id = get_src_access_key_id();
+  char *source_access_secret_key = get_src_access_secret_key();
+  S3ObjectStore *s3_objstore = create_s3_objstore_helper(
+      region, endpoint, source_access_key_id, source_access_secret_key,
+      use_https, "", err_msg);
+  if (!s3_objstore) {
+    err_msg = "failed to create source s3 object store:" + err_msg;
+  }
+  return s3_objstore;
+}
+
+S3ObjectStore *create_dest_s3_objstore(const std::string_view region,
+                                       const std::string_view *endpoint,
+                                       bool use_https, std::string &err_msg) {
+  char *dest_access_key_id = get_dest_access_key_id();
+  char *dest_access_secret_key = get_dest_access_secret_key();
+  S3ObjectStore *s3_objstore =
+      create_s3_objstore_helper(region, endpoint, dest_access_key_id,
+                                dest_access_secret_key, use_https, "", err_msg);
+  if (!s3_objstore) {
+    err_msg = "failed to create destination s3 object store:" + err_msg;
+  }
+  return s3_objstore;
 }
 
 S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
@@ -644,8 +676,15 @@ S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
                                            bool use_https,
                                            const std::string_view bucket_dir,
                                            std::string &err_msg) {
-  return create_s3_objstore_helper(region, endpoint, use_https, bucket_dir,
-                                   err_msg);
+  char *access_key_id = get_s3_access_key_id();
+  char *access_secret_key = get_s3_access_secret_key();
+  S3ObjectStore *s3_objstore = create_s3_objstore_helper(
+      region, endpoint, access_key_id, access_secret_key, use_https, bucket_dir,
+      err_msg);
+  if (!s3_objstore) {
+    err_msg = "failed to create s3 object store for test:" + err_msg;
+  }
+  return s3_objstore;
 }
 
 void destroy_s3_objstore(S3ObjectStore *s3_objstore) {

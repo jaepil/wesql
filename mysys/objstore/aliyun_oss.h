@@ -103,6 +103,14 @@ AliyunOssObjectStore *create_aliyun_oss_objstore(
     const std::string_view region, const std::string_view *endpoint,
     std::string &err_msg);
 
+AliyunOssObjectStore *create_source_aliyun_oss_objstore(
+    const std::string_view region, const std::string_view *endpoint,
+    std::string &err_msg);
+
+AliyunOssObjectStore *create_dest_aliyun_oss_objstore(
+    const std::string_view region, const std::string_view *endpoint,
+    std::string &err_msg);
+
 AliyunOssObjectStore *create_aliyun_oss_objstore_for_test(
     const std::string_view region, const std::string_view *endpoint,
     const std::string_view bucket_dir, std::string &err_msg);

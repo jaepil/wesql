@@ -190,6 +190,16 @@ ObjectStore *create_object_store(const std::string_view &provider,
                                  const std::string_view *endpoint,
                                  bool use_https, std::string &err_msg);
 
+ObjectStore *create_source_object_store(const std::string_view &provider,
+                                        const std::string_view region,
+                                        const std::string_view *endpoint,
+                                        bool use_https, std::string &err_msg);
+
+ObjectStore *create_dest_object_store(const std::string_view &provider,
+                                      const std::string_view region,
+                                      const std::string_view *endpoint,
+                                      bool use_https, std::string &err_msg);
+
 ObjectStore *create_object_store_for_test(const std::string_view &provider,
                                           const std::string_view region,
                                           const std::string_view *endpoint,
@@ -217,6 +227,14 @@ void destroy_object_store(ObjectStore *obj_store);
 void init_objstore_provider(const std::string_view &provider);
 
 void cleanup_objstore_provider(ObjectStore *objstore);
+
+char *get_src_access_key_id();
+
+char *get_src_access_secret_key();
+
+char *get_dest_access_key_id();
+
+char *get_dest_access_secret_key();
 
 int mkdir_p(std::string_view path);
 

@@ -106,6 +106,14 @@ S3ObjectStore *create_s3_objstore(const std::string_view region,
                                   const std::string_view *endpoint,
                                   bool useHttps, std::string &err_msg);
 
+S3ObjectStore *create_source_s3_objstore(const std::string_view region,
+                                         const std::string_view *endpoint,
+                                         bool use_https, std::string &err_msg);
+
+S3ObjectStore *create_dest_s3_objstore(const std::string_view region,
+                                       const std::string_view *endpoint,
+                                       bool use_https, std::string &err_msg);
+
 S3ObjectStore *create_s3_objstore_for_test(const std::string_view region,
                                            const std::string_view *endpoint,
                                            bool use_https,
