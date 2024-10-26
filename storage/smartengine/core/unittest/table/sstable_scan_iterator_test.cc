@@ -598,7 +598,7 @@ TEST_F(SSTableScanIteratorTest, io_merge_backward)
 } // namespace smartengine
 
 int main(int argc, char** argv) {
-  //port::InstallStackTraceHandler();
+  //util::StackTrace::install_handler();
   ::testing::InitGoogleTest(&argc, argv);
 	smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();

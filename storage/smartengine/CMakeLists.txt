@@ -206,7 +206,6 @@ SET(SE_SOURCES
   core/options/options.cc
   core/options/options_helper.cc
   core/port/port_posix.cc
-  core/port/stack_trace.cc
   core/schema/column_schema.cc
   core/schema/engine_attribute.cc
   core/schema/table_schema.cc
@@ -275,6 +274,7 @@ SET(SE_SOURCES
   core/util/random.cc
   core/util/rate_limiter.cc
   core/util/slice.cc
+  core/util/stack_trace.cc
   core/util/status.cc
   core/util/status_message.cc
   core/util/string_util.cc

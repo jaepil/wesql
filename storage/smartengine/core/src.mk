@@ -78,7 +78,6 @@ LIB_SOURCES =                                                   \
   options/options.cc                                            \
   options/options_helper.cc                                     \
   port/port_posix.cc                                            \
-  port/stack_trace.cc                                           \
   schema/column_schema.cc                                       \
   schema/engine_attribute.cc                                    \
   schema/table_schema.cc                                        \
@@ -147,6 +146,7 @@ LIB_SOURCES =                                                   \
   util/random.cc                                                \
   util/rate_limiter.cc                                          \
   util/slice.cc                                                 \
+  util/stack_trace.cc                                           \
   util/status.cc                                                \
   util/status_message.cc                                        \
   util/string_util.cc                                           \

@@ -10,7 +10,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/db_test_util.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 #include "util/sync_point.h"
 
 using namespace smartengine;
@@ -66,7 +66,7 @@ TEST_F(RecoverNoSpaceTest, FailInRecover) {
 }  // namespace smartengine
 
 int main(int argc, char** argv) {
-  port::InstallStackTraceHandler();
+  util::StackTrace::install_handler();
   ::testing::InitGoogleTest(&argc, argv);
 	smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();

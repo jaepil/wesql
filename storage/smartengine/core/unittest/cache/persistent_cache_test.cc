@@ -18,7 +18,7 @@
 #include "cache/lru_cache.h"
 #include "unittest/db/db_test_util.h"
 #include "util/testharness.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 
 static const std::string test_dir = "/hotbackup_test";
 namespace smartengine
@@ -432,7 +432,7 @@ int main(int argc, char **argv)
   smartengine::util::test::remove_dir(abs_test_dir.c_str());
   smartengine::util::Env::Default()->CreateDir(abs_test_dir);
 	smartengine::util::test::init_logger(info_log_path.c_str(), smartengine::logger::INFO_LEVEL);
-  smartengine::port::InstallStackTraceHandler();
+  smartengine::util::StackTrace::install_handler();
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

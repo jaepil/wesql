@@ -1035,10 +1035,6 @@ protected:
   // Lock over the persistent DB state.  Non-nullptr iff successfully acquired.
   util::FileLock* db_lock_;
 
-  // The mutex for options file related operations.
-  // NOTE: should never acquire options_file_mutex_ and mutex_ at the
-  //       same time.
-  monitor::InstrumentedMutex options_files_mutex_;
   // State below is protected by mutex_
   mutable monitor::InstrumentedMutex mutex_;
 

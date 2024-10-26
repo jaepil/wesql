@@ -11,7 +11,7 @@
 #include <map>
 #include <memory>
 #include "db/column_family.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 #include "util/random.h"
 #include "util/string_util.h"
 #include "util/testharness.h"
@@ -1778,7 +1778,7 @@ TEST_F(WriteBatchWithIndexTest, SingleDeleteDeltaIterTest) {
 }  //  namespace smartengine
 
 int main(int argc, char** argv) {
-  smartengine::port::InstallStackTraceHandler();
+  smartengine::util::StackTrace::install_handler();
   ::testing::InitGoogleTest(&argc, argv);
 	smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();

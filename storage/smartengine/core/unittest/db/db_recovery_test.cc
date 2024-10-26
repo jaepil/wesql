@@ -19,7 +19,7 @@
 #include "db/db_test_util.h"
 #include "env/mock_env.h"
 #include "port/port.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 #include "util/sync_point.h"
 #include "util/testutil.h"
 #include "table/table.h"
@@ -128,7 +128,7 @@ TEST_P(RecoveryTest, simple_put_then_restart) {
 } // namespace smartengine
 
 int main(int argc, char **argv) {
-  smartengine::port::InstallStackTraceHandler();
+  smartengine::util::StackTrace::install_handler();
   std::string log_path =
       smartengine::util::test::TmpDir() + "/db_recover_test.log";
   smartengine::logger::Logger::get_log().init(log_path.c_str(),

@@ -11,7 +11,7 @@
 #include <cstdlib>
 #include "cache/lru_cache.h"
 #include "db/db_test_util.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 #include "table/extent_table_factory.h"
 
 namespace smartengine {
@@ -664,7 +664,7 @@ TEST_F(DBBlockCacheTest, CompressedCache) {
 }  // namespace smartengine
 
 int main(int argc, char** argv) {
-  smartengine::port::InstallStackTraceHandler();
+  smartengine::util::StackTrace::install_handler();
   ::testing::InitGoogleTest(&argc, argv);
   std::string log_path = smartengine::test::TmpDir() + "/db_block_cache_test.log";
   smartengine::logger::Logger::get_log().init(log_path.c_str(), smartengine::logger::INFO_LEVEL);

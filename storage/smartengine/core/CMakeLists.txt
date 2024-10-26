@@ -440,7 +440,6 @@ set(SOURCES
         options/db_options.cc
         options/options.cc
         options/options_helper.cc
-        port/stack_trace.cc
         schema/column_schema.cc
         schema/engine_attribute.cc
         schema/table_schema.cc
@@ -513,6 +512,7 @@ set(SOURCES
         util/random.cc
         util/rate_limiter.cc
         util/slice.cc
+        util/stack_trace.cc
         util/status.cc
         util/status_message.cc
         util/string_util.cc

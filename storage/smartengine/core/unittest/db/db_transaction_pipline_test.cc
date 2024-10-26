@@ -13,7 +13,7 @@
 #include <future>
 #include <string>
 #include "db/db_test_util.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 
 using namespace smartengine;
 using namespace common;
@@ -560,7 +560,7 @@ TEST_F(DBTestTransactionPipline, CopyLogFail) {
 }  // namespace smartengine
 
 int main(int argc, char** argv) {
-  port::InstallStackTraceHandler();
+  util::StackTrace::install_handler();
   ::testing::InitGoogleTest(&argc, argv);
   smartengine::util::test::init_logger(__FILE__);
   return RUN_ALL_TESTS();

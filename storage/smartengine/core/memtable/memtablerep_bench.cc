@@ -31,7 +31,7 @@ int main() {
 #include "memtable/memtablerep.h"
 #include "options/options.h"
 #include "port/port.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 #include "util/arena.h"
 #include "util/mutexlock.h"
 #include "util/stop_watch.h"
@@ -586,7 +586,7 @@ using namespace memtable;
 using namespace common;
 
 int main(int argc, char** argv) {
-  port::InstallStackTraceHandler();
+  util::StackTrace::install_handler();
   SetUsageMessage(std::string("\nUSAGE:\n") + std::string(argv[0]) +
                   " [OPTIONS]...");
   ParseCommandLineFlags(&argc, &argv, true);

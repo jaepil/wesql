@@ -15,7 +15,7 @@
  */
 
 #include "backup/hotbackup_impl.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 #include "storage/extent_meta_manager.h"
 #include "storage/io_extent.h"
 #include "util/file_reader_writer.h"
@@ -1312,7 +1312,7 @@ int main(int argc, char **argv)
   std::string info_log_path = smartengine::util::test::TmpDir() + "/hotbackup_test.log";
   std::string abs_test_dir = smartengine::util::test::TmpDir() + test_dir;
   smartengine::util::test::remove_dir(abs_test_dir.c_str());
-  smartengine::port::InstallStackTraceHandler();
+  smartengine::util::StackTrace::install_handler();
   ::testing::InitGoogleTest(&argc, argv);
 	smartengine::util::test::init_logger(info_log_path.c_str(), smartengine::logger::INFO_LEVEL);
   return RUN_ALL_TESTS();

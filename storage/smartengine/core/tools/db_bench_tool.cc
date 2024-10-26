@@ -52,7 +52,7 @@
 #include "options/options.h"
 #include "options/options_helper.h"
 #include "port/port.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 #include "schema/table_schema.h"
 // TODO @zhencheng : use QUERY TRACE to print this.
 // #include "smartengine/perf_context.h"
@@ -6130,7 +6130,7 @@ class Benchmark {
 thread_local int32_t Benchmark::stress_cf_id_ = -1;
 
 int db_bench_tool(int argc, char** argv) {
-  port::InstallStackTraceHandler();
+  util::StackTrace::install_handler();
   static bool initialized = false;
   if (!initialized) {
     SetUsageMessage(std::string("\nUSAGE:\n") + std::string(argv[0]) +

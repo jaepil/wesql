@@ -11,17 +11,17 @@
 #include "util/sync_point.h"
 #include "logger/log_module.h"
 #include "memory/base_malloc.h"
-#include "port/stack_trace.h"
+#include "util/stack_trace.h"
 
-using namespace smartengine;
+
+namespace smartengine
+{
 using namespace common;
 using namespace db;
 using namespace util;
 using namespace port;
-using namespace memory;
-
-namespace smartengine {
-namespace monitor {
+namespace monitor
+{
 
 void InstrumentedMutex::Lock() {
   QUERY_COUNT(CountPoint::DB_MUTEX_WAIT);
@@ -37,12 +37,9 @@ void InstrumentedMutex::Unlock() {
   uint64_t locked_nanos = env_ != nullptr ? env_->NowNanos() - start_nano_ : 0;
   mutex_.Unlock();
   if (backtrace_limit_nano_ != nullptr && locked_nanos > *backtrace_limit_nano_) {
-    char *frame_buffer = static_cast<char*>(
-          base_malloc(kMaxFrames * STRING_SIZE_PER_FRAME));
-    print_backtrace_symbol(0, frame_buffer);
+    std::string backtrace_str = StackTrace::backtrace_slow();
     __SE_LOG(WARN, "Mutex %p holding too long, %luns.\n%s",
-                  this, locked_nanos, frame_buffer);
-    base_free(frame_buffer);
+                  this, locked_nanos, backtrace_str.c_str());
   }
 }
 
