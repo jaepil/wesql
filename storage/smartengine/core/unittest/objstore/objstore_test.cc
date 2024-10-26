@@ -1024,6 +1024,17 @@ TEST_P(ObjstoreTest, lease_lock)
 
   // wait for a renewal timeout
   std::this_thread::sleep_for(objstore::single_data_node_lock_renewal_timeout + std::chrono::milliseconds(100));
+  // should renew failed if the lease lock is not renewed in renewal timeout
+  ret = objstore::try_single_data_node_lease_lock(obj_store_,
+                                                  bucket_,
+                                                  cluster_objstore_id,
+                                                  err_msg,
+                                                  important_msg,
+                                                  need_abort);
+  ASSERT_EQ(ret, ::objstore::SE_LEASE_LOCK_RENEWAL_TIMEOUT);
+
+  std::this_thread::sleep_for(objstore::single_data_node_lock_lease_timeout -
+                              objstore::single_data_node_lock_renewal_timeout);
   ret = objstore::try_single_data_node_lease_lock(obj_store_,
                                                   bucket_,
                                                   cluster_objstore_id,
@@ -1031,19 +1042,6 @@ TEST_P(ObjstoreTest, lease_lock)
                                                   important_msg,
                                                   need_abort);
   ASSERT_EQ(ret, 0);
-  ASSERT_TRUE(objstore::is_lease_lock_owner_node());
-  // a new lock version file should be created if the lease lock is renewed after a renewal timeout
-  start_after = "";
-  start_after = "";
-  objects.clear();
-  ret = list_object(lock_version_file_prefix, false, start_after, finished, objects).error_code();
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(objects.size(), 1);
-  ASSERT_NE(last_lock_version, objects[0].key);
-  last_lock_version = objects[0].key;
-  std::cout << "renew the lease lock after a renewal timeout, new lock version created: " << last_lock_version
-            << std::endl;
-
   // test the case that a node was lease lock owner, but fail to renew, should abort this node
   SyncPoint::GetInstance()->SetCallBack("objstore::try_single_data_node_lease_lock", [&](void *arg) {
     int *ret = static_cast<int *>(arg);
@@ -1073,7 +1071,7 @@ TEST_P(ObjstoreTest, lease_lock)
                                                   important_msg,
                                                   need_abort);
   ASSERT_EQ(ret, 0);
-  // a new lock version file should be created if the lease lock is renewed after a renewal timeout
+  // a new lock version file should be created if get lease lock success after a lease lock timeout
   start_after = "";
   objects.clear();
   ret = list_object(lock_version_file_prefix, false, start_after, finished, objects).error_code();

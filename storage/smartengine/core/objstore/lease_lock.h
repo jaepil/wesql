@@ -50,6 +50,12 @@ int get_single_data_node_lease_lock_expire_time(ObjectStore *objstore,
                                                 std::string &err_msg,
                                                 std::chrono::milliseconds &expire_time);
 
+int check_lease_and_try_lease_lock_if_expired(ObjectStore *objstore,
+                                              const std::string_view bucket_dir,
+                                              const std::string_view cluster_objstore_id,
+                                              std::chrono::milliseconds &new_lease_time,
+                                              std::string &err_msg);
+
 int try_single_data_node_lease_lock_if_expired(ObjectStore *objstore,
                                                const std::string_view bucket_dir,
                                                const std::string_view cluster_objstore_id,

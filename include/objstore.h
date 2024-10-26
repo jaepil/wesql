@@ -47,6 +47,7 @@ enum Errors {
   // when forbid overwrite option is true, and the object already exists
   SE_OBJECT_FORBID_OVERWRITE,
 
+  SE_LEASE_LOCK_RENEWAL_TIMEOUT,
   // when we detected other data node may be running.
   SE_OHTER_DATA_NODE_MAYBE_RUNNING,
 
