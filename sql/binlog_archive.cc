@@ -555,11 +555,19 @@ void Binlog_archive::run() {
     char last_binlog_file_name[FN_REFLEN + 1] = {0};
     mysql_mutex_lock(&m_run_lock);
     if (abort_binlog_archive) {
+      err_msg.assign(" persist end consensus index=");
+      err_msg.append(std::to_string(m_slice_end_consensus_index));
+      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
       mysql_mutex_unlock(&m_run_lock);
       break;
     }
     mysql_mutex_unlock(&m_run_lock);
-    if (m_thd == nullptr || m_thd->killed) break;
+    if (m_thd == nullptr || m_thd->killed) {
+      err_msg.assign(" persist end consensus index=");
+      err_msg.append(std::to_string(m_slice_end_consensus_index));
+      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      break;
+    }
     m_thd->clear_error();
 
 #ifdef WESQL_CLUSTER
@@ -738,8 +746,7 @@ void Binlog_archive::run() {
     // aborted, the binlog archive thread must exit. For other errors, will
     // retry binlog archiving after waiting for a period of time.
     if (archive_binlogs()) {
-      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-             "persistent binlog failed abort");
+      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "persistent binlog abort");
     }
 
     // persist last binlog slice to object store.
@@ -771,7 +778,12 @@ void Binlog_archive::run() {
     mysql_mutex_unlock(&m_index_lock);
 
     // If the thread is killed, exit.
-    if (m_thd == nullptr || m_thd->killed) break;
+    if (m_thd == nullptr || m_thd->killed) {
+      err_msg.assign(" persist end consensus index=");
+      err_msg.append(std::to_string(m_slice_end_consensus_index));
+      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+      break;
+    }
 
     // Will retry binlog archiving
     // after waiting for a period of time
@@ -1736,10 +1748,12 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
     err_msg.append(std::to_string(m_mysql_binlog_write_last_event_end_pos));
     err_msg.append(" persistent binlog=");
     err_msg.append(m_binlog_archive_file_name);
-    err_msg.append(" advance ");
+    err_msg.append(" advance position");
     err_msg.append(std::to_string(m_binlog_archive_last_event_end_pos));
     err_msg.append(" to ");
     err_msg.append(std::to_string(m_binlog_archive_write_last_event_end_pos));
+    err_msg.append(" end consensus index=");
+    err_msg.append(std::to_string(m_mysql_end_consensus_index));
 
     // No longer check whether the current node's role has changed; even if a
     // change occurs, the slice will still be persisted to S3. Since the current
@@ -2626,14 +2640,20 @@ int Binlog_archive::binlog_is_archived(const char *log_file_name_arg,
   DBUG_PRINT("info", ("binlog_is_archived"));
   int ret = 0;
   LOG_ARCHIVED_INFO log_info;
+  std::string err_msg{};
 
+  err_msg.assign("mysql binlog ");
+  err_msg.append(log_file_name_arg);
+  err_msg.append("/");
+  err_msg.append(std::to_string(log_pos));
+  err_msg.append(" consensus index=");
+  err_msg.append(std::to_string(consensus_index));
   // 1. If the binlog file is the current mysql binlog file.
   // rotate binlog slice by mysql log_pos.
   if (0 == compare_log_name(m_mysql_binlog_file_name, log_file_name_arg) &&
       (log_pos > 0 && m_mysql_binlog_write_last_event_end_pos < log_pos)) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "mysql binlog position has not yet been readed by the binlog "
-           "archive thread");
+    err_msg.append(" has not yet been readed by the binlog archive thread");
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     return 1;        
   }
 
@@ -2643,8 +2663,8 @@ int Binlog_archive::binlog_is_archived(const char *log_file_name_arg,
     if (rotate_binlog_slice(log_pos, false)) {
       ret = 1;
     } else {
-      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-             "mysql binlog position is currently being archived");
+      err_msg.append(" has being archived");
+      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
       // Update mysql binlog filename to the archived binlog filename
       strmake(persistent_log_file_name, m_binlog_archive_file_name, FN_REFLEN);
       ret = 0;
@@ -2657,9 +2677,8 @@ int Binlog_archive::binlog_is_archived(const char *log_file_name_arg,
   // previous consensus index of the current file, it indicates that the binlog
   // to be archived belongs to future binlogs.
   if (consensus_index > m_slice_end_consensus_index) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "mysql binlog position has not yet been readed by the binlog "
-           "archive thread");
+    err_msg.append(" has not yet been readed by the binlog archive thread");
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     mysql_mutex_unlock(&m_rotate_lock);
     return 1;
   }
@@ -2669,7 +2688,8 @@ int Binlog_archive::binlog_is_archived(const char *log_file_name_arg,
   // 3. Check whether the binlog that needs to be archived has already been
   // persisted by inspecting the `binlog.index`.
   if (open_index_file()) {
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "binlog index not opened");
+    err_msg.append(" binlog.index open failed");
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     mysql_mutex_unlock(&m_index_lock);
     return 1;
   }
@@ -2697,8 +2717,8 @@ int Binlog_archive::binlog_is_archived(const char *log_file_name_arg,
       // diff the first persistent binlog
       if (log_info.log_previous_consensus_index >= consensus_index) {
         // The needed persist binlog has already been purged.
-        LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-               "mysql binlog has already been purged");
+        err_msg.append(", persistent binlog has already been purged");
+        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
         mysql_mutex_unlock(&m_index_lock);
         return 2;
       }
@@ -2708,14 +2728,13 @@ int Binlog_archive::binlog_is_archived(const char *log_file_name_arg,
         // diff next persistent binlog previous consensus index.
         if (log_info.log_previous_consensus_index >= consensus_index) {
           strmake(persistent_log_file_name, pre_log, FN_REFLEN);
-          std::string err_msg{};
-          err_msg.assign("found persisted binlog from binlog index ");
+          err_msg.append(", found persistent binlog from binlog.index ");
           err_msg.append(log_info.log_file_name);
           err_msg.append(" log_previous_index=");
           err_msg.append(std::to_string(log_info.log_previous_consensus_index));
           err_msg.append(" found consensus_index=");
           err_msg.append(std::to_string(consensus_index));
-          LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+          LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
           ret = 0;
           break;

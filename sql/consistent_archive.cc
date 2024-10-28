@@ -932,7 +932,8 @@ bool Consistent_archive::archive_consistent_snapshot() {
 
   // Check whether any new binlogs have updated since the last consistent
   // snapshot.
-  if (!mysql_binlog_has_updated()) {
+  if (DBUG_EVALUATE_IF("force_snapshot_persistent", 0, 1) &&
+      !mysql_binlog_has_updated()) {
     LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
            "persistent binlog has not changed.");
     return false;
@@ -1004,6 +1005,22 @@ bool Consistent_archive::archive_consistent_snapshot() {
   err_msg.append(":");
   err_msg.append(std::to_string(m_mysql_binlog_pos_previous_snapshot));
   LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
+
+  if (DBUG_EVALUATE_IF("force_snapshot_persistent", 0, 1)) {
+    // Check whether smartengine hotbackup binlog had changed.
+    if (compare_log_name(m_mysql_binlog_file_previous_snapshot,
+                         m_mysql_binlog_file) == 0 &&
+        m_mysql_binlog_pos_previous_snapshot == m_mysql_binlog_pos) {
+      LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+             "smartengine backup binlog position no change.");
+      LogErr(INFORMATION_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
+             "release backup lock.");
+      release_backup_lock(thd);
+      // release smartengine snapshot id.
+      ret = true;
+      goto err;
+    }
+  }
 
   // consistent archive mysql innodb
   m_atomic_archive_progress.store(STAGE_INNODB_CLONE,

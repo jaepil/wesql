@@ -134,7 +134,7 @@ int Consistent_recovery::recovery_consistent_snapshot(int flags) {
               ? std::string_view(opt_initialize_objstore_endpoint)
               : "");
       std::string obj_error_msg;
-      recovery_objstore = objstore::create_object_store(
+      recovery_objstore = objstore::create_source_object_store(
           std::string_view(opt_initialize_objstore_provider),
           std::string_view(opt_initialize_objstore_region),
           opt_initialize_objstore_endpoint ? &endpoint : nullptr,
@@ -955,7 +955,11 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
   char mysql_binlog_basename[FN_REFLEN];
   char mysql_binlog_index_basename[FN_REFLEN];
 
-  if (!opt_bin_logname) return false;
+  if (!opt_bin_logname) {
+    LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+           "need enable binlog mode");
+    return true;
+  }
 
   // ref: mysql_bin_log.generate_new_name()
   fn_format(mysql_binlog_basename, opt_bin_logname, mysql_data_home, "",
@@ -1005,6 +1009,7 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
     // if no persistent binlog.index, not recovery binlog and return.
     if (objects.empty()) {
       m_state = CONSISTENT_RECOVERY_STATE_BINLOG;
+      LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, "no persistent binlog.index");
       return false;
     }
     last_index_keyid.assign((objects.back()).key);
@@ -1033,7 +1038,7 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
     err_msg.assign("Failed to chmod: ");
     err_msg.append(m_binlog_index_file_name);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
-    return 1;
+    return true;
   }
 
   if (open_binlog_index_file(&m_binlog_index_file, m_binlog_index_file_name,
@@ -1067,6 +1072,7 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
     // Persistent binlog is empty.
     if (error == LOG_INFO_EOF) {
       m_state = CONSISTENT_RECOVERY_STATE_BINLOG;
+      LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, "no persistent binlog file");
       return false;
     }
     err_msg.assign("Failed to find persistent binlog file: ");
@@ -1166,6 +1172,7 @@ bool Consistent_recovery::recovery_binlog(const char *binlog_index_name
   */
 
   m_state = CONSISTENT_RECOVERY_STATE_BINLOG;
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, "persistent binlog recovery finish");
   return false;
 }
 /**
