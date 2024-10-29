@@ -2115,8 +2115,8 @@ err:
 
 static int add_to_consensus_log_file_index(
     std::vector<std::string> consensuslog_file_name_vector,
-    ConsensusLogIndex *log_file_index, std::string &first_in_use_file,
-    bool remove_dup = false, ulong stop_datetime = 0) {
+    ConsensusLogIndex *log_file_index, bool remove_dup = false,
+    ulong stop_datetime = 0) {
   bool reached_stop_point = false;
   bool found_in_use_file = false;
   DBUG_TRACE;
@@ -2158,7 +2158,6 @@ static int add_to_consensus_log_file_index(
           if (!found_in_use_file &&
               (ev->common_header->flags & LOG_EVENT_BINLOG_IN_USE_F)) {
             found_in_use_file = true;
-            first_in_use_file = *iter;
           }
         break;
         }
@@ -2186,7 +2185,6 @@ static int add_to_consensus_log_file_index(
 int consensus_build_log_file_index(MYSQL_BIN_LOG *binlog) {
   int error = 0;
   std::vector<std::string> consensuslog_file_name_vector;
-  std::string first_in_use_file;
   DBUG_TRACE;
 
   error = binlog->get_file_names(consensuslog_file_name_vector);
@@ -2194,10 +2192,8 @@ int consensus_build_log_file_index(MYSQL_BIN_LOG *binlog) {
 
   error = add_to_consensus_log_file_index(
       consensuslog_file_name_vector, consensus_log_manager.get_log_file_index(),
-      first_in_use_file, false);
+      false);
   if (error) return error;
-
-  consensus_log_manager.set_first_in_use_file(first_in_use_file);
 
   return 0;
 }
@@ -2519,11 +2515,10 @@ int consensus_open_archive_log(uint64 first_index, uint64 last_index) {
   }
 
   /* Build archived log index */
-  std::string not_used_string;
   if (archive_log.get_file_names(consensus_file_name_vector) ||
       add_to_consensus_log_file_index(consensus_file_name_vector,
-                                      &consensus_log_index, not_used_string,
-                                      true, stop_datetime)) {
+                                      &consensus_log_index, true,
+                                      stop_datetime)) {
     archive_log.close();
     consensus_log_index.cleanup();
     return 1;

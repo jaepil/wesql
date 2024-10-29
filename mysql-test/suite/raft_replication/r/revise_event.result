@@ -27,7 +27,7 @@ insert into t1 values(1);
 set global raft_replication_flow_control="";
 insert into t1 values(1);
 77250
-77252
-77252
+77251
+77251
 drop table t1;
 drop table t2;

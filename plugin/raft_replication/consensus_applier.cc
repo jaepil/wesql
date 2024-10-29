@@ -279,13 +279,8 @@ int update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
     if (!rli->is_parallel_exec())
       rpl_consensus_update_applied_index(consensus_index);
   } else if (ev->get_type_code() == binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
-    const char *last_log_name = consensus_applier.get_applying_log_name();
-
-    if (last_log_name[0] != '\0' &&
-        !update_log_file_set_flag_in_use(last_log_name, false)) {
-      error = 1;
-    } else if (consensus_log_manager.advance_commit_index_if_greater(
-                   consensus_applier.get_real_apply_index(), true)) {
+    if (consensus_log_manager.advance_commit_index_if_greater(
+            consensus_applier.get_real_apply_index(), true)) {
       /* The Previous_gtids_event serves as the event marking the end of the
        * binlog file header, allowing to advance to this point. */
       MYSQL_BIN_LOG *binlog = consensus_state_process.get_binlog();
@@ -293,12 +288,6 @@ int update_consensus_apply_pos(Relay_log_info *rli, Log_event *ev) {
       error = binlog->switch_and_seek_log(rli->get_event_relay_log_name(),
                                           ev->future_event_relay_log_pos, true);
       mysql_mutex_unlock(binlog->get_log_lock());
-    } else {
-      consensus_applier.set_applying_log_name(rli->get_event_relay_log_name());
-      if (!update_log_file_set_flag_in_use(
-              consensus_applier.get_applying_log_name(), true)) {
-        error = 1;
-      }
     }
   }
 
@@ -382,12 +371,6 @@ int calculate_consensus_apply_start_pos(Relay_log_info *rli) {
   if (consensus_info->flush_info(true, true)) {
     rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
                 "Error flush consensus info set recover status");
-    return -1;
-  }
-
-  consensus_applier.set_applying_log_name(log_name);
-  if (!update_log_file_set_flag_in_use(
-          consensus_applier.get_applying_log_name(), true)) {
     return -1;
   }
 

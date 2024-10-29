@@ -391,6 +391,8 @@ void *run_consensus_stage_change(void *arg) {
     mysql_cond_wait(&COND_server_started, &LOCK_server_started);
   mysql_mutex_unlock(&LOCK_server_started);
 
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_THREAD_STARTED, "state change");
+
   while (*is_running) {
     consensus_state_process.lock_consensus_state_change();
 
@@ -422,6 +424,9 @@ void *run_consensus_stage_change(void *arg) {
 
     if (error) abort();
   }
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_THREAD_STOPPED, "state change",
+               "be killed");
 
   thd->release_resources();
   delete thd;
@@ -641,6 +646,8 @@ static int gtid_init_after_consensus_setup(uint64 last_index,
   } else {
     global_sid_lock->unlock();
   }
+
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_RECOVERY_GTID_FINISHED);
 
   return 0;
 }

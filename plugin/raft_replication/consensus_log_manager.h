@@ -112,9 +112,6 @@ class ConsensusLogManager {
   uint64 get_last_log_term() { return last_log_term; }
   void set_last_log_term(uint64 arg) { last_log_term = arg; }
 
-  std::string get_first_in_use_file() { return first_in_use_file; }
-  void set_first_in_use_file(std::string &arg) { first_in_use_file = arg; }
-
   // consensus commit index
   uint64 get_commit_index() { return commit_index; }
   bool advance_commit_index_if_greater(uint64 arg, bool force);
@@ -183,8 +180,6 @@ class ConsensusLogManager {
   std::atomic<uint64> sync_index;     // last log entry has been synced
 
   std::atomic<uint64> last_log_term;   // last log term, don't decrease if truncated
-
-  std::string first_in_use_file;  // the first log file in use
 
   mysql_rwlock_t LOCK_consensuslog_rotate;
   uint64 local_system_log_index;  // last local system log

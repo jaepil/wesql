@@ -36,6 +36,7 @@
 #include "sql/binlog_istream.h"
 #include "sql/binlog_ostream.h"
 #include "sql/log_event.h"
+#include "sql/mysqld.h" // innodb_hton
 #include "sql/rpl_rli.h"
 #include "sql/xa/recovery.h"
 #include "sql/xa/xid_extract.h"  // xa::XID_extractor
@@ -43,9 +44,9 @@
 static const int MIN_XID_LIST_SIZE = 128;
 static const int MAX_XID_LIST_SIZE = 1024 * 128;
 
-static int consensus_ha_recover(ConsensusRecoveryManager *recovery_manager,
-                                Xid_commit_list *commit_list,
-                                Xa_state_list::list *binlog_xid_map) {
+static int consensus_ha_recover_with_binlog(
+    ConsensusRecoveryManager *recovery_manager, Xid_commit_list *commit_list,
+    Xa_state_list::list *binlog_xid_map) {
   xarecover_st info;
   Xa_state_list *se_xa_list;
   Xa_state_list xa_list{*binlog_xid_map};
@@ -102,6 +103,57 @@ static int consensus_ha_recover(ConsensusRecoveryManager *recovery_manager,
                  info.found_foreign_xids);
   if (info.commit_list) LogPluginErr(SYSTEM_LEVEL, ER_XA_RECOVERY_DONE);
 
+  return 0;
+}
+
+static int consensus_ha_recover_without_binlog() {
+  xarecover_st info;
+  Xa_state_list *xa_list;
+  DBUG_TRACE;
+  info.commit_list = nullptr;
+  info.dry_run = false;
+  info.list = nullptr;
+
+  std::unique_ptr<MEM_ROOT> mem_root{nullptr};
+  std::unique_ptr<Xa_state_list::allocator> map_alloc{nullptr};
+  std::unique_ptr<Xa_state_list::list> xid_map{nullptr};
+  std::unique_ptr<Xa_state_list> external_xids{nullptr};
+  std::tie(mem_root, map_alloc, xid_map, external_xids) =
+      Xa_state_list::new_instance();
+  xa_list = external_xids.get();
+  info.xa_list = xa_list;
+
+  /* total_ha_2pc must be set */
+  assert(total_ha_2pc > (ulong)opt_bin_log);
+  if (total_ha_2pc <= (ulong)opt_bin_log) return 0;
+
+  LogErr(SYSTEM_LEVEL, ER_XA_STARTING_RECOVERY);
+
+  for (info.len = MAX_XID_LIST_SIZE;
+       info.list == nullptr && info.len > MIN_XID_LIST_SIZE; info.len /= 2) {
+    info.list = new (std::nothrow) XA_recover_txn[info.len];
+  }
+  if (!info.list) {
+    LogErr(ERROR_LEVEL, ER_SERVER_OUTOFMEMORY,
+           static_cast<int>(info.len * sizeof(XID)));
+    return 1;
+  }
+  auto clean_up_guard = create_scope_guard([&] { delete[] info.list; });
+
+  plugin_ref plugin = ha_lock_engine(nullptr, innodb_hton);
+  if (!plugin || xa::recovery::recover_prepared_in_tc_one_ht(
+                     nullptr, plugin, &info)) {
+    plugin_unlock(nullptr, plugin);
+    return 1;
+  }
+  plugin_unlock(nullptr, plugin);
+
+  if (plugin_foreach(nullptr, xa::recovery::inverse_recover_one_ht,
+                     MYSQL_STORAGE_ENGINE_PLUGIN, &info)) {
+    return 1;
+  }
+
+  LogErr(SYSTEM_LEVEL, ER_XA_RECOVERY_DONE);
   return 0;
 }
 
@@ -334,7 +386,7 @@ Consensus_binlog_recovery &Consensus_binlog_recovery::consensus_recover(
 
   assert(total_ha_2pc > 1);
   if (!this->m_is_malformed && ha_recover) {
-    this->m_no_engine_recovery = consensus_ha_recover(
+    this->m_no_engine_recovery = consensus_ha_recover_with_binlog(
         &recovery_manager, &this->m_internal_xids, &this->m_external_xids);
     if (this->m_no_engine_recovery) {
       this->m_failure_message.assign("Recovery failed in storage engines");
@@ -406,13 +458,6 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
     LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_POINT,
                  ha_recover_file, ha_recover_end_index,
                  "for consistent recovering");
-  } else {
-    ha_recover_file_str = consensus_log_manager.get_first_in_use_file();
-    if (!ha_recover_file_str.empty()) {
-      ha_recover_file = ha_recover_file_str.c_str();
-      LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_BINLOG_RECOVERING_POINT,
-                   ha_recover_file, 0, "for first in-use binlog file");
-    }
   }
 
   if ((error = binlog->find_log_pos(&log_info, ha_recover_file,
@@ -590,7 +635,7 @@ int consensus_binlog_recovery(MYSQL_BIN_LOG *binlog, bool has_ha_recover_end,
   }
 
   if (!should_ha_recover) {
-    error = ha_recover();
+    error = consensus_ha_recover_without_binlog();
     if (error)
       LogPluginErr(ERROR_LEVEL, ER_BINLOG_CRASH_RECOVERY_ERROR_RETURNED_SE);
   }

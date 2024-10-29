@@ -361,10 +361,6 @@ static int consensus_applier_after_stop(Binlog_applier_param *param) {
     if (!is_mts_worker(thd)) {
       Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
       destory_applier_workers(rli, applier_info);
-
-      (void)update_log_file_set_flag_in_use(
-          consensus_applier.get_applying_log_name(), false);
-      consensus_applier.clear_applying_log_name();
     }
   }
 

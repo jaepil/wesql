@@ -784,13 +784,15 @@ static void *run_consensus_commit_position_advance(void *arg) {
     mysql_cond_wait(&COND_server_started, &LOCK_server_started);
   mysql_mutex_unlock(&LOCK_server_started);
 
-  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STARTED);
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_THREAD_STARTED,
+               "commit position advance");
 
   while (*is_running && !rpl_consensus_is_shutdown()) {
     consensus_log_manager.try_advance_commit_position(200);
   }
 
-  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STOPPED,
+  LogPluginErr(SYSTEM_LEVEL, ER_CONSENSUS_THREAD_STOPPED,
+               "commit position advance",
                rpl_consensus_is_shutdown() ? "consensus service was shutdown"
                                            : "be killed");
 

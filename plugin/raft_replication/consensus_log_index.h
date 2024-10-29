@@ -71,7 +71,6 @@ class ConsensusLogIndex {
   int truncate_pos_map_of_file(uint64 start_index, uint64 consensus_index);
 
   uint64 get_first_index();
-  uint64 get_start_index_of_last_file();
 
  private:
   bool inited;
@@ -79,7 +78,6 @@ class ConsensusLogIndex {
   mysql_mutex_t LOCK_consensuslog_index;
   std::multimap<uint64, ConsensusLogIndexEntry>
       index_list;  // hold all the binlogs' index
-  std::string first_in_used_at_startup;
 };
 
 #endif

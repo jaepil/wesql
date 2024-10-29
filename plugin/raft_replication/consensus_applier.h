@@ -38,7 +38,6 @@ class ConsensusApplier {
         in_large_trx(false),
         apply_catchup(false),
         stop_term(UINT64_MAX) {
-    applying_log_name[0] = 0;
   }
   ~ConsensusApplier() {}
 
@@ -65,13 +64,6 @@ class ConsensusApplier {
     in_large_trx = in_large_trx_arg;
   }
 
-  const char *get_applying_log_name() { return applying_log_name; }
-  void set_applying_log_name(const char *log_file_name) {
-    strmake(applying_log_name, log_file_name,
-            sizeof(applying_log_name) - 1);
-  }
-  void clear_applying_log_name() { applying_log_name[0] = '\0'; }
-
   mysql_mutex_t *get_apply_thread_lock() {
     return &LOCK_consensus_applier_catchup;
   }
@@ -86,8 +78,6 @@ class ConsensusApplier {
   std::atomic<uint64> real_apply_index;  // for large trx
   std::atomic<uint64> apply_term;        // sql thread coordinator apply term
   std::atomic<bool> in_large_trx;
-
-  char applying_log_name[FN_REFLEN];      // current applying log name
 
   /* Consensus applier exit */
   mysql_mutex_t LOCK_consensus_applier_catchup;
