@@ -113,7 +113,6 @@ class Binlog_archive {
   bool is_thread_running() const { return m_thd_state.is_running(); }
   int archive_event(File_reader &reader, uchar *event_ptr, uint32 event_len,
                     const char *log_file, my_off_t log_pos);
-  int flush_events();
   int binlog_stop_waiting_for_archive(const char *log_file_name,
                                char *persistent_log_file_name, my_off_t log_pos,
                                uint64_t consensus_index);
@@ -180,8 +179,6 @@ class Binlog_archive {
                                                // writed to persistent cache.
   char m_mysql_binlog_start_file[FN_REFLEN + 1];
   my_off_t m_mysql_binlog_start_pos;  // mysql binlog archive start position.
-  std::unique_ptr<IO_CACHE_ostream> m_slice_pipeline_head;
-  char m_binlog_slice_local_name[FN_REFLEN + 1];
   bool m_mysql_binlog_first_file;
   char m_mysql_binlog_file_name[FN_REFLEN + 1];  // mysql binlog entry name
   my_off_t
@@ -204,6 +201,7 @@ class Binlog_archive {
   const char *m_binlog_last_event_type_str;
   Diagnostics_area m_diag_area;
   String m_packet;
+  std::string m_slice_cache;
   bool m_binlog_in_transaction;
   bool m_rotate_forbidden;
   ulonglong m_slice_create_ts;
