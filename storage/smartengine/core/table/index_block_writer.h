@@ -29,8 +29,9 @@ public:
   void reuse();
   int append(const common::Slice &key, const BlockInfo &block_info);
   int build(common::Slice &block);
+  int future(const common::Slice &key, const BlockInfo &block_info, common::Slice &block);
   bool is_empty() const;
-  int64_t future_size(const int64_t key_size, const int64_t block_info_size) const;
+  int64_t future_size(const common::Slice &key, const BlockInfo &block_info) const;
 
 private:
   int serialize_block_stats(const BlockInfo &block_info, common::Slice &serialized_value);
@@ -40,8 +41,11 @@ private:
 
 private:
   bool is_inited_;
-  util::AutoBufferWriter buf_;
+  util::AutoBufferWriter block_info_buf_;
   RowBlockWriter block_writer_;
+  util::AutoBufferWriter shadow_block_buf_;
+  std::string future_key_;
+  RowBlockWriter shadow_block_writer_;
 };
 
 }  // namespace table

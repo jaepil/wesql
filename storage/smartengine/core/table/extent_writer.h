@@ -113,9 +113,8 @@ private:
   int add_to_bloom_filter(const common::Slice &key);
   int build_bloom_filter(BlockInfo &block_info);
   int check_key_order(const common::Slice &key);
-  bool need_switch_block_for_row(const uint32_t key_size, const uint32_t value_size) const;
-  bool need_switch_extent_for_row(const common::Slice &key, const common::Slice &value) const;
-  bool need_switch_extent_for_block(const common::Slice &block, const BlockInfo &block_info, const common::Slice &last_key);
+  int need_switch_block(const common::Slice &key, const common::Slice &value, bool &need_switch) const;
+  int need_switch_extent(const common::Slice &key, const BlockInfo &block_info, bool &need_switch);
   bool is_current_extent_empty() const;
   int write_data_block();
   int write_index_block();
@@ -159,7 +158,8 @@ private:
   const db::InternalKeyComparator *internal_key_comparator_;
   cache::Cache *block_cache_;
   cache::RowCache *row_cache_;
-  util::CompressorHelper compressor_helper_;
+  util::CompressorHelper data_block_compressor_;
+  util::CompressorHelper index_block_compressor_;
   std::string prefix_;
   BlockInfo block_info_;
   ExtentInfo extent_info_;

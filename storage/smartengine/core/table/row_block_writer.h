@@ -25,6 +25,7 @@ class RowBlockWriter : public BlockWriter
 {
 public:
   RowBlockWriter();
+  RowBlockWriter(const RowBlockWriter &other);
   virtual ~RowBlockWriter() override;
 
   int init(const int64_t restart_interval);
@@ -32,12 +33,13 @@ public:
   virtual void reuse() override;
   virtual int append(const common::Slice &key, const common::Slice &value) override;
   virtual int build(common::Slice &block, BlockInfo &block_info) override;
+  int build(util::AutoBufferWriter &dest_buf, common::Slice &block);
   virtual int64_t current_size() const override { return current_block_size_; }
   virtual int64_t future_size(const uint32_t key_size, const uint32_t value_size) const override;
   virtual bool is_empty() const override;
 
 private:
-  int append_restarts();
+  int append_restarts(util::AutoBufferWriter &dest_buf);
 
 private:
   bool is_inited_;

@@ -116,7 +116,7 @@ public:
   inline const common::Slice &get_bloom_filter() const { return bloom_filter_; }
   inline const std::vector<ColumnUnitInfo> &get_unit_infos() const { return unit_infos_; }
   inline std::vector<ColumnUnitInfo> &get_unit_infos() { return unit_infos_; }
-  int64_t get_max_serialize_size(int64_t column_count) const;
+  int64_t get_row_format_raw_size() const;
 
   static const int64_t BLOCK_INFO_VERSION = 1;
   DECLARE_SERIALIZATION()

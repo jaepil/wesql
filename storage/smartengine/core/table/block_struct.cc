@@ -92,7 +92,7 @@ int BlockHandle::serialize(char *buf, int64_t buf_len, int64_t &pos) const
     SE_LOG(WARN, "fail to encode header size", K(ret), K(header_size));
   } else if (FAILED(util::encode_fixed_int32(buf, buf_len, pos, header_version))) {
     SE_LOG(WARN, "fail to encode header version", K(ret), K(header_version));
-  } else if (FAILED(util::serialize(buf, buf_len, pos, offset_))) {
+  } else if (FAILED(util::encode_fixed_int32(buf, buf_len, pos, offset_))) {
     SE_LOG(WARN, "fail to encode offset", K(ret), K_(offset));
   } else if (FAILED(util::serialize(buf, buf_len, pos, size_))) {
     SE_LOG(WARN, "fail to serialize size", K(ret), K_(size));
@@ -123,7 +123,7 @@ int BlockHandle::deserialize(const char *buf, int64_t buf_len, int64_t &pos)
     SE_LOG(WARN, "fail to decode header size", K(ret));
   } else if (FAILED(util::decode_fixed_int32(buf, buf_len, pos, header_version))) {
     SE_LOG(WARN, "fail to decode header version", K(ret));
-  } else if (FAILED(util::deserialize(buf, buf_len, pos, offset_))) {
+  } else if (FAILED(util::decode_fixed_int32(buf, buf_len, pos, offset_))) {
     SE_LOG(WARN, "fail to deserialize offset", K(ret));
   } else if (FAILED(util::deserialize(buf, buf_len, pos, size_))) {
     SE_LOG(WARN, "fail to deserialize size", K(ret));
@@ -145,7 +145,7 @@ int64_t BlockHandle::get_serialize_size() const
   // header size and header version
   int64_t size = sizeof(int32_t) + sizeof(int32_t);
 
-  size += util::get_serialize_size(offset_);
+  size += sizeof(int32_t); // offset_
   size += util::get_serialize_size(size_);
   size += util::get_serialize_size(raw_size_);
   size += util::get_serialize_size(checksum_);
@@ -237,20 +237,19 @@ void BlockInfo::set_bloom_filter(const Slice &bloom_filter)
   set_has_bloom_filter();
 }
 
-int64_t BlockInfo::get_max_serialize_size(int64_t column_count) const
+int64_t BlockInfo::get_row_format_raw_size() const
 {
-  int64_t size = get_serialize_size() + sizeof(BlockInfo);
+  int64_t raw_size = 0;
 
-  // max bloom filter size.
-  int32_t bloom_filter_size = 0;
-  int32_t dummy_cache_line_num = 0;
-  BloomFilterWriter::calculate_space_size(row_count_ + 1, per_key_bits_, bloom_filter_size, dummy_cache_line_num);
-  size += bloom_filter_size;
+  if (is_columnar_format()) {
+    for (auto &unit_info : unit_infos_) {
+      raw_size += unit_info.raw_data_size_;
+    }
+  } else {
+    raw_size = handle_.get_raw_size();
+  }
 
-  // max column unit info size.
-  size += sizeof(int64_t) + column_count * ColumnUnitInfo::get_max_serialize_size();
-
-  return size;
+  return raw_size;
 }
 
 int BlockInfo::serialize(char *buf, int64_t buf_len, int64_t &pos) const

@@ -65,19 +65,6 @@ bool ColumnUnitInfo::is_valid() const
          && raw_data_size_ >= 0;
 }
 
-int64_t ColumnUnitInfo::get_max_serialize_size()
-{
-  ColumnUnitInfo unit_info;
-  unit_info.column_type_ = INT16_MAX;
-  unit_info.compress_type_ = INT8_MAX;
-  unit_info.column_count_ = INT32_MAX;
-  unit_info.null_column_count_ = INT32_MAX;
-  unit_info.data_offset_ = INT32_MAX;
-  unit_info.data_size_ = INT32_MAX;
-  unit_info.raw_data_size_ = INT32_MAX;
-
-  return unit_info.get_serialize_size();
-}
 
 DEFINE_TO_STRING(ColumnUnitInfo, KV_(column_type), KV_(compress_type), KV_(column_count),
     KV_(null_column_count), KV_(data_offset), KV_(data_size), KV_(raw_data_size))

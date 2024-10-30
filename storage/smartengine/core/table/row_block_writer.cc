@@ -50,6 +50,7 @@ namespace table
 {
 
 RowBlockWriter::RowBlockWriter() : is_inited_(false),
+                                   restart_interval_(0),
                                    last_key_(),
                                    counter_(0),
                                    current_block_size_(0),
@@ -148,11 +149,31 @@ int RowBlockWriter::build(Slice &block, BlockInfo &block_info)
   } else if (UNLIKELY(buf_.size() <= 0)) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "block is empty", K(ret));
-  } else if (FAILED(append_restarts())) {
+  } else if (FAILED(append_restarts(buf_))) {
     SE_LOG(WARN, "fail to append restarts", K(ret));
   } else {
     block.assign(buf_.data(), buf_.size());
     block_info.set_row_format();
+  }
+
+  return ret;
+}
+
+int RowBlockWriter::build(util::AutoBufferWriter &dest_buf, Slice &block)
+{
+  int ret = Status::kOk;
+
+  if (UNLIKELY(!is_inited_)) {
+    ret = Status::kNotInit;
+    SE_LOG(WARN, "RowBlockWriter should be initialized", K(ret));
+  } else if (UNLIKELY(buf_.size() <= 0)) {
+    ret = Status::kErrorUnexpected;
+  } else if (FAILED(dest_buf.write(buf_.data(), buf_.size()))) {
+    SE_LOG(WARN, "fail to write to dest buf", K(ret), "buf_size", buf_.size());
+  } else if (FAILED(append_restarts(dest_buf))) {
+    SE_LOG(WARN, "fail to append restarts", K(ret));
+  } else {
+    block.assign(dest_buf.data(), dest_buf.size());
   }
 
   return ret;
@@ -172,7 +193,7 @@ int64_t RowBlockWriter::future_size(const uint32_t key_size, const uint32_t valu
 
 bool RowBlockWriter::is_empty() const { return (0 == buf_.size()); }
 
-int RowBlockWriter::append_restarts()
+int RowBlockWriter::append_restarts(AutoBufferWriter &dest_buf)
 {
   int ret = Status::kOk;
   uint32_t item = 0;
@@ -187,17 +208,17 @@ int RowBlockWriter::append_restarts()
   } else if (UNLIKELY(restarts_.empty())) {
     ret = Status::kErrorUnexpected;
     SE_LOG(WARN, "restarts is empty", K(ret));
-  } else if (FAILED(buf_.reserve(restarts_size))) {
+  } else if (FAILED(dest_buf.reserve(restarts_size))) {
     SE_LOG(WARN, "fail to reserve buf for restarts size", K(ret), K(restarts_size));
   } else {
     for (uint32_t i = 0; i < restarts_.size(); ++i) {
       //PutFixed32(buf_.current(), val);
       item = restarts_[i];
-      EncodeFixed32(buf_.current(), item);
-      buf_.advance(sizeof(item));
+      EncodeFixed32(dest_buf.current(), item);
+      dest_buf.advance(sizeof(item));
     }
-    EncodeFixed32(buf_.current(), item_count);
-    buf_.advance(sizeof(item_count));
+    EncodeFixed32(dest_buf.current(), item_count);
+    dest_buf.advance(sizeof(item_count));
     se_assert(item_count > 0);
   }
 

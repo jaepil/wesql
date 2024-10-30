@@ -110,7 +110,8 @@ ExtentWriter::ExtentWriter()
       internal_key_comparator_(nullptr),
       block_cache_(nullptr),
       row_cache_(nullptr),
-      compressor_helper_(),
+      data_block_compressor_(),
+      index_block_compressor_(),
       prefix_(),
       block_info_(),
       extent_info_(),
@@ -260,6 +261,8 @@ int ExtentWriter::finish(std::vector<ExtentInfo> *extent_infos)
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kOk;
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
+  } else if (FAILED(write_data_block())) {
+    SE_LOG(WARN, "fail to write data block", K(ret));
   } else if (FAILED(write_extent())) {
     SE_LOG(WARN, "fail to write extent", K(ret));
   } else if (FAILED(wait_pending_extents_finish())) {
@@ -452,21 +455,28 @@ int ExtentWriter::append_large_row(const Slice &key, const Slice &value)
 int ExtentWriter::prepare_append_row(const Slice &key, const Slice &value)
 {
   int ret = Status::kOk;
+  bool need_switch = false;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentWriter should be initialized", K(ret));
   } else if (FAILED(check_key_order(key))) {
     SE_LOG(WARN, "fail to check key order", K(ret), K(key));
-  } else if (need_switch_block_for_row(key.size(), value.size()) && FAILED(write_data_block())) {
-    SE_LOG(WARN, "fail to switch block", K(ret));
-  } else if (need_switch_extent_for_row(key, value) && FAILED(write_extent())) {
-    SE_LOG(WARN, "fail to switch extent", K(ret));
+  } else if (FAILED(need_switch_block(key, value, need_switch))) {
+    SE_LOG(WARN, "fail to check if the block need switch", K(ret));
   } else {
-    // TODO(Zhao Dongsheng) : intro level0 compaction or dump job also need evict row cache?
-    if (0 == layer_position_.get_level() && IS_NOTNULL(row_cache_)) {
-      if (FAILED(row_cache_->evict(table_schema_.get_index_id(), key))) {
-        SE_LOG(WARN, "fail to evict old version row from row cache", K(ret));
+    if (need_switch) {
+      if (FAILED(write_data_block())) {
+        SE_LOG(WARN, "fail to write data block", K(ret));
+      }
+    }
+
+    if (SUCCED(ret)) {
+      // TODO(Zhao Dongsheng) : Intro level0 compaction or dump job also need evict row cache?
+      if (0 == layer_position_.get_level() && IS_NOTNULL(row_cache_)) {
+        if (FAILED(row_cache_->evict(table_schema_.get_index_id(), key))) {
+          SE_LOG(WARN, "fail to evict staled row", K(ret), "index_id", table_schema_.get_index_id(), K(key));
+        }
       }
     }
   }
@@ -541,6 +551,8 @@ int ExtentWriter::prepare_append_block(const Slice &block,
                                        const Slice &last_key)
 {
   int ret = Status::kOk;
+  bool need_switch = false;
+  se_assert(static_cast<int32_t>(block.size()) == block_info.get_handle().get_size());
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
@@ -555,10 +567,14 @@ int ExtentWriter::prepare_append_block(const Slice &block,
   // force to close current data block
   } else if (FAILED(write_data_block())) {
     SE_LOG(WARN, "fail to write data block", K(ret));
-  } else if (need_switch_extent_for_block(block, block_info, last_key) && FAILED(write_extent())) {
-    SE_LOG(WARN, "fail to write extent", K(ret));
+  } else if (FAILED(need_switch_extent(last_key, block_info, need_switch))) {
+    SE_LOG(WARN, "fail to check if the extent need switch", K(ret), K(last_key), K(block_info));
   } else {
-    // succeed
+    if (need_switch) {
+      if (FAILED(write_extent())) {
+        SE_LOG(WARN, "fail to write extent", K(ret), K(last_key), K(block_info));
+      }
+    }
   }
 
   return ret;
@@ -643,50 +659,61 @@ int ExtentWriter::check_key_order(const Slice &key)
   return ret;
 }
 
-bool ExtentWriter::need_switch_block_for_row(const uint32_t key_size, const uint32_t value_size) const
+int ExtentWriter::need_switch_block(const Slice &key, const Slice &value, bool &need_switch) const
 {
-  bool res = false;
-  int32_t block_size = table_schema_.get_block_size();
-  const int64_t BLOCK_LOW_WATER_PERCENT = 90;
-  // optimize the repeated compute for block_low_water_size if need
-  const int64_t block_low_water_size = ((block_size * 90) + 99) / 100;
+  int ret = Status::kOk;
+  int64_t block_size = table_schema_.get_block_size();
+  int64_t block_water_mark_size = ((block_size * 90) + 99) / 100;
+  int64_t current_size = data_block_writer_->current_size();
 
-  if (data_block_writer_->current_size() >= block_size) {
-    // block is full
-    res = true;
+  if (UNLIKELY(key.empty())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), "key_size", key.size());
   } else {
-    if (data_block_writer_->current_size() >= block_low_water_size
-        && data_block_writer_->future_size(key_size, value_size) > block_size) {
-      // block is almost full
-      res = true;
+    // If the block is full or almost full, it need switch.
+    need_switch = (current_size >= block_size) ||
+                  ((current_size >= block_water_mark_size &&
+                    data_block_writer_->future_size(key.size(), value.size()) > block_size));
+  }
+
+  return ret;
+}
+
+int ExtentWriter::need_switch_extent(const Slice &key, const BlockInfo &block_info, bool &need_switch)
+{
+  int ret = Status::kOk;
+  int64_t size = 0;
+  int64_t index_block_size = 0;
+  CompressionType actual_compress_type = common::kNoCompression;
+  Slice index_block;
+  Slice compressed_index_block;
+
+  if (UNLIKELY(key.empty()) || UNLIKELY(!block_info.is_valid())) {
+    ret = Status::kInvalidArgument;
+    SE_LOG(WARN, "invalid argument", K(ret), K(key), K(block_info));
+  } else {
+    size += SAFE_SPACE_SIZE; // safe space size
+    size += buf_.size() + block_info.get_handle().get_size(); // data blocks size
+    size += Footer::get_max_serialize_size(); // footer size
+    index_block_size = index_block_writer_.future_size(key, block_info);
+
+    if ((size + index_block_size) >= MAX_EXTENT_SIZE) {
+      if (FAILED(index_block_writer_.future(key, block_info, index_block))) {
+        SE_LOG(WARN, "fail to build future index block", K(ret), K(block_info));
+      } else if (FAILED(index_block_compressor_.compress(index_block,
+                                                         compress_type_,
+                                                         compressed_index_block,
+                                                         actual_compress_type))) {
+        SE_LOG(WARN, "fail to compress index block", K(ret), KE_(compress_type));
+      } else {
+        need_switch = ((size + compressed_index_block.size()) >= MAX_EXTENT_SIZE);
+      }
+    } else {
+      need_switch = false;
     }
   }
 
-  return res;
-}
-
-bool ExtentWriter::need_switch_extent_for_row(const Slice &key, const Slice &value) const
-{
-  int64_t size = SAFE_SPACE_SIZE + Footer::get_max_serialize_size();
-
-  size += buf_.size(); // current extent sze
-  size += data_block_writer_->future_size(key.size(), value.size()); // current block future size
-  // the bloom filter size is included.
-  size += index_block_writer_.future_size(key.size(), block_info_.get_max_serialize_size(table_schema_.get_column_schemas().size()));
-
-  return size >= MAX_EXTENT_SIZE;  
-}
-
-bool ExtentWriter::need_switch_extent_for_block(const Slice &block, const BlockInfo &block_info, const Slice &last_key)
-{
-  se_assert(data_block_writer_->is_empty());
-  int64_t size = SAFE_SPACE_SIZE + Footer::get_max_serialize_size();
-
-  size += buf_.size(); // current extent size
-  size += block.size(); // new block size
-  size += index_block_writer_.future_size(last_key.size(), block_info.get_serialize_size());
-
-  return size >= MAX_EXTENT_SIZE;
+  return ret;
 }
 
 int ExtentWriter::write_data_block()
@@ -698,6 +725,7 @@ int ExtentWriter::write_data_block()
   CompressionType actual_compress_type = common::kNoCompression;
   RowBlock *migrating_block = nullptr;
   char *migrating_block_buf = nullptr;
+  bool switch_extent = false;
 
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kOk;
@@ -708,10 +736,10 @@ int ExtentWriter::write_data_block()
     SE_LOG(WARN, "fail to build data block", K(ret));
   } else if (FAILED(build_bloom_filter(block_info_))) {
     SE_LOG(WARN, "fail to build bloom filter", K(ret));
-  } else if (FAILED(compressor_helper_.compress(raw_block,
-                                                compress_type_,
-                                                compressed_block,
-                                                actual_compress_type))) {
+  } else if (FAILED(data_block_compressor_.compress(raw_block,
+                                                    compress_type_,
+                                                    compressed_block,
+                                                    actual_compress_type))) {
     SE_LOG(WARN, "fail to compressed block", K(ret), K(raw_block));
   } else {
     block_info_.get_handle().set_offset(buf_.size());
@@ -721,34 +749,50 @@ int ExtentWriter::write_data_block()
     calculate_block_checksum(compressed_block, block_checksum);
     block_info_.get_handle().set_checksum(block_checksum);
 
-    if (FAILED(buf_.write(compressed_block))) {
-      SE_LOG(WARN, "fail to write block body", K(ret));
-    } else if (FAILED(index_block_writer_.append(last_key_, block_info_))) {
-      SE_LOG(WARN, "fail to append block index entry", K(ret),
-          K(raw_block), K(compressed_block), KE_(compress_type), KE(actual_compress_type));
-    } else {
-      //TODO(Zhao Dongsheng): column format block can't migrate.
-      // Collect handle of block that needs to be migrated.
-      if (migrate_flag_ && !table_schema_.use_column_format()) {
-        // TODO(Zhao Dongsheng): The blocks currently being migrated to 
-        // the block cache are uncompresed. And, ignore the migrate ret?
-        if (FAILED(collect_migrating_block(raw_block, block_info_.get_handle(), kNoCompression))) {
-          SE_LOG(WARN, "fail to collect migrating block", K(ret), K_(block_info));
-        }
-        migrate_flag_ = false;
+    // The remaining space in the current extent is insufficient to store the current data block.
+    // Persist the current extent and write the current data block into next extent.
+    if (FAILED(need_switch_extent(last_key_, block_info_, switch_extent))) {
+      SE_LOG(WARN, "fail to check if need switch extent", K(ret), K_(last_key), K_(block_info));
+    } else if (switch_extent) {
+      if (FAILED(write_extent())) {
+        SE_LOG(ERROR, "fail to write extent", K(ret));
+      } else {
+        se_assert(0 == buf_.size());
+        block_info_.get_handle().set_offset(buf_.size());
       }
+    }
 
-      // update extent stats
-      extent_info_.raw_data_size_ += raw_block.size();
-      extent_info_.data_size_ += compressed_block.size();
-      extent_info_.update(Slice(last_key_), block_info_);
+    if (SUCCED(ret)) {
+      if (FAILED(buf_.write(compressed_block))) {
+        SE_LOG(WARN, "fail to write block body", K(ret));
+      } else if (FAILED(index_block_writer_.append(last_key_, block_info_))) {
+        SE_LOG(WARN, "fail to append block index entry", K(ret),
+            K(raw_block), K(compressed_block), KE_(compress_type), KE(actual_compress_type));
+      } else {
+        SE_LOG(DEBUG, "success to write data block", K_(last_key), K_(block_info));
+        // TODO(Zhao Dongsheng): column format block can't migrate.
+        // Collect handle of block that needs to be migrated.
+        if (migrate_flag_ && !table_schema_.use_column_format()) {
+          // TODO(Zhao Dongsheng): The blocks currently being migrated to 
+          // the block cache are uncompresed. And, ignore the migrate ret?
+          if (FAILED(collect_migrating_block(raw_block, block_info_.get_handle(), kNoCompression))) {
+            SE_LOG(WARN, "fail to collect migrating block", K(ret), K_(block_info));
+          }
+          migrate_flag_ = false;
+        }
 
-      // clear previous block status
-      data_block_writer_->reuse();
-      reuse_bloom_filter_writer();
-      block_info_.reset();
-      block_info_.set_probe_num(BloomFilter::DEFAULT_PROBE_NUM);
-      block_info_.set_per_key_bits(BloomFilter::DEFAULT_PER_KEY_BITS);
+        // update extent stats
+        extent_info_.raw_data_size_ += block_info_.get_row_format_raw_size();
+        extent_info_.data_size_ += compressed_block.size();
+        extent_info_.update(Slice(last_key_), block_info_);
+
+        // clear previous block status
+        data_block_writer_->reuse();
+        reuse_bloom_filter_writer();
+        block_info_.reset();
+        block_info_.set_probe_num(BloomFilter::DEFAULT_PROBE_NUM);
+        block_info_.set_per_key_bits(BloomFilter::DEFAULT_PER_KEY_BITS);
+      }
     }
   }
 
@@ -772,7 +816,7 @@ int ExtentWriter::write_index_block()
     SE_LOG(WARN, "index block mustn't be empty", K(ret));
   } else if (FAILED(index_block_writer_.build(raw_block))) {
     SE_LOG(WARN, "fail to build index block", K(ret));
-  } else if (FAILED(compressor_helper_.compress(raw_block, compress_type_, compressed_block, actual_compress_type))) {
+  } else if (FAILED(index_block_compressor_.compress(raw_block, compress_type_, compressed_block, actual_compress_type))) {
     SE_LOG(WARN, "fail to compress index block", K(ret));
   } else {
     handle.set_offset(buf_.size());
@@ -807,8 +851,7 @@ int ExtentWriter::write_footer()
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
-  } else if (UNLIKELY(empty_size < 0)) {
-  //} else if (UNLIKELY(empty_size <= 0)) {
+  } else if (UNLIKELY(empty_size <= 0)) {
     ret = Status::kNoSpace;
     SE_LOG(WARN, "the remain space is not enough to store footer", K(ret),
         "buffer_size", buf_.size(), K(empty_size));
@@ -833,8 +876,6 @@ int ExtentWriter::write_extent()
 #ifndef NDEBUG
     SE_LOG(INFO, "current extent is empty");
 #endif
-  } else if (FAILED(write_data_block())) {
-    SE_LOG(WARN, "fail to build and write data block", K(ret));
   } else if (FAILED(write_index_block())) {
     SE_LOG(WARN, "fail to write index block", K(ret));
   } else if (FAILED(write_footer())) {
@@ -859,8 +900,10 @@ int ExtentWriter::flush_extent()
   if (UNLIKELY(!is_inited_)) {
     ret = Status::kNotInit;
     SE_LOG(WARN, "ExtentWriter should be inited", K(ret));
-  } else if (FAILED(
-                 ExtentSpaceManager::get_instance().allocate(table_space_id_, extent_space_type_, prefix_, extent))) {
+  } else if (FAILED(ExtentSpaceManager::get_instance().allocate(table_space_id_,
+                                                                extent_space_type_,
+                                                                prefix_,
+                                                                extent))) {
     SE_LOG(WARN, "fail to allocate extent", K(ret));
   } else {
     extent_info_.table_space_id_ = table_space_id_;
@@ -944,10 +987,10 @@ int ExtentWriter::convert_to_large_object_value(const Slice &value, LargeObject 
       util::DIOHelper::DIO_ALIGN_SIZE, storage::MAX_EXTENT_SIZE, memory::ModId::kLargeObject)))) {
     ret = Status::kMemoryLimit;
     SE_LOG(WARN, "fail to allocate memory for large object value", K(ret));
-  } else if (FAILED(compressor_helper_.compress(value,
-                                                compress_type_,
-                                                compressed_value,
-                                                actual_compress_type))) {
+  } else if (FAILED(data_block_compressor_.compress(value,
+                                                    compress_type_,
+                                                    compressed_value,
+                                                    actual_compress_type))) {
     SE_LOG(WARN, "fail to compress large object value", K(ret), K(value), KE_(compress_type));
   } else {
     large_object.value_.compress_type_ = actual_compress_type;

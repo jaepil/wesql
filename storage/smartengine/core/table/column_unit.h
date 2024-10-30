@@ -46,7 +46,6 @@ struct ColumnUnitInfo
 
   void reset();
   bool is_valid() const;
-  static int64_t get_max_serialize_size();
   DECLARE_TO_STRING()
   DECLARE_COMPACTIPLE_SERIALIZATION(COLUMN_UNIT_INFO_VERSION)
 };
