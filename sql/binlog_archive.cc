@@ -336,7 +336,6 @@ Binlog_archive::Binlog_archive()
       m_purge_index_file() {
   m_consensus_is_leader = false;
   m_consensus_term = 0;
-  m_slice_cache = {0};
   m_mysql_binlog_first_file = true;
   m_binlog_archive_last_index_number = 0;
   m_event_checksum_alg = binary_log::BINLOG_CHECKSUM_ALG_OFF;
@@ -722,6 +721,8 @@ void Binlog_archive::run() {
     m_mysql_binlog_last_event_end_pos = m_mysql_binlog_start_pos;
     m_mysql_binlog_write_last_event_end_pos = m_mysql_binlog_start_pos;
     m_slice_bytes_written = 0;
+    m_slice_create_ts = 0;
+    m_slice_cache.clear();
     m_binlog_archive_write_last_event_end_pos = last_binlog_slice_max_num;
     m_binlog_archive_last_event_end_pos = last_binlog_slice_max_num;
     m_binlog_archive_start_consensus_index = last_binlog_consensus_index;
