@@ -211,7 +211,7 @@ static int consensus_applier_on_stmt_done(Binlog_applier_param *param) {
     uint64 event_consensus_index = consensus_applier.get_apply_index();
     Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
     applier_info->set_consensus_apply_index(event_consensus_index);
-    error = applier_info->flush_info(true, true);
+    error = applier_info->flush_info(true);
   }
 
   return error;
@@ -231,7 +231,7 @@ static int consensus_applier_on_checkpoint_routine(
   if (rli->info_thd->consensus_context.consensus_replication_applier) {
     Consensus_applier_info *applier_info = consensus_meta.get_applier_info();
     applier_info->set_consensus_apply_index(rli->gaq->lwm.consensus_index);
-    applier_info->flush_info(true, true);
+    applier_info->flush_info(true);
     update_consensus_applied_index(rli->gaq->lwm.consensus_index);
   }
 
@@ -326,7 +326,7 @@ static int consensus_applier_on_mts_finalize_recovery(
     if ((error = applier_info->mts_finalize_recovery())) {
       Consensus_info_factory::reset_consensus_applier_workers(applier_info);
     } else {
-      error = applier_info->flush_info(true, true);
+      error = applier_info->flush_info(true);
     }
   }
 
