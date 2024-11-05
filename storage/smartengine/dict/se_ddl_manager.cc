@@ -197,12 +197,15 @@ bool SeDdlManager::init(THD *const thd, SeDictionaryManager *const dict_arg)
         HANDLER_LOG(ERROR, "SE: failed to get max_table_id from dictionary");
         return true;
       }
-/** there is OOM risk when populating all tables if table count is very large
+      /** for version8018. there is OOM risk when populating all tables if table count is very large
+      *   but this will cause duplicate key error when recovery or ha
+      *   8032 has fixed this problem，avoid using too much memory: https://github.com/mysql/mysql-server/commit/ce8bcc334189fa791a1934604bcc198d08e1e5d8
+      *   so populating all tables is safe for memory
+      * */
       else if (!thd || populate_existing_tables(thd)) {
         HANDLER_LOG(ERROR, "SE: failed to populate existing tables!");
         return true;
       }
-*/
 
 #ifndef NDEBUG
       HANDLER_LOG(INFO, "ddl_manager init get max table id from dictionary",
