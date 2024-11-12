@@ -253,7 +253,7 @@ class Binlog_archive_worker {
 
 /**
  * @brief Binlog archive update index worker class.
- * 
+ *
  */
 class Binlog_archive_update_index_worker {
  public:
@@ -275,10 +275,13 @@ class Binlog_archive_update_index_worker {
   bool is_thread_alive() const { return m_thd_state.is_thread_alive(); }
   bool is_thread_running() const { return m_thd_state.is_running(); }
   int terminate_binlog_archive_update_index_worker();
-  bool update_index_is_failed() const { return atomic_update_index_failed.load(std::memory_order_acquire); }
+  bool update_index_is_failed() const {
+    return atomic_update_index_failed.load(std::memory_order_acquire);
+  }
   void set_update_index_failed(bool failed) {
     atomic_update_index_failed.store(failed, std::memory_order_release);
   }
+
  private:
   Binlog_archive *m_archive;
   my_thread_handle m_thread;
@@ -376,19 +379,22 @@ class Binlog_archive {
 
   Binlog_archive_update_index_worker *m_update_index_worker;
   Binlog_archive_worker **m_workers;
+
+  mysql_mutex_t m_slice_mutex;
   bool m_slice_queue_and_map_initted;
   circular_buffer_queue<Binlog_expected_slice> m_expected_slice_queue;
-  mysql_mutex_t
-      m_slice_mutex;  // mutex for m_expected_slice_queue and m_slice_status_map
   mysql_cond_t m_queue_cond;
   // File and slice tracking
   std::map<uint32_t, std::map<uint32_t, Slice_status>> m_slice_status_map;
   mysql_cond_t m_map_cond;
-  int32_t m_current_file_seq{-1};
-  int32_t m_current_slice_seq{-1};
+  // -- m_slice_mutex protects the above variables
+  int32_t m_last_expected_file_seq{-1};  // last added slice file expected queue
+  int32_t m_last_expected_slice_seq{-1};  // last added slice seq expected queue
+
   void notify_slice_persisted(const Binlog_expected_slice &slice,
                               bool is_slice_persisted);
   bool update_index_file(bool need_slice_lock);
+
  private:
   // the binlog archive THD handle.
   THD *m_thd;

@@ -194,18 +194,23 @@ void Binlog_archive_worker::stop() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("stop"));
 
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id, "stopping");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id,
+         "terminate begin");
   mysql_mutex_lock(&m_worker_run_lock);
   if (is_thread_dead()) {
-    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id, "stopped");
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id,
+           "terminated");
     mysql_mutex_unlock(&m_worker_run_lock);
     return;
   }
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id,
+         "terminating binlog archive worker");
   mysql_mutex_unlock(&m_worker_run_lock);
   terminate_binlog_archive_worker_thread();
   /* Wait until the thread is terminated. */
   my_thread_join(&m_thread, nullptr);
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id, "stop end");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id,
+         "terminate end");
 }
 
 /**
@@ -316,7 +321,7 @@ void *Binlog_archive_worker::worker_thread() {
         continue;
       }
       is_slice_persisted = true;
-      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id,
+      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_WORKER_LOG, m_worker_id,
              err_msg.c_str());
       break;
     }
@@ -389,18 +394,23 @@ void Binlog_archive_update_index_worker::stop() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("stop"));
 
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG, "stopping");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+         "terminate begin");
   mysql_mutex_lock(&m_worker_run_lock);
   if (is_thread_dead()) {
-    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG, "stopped");
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+           "terminated");
     mysql_mutex_unlock(&m_worker_run_lock);
     return;
   }
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+         "terminating binlog update index worker");
   mysql_mutex_unlock(&m_worker_run_lock);
   terminate_binlog_archive_update_index_worker();
   /* Wait until the thread is terminated. */
   my_thread_join(&m_thread, nullptr);
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG, "stop end");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+         "terminate end");
 }
 
 /**
@@ -647,16 +657,16 @@ int start_binlog_archive() {
 void stop_binlog_archive() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("stop_binlog_archive"));
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stop binlog archive begin");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "terminate begin");
 
   mysql_mutex_lock(&m_binlog_archive_run_lock);
   if (mysql_binlog_archive.is_thread_dead()) {
-    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-           "binlog archive stopped already");
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "terminated");
     mysql_mutex_unlock(&m_binlog_archive_run_lock);
     return;
   }
   mysql_mutex_unlock(&m_binlog_archive_run_lock);
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "terminating binlog archive");
   mysql_binlog_archive.terminate_binlog_archive_thread();
   /* Wait until the thread is terminated. */
   my_thread_join(&mysql_binlog_archive_pthd, nullptr);
@@ -664,7 +674,7 @@ void stop_binlog_archive() {
     objstore::destroy_object_store(mysql_binlog_archive.get_objstore());
     mysql_binlog_archive.set_objstore(nullptr);
   }
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stop binlog archive end");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "terminate end");
 }
 
 /**
@@ -745,7 +755,6 @@ Binlog_archive::Binlog_archive()
 
   m_update_index_worker = nullptr;
   m_workers = nullptr;
-  m_current_file_seq = 0;
   m_slice_queue_and_map_initted = false;
   m_persisted_binlog_file_name[0] = '\0';
   m_persisted_mysql_binlog_file_name[0] = '\0';
@@ -1184,8 +1193,8 @@ void Binlog_archive::run() {
     // init in archive_init()
     m_mysql_binlog_file_name[0] = '\0';
     m_binlog_archive_file_name[0] = '\0';
-    m_current_file_seq = -1;
-    m_current_slice_seq = -1;
+    m_last_expected_file_seq = -1;
+    m_last_expected_slice_seq = -1;
 
     // init last persisted binlog
     strmake(m_persisted_binlog_file_name, last_binlog_file_name,
@@ -1247,9 +1256,6 @@ void Binlog_archive::run() {
 
     // If the thread is killed, exit.
     if (m_thd == nullptr || m_thd->killed) {
-      err_msg.assign(" persist end consensus index=");
-      err_msg.append(std::to_string(m_slice_end_consensus_index));
-      LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
       break;
     }
 
@@ -1264,9 +1270,7 @@ void Binlog_archive::run() {
   }
 
 end:
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "Binlog archive thread end");
-
-  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stop binlog archive worker");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "stopping binlog archive worker");
   for (ulong i = 0; i < opt_binlog_archive_parallel_workers; ++i) {
     Binlog_archive_worker *worker = m_workers[i];
     delete worker;
@@ -1277,7 +1281,7 @@ end:
   }
 
   LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG,
-         "stop binlog archive update index worker");
+         "stopping binlog archive update index worker");
   // Finally, stop the binlog archive update index worker thread.
   // Wait for all persisted binlog slices to be persisted to the object store
   // and the binlog index to be updated.
@@ -1285,6 +1289,17 @@ end:
     delete m_update_index_worker;
     m_update_index_worker = nullptr;
   }
+  err_msg.assign("persisted end consensus index=");
+  err_msg.append(std::to_string(m_persisted_slice_end_consensus_index));
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+
+  // Update index worker maybe reopens the binlog index file, so close it.
+  mysql_mutex_lock(&m_index_lock);
+  close_index_file();
+  mysql_mutex_unlock(&m_index_lock);
+
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, "binlog archive thread end");
+
   // Free new Item_***.
   m_thd->free_items();
   m_thd->release_resources();
@@ -2151,8 +2166,8 @@ int Binlog_archive::new_binlog_slice(bool new_binlog, const char *log_file,
   // Generate the next archive binlog file name.
   // Generate the first binlog slice.
   if (new_binlog) {
-    m_current_file_seq++;
-    m_current_slice_seq = -1;
+    m_last_expected_file_seq++;
+    m_last_expected_slice_seq = -1;
     m_binlog_archive_last_index_number++;
     m_mysql_binlog_first_file = false;
     m_binlog_previouse_consensus_index = previous_consensus_index;
@@ -2175,8 +2190,8 @@ int Binlog_archive::new_binlog_slice(bool new_binlog, const char *log_file,
   // rotate new archive binlog slice.
   m_slice_cache.clear();
   m_slice_create_ts = my_milli_time();
-  if (m_mysql_binlog_first_file) m_current_file_seq = 0;
-  m_current_slice_seq++;
+  if (m_mysql_binlog_first_file) m_last_expected_file_seq = 0;
+  m_last_expected_slice_seq++;
   LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
   return error;
@@ -2286,8 +2301,8 @@ int Binlog_archive::rotate_binlog_slice(my_off_t log_pos, bool need_lock) {
 
     // write slice_cache to m_expected_slice_queue
     Binlog_expected_slice slice(archived_binlog_keyid.c_str(), m_slice_cache,
-                                m_slice_bytes_written, m_current_file_seq,
-                                m_current_slice_seq);
+                                m_slice_bytes_written, m_last_expected_file_seq,
+                                m_last_expected_slice_seq);
     SLICE_INFO slice_info;
     strmake(slice_info.log_file_name, m_binlog_archive_file_name,
             sizeof(slice_info.log_file_name) - 1);
@@ -2355,6 +2370,18 @@ bool Binlog_archive::add_slice(Binlog_expected_slice &slice,
   err_msg.append(slice.m_slice_keyid);
   err_msg.append(" slice_size=");
   err_msg.append(std::to_string(slice.m_slice_bytes_written));
+  err_msg.append(" log_slice_name=");
+  err_msg.append(log_info.log_slice_name);
+  err_msg.append(" consensus_end_index=");
+  err_msg.append(std::to_string(log_info.log_slice_end_consensus_index));
+  err_msg.append(" previous_consensus_index=");
+  err_msg.append(std::to_string(log_info.log_slice_previous_consensus_index));
+  err_msg.append(" end_pos=");
+  err_msg.append(std::to_string(log_info.log_slice_end_pos));
+  err_msg.append(" mysql_log_name=");
+  err_msg.append(log_info.mysql_log_name);
+  err_msg.append(" mysql_end_pos=");
+  err_msg.append(std::to_string(log_info.mysql_end_pos));
   LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
   DBUG_EXECUTE_IF("fault_injection_add_slice_queue", {
@@ -2373,13 +2400,13 @@ bool Binlog_archive::add_slice(Binlog_expected_slice &slice,
     mysql_cond_wait(&m_queue_cond, &m_slice_mutex);
   }
   m_expected_slice_queue.en_queue(&slice);
+  m_slice_status_map[slice.m_file_seq][slice.m_slice_seq] =
+      Slice_status(slice.m_file_seq, slice.m_slice_seq, log_info);
   mysql_mutex_unlock(&m_slice_mutex);
   m_thd->EXIT_COND(nullptr);
   if (m_thd->killed) {
     return false;
   }
-  m_slice_status_map[slice.m_file_seq][slice.m_slice_seq] =
-      Slice_status(slice.m_file_seq, slice.m_slice_seq, log_info);
   // Signal the binlog archive worker thread that wait, because the slice queue
   // is empty.
   mysql_cond_signal(&m_queue_cond);
@@ -2403,8 +2430,6 @@ void Binlog_archive::notify_slice_persisted(const Binlog_expected_slice &slice,
   err_msg.append(std::to_string(slice.m_slice_seq));
   err_msg.append(" log_slice_keyid=");
   err_msg.append(slice.m_slice_keyid);
-  err_msg.append(is_slice_persisted ? " success" : " failed");
-  LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
 
   mysql_mutex_lock(&m_slice_mutex);
   // If the slice queue and map have not been initialized or reinitialized,
@@ -2417,10 +2442,19 @@ void Binlog_archive::notify_slice_persisted(const Binlog_expected_slice &slice,
     LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
     return;
   }
+
   auto &slice_status = m_slice_status_map[slice.m_file_seq][slice.m_slice_seq];
   slice_status.persisted =
       is_slice_persisted ? SLICE_PERSISTED : SLICE_PERSISTED_FAILED;
+  err_msg.append(" slice=");
+  err_msg.append(slice_status.archived_info.log_slice_name);
+  err_msg.append(" consensus_end_index=");
+  err_msg.append(
+      std::to_string(slice_status.archived_info.log_slice_end_consensus_index));
+  err_msg.append(is_slice_persisted ? " success" : " failed");
+  LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
   mysql_mutex_unlock(&m_slice_mutex);
+
   mysql_cond_signal(&m_map_cond);
 }
 
@@ -2455,13 +2489,23 @@ bool Binlog_archive::update_index_file(bool need_slice_lock) {
         if (need_slice_lock) mysql_mutex_unlock(&m_slice_mutex);
         err_msg.assign(" binlog slice persisted failed, slice=");
         err_msg.append(slice_it->second.archived_info.log_slice_name);
-        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+               err_msg.c_str());
         return false;
       }
       if (slice_it->second.persisted == SLICE_NOT_PERSISTED) {
         // Stop at first non-persisted slice
         break;
       }
+      assert(slice_it->second.persisted == SLICE_PERSISTED);
+      err_msg.assign(" binlog slice persisted, slice=");
+      err_msg.append(slice_it->second.archived_info.log_slice_name);
+      err_msg.append(" persisted slice map file_seq=");
+      err_msg.append(std::to_string(slice_it->second.file_seq));
+      err_msg.append(" slice_seq=");
+      err_msg.append(std::to_string(slice_it->second.slice_seq));
+      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+             err_msg.c_str());
       // Add to processing batch
       to_process.push_back(slice_it->second);
       slice_it = slice_map.erase(slice_it);
@@ -2481,23 +2525,26 @@ bool Binlog_archive::update_index_file(bool need_slice_lock) {
   if (!to_process.empty()) {
     err_msg.assign(" batch put log index entry count=");
     err_msg.append(std::to_string(to_process.size()));
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+           err_msg.c_str());
 
     mysql_mutex_lock(&m_index_lock);
     if (open_index_file()) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, "failed to open_index_file");
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+             "failed to open_index_file");
       mysql_mutex_unlock(&m_index_lock);
       return false;
     }
     if (open_crash_safe_index_file()) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
              "failed to open_crash_safe_index_file");
       mysql_mutex_unlock(&m_index_lock);
       return false;
     }
 
     if (copy_file(&m_index_file, &m_crash_safe_index_file, 0)) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, "failed to copy_file");
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+             "failed to copy_file");
       mysql_mutex_unlock(&m_index_lock);
       return false;
     }
@@ -2518,20 +2565,24 @@ bool Binlog_archive::update_index_file(bool need_slice_lock) {
                      binlog_entry.length()) ||
           my_b_write(&m_crash_safe_index_file,
                      pointer_cast<const uchar *>("\n"), 1)) {
-        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, "failed to my_b_write");
+        LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+               "failed to my_b_write");
         mysql_mutex_unlock(&m_index_lock);
         return false;
       }
+      LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+             binlog_entry.c_str());
     }
     if (flush_io_cache(&m_crash_safe_index_file) ||
         mysql_file_sync(m_crash_safe_index_file.file, MYF(MY_WME))) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG, "failed to mysql_file_sync");
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+             "failed to mysql_file_sync");
       mysql_mutex_unlock(&m_index_lock);
       return false;
     }
 
     if (close_crash_safe_index_file()) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
              "failed to close_crash_safe_index_file");
       mysql_mutex_unlock(&m_index_lock);
       return false;
@@ -2540,7 +2591,7 @@ bool Binlog_archive::update_index_file(bool need_slice_lock) {
     // If failed, recover the index file from object store
     // when restart the binlog archiving from run()->while{}.
     if (move_crash_safe_index_file_to_index_file()) {
-      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+      LogErr(ERROR_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
              "failed to move_crash_safe_index_file_to_index_file");
       mysql_mutex_unlock(&m_index_lock);
       return false;
@@ -2575,7 +2626,8 @@ bool Binlog_archive::update_index_file(bool need_slice_lock) {
     err_msg.append(m_persisted_mysql_binlog_file_name);
     err_msg.append(" mysql end pos=");
     err_msg.append(std::to_string(m_persisted_mysql_binlog_last_event_end_pos));
-    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_BINLOG_ARCHIVE_UPDATE_INDEX_WORKER_LOG,
+           err_msg.c_str());
   }
   return true;
 }
