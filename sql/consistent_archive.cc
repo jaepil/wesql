@@ -204,7 +204,8 @@ int start_consistent_archive() {
   // data home can not contain archive directory.
   if (test_if_data_home_dir(opt_consistent_snapshot_archive_dir)) {
     std::string err_msg;
-    err_msg.assign("snapshot archive local dir is within the current data directory: ");
+    err_msg.assign(
+        "snapshot archive local dir is within the current data directory: ");
     err_msg.append(opt_consistent_snapshot_archive_dir);
     LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
     return 1;
@@ -226,7 +227,7 @@ int start_consistent_archive() {
     err_msg.append(", failed to remove local snapshot dir ");
     err_msg.append(tmp_archive_data_dir);
     LogErr(WARNING_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
-    return 1; 
+    return 1;
   }
   if (my_mkdir(tmp_archive_data_dir, 0777, MYF(0))) {
     std::string err_msg;
@@ -312,8 +313,7 @@ void stop_consistent_archive() {
   DBUG_TRACE;
   DBUG_PRINT("info", ("stop_consistent_archive"));
 
-  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-         "stop snapshot archive ...");
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, "stop snapshot archive ...");
 
   mysql_mutex_lock(&m_run_lock);
   if (mysql_consistent_archive.is_thread_dead()) {
@@ -330,8 +330,7 @@ void stop_consistent_archive() {
     objstore::destroy_object_store(mysql_consistent_archive.get_objstore());
     mysql_consistent_archive.set_objstore(nullptr);
   }
-  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
-         "stop snapshot archive end");
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, "stop snapshot archive end");
 }
 
 /**
@@ -1093,17 +1092,19 @@ bool Consistent_archive::archive_consistent_snapshot() {
 
   err_msg.assign("archive snapshot end: ");
   err_msg.append(m_consistent_snapshot_local_time);
-  err_msg.append(" ");
+  err_msg.append(" clone_keyid=");
   err_msg.append(m_mysql_clone_keyid);
-  err_msg.append(" ");
+  err_msg.append(" se_keyid=");
   err_msg.append(m_se_backup_keyid);
-  err_msg.append(" ");
+  err_msg.append(" binlog=");
   err_msg.append(m_binlog_file);
-  err_msg.append(" ");
-  err_msg.append(std::to_string(m_mysql_binlog_pos));
-  err_msg.append(" ");
+  err_msg.append(" end consensus index=");
   err_msg.append(std::to_string(m_consensus_index));
-  err_msg.append(" ");
+  err_msg.append(" mysql binlog=");
+  err_msg.append(m_mysql_binlog_file);
+  err_msg.append(" mysql end pos=");
+  err_msg.append(std::to_string(m_mysql_binlog_pos));
+  err_msg.append(" se snapshot=");
   err_msg.append(std::to_string(m_se_snapshot_id));
   LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG, err_msg.c_str());
 
@@ -1408,7 +1409,8 @@ int Consistent_archive::archive_innodb_data() {
             MYF(0))) {
       err_msg.append(" failed to chmod: ");
       err_msg.append(clone_name);
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG, err_msg.c_str());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG,
+             err_msg.c_str());
       remove_file(clone_name);
       remove_file(m_mysql_innodb_clone_dir);
       return 1;
@@ -1844,7 +1846,8 @@ bool Consistent_archive::archive_smartengine_wals_and_metas() {
             MYF(0))) {
       err_msg.append(" failed to chmod: ");
       err_msg.append(se_tar_name);
-      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG, err_msg.c_str());
+      LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG,
+             err_msg.c_str());
       remove_file(se_tar_name);
       remove_file(m_se_snapshot_dir);
       return true;
@@ -1964,15 +1967,18 @@ bool Consistent_archive::mysql_binlog_has_updated() {
   DBUG_EXECUTE_IF("force_consistent_snapshot_mysql_binlog_updated",
                   { return true; });
 
+  // If previous snapshot binlog file is empty, also considered as updated.
+  if ((m_mysql_binlog_file_previous_snapshot[0] == '\0') ||
+      (m_mysql_binlog_pos_previous_snapshot == 0))
+    return true;
   // If mysql binlog not opened, also considered as updated.
   if (mysql_bin_log.is_open()) {
-    LOG_INFO li{};
-    Binlog_archive::get_instance()->get_mysql_current_archive_binlog(&li);
-    if ((m_mysql_binlog_file_previous_snapshot[0] == '\0') ||
-        (m_mysql_binlog_pos_previous_snapshot == 0) ||
-        (compare_log_name(m_mysql_binlog_file_previous_snapshot,
-                          li.log_file_name) != 0) ||
-        li.pos > m_mysql_binlog_pos_previous_snapshot) {
+    // If previous snapshot binlog file is not active, also considered as
+    // updated. If binlog file is active, but the end position is greater than
+    // the previous snapshot position, also considered as updated.
+    if (mysql_bin_log.get_binlog_end_pos() >
+            m_mysql_binlog_pos_previous_snapshot ||
+        !mysql_bin_log.is_active(m_mysql_binlog_file_previous_snapshot)) {
       return true;
     }
     return false;
@@ -3219,8 +3225,7 @@ int Consistent_archive::purge_archive_garbage(const char *dirty_end_archive,
                                        object.key.c_str()) > 0) {
         err_msg.assign("delete garbage archive file from object store: ");
         err_msg.append(object.key);
-        LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG,
-               err_msg.c_str());
+        LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG, err_msg.c_str());
         objstore::Status ss{};
         if (DBUG_EVALUATE_IF("fault_injection_delete_garbage_smartengine_"
                              "snapshot_from_objstore",
@@ -3440,8 +3445,7 @@ int Consistent_archive::purge_index_entry(Archive_type arch_type) {
     std::string err_msg;
     err_msg.assign("delete archive file from object store: ");
     err_msg.append(archive_keyid);
-    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG,
-           err_msg.c_str());
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_SNAPSHOT_PURGE_LOG, err_msg.c_str());
     objstore::Status ss{};
     if (DBUG_EVALUATE_IF(
             "fault_injection_delete_smartengine_snapshot_from_objstore", 1,

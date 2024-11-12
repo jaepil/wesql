@@ -613,7 +613,7 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       m_state == CONSISTENT_RECOVERY_STATE_END)
     return false;
 
-  err_msg.assign("recover persistent innodb ");
+  err_msg.assign("recover persistent innodb objects ");
   err_msg.append(m_mysql_clone_keyid);
   err_msg.append(" to mysql datadir ");
   err_msg.append(mysql_real_data_home);
@@ -626,10 +626,10 @@ bool Consistent_recovery::recovery_mysql_innodb() {
   // Check if with ".tar" or ".tar.gz" extension.
   if (idx == std::string::npos) {  // innodb_archive_000001/
     // Directly recover to mysql data directory.
-    err_msg.assign("download mysql innodb clone dir: ");
+    err_msg.assign("download persistent innodb objects: ");
     err_msg.append(" key=");
     err_msg.append(m_mysql_clone_keyid);
-    err_msg.append(" mysql datadir=");
+    err_msg.append(" to mysql datadir=");
     err_msg.append(mysql_real_data_home);
     LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     objstore::Status ss = recovery_objstore->get_objects_to_dir(
@@ -641,6 +641,8 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return true;
     }
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+           "download persistent innodb objects finish.");
     if (recursive_chmod(mysql_real_data_home)) {
       err_msg.assign("chmod failed: ");
       err_msg.append(mysql_real_data_home);
@@ -659,7 +661,7 @@ bool Consistent_recovery::recovery_mysql_innodb() {
     // delete the local clone data if it exists.
     remove_file(mysql_clone_file_name);
     // download m_mysql_clone_keyid from object store
-    err_msg.assign("download mysql innodb clone file: ");
+    err_msg.assign("download innodb objects: ");
     err_msg.append(" key=");
     err_msg.append(m_mysql_clone_keyid);
     err_msg.append(" file=");
@@ -674,7 +676,8 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return true;
     }
-
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+           "download persistent innodb objects finish.");
     if (my_chmod(
             mysql_clone_file_name.c_str(),
             USER_READ | USER_WRITE | GROUP_READ | GROUP_WRITE | OTHERS_READ,
@@ -702,7 +705,7 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       cmd << "tar -xf " << mysql_clone_file_name.c_str() << " -C "
           << m_mysql_archive_recovery_data_dir;
     }
-    err_msg.assign("untar mysql innodb clone file: ");
+    err_msg.assign("untar innodb objects: ");
     err_msg.append(cmd.str());
     LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
     if ((err = system(cmd.str().c_str())) != 0) {
@@ -713,10 +716,12 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       remove_file(mysql_clone_file_name);
       return true;
     }
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+           "untar innodb objects finish.");
 
     // cp -r /u01/mysql_archive/clone000034 mysql_real_data_home
     // scan the clone dir and copy the files and sub dir to mysql data dir
-    err_msg.assign("copy mysql innodb clone file: ");
+    err_msg.assign("copy innodb objects: ");
     err_msg.append(clone_untar_name);
     err_msg.append(" to mysql datadir ");
     err_msg.append(mysql_real_data_home);
@@ -730,14 +735,16 @@ bool Consistent_recovery::recovery_mysql_innodb() {
       remove_file(mysql_clone_file_name);
       return true;
     }
-
+    LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+           "copy innodb objects finish.");
     // remove mysql_archive/clone000034
     remove_file(clone_untar_name);
     // mysql_archive/clone000034.tar
     remove_file(mysql_clone_file_name);
   }
   m_state = CONSISTENT_RECOVERY_STATE_MYSQL_INNODB;
-
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+         "reocver persistent innodb objects finish.");
   return false;
 }
 
@@ -913,6 +920,8 @@ bool Consistent_recovery::recovery_smartengine() {
     remove_file(se_file_name);
   }
   m_state = CONSISTENT_RECOVERY_STATE_SE;
+  LogErr(SYSTEM_LEVEL, ER_CONSISTENT_RECOVERY_LOG,
+         "recover persistent smartengine wals and meta finish.");
   return false;
 }
 
@@ -1231,6 +1240,8 @@ bool Consistent_recovery::recovery_smartengine_objectstore_data() {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_RECOVERY_LOG, err_msg.c_str());
       return true;
     }
+    // skip smartengine lease_lock object.
+    if (object.key.find("lease_lock") != std::string::npos) continue;
     // replace smartengine root path
     // suffix of the object key
     std::string object_key_suffix =

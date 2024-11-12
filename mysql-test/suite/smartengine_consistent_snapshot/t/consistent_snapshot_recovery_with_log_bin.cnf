@@ -6,5 +6,5 @@ log-bin=                    master-bin.index
 snapshot_archive_period=     1000
 snapshot_archive_expire_auto_purge=  false
 binlog_archive_expire_auto_purge=       false
-binlog_archive_period=                  3000
+binlog_archive_period=                  1000
 recovery_snapshot_from_objectstore=  true
