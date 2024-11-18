@@ -41,8 +41,10 @@ using Status = ::objstore::Status;
 
 const std::string ALIYUN_PROVIDER = "aliyun";
 const std::string S3_PROVIDER = "aws";
+const std::string MINIO_PROVIDER = "minio";
 const std::string LOCAL_PROVIDER = "local";
 const std::string ALIYUN_ENDPOINT = "oss-cn-hangzhou.aliyuncs.com";
+const std::string MINIO_ENDPOINT = "http://127.0.0.1:9000";
 
 class ObjstoreTest : public testing::TestWithParam<std::string>
 {
@@ -63,6 +65,11 @@ public:
     } else if (provider_ == S3_PROVIDER) {
       // s3
       bucket_ = bucket_s3_;
+    } else if (provider_ == MINIO_PROVIDER) {
+      // minio
+      bucket_ = bucket_minio_;
+      region_ = "test";
+      endpoint_ = new std::string_view(MINIO_ENDPOINT);
     } else if (provider_ == LOCAL_PROVIDER) {
       // local
       bucket_ = bucket_local_;
@@ -265,6 +272,7 @@ protected:
   std::string bucket_;
   std::string bucket_local_ = "local-test";
   std::string bucket_s3_ = "wesql-s3-ut-test";
+  std::string bucket_minio_ = "wesql-minio-ut-test";
   std::string bucket_aliyun_ = "wesql-aliyun-ut-test";
   std::string region_ = "cn-northwest-1";
   std::string_view *endpoint_ = nullptr;
@@ -273,7 +281,8 @@ protected:
 INSTANTIATE_TEST_CASE_P(cloudProviders,
                         ObjstoreTest,
                         testing::Values( // clang-format off
-                            "aws"
+                            // "aws"
+                            "minio"
                             // "aliyun"
                             // "local"
                             )); // clang-format on
@@ -358,7 +367,7 @@ TEST_P(ObjstoreTest, createBucket)
   ss = create_bucket();
   ASSERT_TRUE(ss.is_succ());
 
-  if (provider_ == S3_PROVIDER) {
+  if (provider_ == S3_PROVIDER || provider_ == MINIO_PROVIDER) {
     ss = create_bucket();
     ASSERT_EQ(ss.error_code(), ::objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
   } else if (provider_ == ALIYUN_PROVIDER) {
@@ -370,7 +379,7 @@ TEST_P(ObjstoreTest, createBucket)
   ASSERT_TRUE(new_client != nullptr);
 
   ss = new_client->create_bucket(bucket_);
-  if (provider_ == S3_PROVIDER) {
+  if (provider_ == S3_PROVIDER || provider_ == MINIO_PROVIDER) {
     ASSERT_EQ(ss.error_code(), ::objstore::SE_BUCKET_ALREADY_OWNED_BY_YOU);
   } else if (provider_ == ALIYUN_PROVIDER) {
     ASSERT_EQ(ss.error_code(), ::objstore::SE_BUCKET_ALREADY_EXISTS);
@@ -510,13 +519,13 @@ TEST_P(ObjstoreTest, listObjectWithRecursiveOption)
 
   // 2. for `local` mode, when we delete a directory key, all the objects under the directory will be deleted.
   // for example, if we put a directory with key "a/", and then put a file with key "a/b", and then delete "a/" key,
-  // the directory key "a/" and the file key "a/b" will be all eleted.
+  // the directory key "a/" and the file key "a/b" will be all deleted.
 
   // for `s3` and `aliyun` mode, when we delete a directory key, all the objects under the directory will not be
   // deleted. for example, if we put a directory with key "a/", and then put a file with key "a/b", and then delete "a/"
   // key, the directory key "a/" will be deleted, but the file key "a/b" will not be deleted.
 
-  if (provider_ == LOCAL_PROVIDER) {
+  if (provider_ == LOCAL_PROVIDER || provider_ == MINIO_PROVIDER) {
     ss = put_object("a/", "");
     ASSERT_TRUE(ss.is_succ());
     ss = put_object("a/b/", "");
@@ -538,18 +547,20 @@ TEST_P(ObjstoreTest, listObjectWithRecursiveOption)
     ASSERT_TRUE(ss.is_succ());
     ASSERT_EQ(objects.size(), 1);
     ASSERT_EQ(objects[0].key, "a/");
+    objects.clear();
 
     ss = list_object("a/", false, start_after, finished, objects);
     ASSERT_TRUE(ss.is_succ());
     ASSERT_EQ(objects.size(), 2);
     ASSERT_EQ(objects[0].key, "a/");
     ASSERT_EQ(objects[1].key, "a/b/");
+    objects.clear();
 
     ss = delete_object("a/b/c");
     ASSERT_TRUE(ss.is_succ());
     ss = delete_object("a/b/");
     ASSERT_TRUE(ss.is_succ());
-    ss = delete_object("a");
+    ss = delete_object("a/");
     ASSERT_TRUE(ss.is_succ());
   } else {
     ss = put_object("a", "");
@@ -812,6 +823,8 @@ TEST_P(ObjstoreTest, CornerCase)
   } else if (provider_ == S3_PROVIDER) {
     ASSERT_TRUE(ss.error_message().find("UserKeyMustBeSpecified") != std::string::npos);
     ASSERT_EQ(ss.error_code(), ::objstore::CLOUD_PROVIDER_UNRECOVERABLE_ERROR);
+  } else if (provider_ == MINIO_PROVIDER) {
+    ASSERT_EQ(ss.error_code(), ::objstore::SE_SUCCESS);
   } else if (provider_ == LOCAL_PROVIDER) {
     ASSERT_EQ(ss.error_code(), ::objstore::SE_INVALID);
   }
