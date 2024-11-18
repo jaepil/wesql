@@ -22,6 +22,7 @@
 #include "sql/binlog.h"
 #include "sql/binlog_reader.h"
 #include "sql/rpl_io_monitor.h"
+#include "sql/rpl_rli_pdb.h"
 #include "sql/sql_error.h"
 #include "sql_string.h"
 
@@ -63,6 +64,233 @@ struct LOG_ARCHIVED_INFO {
     memset(log_file_name, 0, FN_REFLEN);
     memset(log_slice_name, 0, FN_REFLEN);
   }
+
+  // Copy constructor
+  LOG_ARCHIVED_INFO(const LOG_ARCHIVED_INFO &other)
+      : slice_end_consensus_index(other.slice_end_consensus_index),
+        slice_consensus_term(other.slice_consensus_term),
+        log_previous_consensus_index(other.log_previous_consensus_index),
+        slice_end_pos(other.slice_end_pos),
+        index_file_offset(other.index_file_offset),
+        index_file_start_offset(other.index_file_start_offset),
+        pos(other.pos),
+        entry_index(other.entry_index) {
+    strmake(log_line, other.log_line, FN_REFLEN);
+    strmake(log_file_name, other.log_file_name, FN_REFLEN);
+    strmake(log_slice_name, other.log_slice_name, FN_REFLEN);
+  }
+
+  LOG_ARCHIVED_INFO &operator=(const LOG_ARCHIVED_INFO &other) {
+    if (this != &other) {
+      strmake(this->log_line, other.log_line, FN_REFLEN);
+      strmake(this->log_file_name, other.log_file_name, FN_REFLEN);
+      strmake(this->log_slice_name, other.log_slice_name, FN_REFLEN);
+      this->slice_end_consensus_index = other.slice_end_consensus_index;
+      this->slice_consensus_term = other.slice_consensus_term;
+      this->log_previous_consensus_index = other.log_previous_consensus_index;
+      this->slice_end_pos = other.slice_end_pos;
+      this->index_file_offset = other.index_file_offset;
+      this->index_file_start_offset = other.index_file_start_offset;
+      this->pos = other.pos;
+      this->entry_index = other.entry_index;
+    }
+    return *this;
+  }
+};
+
+struct SLICE_INFO {
+  char log_file_name[FN_REFLEN] = {0};
+  char log_slice_name[FN_REFLEN] = {0};
+  char mysql_log_name[FN_REFLEN] = {0};
+  uint64_t log_slice_end_consensus_index;
+  uint64_t log_slice_consensus_term;
+  uint64_t log_slice_previous_consensus_index;
+  my_off_t log_slice_end_pos;
+  my_off_t mysql_end_pos;
+  int entry_index;  // used in purge_logs(), calculated in find_log_pos().
+  SLICE_INFO()
+      : log_slice_end_consensus_index(0),
+        log_slice_consensus_term(0),
+        log_slice_previous_consensus_index(0),
+        log_slice_end_pos(0),
+        mysql_end_pos(0),
+        entry_index(0) {
+    memset(log_file_name, 0, FN_REFLEN);
+    memset(log_slice_name, 0, FN_REFLEN);
+    memset(mysql_log_name, 0, FN_REFLEN);
+  }
+
+  // Copy constructor
+  SLICE_INFO(const SLICE_INFO &other)
+      : log_slice_end_consensus_index(other.log_slice_end_consensus_index),
+        log_slice_consensus_term(other.log_slice_consensus_term),
+        log_slice_previous_consensus_index(
+            other.log_slice_previous_consensus_index),
+        log_slice_end_pos(other.log_slice_end_pos),
+        mysql_end_pos(other.mysql_end_pos),
+        entry_index(other.entry_index) {
+    strmake(log_file_name, other.log_file_name, FN_REFLEN);
+    strmake(log_slice_name, other.log_slice_name, FN_REFLEN);
+    strmake(mysql_log_name, other.mysql_log_name, FN_REFLEN);
+  }
+
+  SLICE_INFO &operator=(const SLICE_INFO &other) {
+    if (this != &other) {
+      strmake(log_file_name, other.log_file_name, FN_REFLEN);
+      strmake(log_slice_name, other.log_slice_name, FN_REFLEN);
+      strmake(mysql_log_name, other.mysql_log_name, FN_REFLEN);
+      log_slice_end_consensus_index = other.log_slice_end_consensus_index;
+      log_slice_consensus_term = other.log_slice_consensus_term;
+      log_slice_previous_consensus_index =
+          other.log_slice_previous_consensus_index;
+      log_slice_end_pos = other.log_slice_end_pos;
+      mysql_end_pos = other.mysql_end_pos;
+      entry_index = other.entry_index;
+    }
+    return *this;
+  }
+};
+
+/**
+ * @brief  Binlog expected slice structure.
+ *
+ */
+struct Binlog_expected_slice {
+  char m_slice_keyid[FN_REFLEN + 1];
+  std::string slice_data_cache;
+  uint32_t m_file_seq;
+  uint32_t m_slice_seq;
+  my_off_t m_slice_bytes_written;
+  // Default constructor
+  Binlog_expected_slice() = default;
+  // Constructor
+  Binlog_expected_slice(const char *keyid, const std::string &slice_data_cache,
+                        my_off_t slice_bytes, uint32_t file_seq,
+                        uint32_t slice_seq)
+      : m_file_seq(file_seq), m_slice_seq(slice_seq) {
+    strmake(this->m_slice_keyid, keyid, FN_REFLEN);
+    this->slice_data_cache = slice_data_cache;
+    this->m_slice_bytes_written = slice_bytes;
+  }
+
+  // Copy constructor
+  Binlog_expected_slice(const Binlog_expected_slice &other)
+      : slice_data_cache(other.slice_data_cache),
+        m_file_seq(other.m_file_seq),
+        m_slice_seq(other.m_slice_seq),
+        m_slice_bytes_written(other.m_slice_bytes_written) {
+    strmake(m_slice_keyid, other.m_slice_keyid, FN_REFLEN);
+  }
+
+  Binlog_expected_slice &operator=(const Binlog_expected_slice &other) {
+    if (this != &other) {
+      strmake(this->m_slice_keyid, other.m_slice_keyid, FN_REFLEN);
+      this->slice_data_cache = other.slice_data_cache;
+      this->m_file_seq = other.m_file_seq;
+      this->m_slice_seq = other.m_slice_seq;
+      this->m_slice_bytes_written = other.m_slice_bytes_written;
+    }
+    return *this;
+  }
+};
+
+enum Slice_status_enum {
+  SLICE_NOT_PERSISTED,
+  SLICE_PERSISTED,
+  SLICE_PERSISTED_FAILED
+};
+struct Slice_status {
+  Slice_status_enum persisted;
+  SLICE_INFO archived_info;
+  uint32_t file_seq;
+  uint32_t slice_seq;
+  Slice_status() : persisted(SLICE_NOT_PERSISTED), file_seq(0), slice_seq(0) {}
+
+  Slice_status(uint32_t f_seq, uint32_t s_seq, SLICE_INFO info)
+      : persisted(SLICE_NOT_PERSISTED),
+        archived_info(info),
+        file_seq(f_seq),
+        slice_seq(s_seq) {}
+};
+
+class Binlog_archive;
+
+/**
+ * @brief Binlog archive worker class.
+ *
+ */
+class Binlog_archive_worker {
+ public:
+  Binlog_archive_worker(Binlog_archive *archive, int worker_id);
+  ~Binlog_archive_worker();
+
+  bool start();
+  void stop();
+  static void *thread_launcher(void *arg) {
+    return static_cast<Binlog_archive_worker *>(arg)->worker_thread();
+  }
+  void *worker_thread();
+  void thread_set_created() { m_thd_state.set_created(); }
+  bool is_thread_alive_not_running() const {
+    return m_thd_state.is_alive_not_running();
+  }
+  bool is_thread_dead() const { return m_thd_state.is_thread_dead(); }
+  bool is_thread_alive() const { return m_thd_state.is_thread_alive(); }
+  bool is_thread_running() const { return m_thd_state.is_running(); }
+  int terminate_binlog_archive_worker_thread();
+
+ private:
+  Binlog_archive *m_archive;
+  my_thread_handle m_thread;
+  int m_worker_id;
+  Binlog_expected_slice m_current_slice;
+  THD *m_thd;
+  /* thread state */
+  thread_state m_thd_state;
+  mysql_mutex_t m_worker_run_lock;
+  mysql_cond_t m_worker_run_cond;
+};
+
+/**
+ * @brief Binlog archive update index worker class.
+ *
+ */
+class Binlog_archive_update_index_worker {
+ public:
+  Binlog_archive_update_index_worker(Binlog_archive *archive);
+  ~Binlog_archive_update_index_worker();
+
+  bool start();
+  void stop();
+  static void *thread_launcher(void *arg) {
+    return static_cast<Binlog_archive_update_index_worker *>(arg)
+        ->worker_thread();
+  }
+  void *worker_thread();
+  void thread_set_created() { m_thd_state.set_created(); }
+  bool is_thread_alive_not_running() const {
+    return m_thd_state.is_alive_not_running();
+  }
+  bool is_thread_dead() const { return m_thd_state.is_thread_dead(); }
+  bool is_thread_alive() const { return m_thd_state.is_thread_alive(); }
+  bool is_thread_running() const { return m_thd_state.is_running(); }
+  int terminate_binlog_archive_update_index_worker();
+  bool update_index_is_failed() const {
+    return atomic_update_index_failed.load(std::memory_order_acquire);
+  }
+  void set_update_index_failed(bool failed) {
+    atomic_update_index_failed.store(failed, std::memory_order_release);
+  }
+
+ private:
+  Binlog_archive *m_archive;
+  my_thread_handle m_thread;
+  THD *m_thd;
+  /* thread state */
+  thread_state m_thd_state;
+  mysql_mutex_t m_worker_run_lock;
+  mysql_cond_t m_worker_run_cond;
+  std::atomic<bool> atomic_update_index_failed;
 };
 
 /**
@@ -114,8 +342,9 @@ class Binlog_archive {
   int archive_event(File_reader &reader, uchar *event_ptr, uint32 event_len,
                     const char *log_file, my_off_t log_pos);
   int binlog_stop_waiting_for_archive(const char *log_file_name,
-                               char *persistent_log_file_name, my_off_t log_pos,
-                               uint64_t consensus_index);
+                                      char *persistent_log_file_name,
+                                      my_off_t log_pos,
+                                      uint64_t consensus_index);
   int wait_for_archive();
   void signal_archive();
   int terminate_binlog_archive_thread();
@@ -135,24 +364,53 @@ class Binlog_archive {
     binlog_objstore = objstore;
   }
   inline objstore::ObjectStore *get_objstore() { return binlog_objstore; }
-  int show_binlog_archive_task_info(uint64_t &consensus_index,
-                                      uint64_t &consensus_term,
-                                      std::string &mysql_binlog,
-                                      my_off_t &mysql_binlog_pos,
-                                      my_off_t &mysql_binlog_write_pos,
-                                      std ::string &binlog,
-                                      my_off_t &binlog_pos,
-                                      my_off_t &binlog_write_pos);
+  int show_binlog_archive_task_info(
+      uint64_t &persisting_consensus_index, uint64_t &consensus_term,
+      std::string &persisting_mysql_binlog,
+      my_off_t &persisting_mysql_binlog_pos,
+      my_off_t &persisting_mysql_binlog_write_pos,
+      std::string &persisting_binlog, my_off_t &persisting_binlog_pos,
+      my_off_t &persisting_binlog_write_pos, std::string &persisted_binlog,
+      my_off_t &persisted_binlog_pos, uint64_t &persisted_consensus_index,
+      std::string &persisted_mysql_binlog,
+      my_off_t &persisted_mysql_binlog_pos);
 
-  int get_mysql_current_archive_binlog(LOG_INFO *linfo,
-                                   bool need_lock = true);
+  int get_mysql_current_archive_binlog(LOG_INFO *linfo, bool need_lock = true);
+
+  Binlog_archive_update_index_worker *m_update_index_worker;
+  Binlog_archive_worker **m_workers;
+
+  mysql_mutex_t m_slice_mutex;
+  bool m_slice_queue_and_map_initted;
+  circular_buffer_queue<Binlog_expected_slice> m_expected_slice_queue;
+  mysql_cond_t m_queue_cond;
+  // File and slice tracking
+  std::map<uint32_t, std::map<uint32_t, Slice_status>> m_slice_status_map;
+  mysql_cond_t m_map_cond;
+  // -- m_slice_mutex protects the above variables
+  int32_t m_last_expected_file_seq{-1};  // last added slice file expected queue
+  int32_t m_last_expected_slice_seq{-1};  // last added slice seq expected queue
+
+  void notify_slice_persisted(const Binlog_expected_slice &slice,
+                              bool is_slice_persisted);
+  bool update_index_file(bool need_slice_lock);
+
  private:
   // the binlog archive THD handle.
   THD *m_thd;
   /* thread state */
   thread_state m_thd_state;
 
-  void set_thread_context();
+  bool add_slice(Binlog_expected_slice &slice, SLICE_INFO &log_info);
+  char m_persisted_binlog_file_name[FN_REFLEN + 1];
+  char m_persisted_mysql_binlog_file_name[FN_REFLEN + 1];
+  my_off_t m_persisted_mysql_binlog_last_event_end_pos;
+  my_off_t m_persisted_binlog_last_event_end_pos;  //  The last persisted binlog
+                                                   //  event position persisted
+                                                   //  to objstore.
+  uint64 m_persisted_slice_end_consensus_index;  // end consensus index of last
+                                                 // persisted binlogs.
+  uint64 m_persisted_binlog_previouse_consensus_index;
 
   /* current archive binlog file name, copy from mysql binlog file name
     e.g.
@@ -169,14 +427,14 @@ class Binlog_archive {
   Format_description_event m_description_event;
   objstore::ObjectStore *binlog_objstore;
   mysql_mutex_t m_rotate_lock;
-  bool m_consensus_is_leader;
   uint64_t m_consensus_term;
   my_off_t m_slice_bytes_written;
   my_off_t
       m_binlog_archive_last_event_end_pos;  //  The last binlog event position
                                             //  persisted to objstore.
-  my_off_t m_binlog_archive_write_last_event_end_pos;  // The last binlog event position
-                                               // writed to persistent cache.
+  my_off_t m_binlog_archive_write_last_event_end_pos;  // The last binlog event
+                                                       // position writed to
+                                                       // persistent cache.
   char m_mysql_binlog_start_file[FN_REFLEN + 1];
   my_off_t m_mysql_binlog_start_pos;  // mysql binlog archive start position.
   bool m_mysql_binlog_first_file;
@@ -192,9 +450,9 @@ class Binlog_archive {
   uint64
       m_mysql_binlog_previouse_consensus_index;  // the previous consensus index
                                                  // of current mysql binlog
-  uint64 m_binlog_previouse_consensus_index;     // the previous	
-                                                 // consensus index	
-                                                 // of previous	
+  uint64 m_binlog_previouse_consensus_index;     // the previous
+                                                 // consensus index
+                                                 // of previous
                                                  // mysql binlog
   uint64 m_binlog_archive_start_consensus_index;
   Log_event_type m_binlog_last_event_type;
@@ -205,8 +463,10 @@ class Binlog_archive {
   bool m_binlog_in_transaction;
   bool m_rotate_forbidden;
   ulonglong m_slice_create_ts;
-  uint64 m_slice_end_consensus_index; // end consensus index of persisted binlogs.
-  uint64 m_mysql_end_consensus_index; // end consensus index of readed mysql binlogs.
+  uint64
+      m_slice_end_consensus_index;  // end consensus index of persisted binlogs.
+  uint64 m_mysql_end_consensus_index;  // end consensus index of readed mysql
+                                       // binlogs.
   int new_binlog_slice(bool new_binlog, const char *log_file, my_off_t log_pos,
                        uint64_t previous_consensus_index);
   int archive_init();
@@ -223,8 +483,8 @@ class Binlog_archive {
                                       const my_off_t pos, const uint64_t term);
   int stop_waiting_for_mysql_binlog_update(my_off_t log_pos);
   int binlog_is_archived(const char *log_file_name_arg,
-                          char *persistent_log_file_name, my_off_t log_pos,
-                          uint64_t consensus_index);
+                         char *persistent_log_file_name, my_off_t log_pos,
+                         uint64_t consensus_index);
   int merge_slice_to_binlog_file(const char *log_name,
                                  const char *to_binlog_file);
   inline bool event_checksum_on() {
@@ -300,7 +560,7 @@ class Binlog_archive {
 extern int start_binlog_archive();
 extern void stop_binlog_archive();
 extern int binlog_archive_wait_for_archive(THD *thd, const char *log_file_name,
-                                          char *persistent_log_file_name,
-                                          my_off_t log_pos,
-                                          uint64_t consensus_index);
+                                           char *persistent_log_file_name,
+                                           my_off_t log_pos,
+                                           uint64_t consensus_index);
 #endif

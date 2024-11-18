@@ -1,16 +1,16 @@
 # Wait for at least 1 snapshots to be generated 
 CREATE DATABASE db1;
-CREATE TABLE t1(c1 int) ENGINE=SMARTENGINE ;
-INSERT INTO t1 values(1);
-INSERT INTO t1 values(2);
-INSERT INTO t1 values(3);
-INSERT INTO t1 values(4);
+CREATE TABLE t1(c1 int, c2 char(200)) ENGINE=SMARTENGINE ;
+INSERT INTO t1 values(1, 'abcd');
+INSERT INTO t1 values(2, 'abcd');
+INSERT INTO t1 values(3, 'abcd');
+INSERT INTO t1 values(4, 'abcd');
 SELECT * FROM t1;
-c1
-1
-2
-3
-4
+c1	c2
+1	abcd
+2	abcd
+3	abcd
+4	abcd
 SELECT SNAPSHOT_ARCHIVE_PERSISTENT_FORCE();
 SNAPSHOT_ARCHIVE_PERSISTENT_FORCE()
 
@@ -93,6 +93,54 @@ Pattern found.
 Pattern found.
 Pattern found.
 Pattern found.
+# Wait for all binlog persistent
+# fault_injection_add_slice_queue 
+set global debug= '+d, fault_injection_add_slice_queue';
+INSERT INTO t1 values(1,'abcd');
+INSERT INTO t1 values(2,'abcd');
+INSERT INTO t1 values(3,'abcd');
+INSERT INTO t1 values(4,'abcd');
+Pattern found.
+Pattern found.
+set global debug= '-d, fault_injection_add_slice_queue';
+# Wait for all binlog persistent
+# fault_injection_put_slice_to_objstore 
+set global debug= '+d, fault_injection_put_slice_to_objstore';
+INSERT INTO t1 values(1,'abcd');
+INSERT INTO t1 values(2,'abcd');
+INSERT INTO t1 values(3,'abcd');
+INSERT INTO t1 values(4,'abcd');
+# Wait for all binlog add expected persistent queue.
+Pattern found.
+Pattern found.
+Pattern found.
+set global debug= '-d, fault_injection_put_slice_to_objstore';
+# Wait for all binlog persistent
+# fault_injection_binlog_archive_update_index_file 
+set global debug= '+d, fault_injection_binlog_archive_update_index_file';
+INSERT INTO t1 values(1,'abcd');
+INSERT INTO t1 values(2,'abcd');
+INSERT INTO t1 values(3,'abcd');
+INSERT INTO t1 values(4,'abcd');
+Pattern found.
+Pattern found.
+set global debug= '-d, fault_injection_binlog_archive_update_index_file';
+# Wait for all binlog persistent
+INSERT INTO t1 values(1,'abcd');
+INSERT INTO t1 values(2,'abcd');
+INSERT INTO t1 values(3,'abcd');
+INSERT INTO t1 values(4,'abcd');
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+272
+include/stop_mysqld.inc [server 1]
+# Force rmdir datadir for recovery test
+# Create an empty data directory...
+# Recovery start from object store.
+# restart
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+272
 # Cleanup
 DROP TABLE t1;
 DROP DATABASE db1;

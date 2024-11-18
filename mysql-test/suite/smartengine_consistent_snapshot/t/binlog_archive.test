@@ -41,7 +41,7 @@ SHOW CREATE TABLE t1;
 # --source include/show_binary_logs.inc
 
 --echo # Wait for all binlog persistent
-let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO, INFORMATION_SCHEMA.WESQL_CLUSTER_LOCAL where LAST_RAFT_INDEX = COMMIT_INDEX;
+let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO, INFORMATION_SCHEMA.WESQL_CLUSTER_LOCAL where LAST_PERSISTED_RAFT_INDEX = COMMIT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -50,7 +50,7 @@ let $wait_timeout= 600;
 # SELECT SUBSTRING_INDEX(Log_slice_key, '/', -1) from INFORMATION_SCHEMA.BINLOG_PERSISTENT_SLICES order by Log_slice_key;
 # --enable_warnings
 
-let $wait_condition= SELECT last_persistent_binlog_pos = last_persistent_binlog_write_pos FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO;
+let $wait_condition= SELECT LAST_PERSISTING_BINLOG_WRITE_POS = LAST_PERSISTED_BINLOG_POS FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
@@ -67,14 +67,14 @@ BEGIN;
 INSERT INTO t1 SELECT * FROM t1 limit 100;
 COMMIT;
 
-let $wait_condition= SELECT last_persistent_binlog_write_pos > last_persistent_binlog_pos  FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO;
+let $wait_condition= SELECT LAST_PERSISTING_BINLOG_WRITE_POS > LAST_PERSISTING_BINLOG_POS  FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
 --echo #Rotate allowed
 set global debug= '-d, force_rotate_forbidded';
 
-let $wait_condition= SELECT last_persistent_binlog_pos = last_persistent_binlog_write_pos FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO;
+let $wait_condition= SELECT LAST_PERSISTING_BINLOG_WRITE_POS = LAST_PERSISTED_BINLOG_POS FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 

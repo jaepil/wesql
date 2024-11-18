@@ -38,7 +38,7 @@ INSERT INTO t1 values(8);
 SELECT * FROM t1;
 
 --echo # Wait for all binlog persistent
-let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO, INFORMATION_SCHEMA.WESQL_CLUSTER_LOCAL where LAST_RAFT_INDEX = COMMIT_INDEX;
+let $wait_condition= SELECT count(*) = 1 FROM INFORMATION_SCHEMA.BINLOG_PERSISTENT_TASK_INFO, INFORMATION_SCHEMA.WESQL_CLUSTER_LOCAL where LAST_PERSISTED_RAFT_INDEX = COMMIT_INDEX;
 let $wait_timeout= 600;
 --source include/wait_condition_or_abort.inc
 
