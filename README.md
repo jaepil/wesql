@@ -20,10 +20,14 @@ Feel free to start trying WeSQL in your development and testing environments!
 ## Docs with WeSQL
 
 [Architecture](https://wesql.io/docs/architecture)
+
 [Tutorial](https://wesql.io/docs/tutorial)
 
 For further information on WeSQL or additional documentation, visit
   <https://wesql.io/docs/introduction>
+
+## Community
+Join our [Discord](https://discord.com/channels/1308609231498510427/1308609231498510430) to discuss features, get help, and connect with other users.
 
 ## Licensing
 
