@@ -14,9 +14,11 @@ DEFAULT_CLUSTER_NAME="wesql-cluster"
 DEFAULT_PROVIDER="aws"
 DEFAULT_REGION="cn-northwest-1"
 DEFAULT_BUCKET="wesql-chaos-test"
+DEFAULT_ENDPOINT=""
+DEFAULT_USE_HTTPS="false"
 DEFAULT_IMAGE="apecloud/wesql-server:8.0.35-0.1.0_beta3.38"
-DEFAULT_AK=$(echo -n ${AWS_ACCESS_KEY_ID} | base64)
-DEFAULT_SK=$(echo -n ${AWS_SECRET_ACCESS_KEY} | base64)
+DEFAULT_AK=$(echo -n "${AWS_ACCESS_KEY_ID}" | base64)
+DEFAULT_SK=$(echo -n "${AWS_SECRET_ACCESS_KEY}" | base64)
 
 runningToStopTime="null"
 stopToRunningTime="null"
@@ -47,6 +49,7 @@ exit_program() {
 
     eval "rm -rf tmp"
     echo "Exiting..."
+    report_test_result
     exit 0
 }
 
@@ -63,19 +66,21 @@ eval_cmd() {
 show_help() {
     cat <<EOF
 Usage: $(basename "$0") <options>
-    -h, --help                Display this help message and exit
-    -n, --namespace           Specify the Kubernetes namespace (default: $DEFAULT_NAMESPACE)
-    -cn, --cluster-name        Specify the Kubernetes cluster name (default: $DEFAULT_CLUSTER_NAME-)
-    -op, --objstore-provider   Specify the object storage provider (e.g., AWS, MINIO, R2) (default: $DEFAULT_PROVIDER)
-    -or, --objstore-region     Specify the object storage region (default: $DEFAULT_REGION)
-    -ob, --objstore-bucket     Specify the object storage bucket (default: $DEFAULT_BUCKET)
-    -wi, --wesql-image         Specify the Wesql image to use (default: $DEFAULT_IMAGE)
+    -h, --help                  Display this help message and exit
+    -n, --namespace             Specify the Kubernetes namespace (default: $DEFAULT_NAMESPACE)
+    -cn, --cluster-name         Specify the Kubernetes cluster name (default: $DEFAULT_CLUSTER_NAME-)
+    -op, --objstore-provider    Specify the object storage provider (e.g., AWS, MINIO, R2) (default: $DEFAULT_PROVIDER)
+    -or, --objstore-region      Specify the object storage region (default: $DEFAULT_REGION)
+    -ob, --objstore-bucket      Specify the object storage bucket (default: $DEFAULT_BUCKET)
+    -oe, --objstore-endpoint    Specify the object storage endpoint (default: $DEFAULT_ENDPOINT)
+    -ouh, --objstore-use-https  Specify whether to use HTTPS for the object storage (default: $DEFAULT_USE_HTTPS)
+    -wi, --wesql-image          Specify the Wesql image to use (default: $DEFAULT_IMAGE)
     -ak64, --access-key-base64  Specify the Base64-encoded access key for the object storage (default: the environment variable AWS_ACCESS_KEY_ID)
     -sk64, --secret-key-base64  Specify the Base64-encoded secret key for the object storage (default: the environment variable AWS_SECRET_ACCESS_KEY)
-    -th, --threads             Specify the number of threads used for tpcc test (default: $TABLES)
-    -tb, --tables              Specify the tables to process used for tpcc test (default: $THREADS)
-    -sz, -sc, --size, --scale  Specify the size or scale factor used for tpcc test (default: $SIZE)
-    -d, --duration             Specify the duration (default: $DEFAULT_PROVIDER)
+    -th, --threads              Specify the number of threads used for tpcc test (default: $TABLES)
+    -tb, --tables               Specify the tables to process used for tpcc test (default: $THREADS)
+    -sz, -sc, --size, --scale   Specify the size or scale factor used for tpcc test (default: $SIZE)
+    -d, --duration              Specify the duration (default: $DEFAULT_PROVIDER)
 EOF
 }
 
@@ -108,6 +113,26 @@ leader_exec_command() {
     return 0
 }
 
+check_cluster_connect() {
+    cmd="select 1"
+    while true; do
+        ready_num=0
+        for i in {0..2}; do
+            if res=$(pod_exec_command "$cmd" "$i"); then
+              if [[ "$res" == "1" ]]; then
+                ready_num=$(($ready_num + 1))
+              fi
+            fi
+        done
+        if [[ $ready_num -eq 3 ]]; then
+            echo "check cluster connect done"
+            break
+        fi
+        echo "check cluster connect ready num:$ready_num"
+        sleep 5
+    done
+}
+
 check_cluster_status_create() {
     while true; do
         pod0_status=$(kubectl get pod --namespace $NAMESPACE | (grep "${NAME_PODS[0]}" || true) | (grep "1/1" || true) | awk '{print $3}')
@@ -120,6 +145,7 @@ check_cluster_status_create() {
         fi
         sleep 1
     done
+    check_cluster_connect
 }
 
 create_cluster() {
@@ -248,6 +274,8 @@ tpcc_check() {
     while true; do
         check_pod_status=$(kubectl get pod | (grep "$pod_name" || true) | awk '{print $3}')
         if [[ "$check_pod_status" == "Completed" ]]; then
+            delete_tpcc_check_cmd="kubectl delete pod $pod_name"
+            eval "$delete_tpcc_check_cmd"
             break
         elif [[ "$check_pod_status" == "Running" || "$check_pod_status" == "ContainerCreating" ]]; then
             sleep 1
@@ -831,6 +859,7 @@ add_test_result() {
 }
 
 report_test_result() {
+    echo "report test result"
     for test_ret in $(echo "$TEST_RESULT" | sed 's/##/ /g'); do
         test_ret=$(echo "$test_ret" | sed 's/#/ /g')
         case $test_ret in
@@ -872,6 +901,7 @@ check_rto_rpo() {
         podeverstopped="false"
         fullrecov=0
         running_pod_name=$(tpcc_run)
+        continue_flag=0
 
         case $fault_rand in
         1)
@@ -981,18 +1011,22 @@ check_rto_rpo() {
         27)
             test_fault_name="test_network_follower_partition"
             # test_network_follower partition
+            continue_flag=1
             ;;
         28)
             test_fault_name="test_network_2follower_partition"
             # test_network_2follower partition
+            continue_flag=1
             ;;
         29)
             test_fault_name="test_network_1leader1follower_partition"
             # test_network_1leader1follower partition
+            continue_flag=1
             ;;
         30)
             test_fault_name="test_network_all_partition"
             # test_network_all partition
+            continue_flag=1
             ;;
         31)
             test_fault_name="test_network_leader_loss100"
@@ -1109,6 +1143,7 @@ check_rto_rpo() {
         59)
             test_fault_name="test_data_lost_2follower"
             # test_data_lost_2follower
+            continue_flag=1
             ;;
         60)
             test_fault_name="test_data_lost_1leader_1follower"
@@ -1120,6 +1155,11 @@ check_rto_rpo() {
             ;;
 
         esac
+
+        if [ "$continue_flag" -eq 1 ]; then
+            continue
+        fi
+
         injectFaultTime=$(date +'%Y-%m-%d %H:%M:%S')
         while true; do
             check_pod_running
@@ -1206,6 +1246,7 @@ check_rto_rpo() {
                 break
             fi
         done
+        report_test_result
     done
 
 }
@@ -1255,9 +1296,12 @@ main() {
     export OBJSTORE_PROVIDER=${DEFAULT_PROVIDER}
     export OBJSTORE_REGION=${DEFAULT_REGION}
     export OBJSTORE_BUCKET=${DEFAULT_BUCKET}
+    export OBJSTORE_ENDPOINT=${DEFAULT_ENDPOINT}
+    export OBJSTORE_USE_HTTPS=${DEFAULT_USE_HTTPS}
     export WESQL_IMAGE=${DEFAULT_IMAGE}
     export ACCESS_KEY=${DEFAULT_AK}
     export SECRET_KEY=${DEFAULT_SK}
+    export LOWERS="abcdefghijklmnopqrstuvwxyz"
 
     parse_command_line "$@"
     echo "bash test_fault_serverless.sh --threads ${THREADS} \
@@ -1320,6 +1364,14 @@ parse_command_line() {
             ;;
         -ob|--objstore-bucket)
             OBJSTORE_BUCKET="$2"
+            shift
+            ;;
+        -oe|--objstore-endpoint)
+            OBJSTORE_ENDPOINT="$2"
+            shift
+            ;;
+        -ouh|--objstore-use-https)
+            OBJSTORE_USE_HTTPS="$2"
             shift
             ;;
         -wi|--wesql-image)
