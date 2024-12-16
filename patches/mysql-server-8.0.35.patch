@@ -4674,7 +4674,7 @@ index c288026b810..22d6c7b9d24 100644
  
  #endif /* _log_event_h */
 diff --git a/sql/mysqld.cc b/sql/mysqld.cc
-index 3f94e768956..d2a6878b9a1 100644
+index 3f94e768956..a7c2475e3da 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
 @@ -774,15 +774,18 @@ MySQL clients support the protocol:
@@ -4774,12 +4774,12 @@ index 3f94e768956..d2a6878b9a1 100644
 +  opt_objstore_region/opt_objstore_bucket can not be empty.
 +*/
 +bool opt_table_on_objstore = false;
++uint opt_objstore_lease_lock_timeout;
 +char *opt_objstore_provider;
 +char *opt_objstore_region;
 +char *opt_objstore_endpoint;
 +bool opt_objstore_use_https = false;
 +char *opt_objstore_bucket;
-+char *opt_objstore_mtr_test_bucket_dir;
 +char *opt_repo_objstore_id = nullptr;
 +char *opt_branch_objstore_id = nullptr;
 +char *opt_server_id_on_objstore = nullptr;
@@ -5269,7 +5269,7 @@ index 3f94e768956..d2a6878b9a1 100644
    { &key_COND_compress_gtid_table, "COND_compress_gtid_table", PSI_FLAG_SINGLETON, 0, PSI_DOCUMENT_ME},
    { &key_commit_order_manager_cond, "Commit_order_manager::m_workers.cond", 0, 0, PSI_DOCUMENT_ME},
 diff --git a/sql/mysqld.h b/sql/mysqld.h
-index 8b5a842b54b..7dd3f67e1f3 100644
+index 8b5a842b54b..9f53718f532 100644
 --- a/sql/mysqld.h
 +++ b/sql/mysqld.h
 @@ -180,6 +180,9 @@ extern MYSQL_PLUGIN_IMPORT std::atomic<int32>
@@ -5352,12 +5352,12 @@ index 8b5a842b54b..7dd3f67e1f3 100644
 +
 +extern MYSQL_PLUGIN_IMPORT bool opt_serverless;
 +extern MYSQL_PLUGIN_IMPORT bool opt_table_on_objstore;
++extern MYSQL_PLUGIN_IMPORT uint opt_objstore_lease_lock_timeout;
 +extern MYSQL_PLUGIN_IMPORT char *opt_objstore_provider;
 +extern MYSQL_PLUGIN_IMPORT char *opt_objstore_region;
 +extern MYSQL_PLUGIN_IMPORT char *opt_objstore_endpoint;
 +extern MYSQL_PLUGIN_IMPORT bool opt_objstore_use_https;
 +extern MYSQL_PLUGIN_IMPORT char *opt_objstore_bucket;
-+extern MYSQL_PLUGIN_IMPORT char *opt_objstore_mtr_test_bucket_dir;
 +
  /*
    Server mutex locks and condition variables.
@@ -8841,7 +8841,7 @@ index 6c3dd85db23..8c43a67cd52 100644
          | HASH_SYM
          | HISTOGRAM_SYM
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index b16cb1830e4..fbfb0faf93d 100644
+index b16cb1830e4..b76c7e5e413 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
 @@ -93,11 +93,13 @@
@@ -8937,7 +8937,7 @@ index b16cb1830e4..fbfb0faf93d 100644
  
  static bool check_set_require_row_format(sys_var *, THD *thd, set_var *var) {
    /*
-@@ -7718,3 +7764,296 @@ static Sys_var_enum Sys_explain_format(
+@@ -7718,3 +7764,297 @@ static Sys_var_enum Sys_explain_format(
      SESSION_VAR(explain_format), CMD_LINE(OPT_ARG), explain_format_names,
      DEFAULT(static_cast<ulong>(Explain_format_type::TRADITIONAL)),
      NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(nullptr), ON_UPDATE(nullptr));
@@ -9169,6 +9169,13 @@ index b16cb1830e4..fbfb0faf93d 100644
 +    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_table_on_objstore), CMD_LINE(OPT_ARG),
 +    DEFAULT(true));
 +
++static Sys_var_uint Sys_objstore_lease_lock_timeout(
++    "objectstore_lease_lock_timeout",
++    "The timeout in seconds for the lease lock on object store."
++    "if 0, lease lock is disabled.",
++    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_lease_lock_timeout),
++    CMD_LINE(OPT_ARG), VALID_RANGE(0, 30), DEFAULT(8), BLOCK_SIZE(1));
++
 +static Sys_var_charptr Sys_objstore_provider(
 +    "objectstore_provider",
 +    "The provider of object store. "
@@ -9204,12 +9211,6 @@ index b16cb1830e4..fbfb0faf93d 100644
 +    "If serverless is enabled, objectstore_bucket must not be empty.",
 +    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_bucket), CMD_LINE(REQUIRED_ARG),
 +    IN_FS_CHARSET, DEFAULT("objectstore_bucket"));
-+
-+static Sys_var_charptr Sys_objstore_mtr_test_bucket_dir(
-+    "objectstore_mtr_test_bucket_dir",
-+    "The object store bucket sub dir to store record. for mtr test only",
-+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_mtr_test_bucket_dir),
-+    CMD_LINE(OPT_ARG), IN_FS_CHARSET, DEFAULT(""));
 +
 +static Sys_var_charptr Sys_repo_objstore_id(
 +    "repo_objectstore_id",

@@ -67,11 +67,16 @@ static int se_init_func(void *const p)
   se_bg_thread.init(se_signal_bg_psi_mutex_key, se_signal_bg_psi_cond_key);
   se_drop_idx_thread.init(se_signal_drop_idx_psi_mutex_key,
                            se_signal_drop_idx_psi_cond_key);
-  se_renewal_objstore_lease_lock_thread.init(se_renewal_objstore_lease_lock_psi_mutex_key,
+  if (opt_objstore_lease_lock_timeout > 0) {
+    se_renewal_objstore_lease_lock_thread.init(se_renewal_objstore_lease_lock_psi_mutex_key,
                                              se_renewal_objstore_lease_lock_psi_cond_key);
+  }
 #else
   se_bg_thread.init();
   se_drop_idx_thread.init();
+  if (opt_objstore_lease_lock_timeout > 0) {
+    se_renewal_objstore_lease_lock_thread.init();
+  }
 #endif
   mysql_mutex_init(se_collation_data_mutex_key, &se_collation_data_mutex,
                    MY_MUTEX_INIT_FAST);
@@ -256,21 +261,13 @@ static int se_init_func(void *const p)
 
     std::string_view endpoint(opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
 
-    std::string mtr_test_bucket_subdir = "";
-    if (opt_objstore_mtr_test_bucket_dir) {
-      mtr_test_bucket_subdir = opt_objstore_mtr_test_bucket_dir;
-      // remove possible '/' at the beginning and end of the string
-      mtr_test_bucket_subdir.erase(0, mtr_test_bucket_subdir.find_first_not_of("/"));
-      mtr_test_bucket_subdir.erase(mtr_test_bucket_subdir.find_last_not_of("/") + 1);
-    }
-
     common::Status status = main_opts.env->InitObjectStore(std::string_view(opt_objstore_provider),
                                                            std::string_view(opt_objstore_region),
                                                            opt_objstore_endpoint ? &endpoint : nullptr,
                                                            opt_objstore_use_https,
                                                            opt_objstore_bucket,
                                                            se_tbl_options.cluster_id,
-                                                           mtr_test_bucket_subdir);
+                                                           opt_objstore_lease_lock_timeout);
     if (!status.ok()) {
       std::string err_text = status.ToString();
       sql_print_error("SE: fail to create object store: %s", err_text.c_str());
@@ -285,32 +282,34 @@ static int se_init_func(void *const p)
 
     db::GlobalContext::set_env(main_opts.env);
 
-    int ret = se_renewal_objstore_lease_lock_thread.create_thread(RENEW_LEASE_LOCK_THREAD_NAME
+    if (opt_objstore_lease_lock_timeout > 0) {
+      int ret = se_renewal_objstore_lease_lock_thread.create_thread(RENEW_LEASE_LOCK_THREAD_NAME
 #ifdef HAVE_PSI_INTERFACE
                                                                   ,
                                                                   se_renewal_objstore_lease_lock_psi_thread_key
 #endif
-    );
-    if (ret != 0) {
-      sql_print_error("SE: Couldn't start the renewal object store lease lock thread: (errno=%d)", ret);
-      se_open_tables.free_hash();
-      DBUG_RETURN(HA_EXIT_FAILURE);
-    }
+      );
+      if (ret != 0) {
+        sql_print_error("SE: Couldn't start the renewal object store lease lock thread: (errno=%d)", ret);
+        se_open_tables.free_hash();
+        DBUG_RETURN(HA_EXIT_FAILURE);
+      }
 
-    sql_print_warning("SE: This node is not the owner of the lease lock, waiting...");
-    // retry 1 minute to get single data node lease lock.
-    int retry = 60000;
-    while (!objstore::is_lease_lock_owner_node() && retry > 0) {
-      // if this node is not the owner of the lease lock, can't do anything but wait
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      retry--;
+      sql_print_warning("SE: This node is not the owner of the lease lock, waiting...");
+      // retry 1 minute to get single data node lease lock.
+      int retry = 60000;
+      while (!objstore::is_lease_lock_owner_node() && retry > 0) {
+        // if this node is not the owner of the lease lock, can't do anything but wait
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        retry--;
+      }
+      if (!objstore::is_lease_lock_owner_node()) {
+        sql_print_error("SE: Couldn't get object store lease lock: other node may be running");
+        se_open_tables.free_hash();
+        DBUG_RETURN(HA_EXIT_FAILURE);
+      }
+      sql_print_warning("SE: This node becomes the owner of the lease lock, go on");
     }
-    if (!objstore::is_lease_lock_owner_node()) {
-      sql_print_error("SE: Couldn't get object store lease lock: other node may be running");
-      se_open_tables.free_hash();
-      DBUG_RETURN(HA_EXIT_FAILURE);
-    }
-    sql_print_warning("SE: This node becomes the owner of the lease lock, go on");
   }
 
   util::TransactionDBOptions tx_db_options;
@@ -448,10 +447,12 @@ static int se_done_func(void *const p)
   se_bg_thread.signal(true);
 
   if (opt_table_on_objstore && opt_serverless) {
-    // Signal the renewal object store lease lock thread to stop.
-    se_renewal_objstore_lease_lock_thread.signal(true);
-    // Wait for the renewal object store lease lock thread to finish.
-    se_renewal_objstore_lease_lock_thread.join();
+    if (opt_objstore_lease_lock_timeout > 0) {
+      // Signal the renewal object store lease lock thread to stop.
+      se_renewal_objstore_lease_lock_thread.signal(true);
+      // Wait for the renewal object store lease lock thread to finish.
+      se_renewal_objstore_lease_lock_thread.join();
+    }
   }
 
   // Wait for the background thread to finish.
@@ -499,6 +500,20 @@ static int se_done_func(void *const p)
 
   util::Env *env = se_db->GetEnv();
   if (env) {
+    objstore::ObjectStore *se_objstore = nullptr;
+    env->GetObjectStore(se_objstore);
+    if (se_objstore) {
+      int ret = 0;
+      std::string err_msg;
+      const std::string& bucket = env->GetObjectStoreBucket();
+      const std::string& cluster_objstore_id = env->GetClusterObjstoreId();
+      ret = objstore::remove_lease_lock_key(se_objstore, bucket, cluster_objstore_id, err_msg);
+      if (0 == ret) {
+        sql_print_warning("SE: remove lease lock key success");
+      } else {
+        sql_print_error("SE: fail to remove lease lock key, error code: %s", err_msg.c_str());
+      }
+    }
     env->DestroyObjectStore();
   }
 
